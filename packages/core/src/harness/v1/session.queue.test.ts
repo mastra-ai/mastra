@@ -18,7 +18,7 @@
  *     and emits `queue_item_replayed`
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
@@ -131,6 +131,45 @@ describe('Session.queue() — admission', () => {
       signalId: expect.any(String),
       runId: expect.any(String),
     });
+    await session.close();
+  });
+
+  it('admits a queued turn and returns queued item identity before result lookup', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'queued reply' });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const drain = vi.spyOn(session as unknown as { _maybeDrainQueue(): Promise<void> }, '_maybeDrainQueue');
+
+    const admitted = await session.admitQueue({ content: 'do work', admissionId: 'queue-admit-1' });
+    const duplicate = await session.admitQueue({ content: 'do work', admissionId: 'queue-admit-1' });
+
+    expect(admitted).toEqual({
+      accepted: true,
+      queuedItemId: expect.any(String),
+      duplicate: false,
+    });
+    expect(duplicate).toEqual({
+      accepted: true,
+      queuedItemId: admitted.queuedItemId,
+      duplicate: true,
+    });
+    expect(drain).toHaveBeenCalledTimes(2);
+    expect(session.getRecord().pendingQueue).toHaveLength(1);
+    await session.close();
+  });
+
+  it('emits queue_item_started for fresh remote queue admissions', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'queued reply' });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => events.push(e));
+
+    const admitted = await session.admitQueue({ content: 'do work', admissionId: 'queue-admit-event' });
+    await session.waitForIdle({ timeoutMs: 1000 });
+
+    expect(events.find(e => e.type === 'queue_item_started')).toMatchObject({ queuedItemId: admitted.queuedItemId });
+    expect(events.find(e => e.type === 'queue_item_replayed')).toBeUndefined();
     await session.close();
   });
 

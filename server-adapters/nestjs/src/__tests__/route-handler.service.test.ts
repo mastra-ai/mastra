@@ -64,6 +64,7 @@ describe('RouteHandlerService', () => {
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'user-1' });
     const abortSignal = new AbortController().signal;
+    const getHeader = vi.fn((name: string) => (name === 'if-match' ? '"3"' : undefined));
 
     const route = {
       method: 'POST',
@@ -84,10 +85,13 @@ describe('RouteHandlerService', () => {
       body: {
         requestContext: 'spoofed',
         routePrefix: '/spoofed',
+        requestBody: 'spoofed',
+        getHeader: 'spoofed',
         custom: 'ok',
       },
       requestContext,
       abortSignal,
+      getHeader,
     });
 
     const handlerParams = await route.handler.mock.results[0]?.value;
@@ -100,5 +104,14 @@ describe('RouteHandlerService', () => {
     expect(handlerParams.requestContext).toBe(requestContext);
     expect(handlerParams.abortSignal).toBe(abortSignal);
     expect(handlerParams.routePrefix).toBe('/api');
+    expect(handlerParams.getHeader('if-match')).toBe('"3"');
+    expect(handlerParams.requestBody).toEqual({
+      requestContext: 'spoofed',
+      routePrefix: '/spoofed',
+      requestBody: 'spoofed',
+      getHeader: 'spoofed',
+      custom: 'ok',
+    });
+    expect(handlerParams.requestPathParams).toEqual({ id: '123', mastra: 'spoofed' });
   });
 });

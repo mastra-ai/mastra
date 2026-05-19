@@ -1,20 +1,12 @@
-import type { HarnessMessage, SessionDisplayState, SessionRecord } from '@mastra/core/harness/v1';
-import {
-  HarnessAdmissionConflictError,
-  HarnessConfigError,
-  HarnessQueueFullError,
-  HarnessSessionClosedError,
-  HarnessSessionClosingError,
-  HarnessSessionDeleteBlockedError,
-  HarnessSessionDeletedError,
-  HarnessSessionLockedError,
-  HarnessSessionNotFoundError,
-  HarnessStorageError,
-  HarnessSubagentDepthExceededError,
-  HarnessValidationError,
-  HarnessWorkspaceLostError,
-  HarnessWorkspaceProviderMismatchError,
-  HarnessWorkspaceProvisioningError,
+import type {
+  GoalOptions,
+  GoalState,
+  HarnessMessage,
+  InboxResponseResult,
+  PermissionRules,
+  SessionDisplayState,
+  SessionGrants,
+  SessionRecord,
 } from '@mastra/core/harness/v1';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ValidationErrorHook } from '@mastra/core/server';
@@ -26,9 +18,25 @@ import type { StatusCode } from '../http-exception';
 import {
   createHarnessSessionBodySchema,
   createHarnessSessionResponseSchema,
+  harnessGoalBodySchema,
+  harnessGoalResponseSchema,
+  harnessInboxPathParams,
+  harnessInboxResponseBodySchema,
+  harnessInboxResponseResultSchema,
+  harnessMessageAdmissionBodySchema,
+  harnessMessageAdmissionResponseSchema,
+  harnessModePatchSchema,
+  harnessModeResponseSchema,
+  harnessModelPatchSchema,
+  harnessModelResponseSchema,
   harnessNamePathParams,
+  harnessPermissionPatchSchema,
+  harnessPermissionsResponseSchema,
+  harnessQueueAdmissionBodySchema,
+  harnessQueueAdmissionResponseSchema,
   harnessSessionPathParams,
   harnessSessionSnapshotSchema,
+  harnessStatePatchSchema,
   listHarnessSessionsQuerySchema,
   listHarnessSessionsResponseSchema,
 } from '../schemas/harness';
@@ -118,6 +126,63 @@ type HarnessLike = {
     getRecord(): Readonly<SessionRecord>;
     getDisplayState(): SessionDisplayState;
     getState(): Promise<unknown>;
+    setState(updates: Record<string, unknown>, opts?: { ifVersion?: number }): Promise<void>;
+    admitMessage(opts: {
+      content: string;
+      admissionId: string;
+      mode?: string;
+      model?: string;
+      attachments?: unknown[];
+    }): Promise<{ accepted: true; signalId: string; runId?: string; duplicate: boolean }>;
+    admitQueue(opts: {
+      content: string;
+      admissionId: string;
+      mode?: string;
+      model?: string;
+      yolo?: boolean;
+      attachments?: unknown[];
+    }): Promise<{ accepted: true; queuedItemId: string; duplicate: boolean }>;
+    switchMode(opts: { mode: string }): Promise<void>;
+    models: {
+      switch(opts: { model: string }): Promise<void>;
+    };
+    permissions: {
+      grantCategory(opts: { category: string }): Promise<void>;
+      grantTool(opts: { toolName: string }): Promise<void>;
+      revokeCategory(opts: { category: string }): Promise<void>;
+      revokeTool(opts: { toolName: string }): Promise<void>;
+      getGrants(): Readonly<SessionGrants>;
+      getRules(): Readonly<PermissionRules>;
+      setPolicy(
+        opts:
+          | { category: string; toolName?: never; policy: 'allow' | 'ask' | 'deny' }
+          | { toolName: string; category?: never; policy: 'allow' | 'ask' | 'deny' },
+      ): Promise<void>;
+    };
+    respondToToolApproval(opts: {
+      itemId: string;
+      responseId: string;
+      approved: boolean;
+      reason?: string;
+    }): Promise<InboxResponseResult>;
+    respondToToolSuspension(opts: {
+      itemId: string;
+      responseId: string;
+      resumeData: unknown;
+    }): Promise<InboxResponseResult>;
+    respondToQuestion(opts: { itemId: string; responseId: string; answer: unknown }): Promise<InboxResponseResult>;
+    respondToPlanApproval(opts: {
+      itemId: string;
+      responseId: string;
+      approved: boolean;
+      revision?: string;
+      transitionToMode?: string;
+    }): Promise<InboxResponseResult>;
+    setGoal(opts: GoalOptions): Promise<GoalState>;
+    getGoal(): GoalState | undefined;
+    pauseGoal(): Promise<GoalState | undefined>;
+    resumeGoal(): Promise<GoalState | undefined>;
+    clearGoal(): Promise<void>;
     listMessages(opts?: { limit?: number }): Promise<HarnessMessage[]>;
   }>;
   listSessions(opts: {
@@ -146,6 +211,18 @@ type HarnessLike = {
   closeSession(opts: { sessionId: string; resourceId?: string }): Promise<void>;
   ownerId?: string;
 };
+
+type HarnessSessionLike = Awaited<ReturnType<HarnessLike['session']>>;
+type CreateHarnessSessionBody = {
+  sessionId?: string;
+  threadId?: string | { fresh: true };
+  parentSessionId?: string;
+  origin?: 'top-level';
+  modeId?: string;
+  modelId?: string;
+};
+type MessageAdmissionBody = Parameters<HarnessSessionLike['admitMessage']>[0];
+type QueueAdmissionBody = Parameters<HarnessSessionLike['admitQueue']>[0];
 
 type MemoryThreadLike = { resourceId?: string | null };
 
@@ -183,6 +260,138 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
       ...Object.fromEntries(new Headers(init?.headers).entries()),
     },
   });
+}
+
+function parseStrongIfMatch(value: string | undefined): number {
+  if (!value) {
+    throwHarnessHttpError(400, 'harness.validation', 'If-Match header is required', {
+      field: 'if-match',
+      reason: 'missing',
+    });
+  }
+  if (value.includes(',') || value === '*' || value.startsWith('W/')) {
+    throwHarnessHttpError(400, 'harness.validation', 'If-Match must be a single strong session ETag', {
+      field: 'if-match',
+      reason: 'invalid',
+    });
+  }
+  const match = /^"([0-9]+)"$/.exec(value);
+  if (!match) {
+    throwHarnessHttpError(400, 'harness.validation', 'If-Match must use the session ETag format', {
+      field: 'if-match',
+      reason: 'invalid',
+    });
+  }
+  return Number(match[1]);
+}
+
+function assertSessionVersion(record: SessionRecord, expectedVersion: number): void {
+  if (record.version !== expectedVersion) {
+    throwHarnessHttpError(409, 'harness.state_conflict', 'Session state validator does not match current version', {
+      sessionId: record.id,
+      attemptedVersion: expectedVersion,
+      currentVersion: record.version,
+    });
+  }
+}
+
+function permissionsSnapshot(session: {
+  permissions: { getGrants(): Readonly<SessionGrants>; getRules(): Readonly<PermissionRules> };
+}) {
+  const grants = session.permissions.getGrants();
+  const rules = session.permissions.getRules();
+  return {
+    grants: {
+      categories: [...grants.categories],
+      tools: [...grants.tools],
+    },
+    rules: {
+      categories: { ...rules.categories },
+      tools: { ...rules.tools },
+    },
+  };
+}
+
+function objectRequestBody(requestBody: unknown, label: string): Record<string, unknown> {
+  if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} body must be a JSON object`);
+  }
+  return { ...(requestBody as Record<string, unknown>) };
+}
+
+function requiredStringField(body: Record<string, unknown>, field: string, label: string): string {
+  const value = body[field];
+  if (typeof value !== 'string' || value.length === 0) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} requires "${field}"`, {
+      field,
+      reason: 'required',
+    });
+  }
+  return value;
+}
+
+function requiredPermissionPolicy(body: Record<string, unknown>, label: string): 'allow' | 'ask' | 'deny' {
+  const value = body.policy;
+  if (value === undefined) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} requires "policy"`, {
+      field: 'policy',
+      reason: 'required',
+    });
+  }
+  if (value !== 'allow' && value !== 'ask' && value !== 'deny') {
+    throwHarnessHttpError(400, 'harness.validation', `${label} policy is invalid`, {
+      field: 'policy',
+      reason: 'invalid',
+    });
+  }
+  return value;
+}
+
+function requiredPermissionTarget(
+  body: Record<string, unknown>,
+  label: string,
+): { category: string } | { toolName: string } {
+  const hasCategory = body.category !== undefined;
+  const hasToolName = body.toolName !== undefined;
+  if (hasCategory === hasToolName) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} requires exactly one permission target`, {
+      field: 'category',
+      reason: 'exclusive',
+    });
+  }
+  return hasCategory
+    ? { category: requiredStringField(body, 'category', label) }
+    : { toolName: requiredStringField(body, 'toolName', label) };
+}
+
+function statePatchFromRequestBody(requestBody: unknown): Record<string, unknown> {
+  return objectRequestBody(requestBody, 'State patch');
+}
+
+function stringPathParam(
+  requestPathParams: Record<string, unknown> | undefined,
+  fallback: unknown,
+  key: string,
+): string {
+  const value = requestPathParams?.[key] ?? fallback;
+  if (typeof value !== 'string' || value.length === 0) {
+    throwHarnessHttpError(400, 'harness.validation', `Missing required path parameter "${key}"`, {
+      field: key,
+      reason: 'missing',
+    });
+  }
+  return value;
+}
+
+function harnessSessionPathIdentity(
+  requestPathParams: Record<string, unknown> | undefined,
+  fallbackName: unknown,
+  fallbackSessionId: unknown,
+): { pathName: string; pathSessionId: string } {
+  return {
+    pathName: stringPathParam(requestPathParams, fallbackName, 'name'),
+    pathSessionId: stringPathParam(requestPathParams, fallbackSessionId, 'sessionId'),
+  };
 }
 
 function isClosingUnderActiveForeignLease(record: SessionRecord, harness: Pick<HarnessLike, 'ownerId'>): boolean {
@@ -330,96 +539,158 @@ function assertResolvedSessionMatchesRequestedParent({
   }
 }
 
+function harnessErrorName(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const name = (error as { name?: unknown }).name;
+  return typeof name === 'string' ? name : undefined;
+}
+
+function harnessErrorProp(error: unknown, key: string): unknown {
+  if (!error || typeof error !== 'object') return undefined;
+  return (error as Record<string, unknown>)[key];
+}
+
+function harnessErrorString(error: unknown, key: string): string | undefined {
+  const value = harnessErrorProp(error, key);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function harnessErrorNumber(error: unknown, key: string): number | undefined {
+  const value = harnessErrorProp(error, key);
+  return typeof value === 'number' ? value : undefined;
+}
+
+function harnessErrorStringArray(error: unknown, key: string): string[] {
+  const value = harnessErrorProp(error, key);
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
 function mapHarnessError(error: unknown): never {
   if (error instanceof HTTPException) {
     throw error;
   }
-  if (error instanceof HarnessValidationError) {
-    throwHarnessHttpError(400, 'harness.validation', error.message, { field: error.field, reason: error.reason });
-  }
-  if (error instanceof HarnessConfigError) {
-    throwHarnessHttpError(400, 'harness.validation', error.message, { field: error.field, reason: error.reason });
-  }
-  if (error instanceof HarnessQueueFullError) {
-    throwHarnessHttpError(429, 'harness.queue_full', error.message, {
-      sessionId: error.sessionId,
-      maxQueueDepth: error.maxQueueDepth,
+  const name = harnessErrorName(error);
+  const message = error instanceof Error ? error.message : 'Harness route failed';
+  if (name === 'HarnessValidationError') {
+    throwHarnessHttpError(400, 'harness.validation', message, {
+      field: harnessErrorString(error, 'field'),
+      reason: harnessErrorString(error, 'reason'),
     });
   }
-  if (error instanceof HarnessAdmissionConflictError) {
-    throwHarnessHttpError(409, 'harness.admission_conflict', error.message, {
-      sessionId: error.sessionId,
-      admissionId: error.admissionId,
-      storedAdmissionHash: error.storedAdmissionHash,
-      attemptedAdmissionHash: error.attemptedAdmissionHash,
+  if (name === 'HarnessConfigError') {
+    throwHarnessHttpError(400, 'harness.validation', message, {
+      field: harnessErrorString(error, 'field'),
+      reason: harnessErrorString(error, 'reason'),
     });
   }
-  if (error instanceof HarnessSessionNotFoundError) {
-    throwHarnessHttpError(404, 'harness.session_not_found', error.message, { sessionId: error.sessionId });
-  }
-  if (error instanceof HarnessSessionClosedError) {
-    throwHarnessHttpError(404, 'harness.session_closed', error.message, { sessionId: error.sessionId });
-  }
-  if (error instanceof HarnessSessionDeletedError) {
-    throwHarnessHttpError(404, 'harness.session_deleted', error.message, { sessionId: error.sessionId });
-  }
-  if (error instanceof HarnessSessionClosingError) {
-    throwHarnessHttpError(409, 'harness.session_closing', error.message, {
-      sessionId: error.sessionId,
+  if (name === 'HarnessQueueFullError') {
+    throwHarnessHttpError(429, 'harness.queue_full', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      maxQueueDepth: harnessErrorNumber(error, 'maxQueueDepth'),
     });
   }
-  if (error instanceof HarnessSessionDeleteBlockedError) {
-    throwHarnessHttpError(409, 'harness.session_delete_blocked', error.message, {
-      sessionId: error.sessionId,
-      blockers: error.blockers.map(id => ({ source: 'session', id })),
+  if (name === 'HarnessAdmissionConflictError') {
+    throwHarnessHttpError(409, 'harness.admission_conflict', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      admissionId: harnessErrorString(error, 'admissionId'),
+      storedAdmissionHash: harnessErrorString(error, 'storedAdmissionHash'),
+      attemptedAdmissionHash: harnessErrorString(error, 'attemptedAdmissionHash'),
     });
   }
-  if (error instanceof HarnessSessionLockedError) {
-    throwHarnessHttpError(409, 'harness.session_locked', error.message, {
-      sessionId: error.sessionId,
-      currentOwnerId: error.currentOwnerId,
-      expiresAt: error.expiresAt,
+  if (name === 'HarnessAttachmentUnavailableError') {
+    const attachmentId = harnessErrorString(error, 'attachmentId');
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      reason: harnessErrorString(error, 'reason'),
+      ...(attachmentId !== undefined ? { attachmentId } : {}),
     });
   }
-  if (error instanceof HarnessSubagentDepthExceededError) {
-    throwHarnessHttpError(409, 'harness.subagent_depth_exceeded', error.message, {
-      sessionId: error.sessionId,
-      attemptedDepth: error.depth,
-      maxDepth: error.maxDepth,
+  if (name === 'HarnessInboxItemNotFoundError') {
+    throwHarnessHttpError(404, 'harness.inbox_item_not_found', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      itemId: harnessErrorString(error, 'itemId'),
     });
   }
-  if (error instanceof HarnessWorkspaceProviderMismatchError) {
-    throwHarnessHttpError(409, 'harness.workspace_provider_mismatch', error.message, {
-      sessionId: error.sessionId,
-      storedProviderId: error.storedProviderId,
-      configuredProviderId: error.expectedProviderId,
+  if (name === 'HarnessInboxResponseConflictError') {
+    throwHarnessHttpError(409, 'harness.inbox_response_conflict', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      itemId: harnessErrorString(error, 'itemId'),
+      responseId: harnessErrorString(error, 'responseId'),
     });
   }
-  if (error instanceof HarnessWorkspaceLostError) {
-    throwHarnessHttpError(409, 'harness.workspace_lost', error.message, {
-      sessionId: error.sessionId,
-      providerId: error.providerId,
-      reason: error.reason,
+  if (name === 'HarnessSessionNotFoundError') {
+    throwHarnessHttpError(404, 'harness.session_not_found', message, { sessionId: harnessErrorString(error, 'sessionId') });
+  }
+  if (name === 'HarnessSessionClosedError') {
+    throwHarnessHttpError(404, 'harness.session_closed', message, { sessionId: harnessErrorString(error, 'sessionId') });
+  }
+  if (name === 'HarnessSessionDeletedError') {
+    throwHarnessHttpError(404, 'harness.session_deleted', message, { sessionId: harnessErrorString(error, 'sessionId') });
+  }
+  if (name === 'HarnessSessionClosingError') {
+    throwHarnessHttpError(409, 'harness.session_closing', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
     });
   }
-  if (error instanceof HarnessWorkspaceProvisioningError) {
-    throwHarnessHttpError(503, 'harness.internal', error.message, {
-      providerId: error.providerId,
-      sessionId: error.sessionId,
-      resourceId: error.resourceId,
+  if (name === 'HarnessSessionDeleteBlockedError') {
+    throwHarnessHttpError(409, 'harness.session_delete_blocked', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      blockers: harnessErrorStringArray(error, 'blockers').map(id => ({ source: 'session', id })),
     });
   }
-  if (error instanceof HarnessStorageError) {
+  if (name === 'HarnessSessionLockedError') {
+    throwHarnessHttpError(409, 'harness.session_locked', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      currentOwnerId: harnessErrorString(error, 'currentOwnerId'),
+      expiresAt: harnessErrorNumber(error, 'expiresAt'),
+    });
+  }
+  if (name === 'HarnessStateConflictError') {
+    throwHarnessHttpError(409, 'harness.state_conflict', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      attemptedVersion: harnessErrorNumber(error, 'attemptedVersion'),
+      currentVersion: harnessErrorNumber(error, 'currentVersion'),
+    });
+  }
+  if (name === 'HarnessSubagentDepthExceededError') {
+    throwHarnessHttpError(409, 'harness.subagent_depth_exceeded', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      attemptedDepth: harnessErrorNumber(error, 'depth'),
+      maxDepth: harnessErrorNumber(error, 'maxDepth'),
+    });
+  }
+  if (name === 'HarnessWorkspaceProviderMismatchError') {
+    throwHarnessHttpError(409, 'harness.workspace_provider_mismatch', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      storedProviderId: harnessErrorString(error, 'storedProviderId'),
+      configuredProviderId: harnessErrorString(error, 'expectedProviderId'),
+    });
+  }
+  if (name === 'HarnessWorkspaceLostError') {
+    throwHarnessHttpError(409, 'harness.workspace_lost', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      providerId: harnessErrorString(error, 'providerId'),
+      reason: harnessErrorString(error, 'reason'),
+    });
+  }
+  if (name === 'HarnessWorkspaceProvisioningError') {
+    throwHarnessHttpError(503, 'harness.internal', message, {
+      providerId: harnessErrorString(error, 'providerId'),
+      sessionId: harnessErrorString(error, 'sessionId'),
+      resourceId: harnessErrorString(error, 'resourceId'),
+    });
+  }
+  if (name === 'HarnessStorageError') {
     throwHarnessHttpError(
       503,
       'harness.storage',
-      error.message,
-      { sessionId: error.sessionId, operation: error.operation },
+      message,
+      { sessionId: harnessErrorString(error, 'sessionId'), operation: harnessErrorString(error, 'operation') },
       true,
     );
   }
 
-  throwHarnessHttpError(500, 'harness.internal', error instanceof Error ? error.message : 'Harness route failed');
+  throwHarnessHttpError(500, 'harness.internal', message);
 }
 
 function lifecycleOf(record: Pick<SessionRecord, 'closingAt' | 'closedAt'>): SessionLifecycleStatus {
@@ -435,6 +706,14 @@ function throwSessionClosingFromRecord(record: Pick<SessionRecord, 'id' | 'closi
     closingAt,
     closeDeadlineAt: record.closeDeadlineAt ?? closingAt,
   });
+}
+
+function throwSessionNotFound(sessionId: string): never {
+  throwHarnessHttpError(404, 'harness.session_not_found', `Session "${sessionId}" was not found`, { sessionId });
+}
+
+function throwSessionClosed(sessionId: string): never {
+  throwHarnessHttpError(404, 'harness.session_closed', `Session "${sessionId}" is closed`, { sessionId });
 }
 
 function pendingInboxOf(record: Pick<SessionRecord, 'pendingResume'>): HarnessSessionListItem['pendingInbox'] {
@@ -584,7 +863,10 @@ function decodeCursor(cursor: string | undefined): number {
   } catch {
     // Fall through to validation envelope below.
   }
-  throw new HarnessValidationError('cursor', 'cursor is invalid or expired');
+  throwHarnessHttpError(400, 'harness.validation', 'cursor is invalid or expired', {
+    field: 'cursor',
+    reason: 'cursor is invalid or expired',
+  });
 }
 
 function harnessValidationErrorHook(error: ZodError, context: Parameters<ValidationErrorHook>[1]) {
@@ -658,18 +940,30 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
   summary: 'Create or resolve a Harness session',
   description: 'Creates or resolves a resource-scoped Harness session for the authenticated caller.',
   tags: ['Harness'],
-  handler: async ({ mastra, requestContext, name, sessionId, threadId, parentSessionId, origin, modeId, modelId }) => {
+  handler: async ({
+    mastra,
+    requestContext,
+    name,
+    requestBody,
+    requestPathParams,
+  }) => {
     try {
+      const pathName = stringPathParam(requestPathParams, name, 'name');
+      const body =
+        requestBody === undefined
+          ? ({} as CreateHarnessSessionBody)
+          : (objectRequestBody(requestBody, 'Create session') as CreateHarnessSessionBody);
+      const { sessionId, threadId, parentSessionId, origin, modeId, modelId } = body;
       const resourceId = getAuthResourceId(requestContext);
-      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, name);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
       let existingById: SessionRecord | null = null;
       if (sessionId !== undefined) {
         existingById = await harness.loadSession({ sessionId, includeClosed: true });
         if (existingById && existingById.resourceId !== resourceId) {
-          throw new HarnessSessionNotFoundError(sessionId);
+          throwSessionNotFound(sessionId);
         }
         if (existingById?.closedAt !== undefined) {
-          throw new HarnessSessionClosedError(sessionId);
+          throwSessionClosed(sessionId);
         }
         if (existingById?.closingAt !== undefined && existingById.closedAt === undefined) {
           throwSessionClosingFromRecord(existingById);
@@ -686,10 +980,10 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
       if (parentSessionId !== undefined) {
         const parent = await harness.loadSession({ sessionId: parentSessionId, includeClosed: true });
         if (!parent || parent.resourceId !== resourceId) {
-          throw new HarnessSessionNotFoundError(parentSessionId);
+          throwSessionNotFound(parentSessionId);
         }
         if (parent.closedAt !== undefined) {
-          throw new HarnessSessionClosedError(parentSessionId);
+          throwSessionClosed(parentSessionId);
         }
         if (parent.closingAt !== undefined && parent.closedAt === undefined) {
           throwSessionClosingFromRecord(parent);
@@ -744,13 +1038,14 @@ export const GET_HARNESS_SESSION_ROUTE = createRoute({
   summary: 'Get Harness session snapshot',
   description: 'Returns a tenant-scoped stored snapshot for a Harness session.',
   tags: ['Harness'],
-  handler: async ({ mastra, requestContext, name, sessionId }) => {
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
     try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
       const resourceId = getAuthResourceId(requestContext);
-      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, name);
-      const stored = await harness.loadSession({ sessionId, includeClosed: true });
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const stored = await harness.loadSession({ sessionId: pathSessionId, includeClosed: true });
       if (!stored || stored.resourceId !== resourceId) {
-        throw new HarnessSessionNotFoundError(sessionId);
+        throwSessionNotFound(pathSessionId);
       }
 
       const displayState = displayStateFromRecord(stored);
@@ -760,6 +1055,433 @@ export const GET_HARNESS_SESSION_ROUTE = createRoute({
         status: 200,
         headers: { etag: `"${stored.version}"` },
       });
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const POST_HARNESS_MESSAGE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/messages',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessMessageAdmissionBodySchema,
+  responseSchema: harnessMessageAdmissionResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Admit a Harness session message',
+  description: 'Admits a retry-safe message turn and returns the durable signal identity.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Message admission') as MessageAdmissionBody;
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      return await session.admitMessage(body);
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const POST_HARNESS_QUEUE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/queue',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessQueueAdmissionBodySchema,
+  responseSchema: harnessQueueAdmissionResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Admit a Harness queued turn',
+  description: 'Appends a retry-safe queued turn and returns the durable queued item identity.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Queue admission') as QueueAdmissionBody;
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      return await session.admitQueue(body);
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const GET_HARNESS_STATE_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/state',
+  responseType: 'datastream-response',
+  pathParamSchema: harnessSessionPathParams,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Get Harness session state',
+  description: 'Returns the tenant-scoped Harness session state with the session ETag.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const stored = await harness.loadSession({ sessionId: pathSessionId, includeClosed: true });
+      if (!stored || stored.resourceId !== resourceId) {
+        throwSessionNotFound(pathSessionId);
+      }
+      return jsonResponse(stored.state ?? {}, { status: 200, headers: { etag: `"${stored.version}"` } });
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const PATCH_HARNESS_STATE_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/harness/:name/sessions/:sessionId/state',
+  responseType: 'datastream-response',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessStatePatchSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Patch Harness session state',
+  description: 'Applies the object-form Harness state merge under a session ETag validator.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, getHeader, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const expectedVersion = parseStrongIfMatch(getHeader?.('if-match'));
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const stored = await harness.loadSession({ sessionId: pathSessionId, includeClosed: true });
+      if (!stored || stored.resourceId !== resourceId) {
+        throwSessionNotFound(pathSessionId);
+      }
+      assertSessionVersion(stored, expectedVersion);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      assertSessionVersion(session.getRecord() as SessionRecord, expectedVersion);
+      await session.setState(statePatchFromRequestBody(requestBody), { ifVersion: expectedVersion });
+      const record = session.getRecord() as SessionRecord;
+      return jsonResponse((record.state ?? {}) as unknown, { status: 200, headers: { etag: `"${record.version}"` } });
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const PATCH_HARNESS_MODE_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/harness/:name/sessions/:sessionId/mode',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessModePatchSchema,
+  responseSchema: harnessModeResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Switch Harness session mode',
+  description: 'Switches the active mode for future Harness turns.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Mode patch') as { mode: string };
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      await session.switchMode({ mode: body.mode });
+      return { modeId: (session.getRecord() as SessionRecord).modeId };
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const PATCH_HARNESS_MODEL_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/harness/:name/sessions/:sessionId/model',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessModelPatchSchema,
+  responseSchema: harnessModelResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Switch Harness session model',
+  description: 'Switches the default model for future Harness turns.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Model patch') as { model: string };
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      await session.models.switch({ model: body.model });
+      return { modelId: (session.getRecord() as SessionRecord).modelId };
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const PATCH_HARNESS_PERMISSIONS_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/harness/:name/sessions/:sessionId/permissions',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessPermissionPatchSchema,
+  responseSchema: harnessPermissionsResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Mutate Harness session permissions',
+  description: 'Applies a single session permission grant, revoke, or policy mutation.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Permissions patch') as {
+        action: 'grantCategory' | 'grantTool' | 'revokeCategory' | 'revokeTool' | 'setPolicy';
+        category?: string;
+        toolName?: string;
+        policy?: 'allow' | 'ask' | 'deny';
+      };
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      switch (body.action) {
+        case 'grantCategory':
+          await session.permissions.grantCategory({ category: requiredStringField(body, 'category', 'Permissions patch') });
+          break;
+        case 'grantTool':
+          await session.permissions.grantTool({ toolName: requiredStringField(body, 'toolName', 'Permissions patch') });
+          break;
+        case 'revokeCategory':
+          await session.permissions.revokeCategory({ category: requiredStringField(body, 'category', 'Permissions patch') });
+          break;
+        case 'revokeTool':
+          await session.permissions.revokeTool({ toolName: requiredStringField(body, 'toolName', 'Permissions patch') });
+          break;
+        case 'setPolicy': {
+          const policy = requiredPermissionPolicy(body, 'Permissions patch');
+          await session.permissions.setPolicy({ ...requiredPermissionTarget(body, 'Permissions patch'), policy });
+          break;
+        }
+      }
+      return permissionsSnapshot(session);
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const RESPOND_HARNESS_INBOX_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/inbox/:itemId',
+  responseType: 'json',
+  pathParamSchema: harnessInboxPathParams,
+  bodySchema: harnessInboxResponseBodySchema,
+  responseSchema: harnessInboxResponseResultSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Respond to a Harness inbox item',
+  description: 'Applies a typed, idempotent response to a pending Harness approval, suspension, question, or plan.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, itemId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const pathItemId = stringPathParam(requestPathParams, itemId, 'itemId');
+      const body = objectRequestBody(requestBody, 'Inbox response') as {
+        kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+        responseId: string;
+        approved?: boolean;
+        reason?: string;
+        resumeData?: unknown;
+        answer?: unknown;
+        revision?: string;
+        transitionToMode?: string;
+      };
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      switch (body.kind) {
+        case 'tool-approval':
+          return await session.respondToToolApproval({
+            itemId: pathItemId,
+            responseId: body.responseId,
+            approved: body.approved!,
+            ...(body.reason !== undefined ? { reason: body.reason } : {}),
+          });
+        case 'tool-suspension':
+          return await session.respondToToolSuspension({
+            itemId: pathItemId,
+            responseId: body.responseId,
+            resumeData: body.resumeData,
+          });
+        case 'question':
+          return await session.respondToQuestion({
+            itemId: pathItemId,
+            responseId: body.responseId,
+            answer: body.answer,
+          });
+        case 'plan-approval':
+          return await session.respondToPlanApproval({
+            itemId: pathItemId,
+            responseId: body.responseId,
+            approved: body.approved!,
+            ...(body.revision !== undefined ? { revision: body.revision } : {}),
+            ...(body.transitionToMode !== undefined ? { transitionToMode: body.transitionToMode } : {}),
+          });
+        default: {
+          const unsupportedKind: never = body.kind;
+          throwHarnessHttpError(400, 'harness.validation', `Unsupported inbox response kind for "${pathItemId}"`, {
+            field: 'kind',
+            reason: 'unsupported',
+            kind: unsupportedKind,
+            itemId: pathItemId,
+          });
+        }
+      }
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const PUT_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/harness/:name/sessions/:sessionId/goal',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessGoalBodySchema,
+  responseSchema: harnessGoalResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Set Harness session goal',
+  description: 'Sets or replaces the active session goal.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Goal') as unknown as GoalOptions;
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      const goal = await session.setGoal(body);
+      return { goal };
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const GET_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/goal',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  responseSchema: harnessGoalResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Get Harness session goal',
+  description: 'Reads the current session goal.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const stored = await harness.loadSession({ sessionId: pathSessionId, includeClosed: true });
+      if (!stored || stored.resourceId !== resourceId) {
+        throwSessionNotFound(pathSessionId);
+      }
+      return { goal: stored.goal ?? null };
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const PAUSE_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/goal/pause',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  responseSchema: harnessGoalResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Pause Harness session goal',
+  description: 'Pauses the current session goal if present.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      return { goal: (await session.pauseGoal()) ?? null };
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const RESUME_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/goal/resume',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  responseSchema: harnessGoalResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Resume Harness session goal',
+  description: 'Resumes the current session goal if present.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      return { goal: (await session.resumeGoal()) ?? null };
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const DELETE_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/harness/:name/sessions/:sessionId/goal',
+  responseType: 'datastream-response',
+  pathParamSchema: harnessSessionPathParams,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Clear Harness session goal',
+  description: 'Clears the current session goal if present.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      await session.clearGoal();
+      return new Response(null, { status: 204 });
     } catch (error) {
       return mapHarnessError(error);
     }
@@ -777,13 +1499,14 @@ export const CLOSE_HARNESS_SESSION_ROUTE = createRoute({
   summary: 'Close a Harness session',
   description: 'Closes a tenant-owned Harness session idempotently.',
   tags: ['Harness'],
-  handler: async ({ mastra, requestContext, name, sessionId }) => {
+  handler: async ({ mastra, requestContext, name, sessionId, requestPathParams }) => {
     try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
       const resourceId = getAuthResourceId(requestContext);
-      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, name);
-      const stored = await harness.loadSession({ sessionId, includeClosed: true });
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const stored = await harness.loadSession({ sessionId: pathSessionId, includeClosed: true });
       if (!stored || stored.resourceId !== resourceId) {
-        throw new HarnessSessionNotFoundError(sessionId);
+        throwSessionNotFound(pathSessionId);
       }
       if (stored.closedAt !== undefined) {
         return new Response(null, { status: 204 });
@@ -791,7 +1514,7 @@ export const CLOSE_HARNESS_SESSION_ROUTE = createRoute({
       if (isClosingUnderActiveForeignLease(stored, harness)) {
         return new Response(null, { status: 204 });
       }
-      await harness.closeSession({ sessionId, resourceId });
+      await harness.closeSession({ sessionId: pathSessionId, resourceId });
       return new Response(null, { status: 204 });
     } catch (error) {
       return mapHarnessError(error);

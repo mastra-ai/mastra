@@ -620,6 +620,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,
+        getHeader: (name: string) => {
+          const value = request.headers[name.toLowerCase()];
+          return Array.isArray(value) ? value.join(',') : value;
+        },
+        requestBody: params.body,
+        requestPathParams: params.urlParams,
       };
 
       // Check route permission requirement (EE feature)

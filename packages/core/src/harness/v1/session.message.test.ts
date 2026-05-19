@@ -127,6 +127,23 @@ class LiveStreamFakeAgent extends FakeAgent {
   }
 }
 
+class SlowStreamStartFakeAgent extends FakeAgent {
+  releaseStreamStart?: () => void;
+
+  override async stream(messages: any, options?: any): Promise<any> {
+    this.calls.push({ type: 'stream', messages, options });
+    await new Promise<void>(resolve => {
+      this.releaseStreamStart = resolve;
+    });
+    const out = buildFakeOutput({
+      runId: options?.runId ?? this.fullOutput.runId,
+      fullOutput: this.fullOutput,
+    });
+    this._internalRegisterStreamRun(out, (options ?? {}) as any);
+    return out;
+  }
+}
+
 function setup(modes?: any) {
   const agent = new FakeAgent('default');
   const storage = new InMemoryHarness({ db: new InMemoryDB() });
@@ -155,7 +172,19 @@ function setupTwoModes() {
   return { harness, defaultAgent, otherAgent, storage };
 }
 
-function legacyMessageAdmissionHash(opts: { content: unknown; modeId: string; modelId: string }) {
+function legacyMessageAdmissionHash(opts: {
+  content: unknown;
+  modeId: string;
+  modelId: string;
+  attachments?: Array<{
+    attachmentId: string;
+    resourceId: string;
+    ownerSessionId?: string;
+    bytes?: number;
+    sha256?: string;
+    source?: unknown;
+  }>;
+}) {
   return createHash('sha256')
     .update(
       canonicalJsonForTest({
@@ -163,7 +192,7 @@ function legacyMessageAdmissionHash(opts: { content: unknown; modeId: string; mo
         content: opts.content,
         mode: opts.modeId,
         model: opts.modelId,
-        attachments: [],
+        attachments: opts.attachments ?? [],
       }),
       'utf8',
     )
@@ -178,6 +207,18 @@ function canonicalJsonForTest(value: unknown): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJsonForTest(entry)}`)
     .join(',')}}`;
+}
+
+async function settleWithinTicks<T>(promise: Promise<T>, ticks = 10): Promise<{ settled: true; value: T } | { settled: false }> {
+  return Promise.race([
+    promise.then(value => ({ settled: true as const, value })),
+    (async () => {
+      for (let i = 0; i < ticks; i += 1) {
+        await nextTick();
+      }
+      return { settled: false as const };
+    })(),
+  ]);
 }
 
 describe('Session.message() — default path', () => {
@@ -244,6 +285,184 @@ describe('Session.message() — default path', () => {
 
     expect(first.text).toBe('hello back');
     expect(second.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('admits a message and returns signal identity before result lookup', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const admitted = await session.admitMessage({ content: 'hi', admissionId: 'admit-1' });
+    const duplicate = await session.admitMessage({ content: 'hi', admissionId: 'admit-1' });
+
+    expect(admitted).toMatchObject({ accepted: true, duplicate: false, signalId: expect.any(String) });
+    expect(duplicate).toMatchObject({
+      accepted: true,
+      duplicate: true,
+      signalId: admitted.signalId,
+      runId: admitted.runId,
+    });
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('returns message admission before a slow stream output is available', async () => {
+    const agent = new SlowStreamStartFakeAgent('default');
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const admittedPromise = session.admitMessage({ content: 'hi', admissionId: 'admit-slow-start' });
+    const admitted = await settleWithinTicks(admittedPromise);
+
+    expect(admitted).toMatchObject({
+      settled: true,
+      value: { accepted: true, duplicate: false, signalId: expect.any(String) },
+    });
+    expect(agent.calls).toHaveLength(1);
+    agent.releaseStreamStart?.();
+  });
+
+  it('reports an in-flight message admission piggyback as a duplicate', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const admissionId = 'admit-live-duplicate';
+    const admissionHash = (session as any)._computeMessageAdmissionHashes(
+      { content: 'hi', admissionId },
+      { modeId: 'default', modelId: 'default' },
+    ).primary;
+
+    (session as any)._messageAdmissionStarts.set(admissionId, {
+      admissionHash,
+      modeId: 'default',
+      promise: Promise.resolve({
+        status: 'pending',
+        harnessName: 'default',
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        threadId: session.threadId,
+        signalId: 'sig-live',
+        runId: 'run-live',
+        admissionId,
+        admissionHash,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    });
+
+    const admitted = await session.admitMessage({ content: 'hi', admissionId });
+
+    expect(admitted).toEqual({ accepted: true, duplicate: true, signalId: 'sig-live', runId: 'run-live' });
+    expect(agent.calls).toHaveLength(0);
+  });
+
+  it('treats primitive and file attachment refs as different admission identities', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({
+      content: 'render this',
+      admissionId: 'attachment-kind-conflict',
+      attachments: [
+        {
+          attachmentId: 'att-1',
+          resourceId: 'u1',
+          kind: 'primitive',
+          primitiveType: 'markdown',
+          schemaId: 'schema-v1',
+        },
+      ],
+    });
+
+    await expect(
+      session.message({
+        content: 'render this',
+        admissionId: 'attachment-kind-conflict',
+        attachments: [{ attachmentId: 'att-1', resourceId: 'u1', kind: 'file' }],
+      }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+  });
+
+  it('replays legacy duplicate admissions hashed before attachment metadata fields existed', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const legacyAdmissionHash = legacyMessageAdmissionHash({
+      content: 'render this',
+      modeId: 'default',
+      modelId: (session as any)._record.modelId,
+      attachments: [
+        {
+          attachmentId: 'att-legacy',
+          resourceId: 'u1',
+          bytes: 42,
+          sha256: 'abc123',
+        },
+      ],
+    });
+
+    await storage.writeMessageResultEvidence({
+      harnessName: (session as any)._record.harnessName,
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      status: 'completed',
+      signalId: 'legacy-attachment-signal',
+      runId: 'legacy-attachment-run',
+      result: agent.fullOutput,
+      admissionId: 'legacy-attachment-admission',
+      admissionHash: legacyAdmissionHash,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const duplicate = await session.message({
+      content: 'render this',
+      admissionId: 'legacy-attachment-admission',
+      attachments: [
+        {
+          attachmentId: 'att-legacy',
+          resourceId: 'u1',
+          bytes: 42,
+          sha256: 'abc123',
+          kind: 'primitive',
+          primitiveType: 'markdown',
+          schemaId: 'schema-v1',
+          metadata: { display: 'inline' },
+        },
+      ],
+    });
+
+    expect(duplicate.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(0);
+  });
+
+  it('admits duplicate messages from durable evidence when the retry races past the first lookup', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const first = await session.message({ content: 'hi', admissionId: 'admit-race-completed' });
+    const resolveOperationAdmissionEvidence = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let skippedFirstLookup = false;
+    storage.resolveOperationAdmissionEvidence = async opts => {
+      if (!skippedFirstLookup && opts.kind === 'message' && opts.admissionId === 'admit-race-completed') {
+        skippedFirstLookup = true;
+        return { status: 'none' };
+      }
+      return resolveOperationAdmissionEvidence(opts);
+    };
+
+    const admitted = await session.admitMessage({ content: 'hi', admissionId: 'admit-race-completed' });
+
+    expect(admitted).toMatchObject({
+      accepted: true,
+      duplicate: true,
+      signalId: expect.any(String),
+      runId: expect.any(String),
+    });
+    expect(first.text).toBe('hello back');
     expect(agent.calls).toHaveLength(1);
   });
 

@@ -50,6 +50,7 @@ export type {
 } from './events';
 
 export {
+  HarnessAttachmentUnavailableError,
   HarnessConfigError,
   HarnessAdmissionConflictError,
   HarnessInboxItemNotFoundError,
@@ -62,6 +63,7 @@ export {
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
   HarnessSkillNotFoundError,
+  HarnessStateConflictError,
   HarnessSkillArgsValidationError,
   HarnessStorageError,
   HarnessSubagentDepthExceededError,
@@ -115,7 +117,9 @@ export type {
   UseSkillOptions,
   HarnessWorkspaceConfig,
   ListMessagesOptions,
+  MessageAdmissionResult,
   PermissionPolicy,
+  QueueAdmissionResult,
   SessionDeleteOptions,
   SessionListOptions,
   SessionLoadByIdOptions,
@@ -125,6 +129,7 @@ export type {
   SessionResolveByIdScoped,
   SessionResolveByThread,
   SessionResolveOptions,
+  SetStateOptions,
   ShutdownOptions,
   SubagentDefinition,
   ThreadCloneOptions,

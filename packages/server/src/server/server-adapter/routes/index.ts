@@ -55,6 +55,12 @@ export type ServerContext = {
   abortSignal: AbortSignal;
   /** The route prefix configured for the server (e.g., '/api') */
   routePrefix?: string;
+  /** Adapter-normalized request header lookup. */
+  getHeader?: (name: string) => string | undefined;
+  /** Adapter-validated request body before body fields are flattened into handler params. */
+  requestBody?: unknown;
+  /** Adapter-validated path params before body fields are flattened into handler params. */
+  requestPathParams?: Record<string, unknown>;
 };
 
 /**

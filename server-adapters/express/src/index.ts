@@ -530,6 +530,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
           routePrefix: prefix,
+          getHeader: (name: string) => req.get(name),
+          requestBody: params.body,
+          requestPathParams: params.urlParams,
         };
 
         // Check route permission requirement (EE feature)

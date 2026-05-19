@@ -509,6 +509,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
           routePrefix: prefix,
+          getHeader: (name: string) => c.req.header(name),
+          requestBody: params.body,
+          requestPathParams: params.urlParams,
           request: c.req.raw, // Standard Request object with headers/cookies
         };
 

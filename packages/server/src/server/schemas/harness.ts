@@ -30,6 +30,10 @@ export const harnessSessionPathParams = harnessNamePathParams.extend({
   sessionId: z.string().min(1).describe('Harness session id'),
 });
 
+export const harnessInboxPathParams = harnessSessionPathParams.extend({
+  itemId: z.string().min(1).describe('Pending inbox item id'),
+});
+
 export const listHarnessSessionsQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -154,6 +158,184 @@ export const harnessSessionSnapshotSchema = z.object({
 
 export const createHarnessSessionResponseSchema = z.object({
   session: harnessSessionSnapshotSchema,
+});
+
+const attachmentRefSchema = z
+  .object({
+    attachmentId: z.string().min(1),
+    resourceId: z.string().min(1),
+    ownerSessionId: z.string().min(1).optional(),
+    bytes: z.number().int().nonnegative().optional(),
+    sha256: z.string().min(1).optional(),
+    source: z.enum(['inline', 'preupload', 'url', 'provider']).optional(),
+    kind: z.enum(['file', 'primitive', 'element']).optional(),
+    name: z.string().min(1).optional(),
+    mimeType: z.string().min(1).optional(),
+    primitiveType: z.string().min(1).optional(),
+    elementType: z.string().min(1).optional(),
+    renderer: jsonRecordSchema.optional(),
+    schemaId: z.string().min(1).optional(),
+    metadata: jsonRecordSchema.optional(),
+    object: jsonRecordSchema.optional(),
+  })
+  .strict();
+
+export const harnessMessageAdmissionBodySchema = z
+  .object({
+    content: z.string().min(1),
+    admissionId: z.string().min(1),
+    mode: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    attachments: z.array(attachmentRefSchema).optional(),
+  })
+  .strict();
+
+export const harnessMessageAdmissionResponseSchema = z.object({
+  accepted: z.literal(true),
+  signalId: z.string(),
+  runId: z.string().optional(),
+  duplicate: z.boolean(),
+});
+
+export const harnessQueueAdmissionBodySchema = z
+  .object({
+    content: z.string().min(1),
+    admissionId: z.string().min(1),
+    mode: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    yolo: z.boolean().optional(),
+    attachments: z.array(attachmentRefSchema).optional(),
+  })
+  .strict();
+
+export const harnessQueueAdmissionResponseSchema = z.object({
+  accepted: z.literal(true),
+  queuedItemId: z.string(),
+  duplicate: z.boolean(),
+});
+
+export const harnessStatePatchSchema = jsonRecordSchema;
+
+export const harnessModePatchSchema = z
+  .object({
+    mode: z.string().min(1),
+  })
+  .strict();
+
+export const harnessModeResponseSchema = z.object({
+  modeId: z.string(),
+});
+
+export const harnessModelPatchSchema = z
+  .object({
+    model: z.string().min(1),
+  })
+  .strict();
+
+export const harnessModelResponseSchema = z.object({
+  modelId: z.string(),
+});
+
+export const harnessPermissionPatchSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('grantCategory'), category: z.string().min(1) }).strict(),
+  z.object({ action: z.literal('grantTool'), toolName: z.string().min(1) }).strict(),
+  z.object({ action: z.literal('revokeCategory'), category: z.string().min(1) }).strict(),
+  z.object({ action: z.literal('revokeTool'), toolName: z.string().min(1) }).strict(),
+  z
+    .object({
+      action: z.literal('setPolicy'),
+      category: z.string().min(1).optional(),
+      toolName: z.string().min(1).optional(),
+      policy: z.enum(['allow', 'ask', 'deny']),
+    })
+    .strict()
+    .refine(value => (value.category === undefined) !== (value.toolName === undefined), {
+      message: 'setPolicy requires exactly one of category or toolName',
+      path: ['category'],
+    }),
+]);
+
+export const harnessPermissionsResponseSchema = z.object({
+  grants: z.object({
+    categories: z.array(z.string()),
+    tools: z.array(z.string()),
+  }),
+  rules: z.object({
+    categories: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])),
+    tools: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])),
+  }),
+});
+
+export const harnessInboxResponseBodySchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('tool-approval'),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+      responseId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('tool-suspension'),
+      resumeData: jsonValueSchema,
+      responseId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('question'),
+      answer: jsonValueSchema,
+      responseId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('plan-approval'),
+      approved: z.boolean(),
+      revision: z.string().optional(),
+      responseId: z.string().min(1),
+      transitionToMode: z.string().min(1).optional(),
+    })
+    .strict(),
+]);
+
+export const harnessInboxResponseResultSchema = z.object({
+  itemId: z.string(),
+  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+  status: z.enum(['accepted', 'applied']),
+  responseId: z.string(),
+  duplicate: z.boolean(),
+});
+
+export const harnessGoalSchema = z.object({
+  id: z.string(),
+  objective: z.string(),
+  status: z.enum(['active', 'paused', 'done']),
+  turnsUsed: z.number(),
+  maxTurns: z.number(),
+  judgeModelId: z.string(),
+  createdAt: z.number(),
+  lastDecision: z
+    .object({
+      decision: z.enum(['done', 'continue', 'waiting']),
+      reason: z.string(),
+      judgedAt: z.number(),
+    })
+    .optional(),
+});
+
+export const harnessGoalBodySchema = z
+  .object({
+    objective: z.string().min(1),
+    judgeModel: z.string().min(1).optional(),
+    maxTurns: z.number().int().positive().optional(),
+    kickoff: z.boolean().optional(),
+  })
+  .strict();
+
+export const harnessGoalResponseSchema = z.object({
+  goal: harnessGoalSchema.nullable(),
 });
 
 export const harnessErrorResponseSchema = z.object({

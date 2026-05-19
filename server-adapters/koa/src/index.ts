@@ -462,6 +462,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       taskStore: ctx.state.taskStore,
       abortSignal: ctx.state.abortSignal,
       routePrefix: prefix,
+      getHeader: (name: string) => ctx.get(name) || undefined,
+      requestBody: params.body,
+      requestPathParams: params.urlParams,
     };
 
     // Check route permission requirement (EE feature)

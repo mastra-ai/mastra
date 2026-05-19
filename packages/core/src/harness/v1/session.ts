@@ -8,9 +8,9 @@
  * The current local surface includes message/signal/queue turns, mode/model
  * and state mutation, display snapshots, message listing, pending inbox
  * responses, permissions, code/workspace skills, subagents, goals, event
- * forwarding, abort, and idle waiting. Server routes, remote SDKs, channels,
- * wakeups, and request-context `registerQuestion` / `registerPlanApproval`
- * support remain follow-up lanes.
+ * forwarding, abort, idle waiting, and the core admission/mutation primitives
+ * used by remote routes. Remote SDKs, channels, wakeups, and request-context
+ * `registerQuestion` / `registerPlanApproval` support remain follow-up lanes.
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
@@ -73,6 +73,7 @@ import {
   HarnessSessionClosedError,
   HarnessSessionClosingError,
   HarnessSessionDeletedError,
+  HarnessStateConflictError,
   HarnessSkillArgsValidationError,
   HarnessSkillNotFoundError,
   HarnessValidationError,
@@ -105,12 +106,14 @@ import type {
   HarnessSkill,
   UseSkillOptions,
   ListMessagesOptions,
+  MessageAdmissionResult,
   MessageOptions,
   MessageOptionsDefault,
   MessageOptionsStream,
   MessageOptionsStructured,
   ModelAuthStatus,
   PermissionPolicy,
+  QueueAdmissionResult,
   QueueOptions,
   RegisterPlanApprovalParams,
   RegisterQuestionParams,
@@ -118,6 +121,7 @@ import type {
   SessionInjectSystemReminderResult,
   SessionSignalOptions,
   SessionSignalResult,
+  SetStateOptions,
   ToolCategory,
 } from './types';
 
@@ -437,6 +441,8 @@ export class Session {
   private _currentQueuedItemSource?: 'user' | 'goal';
   /** Hydrated queue items should emit `queue_item_replayed` once per session instance. */
   private readonly _replayedQueuedItemIds = new Set<string>();
+  /** Fresh remote queue admissions have no local promise resolver but are not crash replays. */
+  private readonly _liveAdmittedQueuedItemIds = new Set<string>();
   /** True while `_maybeDrainQueue` is running so re-entrant kicks are no-ops. */
   private _draining = false;
   private _queuedResumeRecoveryTimer?: ReturnType<typeof setTimeout>;
@@ -2473,7 +2479,7 @@ export class Session {
           // The caller owns the visible stream; swallow drain-side errors.
         })
         .finally(() => {
-          if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
+          if (opts.admissionId !== undefined) this._deleteMessageAdmissionStartSoon(opts.admissionId);
           finishOwnedMessageTurn();
           void this._maybeDrainQueue();
         });
@@ -2561,6 +2567,133 @@ export class Session {
       // the queue drain so any item that was admitted mid-turn can run.
       void this._maybeDrainQueue();
     }
+  }
+
+  /**
+   * Admit a default message turn and return the durable signal identity
+   * without awaiting the eventual AgentResult. Remote HTTP routes use this
+   * surface to preserve local `message(...)` promise semantics in the SDK:
+   * the POST only proves admission, and SSE/result lookup settle the result.
+   */
+  async admitMessage(opts: MessageOptionsDefault): Promise<MessageAdmissionResult> {
+    this._assertLive('admitMessage()');
+    if (opts.admissionId === undefined || opts.admissionId.length === 0) {
+      throw new HarnessValidationError('admitMessage().admissionId', 'admissionId must be a non-empty string');
+    }
+    if (opts.output !== undefined || opts.sync !== undefined || opts.stream !== undefined) {
+      throw new HarnessConfigError('admitMessage()', 'admitMessage only accepts default message options');
+    }
+    if (opts.additionalTools !== undefined) {
+      throw new HarnessValidationError('admitMessage().admissionId', 'admissionId cannot be combined with additionalTools');
+    }
+
+    const effectiveModeId = opts.mode ?? this._record.modeId;
+    const admissionHashes = this._computeMessageAdmissionHashes(opts, {
+      modeId: effectiveModeId,
+      modelId: opts.model ?? this._record.modelId,
+    });
+    const duplicate = await this._resolveMessageAdmissionDuplicate({
+      admissionId: opts.admissionId,
+      admissionHash: admissionHashes.primary,
+      compatibleAdmissionHashes: admissionHashes.legacyCompatible,
+    });
+    if (duplicate) {
+      this._assertOpenForTurn('admitMessage()');
+      const signalId = duplicate.signalId;
+      if (signalId === undefined) {
+        throw new HarnessValidationError('admitMessage().admissionId', 'duplicate message result evidence has expired');
+      }
+      return {
+        accepted: true,
+        signalId,
+        ...(duplicate.runId !== undefined ? { runId: duplicate.runId } : {}),
+        duplicate: true,
+      };
+    }
+
+    const existingStart = this._messageAdmissionStarts.get(opts.admissionId);
+    if (existingStart) {
+      if (existingStart.admissionHash !== admissionHashes.primary) {
+        throw new HarnessAdmissionConflictError(
+          this.id,
+          opts.admissionId,
+          existingStart.admissionHash,
+          admissionHashes.primary,
+        );
+      }
+      const evidence = await existingStart.promise;
+      const signalId = evidence.signalId;
+      if (signalId === undefined) {
+        throw new HarnessValidationError('admitMessage().admissionId', 'message admission evidence has expired');
+      }
+      return {
+        accepted: true,
+        signalId,
+        ...(evidence.runId !== undefined ? { runId: evidence.runId } : {}),
+        duplicate: true,
+      };
+    }
+
+    const streamPromise = this.message({ ...opts, stream: true });
+    void streamPromise.catch(() => {});
+    const admissionStart = await this._waitForMessageAdmissionStart(opts.admissionId, streamPromise);
+    const evidence =
+      admissionStart.started !== undefined
+        ? await admissionStart.started.promise
+        : await this._resolveMessageAdmissionDuplicate({
+            admissionId: opts.admissionId,
+            admissionHash: admissionHashes.primary,
+            compatibleAdmissionHashes: admissionHashes.legacyCompatible,
+          });
+    if (evidence === undefined && admissionStart.streamError !== undefined) {
+      throw admissionStart.streamError;
+    }
+    if (evidence === undefined) {
+      throw new HarnessConfigError('admitMessage()', 'message admission evidence was not recorded');
+    }
+    const signalId = evidence.signalId;
+    if (signalId === undefined) {
+      throw new HarnessValidationError('admitMessage().admissionId', 'message admission evidence has expired');
+    }
+    return {
+      accepted: true,
+      signalId,
+      ...(evidence.runId !== undefined ? { runId: evidence.runId } : {}),
+      duplicate: admissionStart.started === undefined,
+    };
+  }
+
+  private async _waitForMessageAdmissionStart(
+    admissionId: string,
+    streamPromise: Promise<unknown>,
+  ): Promise<{ started?: MessageAdmissionStart; streamError?: unknown }> {
+    const settled: { status: 'pending' | 'fulfilled' | 'rejected'; error?: unknown } = { status: 'pending' };
+    void streamPromise.then(
+      () => {
+        settled.status = 'fulfilled';
+      },
+      error => {
+        settled.status = 'rejected';
+        settled.error = error;
+      },
+    );
+
+    while (true) {
+      const started = this._messageAdmissionStarts.get(admissionId);
+      if (started) return { started };
+      if (settled.status === 'rejected') return { streamError: settled.error };
+      if (settled.status === 'fulfilled') {
+        return {};
+      }
+      await delay(0);
+    }
+  }
+
+  private _deleteMessageAdmissionStartSoon(admissionId: string): void {
+    const timer = setTimeout(() => {
+      this._messageAdmissionStarts.delete(admissionId);
+    }, 0);
+    timer.unref?.();
   }
 
   private async _resolveMessageAdmissionDuplicate({
@@ -2839,17 +2972,23 @@ export class Session {
     stable: { modeId: string; modelId: string },
   ): MessageAdmissionHashes {
     const primary = sha256CanonicalJson(this._messageAdmissionHashInput(opts, undefined, { hashVersion: 2 }));
-    // Pre-v2 evidence hashed the effective mode/model. Keep one exact legacy
-    // candidate for the current effective tuple only; old evidence does not
+    // Pre-v2 evidence hashed the effective mode/model. Keep compatibility
+    // candidates for the current effective tuple only; old evidence does not
     // persist enough metadata to safely infer previous defaults after drift.
-    const legacyCompatible = sha256CanonicalJson(this._messageAdmissionHashInput(opts, stable));
-    return { primary, legacyCompatible: legacyCompatible === primary ? [] : [legacyCompatible] };
+    const legacyCompatible = [
+      sha256CanonicalJson(this._messageAdmissionHashInput(opts, stable)),
+      sha256CanonicalJson(this._messageAdmissionHashInput(opts, stable, { includeAttachmentMetadata: false })),
+    ];
+    return {
+      primary,
+      legacyCompatible: [...new Set(legacyCompatible)].filter(hash => hash !== primary),
+    };
   }
 
   private _messageAdmissionHashInput(
     opts: MessageOptions,
     stable?: { modeId: string; modelId: string },
-    options?: { hashVersion?: number },
+    options?: { hashVersion?: number; includeAttachmentMetadata?: boolean },
   ) {
     return {
       kind: 'message',
@@ -2868,6 +3007,19 @@ export class Session {
         ...(attachment.bytes !== undefined ? { bytes: attachment.bytes } : {}),
         ...(attachment.sha256 !== undefined ? { sha256: attachment.sha256 } : {}),
         ...(attachment.source !== undefined ? { source: attachment.source } : {}),
+        ...(options?.includeAttachmentMetadata !== false
+          ? {
+              ...(attachment.kind !== undefined ? { kind: attachment.kind } : {}),
+              ...(attachment.name !== undefined ? { name: attachment.name } : {}),
+              ...(attachment.mimeType !== undefined ? { mimeType: attachment.mimeType } : {}),
+              ...(attachment.primitiveType !== undefined ? { primitiveType: attachment.primitiveType } : {}),
+              ...(attachment.elementType !== undefined ? { elementType: attachment.elementType } : {}),
+              ...(attachment.renderer !== undefined ? { renderer: attachment.renderer } : {}),
+              ...(attachment.schemaId !== undefined ? { schemaId: attachment.schemaId } : {}),
+              ...(attachment.metadata !== undefined ? { metadata: cloneAttachmentMetadata(attachment.metadata) } : {}),
+              ...(attachment.object !== undefined ? { object: attachment.object } : {}),
+            }
+          : {}),
       })),
     };
   }
@@ -3439,18 +3591,24 @@ export class Session {
    * and writes the result. The functional form is the right choice for tools
    * that bump counters or otherwise depend on the previous value.
    */
-  setState<TState = unknown>(updates: Partial<TState>): Promise<void>;
-  setState<TState = unknown>(updater: (prev: TState) => TState): Promise<void>;
-  async setState<TState = unknown>(updatesOrUpdater: Partial<TState> | ((prev: TState) => TState)): Promise<void> {
+  setState<TState = unknown>(updates: Partial<TState>, opts?: SetStateOptions): Promise<void>;
+  setState<TState = unknown>(updater: (prev: TState) => TState, opts?: SetStateOptions): Promise<void>;
+  async setState<TState = unknown>(
+    updatesOrUpdater: Partial<TState> | ((prev: TState) => TState),
+    opts?: SetStateOptions,
+  ): Promise<void> {
     this._assertLive('setState()');
-    await this._flushUpdate(prev => {
-      const current = (prev.state ?? {}) as TState;
-      const next =
-        typeof updatesOrUpdater === 'function'
-          ? (updatesOrUpdater as (prev: TState) => TState)(current)
-          : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
-      return { ...prev, state: next };
-    });
+    await this._flushUpdate(
+      prev => {
+        const current = (prev.state ?? {}) as TState;
+        const next =
+          typeof updatesOrUpdater === 'function'
+            ? (updatesOrUpdater as (prev: TState) => TState)(current)
+            : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
+        return { ...prev, state: next };
+      },
+      opts,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -5108,19 +5266,61 @@ export class Session {
    *     `sessions.maxQueueDepth`.
    */
   async queue(opts: QueueOptions): Promise<AgentResult> {
-    this._assertLive('queue()');
+    const admission = await this._admitQueue(opts, 'queue()');
+    if (admission.duplicate) {
+      return this._withActiveDeletedWaiter(activeDeleted =>
+        this._raceActiveTurnWaiter(this._returnDuplicateQueueResult(admission.evidence, activeDeleted), activeDeleted),
+      );
+    }
+
+    const queued = createDeferred<AgentResult>();
+    const promise = queued.promise;
+    this._queueResolvers.set(admission.queuedItemId, { promise, resolve: queued.resolve, reject: queued.reject });
+    // Kick the drain — fire-and-forget. Drain handles its own errors and
+    // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
+    void this._maybeDrainQueue();
+    void promise.catch(() => {});
+    return promise;
+  }
+
+  /**
+   * Admit a queued turn without awaiting its eventual AgentResult. This is the
+   * remote-route counterpart to `queue(...)`; SDK promises settle from
+   * session events or PF-363 result lookup routes.
+   */
+  async admitQueue(opts: QueueOptions): Promise<QueueAdmissionResult> {
+    if (opts.admissionId === undefined || opts.admissionId.length === 0) {
+      throw new HarnessValidationError('admitQueue().admissionId', 'admissionId must be a non-empty string');
+    }
+    const admission = await this._admitQueue(opts, 'admitQueue()');
+    if (!admission.duplicate) {
+      this._liveAdmittedQueuedItemIds.add(admission.queuedItemId);
+    }
+    void this._maybeDrainQueue();
+    return { accepted: true, queuedItemId: admission.queuedItemId, duplicate: admission.duplicate };
+  }
+
+  private async _admitQueue(
+    opts: QueueOptions,
+    methodName: 'queue()' | 'admitQueue()',
+  ): Promise<{
+    queuedItemId: string;
+    evidence: QueueAdmissionReceipt | OperationAdmissionTombstone;
+    duplicate: boolean;
+  }> {
+    this._assertLive(methodName);
     if (typeof opts.content !== 'string' || opts.content.length === 0) {
-      throw new HarnessValidationError('queue().content', 'must be a non-empty string');
+      throw new HarnessValidationError(`${methodName}.content`, 'must be a non-empty string');
     }
     if (opts.mode !== undefined) {
       // Validates and throws on unknown id.
       this._harness._getMode(opts.mode);
     }
     if (opts.admissionId !== undefined && opts.admissionId.length === 0) {
-      throw new HarnessValidationError('queue().admissionId', 'admissionId must be a non-empty string');
+      throw new HarnessValidationError(`${methodName}.admissionId`, 'admissionId must be a non-empty string');
     }
 
-    const attachments = await this._resolveAttachmentRefs('queue().attachments', opts.attachments ?? []);
+    const attachments = await this._resolveAttachmentRefs(`${methodName}.attachments`, opts.attachments ?? []);
     const effectiveModeId = opts.mode ?? this._record.modeId;
     const admissionId = opts.admissionId ?? `queue-${randomUUID()}`;
     const admissionHash = this._computeQueueAdmissionHash(opts, attachments);
@@ -5128,17 +5328,18 @@ export class Session {
       ? await this._resolveQueueAdmissionDuplicate({ admissionId, admissionHash })
       : undefined;
     if (duplicate) {
-      this._assertOpenForTurn('queue()');
-      return this._withActiveDeletedWaiter(activeDeleted =>
-        this._raceActiveTurnWaiter(this._returnDuplicateQueueResult(duplicate, activeDeleted), activeDeleted),
-      );
+      this._assertOpenForTurn(methodName);
+      const queuedItemId = duplicate.queuedItemId;
+      if (queuedItemId === undefined) {
+        throw new HarnessValidationError(`${methodName}.admissionId`, 'duplicate queue result evidence has expired');
+      }
+      return { queuedItemId, evidence: duplicate, duplicate: true };
     }
 
     const cap = this._harness._internalMaxQueueDepth;
     if ((this._record.pendingQueue?.length ?? 0) >= cap) {
       throw new HarnessQueueFullError(this.id, cap);
     }
-
     const queuedItemId = this._queueAdmissionQueuedItemId(admissionId);
     const item: QueuedItem = {
       id: queuedItemId,
@@ -5160,7 +5361,7 @@ export class Session {
         source: 'queued_item' as const,
         sourceId: item.id,
       }));
-    let admittedReceipt: QueueAdmissionReceipt | OperationAdmissionTombstone | undefined;
+    let admittedReceipt: QueueAdmissionReceipt | undefined;
     const receipt: QueueAdmissionReceipt = {
       admissionId,
       admissionHash,
@@ -5212,20 +5413,11 @@ export class Session {
     }
 
     if (admittedReceipt) {
-      this._assertOpenForTurn('queue()');
-      return this._withActiveDeletedWaiter(activeDeleted =>
-        this._raceActiveTurnWaiter(this._returnDuplicateQueueResult(admittedReceipt!, activeDeleted), activeDeleted),
-      );
+      this._assertOpenForTurn(methodName);
+      return { queuedItemId: admittedReceipt.queuedItemId, evidence: admittedReceipt, duplicate: true };
     }
 
-    const queued = createDeferred<AgentResult>();
-    const promise = queued.promise;
-    this._queueResolvers.set(item.id, { promise, resolve: queued.resolve, reject: queued.reject });
-    // Kick the drain — fire-and-forget. Drain handles its own errors and
-    // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
-    void this._maybeDrainQueue();
-    void promise.catch(() => {});
-    return promise;
+    return { queuedItemId: item.id, evidence: receipt, duplicate: false };
   }
 
   private async _resolveQueueAdmissionDuplicate({
@@ -5470,7 +5662,8 @@ export class Session {
         if (!head) return;
         this._currentQueuedItemId = head.id;
         this._currentQueuedItemSource = head.source ?? 'user';
-        const isReplay = !this._queueResolvers.has(head.id);
+        const isLiveAdmission = this._queueResolvers.has(head.id) || this._liveAdmittedQueuedItemIds.delete(head.id);
+        const isReplay = !isLiveAdmission;
         if (isReplay) {
           this._emitQueueItemReplayedOnce(head.id);
         } else {
@@ -6300,7 +6493,7 @@ export class Session {
    */
   private _flushUpdate(
     update: (prev: SessionRecord) => SessionRecord,
-    opts?: { attachmentReferences?: SaveAttachmentReferenceInput[] },
+    opts?: { attachmentReferences?: SaveAttachmentReferenceInput[]; ifVersion?: number },
   ): Promise<void> {
     if (this._state === 'closed') {
       return Promise.reject(new HarnessSessionClosedError(this.id));
@@ -6312,6 +6505,9 @@ export class Session {
       return Promise.reject(new HarnessSessionClosedError(this.id));
     }
     const run = async (): Promise<void> => {
+      if (opts?.ifVersion !== undefined && this._record.version !== opts.ifVersion) {
+        throw new HarnessStateConflictError(this.id, opts.ifVersion, this._record.version);
+      }
       const next: SessionRecord = {
         ...update(this._record),
         lastActivityAt: Date.now(),

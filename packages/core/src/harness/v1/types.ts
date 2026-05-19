@@ -1128,6 +1128,19 @@ export type AgentResult<OUTPUT = undefined> = FullOutput<OUTPUT>;
 /** Shorthand for the streaming return type. */
 export type AgentStream<OUTPUT = undefined> = MastraModelOutput<OUTPUT>;
 
+export interface MessageAdmissionResult {
+  accepted: true;
+  signalId: string;
+  runId?: string;
+  duplicate: boolean;
+}
+
+export interface QueueAdmissionResult {
+  accepted: true;
+  queuedItemId: string;
+  duplicate: boolean;
+}
+
 export interface InboxResponseOptions {
   itemId?: string;
   responseId?: string;
@@ -1314,9 +1327,18 @@ export type RawAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBa
  *    the resolved value goes into a fresh setState call.
  */
 export type SetStateFn<TState> = {
-  (updates: Partial<TState>): Promise<void>;
-  (updater: (prev: TState) => TState): Promise<void>;
+  (updates: Partial<TState>, opts?: SetStateOptions): Promise<void>;
+  (updater: (prev: TState) => TState, opts?: SetStateOptions): Promise<void>;
 };
+
+export interface SetStateOptions {
+  /**
+   * Optional optimistic validator for remote state patches. When supplied,
+   * the update is rejected unless the latest serialized session version still
+   * matches this value at the state-mutation queue point.
+   */
+  ifVersion?: number;
+}
 
 /** Parameters accepted by `ctx.registerQuestion(...)` from a suspending tool. */
 export interface RegisterQuestionParams {

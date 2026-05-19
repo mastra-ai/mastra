@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { setupHarness } from './__test-utils__/setup';
+import { HarnessStateConflictError } from './errors';
 import type { HarnessRequestContext } from './types';
 
 function getHarnessSlot(streamCalls: any[]): HarnessRequestContext {
@@ -89,6 +90,18 @@ describe('HarnessRequestContext — state reads/writes', () => {
       slot.setState((prev: { counter: number }) => ({ counter: prev.counter + 1 })),
     ]);
     expect(await session.getState()).toEqual({ counter: 3 });
+  });
+
+  it('rejects setState when ifVersion no longer matches at the mutation point', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const version = session._internalRecordVersion;
+    await session.setState({ first: true });
+
+    await expect(session.setState({ stale: true }, { ifVersion: version })).rejects.toBeInstanceOf(
+      HarnessStateConflictError,
+    );
+    await expect(session.getState()).resolves.toEqual({ first: true });
   });
 });
 

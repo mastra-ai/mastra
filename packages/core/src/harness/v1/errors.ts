@@ -161,6 +161,19 @@ export class HarnessInboxResponseConflictError extends Error {
   }
 }
 
+export class HarnessStateConflictError extends Error {
+  readonly name = 'HarnessStateConflictError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly attemptedVersion: number,
+    public readonly currentVersion: number,
+  ) {
+    super(
+      `State update for session "${sessionId}" expected version ${attemptedVersion} but found ${currentVersion}`,
+    );
+  }
+}
+
 export class HarnessAttachmentInUseError extends Error {
   readonly name = 'HarnessAttachmentInUseError';
   constructor(
