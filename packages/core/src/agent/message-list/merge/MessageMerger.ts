@@ -111,9 +111,10 @@ export class MessageMerger {
     for (const [index, part] of incomingMessage.content.parts.entries()) {
       // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
       if (part.type === 'tool-invocation') {
+        if (!part.toolInvocation) continue;
         const existingCallPart = [...latestMessage.content.parts]
           .reverse()
-          .find(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId);
+          .find(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === part.toolInvocation.toolCallId);
 
         const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
 

@@ -627,6 +627,40 @@ describe('DefaultExporter', () => {
         );
       });
 
+      it('should preserve prior-call deferred updates when a later flushSpanUpdates call hits a transient error', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 3,
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        // span-a is started + flushed so it lives in the created-spans set
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-a'));
+        await exporter.flush();
+        mockObservabilityStore.batchUpdateSpans.mockClear();
+
+        // span-b's update arrives before its create — gets deferred by flushSpanUpdates call 1
+        // span-a's end arrives — flushSpanUpdates call 2 batch-updates and fails transiently
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-b'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-a'));
+
+        mockObservabilityStore.batchUpdateSpans.mockRejectedValueOnce(new Error('Transient failure'));
+        await exporter.flush();
+
+        // span-b's deferred update must NOT have been wiped by the call-2 error path.
+        // Now create span-b and flush — the update should be processed.
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-b'));
+        await exporter.flush();
+
+        const allUpdateRecords = mockObservabilityStore.batchUpdateSpans.mock.calls.flatMap(
+          (call: any) => call[0].records,
+        );
+        const spanBUpdates = allUpdateRecords.filter((u: any) => u.spanId === 'span-b');
+        expect(spanBUpdates.length).toBeGreaterThanOrEqual(1);
+      });
+
       it('should emit drop events when deferred updates exhaust retries', async () => {
         const emitDropEvent = vi.fn();
         const exporter = new DefaultExporter({

@@ -4,12 +4,22 @@ import { createStorageErrorId } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
 
-import { METRIC_EVENTS_DDL, LOG_EVENTS_DDL, SCORE_EVENTS_DDL, FEEDBACK_EVENTS_DDL } from './ddl';
+import {
+  METRIC_EVENTS_CURSOR_SEQUENCE_DDL,
+  METRIC_EVENTS_DDL,
+  LOG_EVENTS_CURSOR_SEQUENCE_DDL,
+  LOG_EVENTS_DDL,
+  SCORE_EVENTS_CURSOR_SEQUENCE_DDL,
+  SCORE_EVENTS_DDL,
+  FEEDBACK_EVENTS_CURSOR_SEQUENCE_DDL,
+  FEEDBACK_EVENTS_DDL,
+} from './ddl';
 
 interface SignalMigration {
   table: string;
   createDDL: string;
   idColumn: string;
+  cursorSequenceDDL: string;
 }
 
 export interface SignalMigrationStatusTable {
@@ -23,10 +33,30 @@ export interface SignalMigrationStatus {
 }
 
 const SIGNAL_MIGRATIONS: SignalMigration[] = [
-  { table: 'metric_events', createDDL: METRIC_EVENTS_DDL, idColumn: 'metricId' },
-  { table: 'log_events', createDDL: LOG_EVENTS_DDL, idColumn: 'logId' },
-  { table: 'score_events', createDDL: SCORE_EVENTS_DDL, idColumn: 'scoreId' },
-  { table: 'feedback_events', createDDL: FEEDBACK_EVENTS_DDL, idColumn: 'feedbackId' },
+  {
+    table: 'metric_events',
+    createDDL: METRIC_EVENTS_DDL,
+    idColumn: 'metricId',
+    cursorSequenceDDL: METRIC_EVENTS_CURSOR_SEQUENCE_DDL,
+  },
+  {
+    table: 'log_events',
+    createDDL: LOG_EVENTS_DDL,
+    idColumn: 'logId',
+    cursorSequenceDDL: LOG_EVENTS_CURSOR_SEQUENCE_DDL,
+  },
+  {
+    table: 'score_events',
+    createDDL: SCORE_EVENTS_DDL,
+    idColumn: 'scoreId',
+    cursorSequenceDDL: SCORE_EVENTS_CURSOR_SEQUENCE_DDL,
+  },
+  {
+    table: 'feedback_events',
+    createDDL: FEEDBACK_EVENTS_DDL,
+    idColumn: 'feedbackId',
+    cursorSequenceDDL: FEEDBACK_EVENTS_CURSOR_SEQUENCE_DDL,
+  },
 ];
 
 async function tableExists(db: DuckDBConnection, table: string): Promise<boolean> {
@@ -104,7 +134,7 @@ export async function checkSignalTablesMigrationStatus(db: DuckDBConnection): Pr
  * The live table is only touched during the final swap step.
  */
 export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastraLogger): Promise<void> {
-  for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
+  for (const { table, createDDL, idColumn, cursorSequenceDDL } of SIGNAL_MIGRATIONS) {
     if (!(await tableExists(db, table))) continue;
     if (await hasPrimaryKey(db, table)) continue;
 
@@ -116,6 +146,7 @@ export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastra
     let swapCompleted = false;
 
     try {
+      await db.execute(cursorSequenceDDL);
       await db.execute(buildTemporaryTableDDL(createDDL, table, temp));
 
       const newColumns = await getColumns(db, temp);

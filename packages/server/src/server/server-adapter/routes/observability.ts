@@ -11,6 +11,7 @@ import {
   LIST_SCORES_BY_SPAN_ROUTE,
 } from '../../handlers/observability';
 import {
+  LIST_METRICS,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
@@ -51,7 +52,8 @@ export const OBSERVABILITY_ROUTES = [
   GET_TRACE_TRAJECTORY_ROUTE,
   SCORE_TRACES_ROUTE,
   LIST_SCORES_BY_SPAN_ROUTE,
-  // New (17 routes)
+  // New observability routes
+  LIST_METRICS,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
