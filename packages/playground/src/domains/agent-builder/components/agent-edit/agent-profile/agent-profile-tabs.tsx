@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../../types/agent-tool';
 import { Instructions } from './instructions';
-import { ModelList } from './model-list';
+import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
 import { useBuilderModelPolicy } from '@/domains/builder';
@@ -53,7 +53,7 @@ export const AgentProfileTabs = ({
       value: 'model',
       label: 'Model',
       enabled: modelTabEnabled,
-      render: () => <ModelList editable={editable && !disabled} />,
+      render: () => <Models editable={editable && !disabled} />,
     },
     {
       value: 'instructions',
