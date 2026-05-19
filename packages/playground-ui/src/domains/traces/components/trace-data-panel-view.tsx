@@ -5,7 +5,7 @@ import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
@@ -135,13 +135,13 @@ export function TraceDataPanelView({
             </DataPanel.Heading>
             <ButtonsGroup className="ml-auto shrink-0">
               {onCollapsedChange && (
-                <ButtonWithTooltip
+                <Button
                   size="md"
-                  tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+                  tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
                   onClick={() => setCollapsed(!collapsed)}
                 >
                   {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                </ButtonWithTooltip>
+                </Button>
               )}
               <DataPanel.NextPrevNav
                 onPrevious={onPrevious}
@@ -150,15 +150,15 @@ export function TraceDataPanelView({
                 nextLabel="Next trace"
               />
               {showOpenTracePageLink && (
-                <ButtonWithTooltip
+                <Button
                   as={LinkComponent}
                   href={traceHref}
                   size="md"
-                  tooltipContent="Open trace page"
+                  tooltip="Open trace page"
                   aria-label="Open trace page"
                 >
                   <Link2Icon />
-                </ButtonWithTooltip>
+                </Button>
               )}
               <DataPanel.CloseButton onClick={onClose} />
             </ButtonsGroup>

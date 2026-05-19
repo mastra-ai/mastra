@@ -4,6 +4,7 @@ Convex adapters for Mastra:
 
 - `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, background tasks).
 - `ConvexVector` stores embeddings inside Convex and performs cosine similarity search.
+- `ConvexServerCache` stores Mastra server cache entries in Convex for durable stream replay and response caching.
 - `@mastra/convex/server` exposes the required Convex table definitions and storage mutation.
 
 ## Quick start
@@ -29,6 +30,8 @@ import {
   mastraBackgroundTasksTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
+  mastraCacheTable,
+  mastraCacheListItemsTable,
   mastraDocumentsTable,
 } from '@mastra/convex/schema';
 
@@ -41,11 +44,13 @@ export default defineSchema({
   mastra_background_tasks: mastraBackgroundTasksTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
+  mastra_cache: mastraCacheTable,
+  mastra_cache_list_items: mastraCacheListItemsTable,
   mastra_documents: mastraDocumentsTable,
 });
 ```
 
-### 3. Create the storage handler
+### 3. Create the storage and cache handlers
 
 In `convex/mastra/storage.ts`:
 
@@ -53,6 +58,14 @@ In `convex/mastra/storage.ts`:
 import { mastraStorage } from '@mastra/convex/server';
 
 export const handle = mastraStorage;
+```
+
+In `convex/mastra/cache.ts`:
+
+```ts
+import { mastraCache } from '@mastra/convex/server';
+
+export const handle = mastraCache;
 ```
 
 ### 4. Deploy to Convex
@@ -66,7 +79,7 @@ npx convex deploy
 ### 5. Use in Mastra
 
 ```ts
-import { ConvexStore } from '@mastra/convex';
+import { ConvexServerCache, ConvexStore } from '@mastra/convex';
 
 const storage = new ConvexStore({
   id: 'convex',
@@ -74,7 +87,17 @@ const storage = new ConvexStore({
   adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
   storageFunction: 'mastra/storage:handle', // default
 });
+
+const cache = new ConvexServerCache({
+  deploymentUrl: process.env.CONVEX_URL!,
+  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  cacheFunction: 'mastra/cache:handle', // default
+  requestTimeoutMs: 30_000, // default
+});
 ```
+
+`clear()` removes rows whose stored prefix exactly matches the configured cache prefix. Cleanup runs in bounded batches, so reads for a key being cleared can return empty results until cleanup finishes. During cleanup, cache metadata can briefly use an internal `deleted` state before the next cleanup pass removes it. List pushes refresh the configured cache TTL.
+Use this cache for durable replay of moderate-frequency events; batch high-frequency token streams or use a lower-latency cache backend.
 
 For vectors:
 
@@ -102,6 +125,8 @@ This adapter uses **typed Convex tables** for each Mastra domain:
 | Background Tasks | `mastra_background_tasks`   | Background task state |
 | Vector Indexes   | `mastra_vector_indexes`     | Index metadata        |
 | Vectors          | `mastra_vectors`            | Embeddings            |
+| Cache            | `mastra_cache`              | Cache metadata        |
+| Cache Items      | `mastra_cache_list_items`   | Cache list entries    |
 | Fallback         | `mastra_documents`          | Unknown tables        |
 
 All typed tables include:
