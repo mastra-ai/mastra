@@ -6,7 +6,7 @@
 "@mastra/mcp": patch
 "@mastra/editor": patch
 "@mastra/memory": patch
-"mastrai": patch
+"mastra": patch
 ---
 
 Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime.

@@ -251,7 +251,8 @@ function findCompileSchemaImportEdits(sourceFile) {
  * @param {string} path
  */
 function transform(code, path) {
-  const sourceFile = ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const scriptKind = path.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sourceFile = ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true, scriptKind);
   const importSpecifiers = findCompileSchemaImportSpecifiers(sourceFile);
   const replacements = [
     ...findCompileSchemaCalls(sourceFile, importSpecifiers),
