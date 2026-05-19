@@ -69,6 +69,25 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('isolates local subscriber failures from other subscribers', async () => {
+    const path = await socketPath();
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    const goodCb = vi.fn();
+    await pubsub.subscribe('topic-a', () => {
+      throw new Error('subscriber failed');
+    });
+    await pubsub.subscribe('topic-a', async () => {
+      throw new Error('async subscriber failed');
+    });
+    await pubsub.subscribe('topic-a', goodCb);
+
+    await pubsub.publish('topic-a', makeEvent({ type: 'isolated' }));
+
+    expect(goodCb).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects subscribe when the broker disconnects before acknowledging', async () => {
     const path = await socketPath();
     const server = net.createServer(socket => {

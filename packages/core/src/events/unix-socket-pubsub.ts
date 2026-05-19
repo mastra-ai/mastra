@@ -398,11 +398,18 @@ export class UnixSocketPubSub extends PubSub {
     const callbacks = this.#callbacks.get(topic);
     if (!callbacks) return;
     for (const cb of callbacks) {
-      cb(
-        event,
-        async () => {},
-        async () => {},
-      );
+      try {
+        const result = (cb as (event: Event, ack: () => Promise<void>, nack: () => Promise<void>) => unknown)(
+          event,
+          async () => {},
+          async () => {},
+        );
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          void (result as Promise<void>).catch(() => {});
+        }
+      } catch {
+        // Ignore subscriber failures so one callback cannot poison topic delivery.
+      }
     }
   }
 
