@@ -868,6 +868,86 @@ describe('ArizeExporter', () => {
       expect(attrs[SemanticConventions.INPUT_MIME_TYPE]).toBe('application/json');
       expect(attrs[SemanticConventions.OUTPUT_MIME_TYPE]).toBe('application/json');
     });
+
+    it('emits llm.tools.* from mastra.model_step.input when native tool definitions are absent', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const tools = [
+        {
+          type: 'function',
+          name: 'vectorSearchTool',
+          description: 'Search the knowledge base for relevant information.',
+          parameters: { query: 'string (required)' },
+        },
+      ];
+
+      const modelStepSpan: Mutable<AnyExportedSpan> = {
+        id: 'model-step-tools-span',
+        traceId: 'trace-model-step-tools',
+        parentSpanId: 'parent-span',
+        type: SpanType.MODEL_STEP,
+        name: 'model_step Research Agent',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { model: 'gpt-4o-mini', tools },
+        output: { text: 'result' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: modelStepSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Tool definitions should be emitted as OpenInference llm.tools.* attributes
+      const toolSchema = JSON.parse(attrs['llm.tools.0.tool.json_schema'] as string);
+      expect(toolSchema.name).toBe('vectorSearchTool');
+      expect(toolSchema.description).toBe('Search the knowledge base for relevant information.');
+      expect(toolSchema.parameters).toEqual({ query: 'string (required)' });
+      // The wrapper 'type' field should be stripped from the emitted schema
+      expect(toolSchema.type).toBeUndefined();
+    });
+
+    it('does not overwrite native llm.tools.* attributes with mastra.model_step.input tools', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const nativeToolSchema = JSON.stringify({ name: 'nativeTool', description: 'native', parameters: {} });
+
+      const modelStepSpan: Mutable<AnyExportedSpan> = {
+        id: 'model-step-native-tools-span',
+        traceId: 'trace-model-step-native-tools',
+        parentSpanId: 'parent-span',
+        type: SpanType.MODEL_STEP,
+        name: 'model_step Research Agent',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { model: 'gpt-4o-mini', tools: [{ name: 'mastraTool' }] },
+        output: { text: 'result' },
+        attributes: {
+          'llm.tools.0.tool.json_schema': nativeToolSchema,
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: modelStepSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Native llm.tools.* should be preserved unchanged
+      expect(attrs['llm.tools.0.tool.json_schema']).toBe(nativeToolSchema);
+    });
   });
 
   describe('Model Chunk Span Support', () => {
