@@ -1,3 +1,4 @@
+export { mastraCache } from './cache';
 export { mastraStorage } from './storage';
 
 // Re-export schema definitions for backward compatibility
@@ -11,6 +12,8 @@ export {
   mastraScoresTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
+  mastraCacheTable,
+  mastraCacheListItemsTable,
   mastraDocumentsTable,
   // Table name constants
   TABLE_WORKFLOW_SNAPSHOT,
