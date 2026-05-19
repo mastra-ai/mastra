@@ -243,3 +243,25 @@ import { toAISdkMessages } from '@mastra/ai-sdk/ui';
 const v5Messages = toAISdkMessages(storedMessages);
 const v6Messages = toAISdkMessages(storedMessages, { version: 'v6' });
 ```
+
+## Harness display state streams
+
+Use `harnessToUIMessageStream` from `@mastra/ai-sdk/harness` to stream canonical Harness display-state snapshots to AI SDK UI.
+
+```typescript
+import { harnessToUIMessageStream } from '@mastra/ai-sdk/harness';
+import { createUIMessageStreamResponse } from 'ai';
+
+export async function GET() {
+  const stream = harnessToUIMessageStream(harness, {
+    windowMs: 250,
+    maxWaitMs: 500,
+    mode: 'delta',
+    include: ['tools', 'hitl', 'tasks', 'om', 'files', 'subagents'],
+  });
+
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+The adapter reads the initial state from `harness.getDisplayState()` and then subscribes with `harness.subscribeDisplayState()`. It emits assistant text, reasoning, and native AI SDK tool lifecycle chunks when available, plus a stable `data-mastra-harness-snapshot` baseline. In `delta` mode, later display-state changes are emitted as append-only `data-mastra-harness-delta` parts that replace changed fields or domains.

@@ -25,6 +25,16 @@
         "default": "./dist/ui.cjs"
       }
     },
+    "./harness": {
+      "import": {
+        "types": "./dist/harness.d.ts",
+        "default": "./dist/harness.js"
+      },
+      "require": {
+        "types": "./dist/harness.d.ts",
+        "default": "./dist/harness.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
