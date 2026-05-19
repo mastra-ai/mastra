@@ -11,6 +11,19 @@ import { isModelInferenceEnabled } from './features';
  */
 export type DatadogSpanKind = 'llm' | 'agent' | 'workflow' | 'tool' | 'task' | 'retrieval' | 'embedding';
 
+type DatadogToolCall = {
+  name?: string;
+  arguments?: Record<string, any>;
+  toolId?: string;
+  type?: string;
+};
+
+type DatadogMessage = {
+  role: string;
+  content: string;
+  toolCalls?: DatadogToolCall[];
+};
+
 /**
  * Maps Mastra SpanTypes to Datadog LLMObs span kinds for the legacy hierarchy
  * (no `model-inference-span` feature). MODEL_STEP is the actual API call here
@@ -141,7 +154,7 @@ export function safeStringify(data: unknown): string {
 /**
  * Checks if data is already in message array format ({role, content}[]).
  */
-function isMessageArray(data: any): data is Array<{ role: string; content: any }> {
+function isMessageArray(data: any): data is Array<{ role: string; content: any; toolCalls?: DatadogToolCall[] }> {
   return Array.isArray(data) && data.every(m => m?.role && m?.content !== undefined);
 }
 
@@ -156,10 +169,45 @@ function isGeminiContentArray(data: any): data is Array<{ role: string; parts: a
  * Maps a {role, content}[] message array into the Datadog message shape,
  * stringifying any non-string content (e.g. multimodal part arrays).
  */
-function toDatadogMessages(messages: Array<{ role: string; content: any }>): Array<{ role: string; content: string }> {
-  return messages.map(m => ({
-    role: m.role,
-    content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
+function toDatadogMessages(
+  messages: Array<{ role: string; content: any; toolCalls?: DatadogToolCall[] }>,
+): DatadogMessage[] {
+  return messages.map(m => {
+    const message: DatadogMessage = {
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
+    };
+    if (m.toolCalls) {
+      message.toolCalls = m.toolCalls;
+    }
+    return message;
+  });
+}
+
+function parseToolArguments(args: unknown): Record<string, any> | undefined {
+  if (args == null) return undefined;
+  if (typeof args === 'string') {
+    try {
+      const parsed = JSON.parse(args);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch {
+      // Datadog's tool-call schema expects an object. Preserve opaque strings
+      // under a stable key instead of dropping the argument payload.
+    }
+    return { value: args };
+  }
+  if (typeof args === 'object') return args as Record<string, any>;
+  return { value: args };
+}
+
+function toDatadogToolCalls(toolCalls: any[]): DatadogToolCall[] {
+  return toolCalls.map(c => ({
+    name: c?.toolName ?? c?.name ?? c?.function?.name ?? 'unknown',
+    arguments: parseToolArguments(c?.args ?? c?.input ?? c?.function?.arguments),
+    toolId: c?.toolCallId ?? c?.toolId ?? c?.id,
+    type: c?.type === 'function' ? c.type : 'function',
   }));
 }
 
@@ -238,18 +286,23 @@ export function formatOutput(output: any, spanType: SpanType): any {
       return [{ role: 'assistant', content: output }];
     }
     // AI SDK shape: { text, object, reasoning, toolCalls, ... }.
-    // Prefer text, then object, then a structured tool-call summary so we don't
-    // bury the whole object as escaped JSON inside a single assistant content.
+    // Prefer structured tool-call messages when present so Datadog renders
+    // them as tool-call blocks instead of escaped JSON or text summaries.
     if (output && typeof output === 'object') {
+      if (Array.isArray(output.toolCalls) && output.toolCalls.length > 0) {
+        return [
+          {
+            role: 'assistant',
+            content: typeof output.text === 'string' ? output.text : '',
+            toolCalls: toDatadogToolCalls(output.toolCalls),
+          },
+        ];
+      }
       if (typeof output.text === 'string' && output.text.length > 0) {
         return [{ role: 'assistant', content: output.text }];
       }
       if (output.object !== undefined) {
         return [{ role: 'assistant', content: safeStringify(output.object) }];
-      }
-      if (Array.isArray(output.toolCalls) && output.toolCalls.length > 0) {
-        const summary = output.toolCalls.map((c: any) => `[tool: ${c?.toolName ?? c?.name ?? 'unknown'}]`).join('');
-        return [{ role: 'assistant', content: summary }];
       }
     }
     // Other objects get stringified as assistant message

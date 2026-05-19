@@ -299,15 +299,44 @@ describe('formatOutput', () => {
       expect(result).toEqual([{ role: 'assistant', content: '{"result":"success"}' }]);
     });
 
-    it('summarizes tool-call-only outputs without burying them as escaped JSON', () => {
+    it('formats tool-call-only outputs as Datadog tool call blocks', () => {
       const result = formatOutput(
         {
           text: '',
-          toolCalls: [{ toolName: 'search', args: { q: 'mastra' } }, { toolName: 'fetch' }],
+          toolCalls: [
+            { toolCallId: 'call-1', toolName: 'search', args: { q: 'mastra' } },
+            { toolCallId: 'call-2', toolName: 'fetch', input: { url: 'https://mastra.ai' } },
+          ],
         },
         SpanType.MODEL_GENERATION,
       );
-      expect(result).toEqual([{ role: 'assistant', content: '[tool: search][tool: fetch]' }]);
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { name: 'search', arguments: { q: 'mastra' }, toolId: 'call-1', type: 'function' },
+            { name: 'fetch', arguments: { url: 'https://mastra.ai' }, toolId: 'call-2', type: 'function' },
+          ],
+        },
+      ]);
+    });
+
+    it('preserves assistant text when formatting Datadog tool call blocks', () => {
+      const result = formatOutput(
+        {
+          text: 'I will search for that.',
+          toolCalls: [{ toolCallId: 'call-1', toolName: 'search', args: '{"q":"mastra"}' }],
+        },
+        SpanType.MODEL_GENERATION,
+      );
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: 'I will search for that.',
+          toolCalls: [{ name: 'search', arguments: { q: 'mastra' }, toolId: 'call-1', type: 'function' }],
+        },
+      ]);
     });
 
     it('uses object payload when text is empty and an object result is present', () => {
