@@ -261,6 +261,7 @@ export function createDurableToolCallStep() {
             toolCallId,
             toolName,
             args,
+            resumeSchema,
           },
           {
             resumeLabel: toolCallId,
@@ -347,6 +348,10 @@ export function createDurableToolCallStep() {
             return suspend(
               {
                 type: 'approval',
+                toolCallId,
+                toolName,
+                args,
+                resumeSchema: approvalResumeSchema,
                 requireToolApproval: { toolCallId, toolName, args },
               },
               { resumeLabel: toolCallId },
@@ -384,8 +389,11 @@ export function createDurableToolCallStep() {
             return suspend(
               {
                 type: 'suspension',
+                toolCallId,
                 toolCallSuspended: suspendPayload,
                 toolName,
+                args,
+                resumeSchema: suspendOptions?.resumeSchema,
                 resumeLabel: suspendOptions?.resumeLabel,
               },
               { resumeLabel: toolCallId },
