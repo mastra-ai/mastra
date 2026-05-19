@@ -212,6 +212,61 @@ export const mastraVectorsTable = defineTable({
   .index('by_index_id', ['indexName', 'id']) // Composite for scoped lookups per index
   .index('by_index', ['indexName']);
 
+export type MastraNativeVectorTableConfig = {
+  /**
+   * Vector dimensions for the deployed Convex vector index.
+   */
+  dimensions: number;
+  /**
+   * Convex vector index name.
+   *
+   * @default 'by_embedding'
+   */
+  vectorIndexName?: string;
+  /**
+   * Stage the vector index for a later backfill.
+   *
+   * @default false
+   */
+  staged?: boolean;
+};
+
+/**
+ * Defines a dedicated Convex table for native vector search with the default
+ * `ConvexNativeVector` field names.
+ *
+ * Use a custom `defineTable()` when you need native vector `filterFields`,
+ * because filter fields must also be declared in the table schema.
+ */
+export function defineMastraNativeVectorTable({
+  dimensions,
+  vectorIndexName = 'by_embedding',
+  staged = false,
+}: MastraNativeVectorTableConfig) {
+  if (!Number.isInteger(dimensions) || dimensions < 2 || dimensions > 4096) {
+    throw new Error('defineMastraNativeVectorTable: dimensions must be an integer between 2 and 4096.');
+  }
+
+  const table = defineTable({
+    id: v.string(),
+    embedding: v.array(v.float64()),
+    metadata: v.optional(v.any()),
+  }).index('by_record_id', ['id']);
+
+  if (staged) {
+    return table.vectorIndex(vectorIndexName, {
+      vectorField: 'embedding',
+      dimensions,
+      staged: true,
+    });
+  }
+
+  return table.vectorIndex(vectorIndexName, {
+    vectorField: 'embedding',
+    dimensions,
+  });
+}
+
 // ============================================================================
 // Server Cache Tables - Used by ConvexServerCache
 // ============================================================================
