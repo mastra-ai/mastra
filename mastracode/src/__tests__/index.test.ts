@@ -315,6 +315,14 @@ describe('createMastraCode', () => {
     expect(typeof harnessConfig?.memory).toBe('function');
   });
 
+  it('rejects cross-process PubSub mode without a PubSub instance', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode({ crossProcessPubSub: true })).rejects.toThrow(
+      'crossProcessPubSub requires a pubsub instance',
+    );
+  });
+
   it('restores the current thread caveman observation setting at startup', async () => {
     harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
     harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
