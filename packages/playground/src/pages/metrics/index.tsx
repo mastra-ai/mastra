@@ -45,6 +45,7 @@ import {
 } from '@/domains/metrics/components/metrics-kpi-cards';
 import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
+import { ScoresCard } from '@/domains/metrics/components/scores-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
 
@@ -308,6 +309,7 @@ function MetricsContent() {
             <MemoryCard />
             <TracesVolumeCard />
             <LatencyCard />
+            <ScoresCard />
           </MetricsFlexGrid>
         </div>
       )}
