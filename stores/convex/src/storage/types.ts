@@ -40,6 +40,22 @@ export type StorageRequest =
       op: 'deleteMany';
       tableName: TABLE_NAMES | string;
       ids: string[];
+    }
+  | {
+      op: 'mergeWorkflowStepResult';
+      tableName: TABLE_NAMES | string;
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: string;
+      requestContext: string;
+    }
+  | {
+      op: 'mergeWorkflowState';
+      tableName: TABLE_NAMES | string;
+      workflowName: string;
+      runId: string;
+      opts: string;
     };
 
 export type StorageResponse =

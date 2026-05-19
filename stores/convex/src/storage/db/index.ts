@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 
 import { MastraBase } from '@mastra/core/base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES, UpdateWorkflowStateOptions } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
 import type { EqualityFilter, IndexHint } from '../types';
@@ -148,6 +149,56 @@ export class ConvexDB extends MastraBase {
       tableName,
       ids,
     });
+  }
+
+  public async mergeWorkflowStepResult({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const context = await this.client.callStorage<string>({
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName,
+      runId,
+      stepId,
+      result: JSON.stringify(result),
+      requestContext: JSON.stringify(requestContext),
+    });
+    if (!context) {
+      throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
+    }
+    return JSON.parse(context);
+  }
+
+  public async mergeWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState> {
+    const snapshot = await this.client.callStorage<string>({
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName,
+      runId,
+      opts: JSON.stringify(opts),
+    });
+    if (!snapshot) {
+      throw new Error(`Convex workflow state merge returned no snapshot for runId ${runId}`);
+    }
+    return JSON.parse(snapshot);
   }
 
   private normalizeRecord(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {
