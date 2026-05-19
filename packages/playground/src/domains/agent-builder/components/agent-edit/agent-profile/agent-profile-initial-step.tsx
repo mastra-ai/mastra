@@ -33,7 +33,7 @@ export const AgentProfileInitialStep = ({ avatar, details }: AgentProfileInitial
 
   return (
     <div
-      className="w-full h-full border border-border1 bg-surface3 rounded-3xl flex flex-col items-center justify-center gap-2 py-6 px-6 text-center"
+      className="w-full h-full border border-border1 bg-surface3 rounded-3xl flex flex-col items-center justify-center gap-4 py-6 px-6 text-center"
       style={bannerStyle}
     >
       {avatar}

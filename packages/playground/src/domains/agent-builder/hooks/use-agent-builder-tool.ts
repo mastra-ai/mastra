@@ -59,19 +59,19 @@ export function useAgentBuilderTool({
         outputSchema: z.object({ success: z.boolean() }),
         execute: async (inputData: any) => {
           if (typeof inputData?.name === 'string') {
-            formMethods.setValue('name', inputData.name);
+            formMethods.setValue('name', inputData.name, { shouldDirty: true });
           }
           if (typeof inputData?.description === 'string') {
-            formMethods.setValue('description', inputData.description);
+            formMethods.setValue('description', inputData.description, { shouldDirty: true });
           }
           if (typeof inputData?.instructions === 'string') {
-            formMethods.setValue('instructions', inputData.instructions);
+            formMethods.setValue('instructions', inputData.instructions, { shouldDirty: true });
           }
           if (toolsEnabled && Array.isArray(inputData?.tools)) {
             const { tools, agents, workflows } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
-            formMethods.setValue('tools', tools);
-            formMethods.setValue('agents', agents);
-            formMethods.setValue('workflows', workflows);
+            formMethods.setValue('tools', tools, { shouldDirty: true });
+            formMethods.setValue('agents', agents, { shouldDirty: true });
+            formMethods.setValue('workflows', workflows, { shouldDirty: true });
           }
           if (skillsEnabled && Array.isArray(inputData?.skills)) {
             const validSkillIds = new Set(availableSkills.map(s => s.id));
@@ -99,7 +99,7 @@ export function useAgentBuilderTool({
             formMethods.setValue('browserEnabled', inputData.browserEnabled, { shouldDirty: true });
           }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
-            formMethods.setValue('workspaceId', inputData.workspaceId);
+            formMethods.setValue('workspaceId', inputData.workspaceId, { shouldDirty: true });
           }
 
           return { success: true };
