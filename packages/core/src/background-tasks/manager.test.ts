@@ -50,6 +50,27 @@ async function makeLocalManager(config: BackgroundTaskManagerConfig) {
   };
 }
 
+async function withRecoveringManager<T>(
+  seedStorage: MockStore,
+  fn: (args: { mgr: BackgroundTaskManager; bgStore: NonNullable<Awaited<ReturnType<MockStore['getStore']>>> }) => T,
+): Promise<Awaited<T>> {
+  const bgStore = await seedStorage.getStore('backgroundTasks');
+  const localMastra = new Mastra({ logger: false, storage: seedStorage });
+  await localMastra.startWorkers();
+  const isolatedPubsub = new EventEmitterPubSub();
+  const mgr = new BackgroundTaskManager({ enabled: true });
+  mgr.__registerMastra(localMastra);
+
+  try {
+    await mgr.init(isolatedPubsub);
+    return await fn({ mgr, bgStore: bgStore! });
+  } finally {
+    await mgr.shutdown();
+    await isolatedPubsub.close();
+    await localMastra.stopWorkers();
+  }
+}
+
 describe('BackgroundTaskManager', () => {
   let pubsub: EventEmitterPubSub;
   let manager: BackgroundTaskManager;
@@ -1043,9 +1064,188 @@ describe('BackgroundTaskManager', () => {
         const completed = await mgr.getTask('stale-1');
         expect(completed?.status).toBe('completed');
         expect(completed?.result).toBe('recovered');
+        expect(completed?.retryCount).toBe(1);
       } finally {
         await local.backgroundTaskManager?.shutdown();
         await local.stopWorkers();
+      }
+    });
+
+    it('fails expired running tasks when no executor can be reconstructed', async () => {
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'expired-no-executor',
+        status: 'running',
+        toolName: 'missing-tool',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      await withRecoveringManager(seedStorage, async () => {
+        const failed = await bgStore!.getTask('expired-no-executor');
+        expect(failed?.status).toBe('failed');
+        expect(failed?.error?.message).toContain('could not be recovered after restart');
+      });
+    });
+
+    it('leaves unexpired running tasks without an executor untouched', async () => {
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'active-elsewhere',
+        status: 'running',
+        toolName: 'missing-tool',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 60_000,
+        createdAt: new Date(),
+        startedAt: new Date(),
+      });
+
+      await withRecoveringManager(seedStorage, async () => {
+        const stillRunning = await bgStore!.getTask('active-elsewhere');
+        expect(stillRunning?.status).toBe('running');
+        expect(stillRunning?.error).toBeUndefined();
+      });
+    });
+
+    it('rechecks unexpired running tasks after their timeout window expires', async () => {
+      vi.useFakeTimers();
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'active-then-expired',
+        status: 'running',
+        toolName: 'missing-tool',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 20,
+        createdAt: new Date(),
+        startedAt: new Date(),
+      });
+
+      try {
+        await withRecoveringManager(seedStorage, async () => {
+          expect((await bgStore!.getTask('active-then-expired'))?.status).toBe('running');
+
+          await vi.advanceTimersByTimeAsync(21);
+
+          const failed = await bgStore!.getTask('active-then-expired');
+          expect(failed?.status).toBe('failed');
+          expect(failed?.error?.message).toContain('could not be recovered after restart');
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not fail pending tasks when no executor is available on this process', async () => {
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'pending-no-executor',
+        status: 'pending',
+        toolName: 'missing-tool',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+      });
+
+      await withRecoveringManager(seedStorage, async () => {
+        const stillPending = await bgStore!.getTask('pending-no-executor');
+        expect(stillPending?.status).toBe('pending');
+        expect(stillPending?.error).toBeUndefined();
+      });
+    });
+
+    it('leaves stale running tasks untouched when recovery CAS loses', async () => {
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'recovery-cas-race',
+        status: 'running',
+        toolName: 'missing-tool',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+      const update = vi.spyOn(bgStore!, 'updateTaskIfStatus').mockResolvedValueOnce(false);
+
+      try {
+        await withRecoveringManager(seedStorage, async () => {
+          expect(update).toHaveBeenCalledWith(
+            'recovery-cas-race',
+            'running',
+            expect.objectContaining({ status: 'failed' }),
+          );
+          const stillRunning = await bgStore!.getTask('recovery-cas-race');
+          expect(stillRunning?.status).toBe('running');
+        });
+      } finally {
+        update.mockRestore();
+      }
+    });
+
+    it('retries recovery after a transient storage failure', async () => {
+      vi.useFakeTimers();
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'recovery-after-error',
+        status: 'running',
+        toolName: 'missing-tool',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+      const listTasks = vi.spyOn(bgStore!, 'listTasks').mockRejectedValueOnce(new Error('temporary storage failure'));
+
+      try {
+        await withRecoveringManager(seedStorage, async () => {
+          expect((await bgStore!.getTask('recovery-after-error'))?.status).toBe('running');
+
+          await vi.advanceTimersByTimeAsync(60_000);
+
+          const failed = await bgStore!.getTask('recovery-after-error');
+          expect(failed?.status).toBe('failed');
+          expect(failed?.error?.message).toContain('could not be recovered after restart');
+        });
+      } finally {
+        listTasks.mockRestore();
+        vi.useRealTimers();
       }
     });
 
@@ -1513,6 +1713,118 @@ describe('BackgroundTaskManager', () => {
       await expect(
         manager.enqueue({ toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' }),
       ).rejects.toThrow('shutting down');
+    });
+
+    it('aborts active task controllers during shutdown', async () => {
+      let taskSignal: AbortSignal | undefined;
+      let sawAbort!: () => void;
+      const abortSeen = new Promise<void>(resolve => {
+        sawAbort = resolve;
+      });
+      const executeFn = vi.fn(
+        (_args: any, opts: { abortSignal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            taskSignal = opts.abortSignal;
+            opts.abortSignal.addEventListener(
+              'abort',
+              () => {
+                sawAbort();
+                reject(new Error('aborted-by-shutdown'));
+              },
+              { once: true },
+            );
+          }),
+      );
+
+      const { task } = await manager.enqueue(
+        { toolName: 'slow-shutdown-tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await tick();
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+
+      await manager.shutdown();
+      await abortSeen;
+      await tick(100);
+
+      expect(taskSignal?.aborted).toBe(true);
+      expect(manager.activeAbortControllers.size).toBe(0);
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+    });
+
+    it('does not complete a task when the executor resolves after shutdown abort', async () => {
+      let taskSignal: AbortSignal | undefined;
+      let sawAbort!: () => void;
+      const abortSeen = new Promise<void>(resolve => {
+        sawAbort = resolve;
+      });
+      const executeFn = vi.fn(
+        (_args: any, opts: { abortSignal: AbortSignal }) =>
+          new Promise(resolve => {
+            taskSignal = opts.abortSignal;
+            opts.abortSignal.addEventListener(
+              'abort',
+              () => {
+                sawAbort();
+                resolve('resolved-after-shutdown');
+              },
+              { once: true },
+            );
+          }),
+      );
+
+      const { task } = await manager.enqueue(
+        { toolName: 'shutdown-resolve-tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await tick();
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+
+      await manager.shutdown();
+      await abortSeen;
+      await tick(100);
+
+      expect(taskSignal?.aborted).toBe(true);
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+    });
+
+    it('does not suspend a task when the executor reacts to shutdown abort by suspending', async () => {
+      let taskSignal: AbortSignal | undefined;
+      let sawAbort!: () => void;
+      const abortSeen = new Promise<void>(resolve => {
+        sawAbort = resolve;
+      });
+      const executeFn = vi.fn(
+        (_args: any, opts: { abortSignal: AbortSignal; suspend: (data?: unknown) => Promise<void> }) =>
+          new Promise(resolve => {
+            taskSignal = opts.abortSignal;
+            opts.abortSignal.addEventListener(
+              'abort',
+              async () => {
+                await opts.suspend({ after: 'shutdown' });
+                sawAbort();
+                resolve('resolved-after-shutdown-suspend');
+              },
+              { once: true },
+            );
+          }),
+      );
+
+      const { task } = await manager.enqueue(
+        { toolName: 'shutdown-suspend-tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await tick();
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+
+      await manager.shutdown();
+      await abortSeen;
+      await tick(100);
+
+      const current = await manager.getTask(task.id);
+      expect(taskSignal?.aborted).toBe(true);
+      expect(current?.status).toBe('running');
+      expect(current?.suspendPayload).toBeUndefined();
     });
   });
 });
