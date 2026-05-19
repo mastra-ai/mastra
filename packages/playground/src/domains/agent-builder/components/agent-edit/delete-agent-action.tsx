@@ -83,10 +83,11 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
     <>
       <Button
         size="sm"
-        variant="destructive"
+        variant="default"
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"
+        className="text-error hover:text-error"
       >
         <Trash2 className="h-3.5 w-3.5" />
         <span>Delete agent</span>

@@ -93,11 +93,8 @@ const EditPageBody = () => {
 };
 
 const EditTopBarSlot = () => {
-  const { autosave, onModeToggle, canPublishToChannel, agentId, isOwner } = useEditPage();
+  const { autosave, onModeToggle, canPublishToChannel, agentId } = useEditPage();
   const isRunning = useStreamRunning();
-  const { data: capabilities } = useAuthCapabilities();
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-  const name = useWatch({ control, name: 'name' }) ?? '';
 
   return (
     <EditTopBar
@@ -109,11 +106,11 @@ const EditTopBarSlot = () => {
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
       }
       modeAction={
-        <div className="hidden lg:flex items-center gap-2">
-          {canPublishToChannel && <PublishToChannelButton agentId={agentId} />}
-          {capabilities?.enabled && <VisibilitySelect agentId={agentId} />}
-          {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
-        </div>
+        canPublishToChannel ? (
+          <div className="hidden lg:flex items-center gap-2">
+            <PublishToChannelButton agentId={agentId} />
+          </div>
+        ) : null
       }
       mobileExtra={<MobileMenuSlot />}
     />
@@ -140,15 +137,30 @@ const MobileMenuSlot = () => {
 };
 
 const ProfileSlot = () => {
-  const { availableAgentTools, availableSkills } = useEditPage();
+  const { agentId, availableAgentTools, availableSkills, isOwner } = useEditPage();
   const isRunning = useStreamRunning();
+  const { data: capabilities } = useAuthCapabilities();
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const name = useWatch({ control, name: 'name' }) ?? '';
+
+  const heroActions = (
+    <>
+      {capabilities?.enabled && (
+        <span style={{ viewTransitionName: 'agent-visibility-select' }}>
+          <VisibilitySelect agentId={agentId} />
+        </span>
+      )}
+      {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
+    </>
+  );
 
   return (
     <AgentProfile>
-      <AgentProfileHero>
-        <AgentProfileAvatar disabled={isRunning} />
-        <AgentProfileDetails disabled={isRunning} />
-      </AgentProfileHero>
+      <AgentProfileHero
+        avatar={<AgentProfileAvatar disabled={isRunning} />}
+        details={<AgentProfileDetails disabled={isRunning} />}
+        actions={heroActions}
+      />
       <AgentProfileTabs
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}

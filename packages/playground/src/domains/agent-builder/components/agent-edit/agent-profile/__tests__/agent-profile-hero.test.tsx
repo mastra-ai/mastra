@@ -8,22 +8,19 @@ describe('AgentProfileHero', () => {
     cleanup();
   });
 
-  it('renders children below the gradient banner', () => {
+  it('renders the avatar and details slots below the gradient banner', () => {
     const { getByTestId, getByText } = render(
-      <AgentProfileHero>
-        <span>profile-content</span>
-      </AgentProfileHero>,
+      <AgentProfileHero avatar={<span>avatar-slot</span>} details={<span>details-slot</span>} />,
     );
 
     expect(getByTestId('agent-profile-hero')).toBeTruthy();
-    expect(getByText('profile-content')).toBeTruthy();
+    expect(getByText('avatar-slot')).toBeTruthy();
+    expect(getByText('details-slot')).toBeTruthy();
   });
 
   it('renders a banner with a multi-accent gradient and is hidden from assistive tech', () => {
     const { getByTestId } = render(
-      <AgentProfileHero>
-        <span />
-      </AgentProfileHero>,
+      <AgentProfileHero avatar={<span />} details={<span />} />,
     );
 
     const banner = getByTestId('agent-profile-hero-banner');
@@ -32,5 +29,26 @@ describe('AgentProfileHero', () => {
     expect(banner.className).toContain('from-accent3');
     expect(banner.className).toContain('via-accent5');
     expect(banner.className).toContain('to-accent6');
+  });
+
+  it('renders the actions slot when provided', () => {
+    const { getByTestId, getByText } = render(
+      <AgentProfileHero
+        avatar={<span>avatar-slot</span>}
+        details={<span>details-slot</span>}
+        actions={<button type="button">action-button</button>}
+      />,
+    );
+
+    expect(getByTestId('agent-profile-hero-actions')).toBeTruthy();
+    expect(getByText('action-button')).toBeTruthy();
+  });
+
+  it('omits the actions container when no actions slot is provided', () => {
+    const { queryByTestId } = render(
+      <AgentProfileHero avatar={<span />} details={<span />} />,
+    );
+
+    expect(queryByTestId('agent-profile-hero-actions')).toBeNull();
   });
 });

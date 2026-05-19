@@ -93,7 +93,11 @@ const ViewTopBarSlot = () => {
         isOwner && (
           <>
             {isPublishable && <PublishToChannelButton agentId={agentId} />}
-            {showVisibilitySelect && <VisibilitySelect agentId={agentId} />}
+            {showVisibilitySelect && (
+              <span style={{ viewTransitionName: 'agent-visibility-select' }}>
+                <VisibilitySelect agentId={agentId} />
+              </span>
+            )}
           </>
         )
       }
