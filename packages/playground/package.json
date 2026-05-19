@@ -70,7 +70,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@uiw/react-codemirror": "^4.25.9",
     "@xyflow/react": "^12.10.1",
-    "date-fns": "^4.1.0",
+    "date-fns": "catalog:",
     "lucide-react": "^0.522.0",
     "papaparse": "^5.5.3",
     "posthog-js": "^1.369.3",
