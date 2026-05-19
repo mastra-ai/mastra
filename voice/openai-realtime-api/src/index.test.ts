@@ -199,6 +199,7 @@ describe('OpenAIRealtimeVoice', () => {
           }),
         ),
       );
+
       handleMessage?.(
         Buffer.from(
           JSON.stringify({
@@ -221,6 +222,111 @@ describe('OpenAIRealtimeVoice', () => {
         response_id: 'response_123',
         role: 'assistant',
       });
+    });
+
+    it('should forward OpenAI user transcription deltas using item_id as the response id', () => {
+      let handleMessage: ((message: Buffer) => void) | undefined;
+      (voice as any).ws = {
+        on: vi.fn((event, callback) => {
+          if (event === 'message') handleMessage = callback;
+        }),
+        close: vi.fn(),
+      };
+
+      const mockCallback = vi.fn();
+      voice.on('writing', mockCallback);
+      (voice as any).setupEventListeners();
+
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.delta',
+            item_id: 'item_123',
+            content_index: 0,
+            delta: 'Hello',
+          }),
+        ),
+      );
+
+      expect(mockCallback).toHaveBeenCalledWith({ text: 'Hello', response_id: 'item_123', role: 'user' });
+    });
+
+    it('should forward and finalize completed-only OpenAI user transcriptions', () => {
+      let handleMessage: ((message: Buffer) => void) | undefined;
+      (voice as any).ws = {
+        on: vi.fn((event, callback) => {
+          if (event === 'message') handleMessage = callback;
+        }),
+        close: vi.fn(),
+      };
+
+      const mockCallback = vi.fn();
+      voice.on('writing', mockCallback);
+      (voice as any).setupEventListeners();
+
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.completed',
+            item_id: 'item_123',
+            content_index: 0,
+            transcript: 'Hello',
+          }),
+        ),
+      );
+
+      expect(mockCallback).toHaveBeenCalledWith({ text: 'Hello', response_id: 'item_123', role: 'user' });
+      expect(mockCallback).toHaveBeenCalledWith({ text: '\n', response_id: 'item_123', role: 'user' });
+    });
+
+    it('should not duplicate completed OpenAI user transcripts after deltas', () => {
+      let handleMessage: ((message: Buffer) => void) | undefined;
+      (voice as any).ws = {
+        on: vi.fn((event, callback) => {
+          if (event === 'message') handleMessage = callback;
+        }),
+        close: vi.fn(),
+      };
+
+      const mockCallback = vi.fn();
+      voice.on('writing', mockCallback);
+      (voice as any).setupEventListeners();
+
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.delta',
+            item_id: 'item_123',
+            content_index: 0,
+            delta: 'Hel',
+          }),
+        ),
+      );
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.delta',
+            item_id: 'item_123',
+            content_index: 0,
+            delta: 'lo',
+          }),
+        ),
+      );
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.completed',
+            item_id: 'item_123',
+            content_index: 0,
+            transcript: 'Hello',
+          }),
+        ),
+      );
+
+      expect(mockCallback).toHaveBeenNthCalledWith(1, { text: 'Hel', response_id: 'item_123', role: 'user' });
+      expect(mockCallback).toHaveBeenNthCalledWith(2, { text: 'lo', response_id: 'item_123', role: 'user' });
+      expect(mockCallback).toHaveBeenNthCalledWith(3, { text: '\n', response_id: 'item_123', role: 'user' });
+      expect(mockCallback).toHaveBeenCalledTimes(3);
     });
   });
 });
