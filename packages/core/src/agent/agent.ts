@@ -4180,7 +4180,13 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                result = {
+                  text: generateResult.text,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults,
+                  usage: generateResult.usage,
+                };
               } else if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 resolvedModelVersion === 'v1'
@@ -4193,7 +4199,21 @@ export class Agent<
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
-                result = { text: generateResult.text };
+                const subAgentToolResultsLegacy = generateResult.toolResults?.map((toolResult: any) => ({
+                  toolName: toolResult.toolName,
+                  toolCallId: toolResult.toolCallId,
+                  result: toolResult.result,
+                  args: toolResult.args,
+                  isError: toolResult.isError,
+                }));
+
+                result = {
+                  text: generateResult.text,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults: subAgentToolResultsLegacy,
+                  usage: generateResult.usage,
+                };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
@@ -4339,11 +4359,13 @@ export class Agent<
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
+                const subAgentUsage = await streamResult.usage;
                 result = {
                   text: processedText,
                   subAgentThreadId,
                   subAgentResourceId,
                   subAgentToolResults,
+                  usage: subAgentUsage,
                 };
               } else {
                 if (typeof resolvedAgent.streamLegacy !== 'function') {
@@ -4373,6 +4395,10 @@ export class Agent<
 
                 result = { text: fullText };
               }
+
+              // Note: `usage` is included in `result` for successful generate, generateLegacy,
+              // and stream code paths. The `streamLegacy` path accumulates text only and won't
+              // have `usage`. Error/rejected delegation callbacks may also omit it.
 
               // Call onDelegationComplete hook if provided
               if (delegation?.onDelegationComplete) {
