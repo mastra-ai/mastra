@@ -60,5 +60,11 @@ function hasQuietStreamingPreview(component: Component | undefined): boolean {
 export function getSpacingBetween(prev: ChatSpacingKind | undefined, next: ChatSpacingKind | undefined): number {
   if (!prev || !next) return 0;
   if (prev === 'quiet-compact-tool' && next === 'quiet-compact-tool') return 0;
+  if (isToolSpacingKind(prev) && next === 'assistant-message') return 3;
+  if (prev === 'assistant-message' && isToolSpacingKind(next)) return 3;
   return 1;
+}
+
+function isToolSpacingKind(kind: ChatSpacingKind | undefined): boolean {
+  return kind === 'quiet-compact-tool' || kind === 'quiet-shell-tool' || kind === 'normal-tool';
 }

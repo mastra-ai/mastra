@@ -28,7 +28,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     const visible = stripAnsi(output);
     expect(output).toContain('view');
-    expect(output).toContain('src/example.ts');
+    expect(output).toContain(theme.fg('text', 'src/example.ts'));
     expect(output).toContain(theme.fg('dim', ':10-14'));
     expect(output).not.toContain('path=');
     expect(output).not.toContain('✓');
@@ -39,7 +39,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(4);
   });
 
-  it('wraps quiet view previews before applying ANSI syntax highlighting', () => {
+  it('highlights quiet view previews before truncating displayed lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts', offset: 1, limit: 1, showLineNumbers: true },
@@ -54,8 +54,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = component.render(120).join('\n');
-    const withoutCompleteAnsiSequences = output.replace(/\u001b\[[0-9;]*m/g, '');
-    expect(withoutCompleteAnsiSequences).not.toContain('\u001b');
+    expect(stripAnsi(output)).not.toContain('\u001b');
     expect(stripAnsi(output)).toContain('│ const value =');
   });
 
@@ -223,13 +222,46 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       isError: false,
     });
 
-    const output = stripAnsi(component.render(100).join('\n'));
+    const rendered = component.render(100).join('\n');
+    const output = stripAnsi(rendered);
     expect(output).toContain('list src (5 results)');
+    expect(rendered).toContain(theme.fg('text', 'src (5 results)'));
     expect(output).not.toContain('│ .');
-    expect(output).toContain('│ src/a.ts');
-    expect(output).toContain('│ src/b.ts');
+    expect(rendered).toContain(theme.fg('toolOutput', 'src/a.ts'));
+    expect(rendered).toContain(theme.fg('toolOutput', 'src/b.ts'));
     expect(output).not.toContain('src/c.ts');
     expect(output).toContain('╰──');
+  });
+
+  it('renders quiet web search with query summary and compact result preview', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'web_search',
+      { query: 'muted cli-highlight theme' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            sources: [
+              { title: 'cli-highlight README', url: 'https://github.com/felixfbecker/cli-highlight' },
+              { title: 'highlight.js Themes', url: 'https://highlightjs.org' },
+            ],
+          }),
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('web "muted cli-highlight theme"');
+    expect(output).toContain('│ cli-highlight README');
+    expect(output).toContain('│ https://github.com/felixfbecker/cli-highlight');
+    expect(output).not.toContain('highlight.js Themes');
+    expect(output).not.toContain('sources');
   });
 
   it('colors quiet compact tool labels by status', () => {
@@ -511,16 +543,17 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines[0]).toContain('grep');
     expect(lines[0]).not.toContain('foo');
     expect(lines[1]).toContain('│');
-    expect(lines[1]).toContain('foo');
+    expect(lines[1]).toContain(theme.fg('toolOutput', 'foo'));
     expect(stripAnsi(lines[2]!)).toContain('╰──');
 
     component.updateArgs({ pattern: 'foo', path: 'src/**/*.ts' });
     lines = component.render(100);
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain('src/**/*.ts');
+    expect(lines[0]).toContain(theme.fg('text', 'src/**/*.ts'));
     expect(lines[0]).not.toContain('foo');
     expect(lines[1]).toContain('│');
-    expect(lines[1]).toContain('foo');
+    expect(lines[1]).toContain(theme.fg('toolOutput', 'foo'));
     expect(lines[1]).not.toContain('src/**/*.ts');
     expect(stripAnsi(lines[2]!)).toContain('╰──');
 
@@ -549,7 +582,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('limits quiet shell output to eight content lines', () => {
+  it('limits quiet shell output to nine content lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },
@@ -566,10 +599,12 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
 
     const output = component.render(100).join('\n');
-    expect(output).toContain('line 3');
+    const lines = output.split('\n');
+    expect(output).toContain(theme.fg('success', ' ✓'));
+    expect(output).toContain('line 2');
     expect(output).toContain('line 10');
-    expect(output).not.toContain('line 2');
-    expect(output.split('\n').filter(line => line.includes('│'))).toHaveLength(8);
+    expect(lines.some(line => line.includes('line 1 ') || line.includes('line 1│'))).toBe(false);
+    expect(lines.filter(line => line.includes('line '))).toHaveLength(9);
   });
 
   it('keeps quiet detail lines visible after completion', () => {
@@ -600,6 +635,24 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     expect(output).toContain('\u001b[93m$');
     expect(output).not.toContain('⟶');
+  });
+
+  it('wraps long quiet shell commands in the footer instead of truncating them', () => {
+    const command = 'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = stripAnsi(component.render(60).join('\n'));
+    const footerLines = output.split('\n').filter(line => line.startsWith('│') && line.trim() !== '│');
+    expect(output).not.toContain('…');
+    expect(output).toContain('--reporter=dot');
+    expect(footerLines.length).toBeGreaterThan(1);
+    expect(footerLines[0]).toContain('│ $ pnpm');
+    expect(footerLines[1]).toMatch(/^│   \S/);
   });
 });
 
