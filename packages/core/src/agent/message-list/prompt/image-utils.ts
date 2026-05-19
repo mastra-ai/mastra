@@ -204,6 +204,16 @@ export function categorizeFileData(
     };
   }
 
+  // Check if it's an OpenAI Files API file ID — pass through as-is so
+  // @ai-sdk/openai can forward it as { file_id: "file-..." } to the API.
+  if (data.startsWith('file-')) {
+    return {
+      type: 'url',
+      mimeType,
+      data,
+    };
+  }
+
   // Check if it's a URL
   if (isValidUrl(data)) {
     return {
