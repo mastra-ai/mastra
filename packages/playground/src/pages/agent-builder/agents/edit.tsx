@@ -151,13 +151,12 @@ const ProfileSlot = () => {
   return (
     <AgentProfile>
       <AgentProfileHero>
-        <AgentProfileAvatar editable disabled={isRunning} />
-        <AgentProfileDetails editable disabled={isRunning} />
+        <AgentProfileAvatar disabled={isRunning} />
+        <AgentProfileDetails disabled={isRunning} />
       </AgentProfileHero>
       <AgentProfileTabs
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}
-        editable
         disabled={isRunning}
       />
     </AgentProfile>

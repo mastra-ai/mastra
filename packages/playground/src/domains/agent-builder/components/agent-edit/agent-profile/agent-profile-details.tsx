@@ -3,34 +3,21 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
 export interface AgentProfileDetailsProps {
-  /** Fallback name shown when not editable. */
-  fallbackName?: string;
-  /** Fallback description shown when not editable. */
-  fallbackDescription?: string;
-  editable?: boolean;
-  /** Disables interaction (e.g. while a stream is running). */
   disabled?: boolean;
 }
 
-export const AgentProfileDetails = ({
-  fallbackName,
-  fallbackDescription,
-  editable = true,
-  disabled = false,
-}: AgentProfileDetailsProps) => {
+export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const draftName = useWatch({ control, name: 'name' }) ?? '';
   const draftDescription = useWatch({ control, name: 'description' }) ?? '';
 
-  const isDisabled = disabled || !editable;
-  const displayedName = editable ? draftName : (fallbackName ?? draftName);
-  const displayedDescription = editable ? draftDescription : (fallbackDescription ?? draftDescription);
-
-  const setDraftName = (value: string) => {
-    if (!isDisabled) setValue('name', value, { shouldDirty: true });
+  const handleDraftNameChange = (value: string) => {
+    if (disabled) return;
+    setValue('name', value, { shouldDirty: true });
   };
-  const setDraftDescription = (value: string) => {
-    if (!isDisabled) setValue('description', value, { shouldDirty: true });
+  const handleDraftDescriptionChange = (value: string) => {
+    if (disabled) return;
+    setValue('description', value, { shouldDirty: true });
   };
 
   return (
@@ -38,10 +25,10 @@ export const AgentProfileDetails = ({
       <TextFieldBlock
         name="agent-name"
         label="Name"
-        value={displayedName}
+        value={draftName}
         placeholder="Untitled agent"
-        onChange={e => setDraftName(e.target.value)}
-        disabled={isDisabled}
+        onChange={e => handleDraftNameChange(e.target.value)}
+        disabled={disabled}
         testId="agent-configure-name"
       />
 
@@ -50,10 +37,10 @@ export const AgentProfileDetails = ({
           <FieldBlock.Label name="agent-description">Description</FieldBlock.Label>
           <Textarea
             name="agent-description"
-            value={displayedDescription}
+            value={draftDescription}
             placeholder="What is this agent for?"
-            onChange={e => setDraftDescription(e.target.value)}
-            disabled={isDisabled}
+            onChange={e => handleDraftDescriptionChange(e.target.value)}
+            disabled={disabled}
             testId="agent-configure-description"
           />
         </FieldBlock.Column>

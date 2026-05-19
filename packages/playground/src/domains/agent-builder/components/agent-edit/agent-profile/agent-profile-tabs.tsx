@@ -11,11 +11,7 @@ import { useBuilderModelPolicy } from '@/domains/builder';
 export interface AgentProfileTabsProps {
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
-  /** Whether the user can mutate the form. */
-  editable?: boolean;
-  /** Disables interaction across all tabs (e.g. while a stream is running). */
   disabled?: boolean;
-  /** Read-only fallback for the instructions prompt. */
   fallbackInstructions?: string;
 }
 
@@ -27,7 +23,6 @@ export interface AgentProfileTabsProps {
 export const AgentProfileTabs = ({
   availableAgentTools,
   availableSkills,
-  editable = true,
   disabled = false,
   fallbackInstructions,
 }: AgentProfileTabsProps) => {
@@ -40,7 +35,7 @@ export const AgentProfileTabs = ({
 
   const tabContentClassName = 'h-full min-h-0';
 
-  const isEditable = editable && !disabled;
+  const isEditable = !disabled;
 
   return (
     <div
