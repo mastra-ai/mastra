@@ -100,15 +100,7 @@ import type {
 import type { DbClient } from '../../../client';
 import { resolvePgConfig } from '../../../db';
 import type { PgDomainConfig } from '../../../db';
-import {
-  ALL_SIGNAL_TABLES,
-  allIndexDDL,
-  allTableDDL,
-  migrationDDL,
-  qualifiedTable,
-  TABLE_DISCOVERY,
-  TABLE_SPAN_EVENTS,
-} from './ddl';
+import { ALL_SIGNAL_TABLES, allIndexDDL, allTableDDL, qualifiedTable, TABLE_DISCOVERY, TABLE_SPAN_EVENTS } from './ddl';
 import * as discoveryOps from './discovery';
 import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
@@ -182,12 +174,6 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
-        await this.#client.none(ddl);
-      }
-      // ALTER TABLE ADD COLUMN IF NOT EXISTS for columns introduced after the
-      // initial schema. Idempotent — no-ops on fresh deploys that already
-      // have the columns from the CREATE TABLE above.
-      for (const ddl of migrationDDL(this.#schema)) {
         await this.#client.none(ddl);
       }
       for (const ddl of allIndexDDL(this.#schema)) {

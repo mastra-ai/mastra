@@ -514,33 +514,6 @@ function indexDDL(schema: string, spec: IndexSpec): string {
 // Public DDL accessors
 // ---------------------------------------------------------------------------
 
-/**
- * `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements for columns that were
- * added after the initial schema landed. Lets a deployment that came up on an
- * older version of the adapter pick up new columns at the next `init()`
- * without needing a separate migration step.
- *
- * Only list columns that arrived AFTER the initial CREATE TABLE. The CREATE
- * TABLE statement (idempotent via `IF NOT EXISTS`) handles fresh deploys; the
- * ALTERs handle in-place upgrades.
- *
- * NOTE: each ALTER ADD COLUMN that adds a `bigserial` rewrites the table
- * under `ACCESS EXCLUSIVE` to backfill the sequence values, which blocks all
- * other access for the duration. On a small / freshly-deployed table this is
- * fast; if you're upgrading an existing high-volume deployment, run init()
- * during a quiet window or apply the migration manually with a more nuanced
- * strategy (e.g. add nullable column → backfill in batches → set NOT NULL).
- */
-export function migrationDDL(schema: string): string[] {
-  return ALL_SIGNAL_TABLES.map(table => {
-    const tbl = qualifiedTable(schema, table);
-    // `cursorId` was added when delta polling landed. `bigserial` desugars to
-    // a sequence + default + NOT NULL — adding it to an existing table
-    // backfills via the sequence and applies the NOT NULL constraint.
-    return `ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS "cursorId" bigserial NOT NULL`;
-  });
-}
-
 /** All table CREATEs in dependency-safe order. */
 export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
   return [
