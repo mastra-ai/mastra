@@ -39,7 +39,7 @@ export const navItemClasses = ({ isActive, isCollapsed, isFeatured }: ItemStyleO
     'hover:bg-sidebar-nav-hover hover:text-neutral6 [&:hover_svg]:text-neutral5',
     'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
     !isCollapsed && 'w-full gap-2.5 py-1 px-3 justify-start',
-    isCollapsed && 'w-9 mx-auto p-0 justify-center',
+    isCollapsed && 'w-full p-0 justify-center',
     isActive &&
       'text-neutral6 bg-sidebar-nav-active hover:bg-sidebar-nav-active hover:text-neutral6 [&_svg]:text-neutral6 [&:hover_svg]:text-neutral6',
     isCollapsed && !isActive && '[&_svg]:text-neutral3',

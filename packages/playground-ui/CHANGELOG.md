@@ -1,5 +1,72 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.3
+
+### Minor Changes
+
+- Removed `ButtonWithTooltip` from `@mastra/playground-ui`. Use `Button` with the `tooltip` prop instead. ([#16719](https://github.com/mastra-ai/mastra/pull/16719))
+
+  **Migration**
+
+  ```tsx
+  // before
+  import { ButtonWithTooltip } from '@mastra/playground-ui';
+
+  <ButtonWithTooltip tooltipContent="Search">
+    <Search />
+  </ButtonWithTooltip>;
+
+  // after
+  import { Button } from '@mastra/playground-ui';
+
+  <Button tooltip="Search">
+    <Search />
+  </Button>;
+  ```
+
+  `tooltip` supports the same values as `tooltipContent`. Icon-only buttons that pass a string `tooltip` now also get it as their `aria-label` automatically, matching how labelled controls have always behaved. Pass an explicit `aria-label` to override.
+
+### Patch Changes
+
+- The Traces list now updates live via delta polling. Previously the list was refetched every 10 seconds, replacing the whole page with no signal about what changed; now new traces appear within a few seconds of being created, with a brief highlight to draw attention. Status changes on already-visible rows (running → success / error) also propagate without intervention, and returning to the tab after being idle re-syncs from a fresh cursor. ([#16727](https://github.com/mastra-ai/mastra/pull/16727))
+
+  **New `useTraces` return fields**
+  - `isRefetching` — true while any meaningful refetch is in flight. Use it to drive a heartbeat indicator.
+  - `autoRefetch` / `setAutoRefetch` — pause / resume all automatic polling so the consumer can render an opt-out toggle.
+  - `recentlyAddedKeys` — `Set<string>` of `traceId:spanId` for rows that just arrived via delta polling. Drives the temporary highlight in `TracesListView`.
+
+  **New polling config**
+
+  Every timing in the hook is tunable per-instance via a new `polling` option:
+
+  ```ts
+  import { useTraces, type TracesPollingConfig } from '@mastra/playground-ui';
+
+  useTraces({
+    filters,
+    listMode,
+    polling: {
+      deltaPollIntervalMs: 10_000,
+      idleGuardThresholdMs: 5 * 60_000,
+    },
+  });
+  ```
+
+  Omitted fields fall through to the defaults (delta poll every 5s, idle reset after 15 min, status refresh every 60s, etc).
+
+  **TracesListView**
+
+  New optional `recentlyAddedKeys?: Set<string>` prop. Rows whose `traceId:spanId` is in the set get the `animate-row-highlight` class — a brief fade-out to transparent, added to `index.css`.
+
+  **Compatibility**
+
+  Requires `@mastra/server` and `@mastra/client-js` at the versions that ship the observability delta-polling endpoints, and a store that opts into delta polling (`@mastra/clickhouse`, `@mastra/duckdb`, and the in-memory store today). When unavailable — older server or a store without delta capability — the hook silently falls back to page-mode interval refetching. No consumer changes required.
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+  - @mastra/client-js@1.20.0-alpha.3
+  - @mastra/react@0.4.0-alpha.3
+
 ## 29.0.0-alpha.2
 
 ### Patch Changes

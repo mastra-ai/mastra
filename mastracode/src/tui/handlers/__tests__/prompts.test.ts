@@ -72,6 +72,9 @@ function createPlanApprovalCtx() {
       respondToPlanApproval: vi.fn().mockResolvedValue(undefined),
       sendSignal,
     },
+    goalManager: {
+      getGoal: vi.fn(() => ({ id: 'goal-123', status: 'active', judgeModelId: 'openai/gpt-5.5' })),
+    },
     chatContainer: {
       children: [] as unknown[],
       addChild: vi.fn(function (this: any, child: unknown) {
@@ -84,6 +87,7 @@ function createPlanApprovalCtx() {
     },
     ui: { requestRender: vi.fn() },
     pendingSubmitPlanComponents: new Map(),
+    planStartedGoalId: undefined,
   } as any;
   const ctx = {
     state,
@@ -120,6 +124,21 @@ describe('handlePlanApproval goal mode', () => {
     // The goal handler does not send the "begin executing" reminder — the
     // goal judge keeps the agent driving toward the goal.
     expect(state.harness.sendSignal).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe('goal-123');
+  });
+
+  it('does not set planStartedGoalId if startGoal does not set a goal', async () => {
+    const { state, ctx } = createPlanApprovalCtx();
+    state.goalManager.getGoal = vi.fn(() => undefined);
+
+    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const component = state.chatContainer.children[0];
+
+    await (component as any).onGoal();
+    await promise;
+
+    expect(ctx.startGoal).toHaveBeenCalledTimes(1);
+    expect(state.planStartedGoalId).toBeUndefined();
   });
 });
 
@@ -161,7 +180,8 @@ describe('handlePlanApproval regular approval', () => {
       type: 'system-reminder',
       contents: 'The user has approved the plan, begin executing.',
     });
-    // Regular approval should not enter goal mode.
+    // Regular approval should not enter goal mode or set the return flag.
     expect(ctx.startGoal).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBeUndefined();
   });
 });
