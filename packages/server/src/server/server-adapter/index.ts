@@ -123,9 +123,9 @@ function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
 }
 
 function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
-  return [getEffectivePermission(route), route.fga?.permission].filter(
-    (permission): permission is MastraFGAPermissionInput => Boolean(permission),
-  );
+  return [getEffectivePermission(route), route.fga?.permission]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
 }
 
 async function resolveRouteFGAConfig(
@@ -480,6 +480,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       rawRequest: context.request,
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
+      requiresAuth: route.requiresAuth,
     });
 
     if (result.action === 'next') {
@@ -502,6 +503,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * 1. If route has explicit `requiresPermission`, use that
    * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
    * 3. Routes with `requiresAuth: false` skip permission checks
+   *
+   * When the route specifies an array of permissions, the user needs ANY ONE
+   * of them (logical OR).
    *
    * @param route - The route being accessed
    * @param userPermissions - The user's permissions from the request context
@@ -527,12 +531,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return null;
     }
 
-    // Check if user has the required permission
-    if (!userPermissions || !hasPermissionFn(userPermissions, requiredPermission)) {
+    // Check if user has the required permission(s)
+    // When an array is provided, user needs ANY ONE of them (logical OR)
+    const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
+
+    if (!hasAny) {
       return {
         status: 403,
         error: 'Forbidden',
-        message: `Missing required permission: ${requiredPermission}`,
+        message: `Missing required permission: ${permissions.join(' or ')}`,
       };
     }
 
@@ -552,6 +560,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateAgentBuilderLicense();
     await this.validateFGAPolicyCoverage();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
@@ -587,6 +596,36 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       // @mastra/core/auth/ee module not available; EE authorization cannot function.
       throw new Error(
         `[mastra/auth-ee] ${configuredFeatures.join(' and ')} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
+  /**
+   * Validate that an Agent Builder configuration has a valid EE license.
+   * Throws if the editor is configured with builder support but no valid EE license is available.
+   */
+  async validateAgentBuilderLicense(): Promise<void> {
+    const editor = this.mastra.getEditor();
+    if (!editor?.hasEnabledBuilderConfig?.()) return;
+
+    try {
+      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      if (!isEEEnabled()) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      // @mastra/core/auth/ee module not available — Agent Builder cannot function
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
@@ -987,9 +1026,10 @@ export async function checkRouteFGA(
       message: 'FGA authorization denied: route FGA metadata is incomplete',
     };
   }
+  const effectivePermission = route.path ? getEffectivePermission(route) : null;
   const permission =
     fgaConfig.permission ||
-    (route.path ? getEffectivePermission(route) : null) ||
+    effectivePermission ||
     `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
 
   const authorized = await fgaProvider.check(user, {

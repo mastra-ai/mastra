@@ -137,6 +137,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/acp',
+          label: 'ACP',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/signals',
           label: 'Signals',
           customProps: {

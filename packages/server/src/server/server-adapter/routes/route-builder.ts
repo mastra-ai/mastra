@@ -171,8 +171,10 @@ interface RouteConfig<
    * Permission required to access this route (EE feature).
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
+   *
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
    */
-  requiresPermission?: MastraFGAPermissionInput;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /**
    * FGA authorization config for this route (EE feature).
    * If set, the user must have the specified permission on the resource.

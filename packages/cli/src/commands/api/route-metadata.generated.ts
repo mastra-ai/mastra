@@ -425,6 +425,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /auth/roles/:roleId/permissions": {
+    "method": "GET",
+    "path": "/auth/roles/:roleId/permissions",
+    "pathParams": [
+      "roleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "permissions"
+    }
+  },
   "GET /workflows": {
     "method": "GET",
     "path": "/workflows",
@@ -3055,11 +3070,14 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "status"
+      "pinFavoritedFor",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -3109,6 +3127,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "defaultOptions",
       "description",
       "id",
@@ -3125,6 +3144,7 @@ export const API_ROUTE_METADATA = {
       "scorers",
       "skills",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3144,6 +3164,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "changeMessage",
       "defaultOptions",
       "description",
@@ -3160,6 +3181,7 @@ export const API_ROUTE_METADATA = {
       "scorers",
       "skills",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3287,6 +3309,34 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "agentId",
       "versionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/agents/:storedAgentId/favorite": {
+    "method": "PUT",
+    "path": "/stored/agents/:storedAgentId/favorite",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/agents/:storedAgentId/favorite": {
+    "method": "DELETE",
+    "path": "/stored/agents/:storedAgentId/favorite",
+    "pathParams": [
+      "storedAgentId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -4026,10 +4076,14 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
-      "perPage"
+      "perPage",
+      "pinFavoritedFor",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -4064,6 +4118,7 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "id",
       "instructions",
       "license",
@@ -4071,7 +4126,8 @@ export const API_ROUTE_METADATA = {
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4091,13 +4147,15 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "instructions",
       "license",
       "metadata",
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4131,6 +4189,34 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/skills/:storedSkillId/favorite": {
+    "method": "PUT",
+    "path": "/stored/skills/:storedSkillId/favorite",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/skills/:storedSkillId/favorite": {
+    "method": "DELETE",
+    "path": "/stored/skills/:storedSkillId/favorite",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -4742,6 +4828,114 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": false,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/settings": {
+    "method": "GET",
+    "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/infrastructure": {
+    "method": "GET",
+    "path": "/editor/builder/infrastructure",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries": {
+    "method": "GET",
+    "path": "/editor/builder/registries",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "registries"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/search": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/search",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "limit",
+      "q"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/popular": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/popular",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "limit",
+      "offset"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/preview": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/preview",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "owner",
+      "path",
+      "repo"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /editor/builder/registries/:registryId/install": {
+    "method": "POST",
+    "path": "/editor/builder/registries/:registryId/install",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "owner",
+      "repo",
+      "skillName",
+      "visibility"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }
