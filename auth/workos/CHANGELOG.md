@@ -1,5 +1,35 @@
 # @mastra/auth-workos
 
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- FGA `check()` and `require()` now accept an array of permissions and short-circuit on the first one that resolves to allow (ANY-of semantics). Single-permission usage continues to work unchanged. ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  ```ts
+  // Before — one permission per call
+  await fgaProvider.check({
+    user,
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or ANY-of array
+  await fgaProvider.check({
+    user,
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+  When all permissions in the array are denied, the thrown `FGADeniedError` lists them as `any of [a, b, c]` in its message.
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/auth@1.0.2
+
 ## 1.4.0
 
 ### Minor Changes

@@ -1,5 +1,19 @@
 # @mastra/koa
 
+## 1.5.6-alpha.2
+
+### Patch Changes
+
+- Updated the adapter permission check to read user permissions from the new namespaced request-context key `mastra__userPermissions` (was `userPermissions`). This matches the namespaced keys that `@mastra/server`'s core auth middleware now writes and avoids collisions with caller-supplied context entries. ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  No action needed for typical users — install the matching `@mastra/server` release and the adapter will continue to enforce route permissions exactly as before.
+
+- Bumped the `@mastra/core` peer dependency floor from `>=1.32.0-0` to `>=1.34.0-0`. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a), [`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/server@1.36.0-alpha.2
+
 ## 1.5.6-alpha.1
 
 ### Patch Changes
