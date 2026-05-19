@@ -70,6 +70,7 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
+      activationCount?: number;
     }
   | {
       type: 'om_activation_ttl';
@@ -165,7 +166,9 @@ function formatMarker(data: OMMarkerData): string {
       }
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
-      return theme.fg('success', `  ✓ Activated observations: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+      const label =
+        data.activationCount && data.activationCount > 1 ? `${data.activationCount} observations` : 'observations';
+      return theme.fg('success', `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
     }
     case 'om_activation_ttl': {
       return theme.fg(

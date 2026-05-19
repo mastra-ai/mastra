@@ -189,6 +189,25 @@ describe('renderExistingMessages startup history loading', () => {
     expect(state.messageComponentsById.get('user-2')).toBe(children[1]);
   });
 
+  it('tracks the latest rendered message timestamp for startup idle state', async () => {
+    const latest = new Date('2026-05-15T13:30:00.000Z');
+    const messages = [
+      { ...createUserMessage('first', 'user-1'), createdAt: new Date('2026-05-15T13:00:00.000Z') },
+      { ...createUserMessage('second', 'user-2'), createdAt: latest },
+    ] as HarnessMessage[];
+    const state = createState();
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getDisplayState: () => ({ isRunning: false }),
+      setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(state.lastRenderedMessageAt).toBe(latest.getTime());
+  });
+
   it('does not clear existing task display state when the bounded startup window has no task snapshot', async () => {
     const messages = [createUserMessage('recent', 'user-1')];
     const existingTasks = [{ id: 'old-task', content: 'Old task', status: 'pending', activeForm: 'Working' }];

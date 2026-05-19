@@ -19,17 +19,28 @@ import type { EventHandlerContext } from './types.js';
  * doesn't get pushed down as text streams in.  Falls back to a normal
  * append when nothing is streaming.
  */
-function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
+function getInsertIndexBeforeStreaming(ctx: EventHandlerContext): number {
   const { state } = ctx;
   if (state.streamingComponent) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent);
-    if (idx >= 0) {
-      state.chatContainer.children.splice(idx, 0, child);
-      state.chatContainer.invalidate();
-      return;
-    }
+    if (idx >= 0) return idx;
   }
-  state.chatContainer.addChild(child);
+  return state.chatContainer.children.length;
+}
+
+function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
+  const insertIndex = getInsertIndexBeforeStreaming(ctx);
+  if (insertIndex < ctx.state.chatContainer.children.length) {
+    ctx.state.chatContainer.children.splice(insertIndex, 0, child);
+    ctx.state.chatContainer.invalidate();
+    return;
+  }
+  ctx.state.chatContainer.addChild(child);
+}
+
+function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Component): boolean {
+  const insertIndex = getInsertIndexBeforeStreaming(ctx);
+  return insertIndex > 0 && ctx.state.chatContainer.children[insertIndex - 1] === child;
 }
 
 function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {
@@ -163,6 +174,7 @@ export function handleOMBufferingStart(
 ): void {
   const { state } = ctx;
   state.activeActivationMarker = undefined;
+  state.activeActivationData = undefined;
   state.activeActivationTTLMarker = undefined;
   state.activeActivationProviderChangeMarker = undefined;
   if (state.quietMode) {
@@ -273,14 +285,36 @@ export function handleOMActivation(
     }
   }
 
-  const activationData: OMMarkerData = {
-    type: 'om_activation',
-    operationType,
-    tokensActivated,
-    observationTokens,
-  };
-  state.activeActivationMarker = new OMMarkerComponent(activationData);
-  addChildBeforeStreaming(ctx, state.activeActivationMarker);
+  const previousActivationData = state.activeActivationData;
+  const canCombineActivation =
+    previousActivationData?.type === 'om_activation' &&
+    previousActivationData.operationType === operationType &&
+    state.activeActivationMarker !== undefined &&
+    isImmediatelyBeforeStreamingInsert(ctx, state.activeActivationMarker);
+
+  const activationData: OMMarkerData = canCombineActivation
+    ? {
+        type: 'om_activation',
+        operationType,
+        tokensActivated: previousActivationData.tokensActivated + tokensActivated,
+        observationTokens: previousActivationData.observationTokens + observationTokens,
+        activationCount: (previousActivationData.activationCount ?? 1) + 1,
+      }
+    : {
+        type: 'om_activation',
+        operationType,
+        tokensActivated,
+        observationTokens,
+      };
+
+  if (canCombineActivation && state.activeActivationMarker) {
+    state.activeActivationMarker.update(activationData);
+  } else {
+    state.activeActivationMarker = new OMMarkerComponent(activationData);
+    addChildBeforeStreaming(ctx, state.activeActivationMarker);
+  }
+
+  state.activeActivationData = activationData;
   state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }

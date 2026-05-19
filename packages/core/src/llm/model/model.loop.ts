@@ -77,6 +77,10 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
+  getProviderOptions() {
+    return this.#firstModel.providerOptions;
+  }
+
   convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[] {
     if (Array.isArray(messages)) {
       return messages.map(m => {
