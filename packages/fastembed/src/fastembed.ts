@@ -137,7 +137,7 @@ function isAddedTokenMap(token: unknown): token is AddedTokenMap {
   return (
     typeof token === 'object' &&
     token !== null &&
-    'token' in token &&
+    'content' in token &&
     'single_word' in token &&
     'rstrip' in token &&
     'lstrip' in token &&
@@ -264,6 +264,12 @@ export class FlagEmbedding extends Embedding {
     return new Promise<PathLike>((resolve, reject) => {
       https
         .get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, response => {
+          const status = response.statusCode ?? 0;
+          if (status < 200 || status >= 300) {
+            response.resume();
+            reject(new Error(`Failed to download ${model}: HTTP ${status}`));
+            return;
+          }
           const totalSizeInBytes = parseInt(response.headers['content-length'] || '0', 10);
 
           if (totalSizeInBytes === 0) {
@@ -321,7 +327,7 @@ export class FlagEmbedding extends Embedding {
     showDownloadProgress: boolean = true,
   ): Promise<PathLike> {
     if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { mode: 0o777 });
+      fs.mkdirSync(cacheDir, { mode: 0o755 });
     }
 
     const modelDir = path.join(cacheDir.toString(), model);
@@ -482,7 +488,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     _showDownloadProgress: boolean = true,
   ): Promise<PathLike> {
     if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { mode: 0o777 });
+      fs.mkdirSync(cacheDir, { mode: 0o755 });
     }
 
     const modelDir = path.join(cacheDir.toString(), model.replace('/', '_'));
@@ -491,7 +497,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       return modelDir;
     }
 
-    fs.mkdirSync(modelDir, { mode: 0o777 });
+    fs.mkdirSync(modelDir, { mode: 0o755 });
 
     const filesToDownload = [
       'onnx/model.onnx',
@@ -506,7 +512,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const outputDir = path.dirname(outputPath);
 
       if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true, mode: 0o777 });
+        fs.mkdirSync(outputDir, { recursive: true, mode: 0o755 });
       }
 
       const downloaded = await downloadFileToCacheDir({

@@ -2,4 +2,4 @@
 '@mastra/fastembed': minor
 ---
 
-Vendor fastembed-js source into @mastra/fastembed, removing the dependency on the abandoned upstream `fastembed` npm package. The core ONNX embedding engine is now maintained as a fork within the Mastra monorepo.
+Replace the abandoned `fastembed` npm dependency with a maintained, vendored implementation. The public API and all embedding models remain unchanged — no migration needed.
