@@ -121,6 +121,21 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).not.toContain('mastracode/src/tui/com');
   });
 
+  it('preserves the filename when continuation paths are identical', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'mastracode/src/tui/components/tool-execution-enhanced.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, 'mastracode/src/tui/components/tool-execution-enhanced.ts');
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('/tool-execution-enhanced.ts');
+    expect(output).not.toContain('mastracode/src/tui/components/tool-execution-enhanced.ts');
+  });
+
   it('renders matching completed continuation segments as connector chunks', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
@@ -323,7 +338,42 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines[1]).toContain('│   return value;');
   });
 
-  it('rolls long quiet write previews through two detail lines', () => {
+  it('hides quiet detail previews when the preview line limit is zero', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/example.ts', content: 'first line\nsecond line' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+
+    const lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('write /tmp/example.ts');
+    expect(lines.join('\n')).not.toContain('first line');
+    expect(component.hasQuietStreamingPreview()).toBe(false);
+  });
+
+  it('uses the configured quiet detail preview line limit', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      {
+        path: '/tmp/example.ts',
+        content: 'const first = 1;\nconst second = 2;\nconst third = 3;\nconst fourth = 4;',
+      },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 3 },
+      ui,
+    );
+
+    const lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(5);
+    expect(lines.join('\n')).not.toContain('const first = 1;');
+    expect(lines.join('\n')).toContain('const second = 2;');
+    expect(lines.join('\n')).toContain('const third = 3;');
+    expect(lines.join('\n')).toContain('const fourth = 4;');
+    expect(lines[4]).toContain('╰──');
+  });
+
+  it('rolls long quiet write previews through two detail lines by default', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       {
@@ -366,6 +416,21 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(lines[2]!)).toContain('const third = 3;');
     expect(stripAnsi(lines[3]!)).toContain('╰──');
     expect(stripAnsi(first.render(100).join('\n'))).toContain('const first = 1;');
+  });
+
+  it('uses a closed continuation header when preview lines are disabled', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/a.ts', content: 'const first = 1;' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, '/tmp/previous.ts');
+    const lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('╰─');
+    expect(lines[0]).not.toContain('├─');
   });
 
   it('uses an open continuation header when the continuation has preview lines', () => {

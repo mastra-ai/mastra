@@ -24,6 +24,7 @@ export interface ToolExecutionOptions {
   autoCollapse?: boolean;
   collapsedByDefault?: boolean;
   quietDisplayMode?: QuietToolDisplayMode;
+  quietPreviewLineLimit?: number;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
@@ -118,6 +119,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
   private quietDisplayMode: QuietToolDisplayMode;
+  private quietPreviewLineLimit: number;
   private compactToolContinuation = false;
   private compactToolHasFollowingContinuation = false;
   private compactToolPreviousSummary: string | undefined;
@@ -135,6 +137,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     };
     this.expanded = !this.options.collapsedByDefault;
     this.quietDisplayMode = this.options.quietDisplayMode ?? 'normal';
+    this.quietPreviewLineLimit = this.options.quietPreviewLineLimit ?? 2;
 
     // Content box - left indent for chat history alignment, no background
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
@@ -187,6 +190,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.rebuild();
   }
 
+  setQuietPreviewLineLimit(limit: number): void {
+    this.quietPreviewLineLimit = Math.max(0, Math.floor(limit));
+    this.rebuild();
+  }
+
   getChatSpacingKind(): ChatSpacingKind {
     if (this.quietDisplayMode === 'quiet') {
       return this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 'quiet-shell-tool' : 'quiet-compact-tool';
@@ -205,7 +213,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   hasQuietStreamingPreview(): boolean {
-    return this.quietDisplayMode === 'quiet' && this.getQuietActivePreview() !== '';
+    return this.quietDisplayMode === 'quiet' && this.quietPreviewLineLimit > 0 && this.getQuietActivePreview() !== '';
   }
 
   setCompactToolContinuation(continuation: boolean, previousSummary?: string): void {
@@ -335,14 +343,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private getQuietPreviewLines(maxLineWidth: number): string[] {
-    if (this.quietDisplayMode !== 'quiet' || this.toolName === MC_TOOLS.EXECUTE_COMMAND) return [];
+    if (this.quietDisplayMode !== 'quiet' || this.toolName === MC_TOOLS.EXECUTE_COMMAND || this.quietPreviewLineLimit <= 0) return [];
 
     const preview = this.getQuietActivePreview();
     if (!preview) return [];
 
     const firstLineWidth = Math.max(10, maxLineWidth - 4);
     const continuationWidth = Math.max(10, maxLineWidth - 4);
-    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-2);
+    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.quietPreviewLineLimit);
 
     return wrapped.map(line => {
       const linePrefix = `  ${theme.bold(theme.fg('toolBorderSuccess', '│'))} `;
@@ -527,7 +535,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const lineMatch = summary.match(/^─+/);
     const linePrefix = lineMatch?.[0] ?? '';
     const separator = linePrefix ? '' : ' ';
-    const connector = this.compactToolHasFollowingContinuation || this.getQuietActivePreview() ? '├' : '╰';
+    const connector = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview() ? '├' : '╰';
     const branch = `${connector}─${separator}${linePrefix}`;
     return `${theme.bold(theme.fg('toolBorderSuccess', branch))}${theme.fg('toolArgs', summary.slice(linePrefix.length))}`;
   }
@@ -541,6 +549,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (sharedPrefixLength === 0) return summary;
 
     return `${this.formatSharedPrefixPlaceholder(summary, sharedPrefixLength)}${summary.slice(sharedPrefixLength)}`;
+  }
+
+  private getImmediateDirnameStart(summary: string): number | undefined {
+    const pathEnd = summary.indexOf(':');
+    const path = pathEnd >= 0 ? summary.slice(0, pathEnd) : summary;
+    const filenameSlashIndex = path.lastIndexOf('/');
+    if (filenameSlashIndex < 0) return undefined;
+    const dirnameSlashIndex = path.lastIndexOf('/', filenameSlashIndex - 1);
+    return dirnameSlashIndex >= 0 ? dirnameSlashIndex : filenameSlashIndex;
   }
 
   private formatSharedPrefixPlaceholder(summary: string, sharedPrefixLength: number): string {
@@ -565,12 +582,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const matchingSegmentBoundary = path.lastIndexOf('/', sharedPathLength - 1);
     const currentSegmentStart = path.lastIndexOf('/', Math.max(0, sharedPathLength - 1));
 
+    if (i === b.length && i === a.length) {
+      return this.getImmediateDirnameStart(b) ?? b.length;
+    }
+
     if (i === b.length || i === a.length) {
       return b.length;
     }
 
     if (i < b.length && i < a.length) {
-      return currentSegmentStart >= 0 ? currentSegmentStart : 0;
+      const visiblePathStart = this.getImmediateDirnameStart(b) ?? currentSegmentStart;
+      if (currentSegmentStart < 0) return 0;
+      return Math.min(currentSegmentStart, visiblePathStart);
     }
 
     return matchingSegmentBoundary >= 0 ? matchingSegmentBoundary + 1 : 0;

@@ -7,13 +7,14 @@ import { showModalOverlay } from '../overlay.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
-function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean): void {
+function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
   const tools = ctx.state.allToolComponents.filter(
     (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
   );
 
   tools.forEach(tool => {
     tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
+    tool.setQuietPreviewLineLimit?.(previewLineLimit);
   });
 
   ctx.state.ui.requestRender();
@@ -29,6 +30,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
+    quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
@@ -60,7 +62,14 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.state.quietMode = enabled;
         ctx.state.taskProgress?.setQuietMode(enabled);
-        applyQuietModeToRenderedTools(ctx, enabled);
+        applyQuietModeToRenderedTools(ctx, enabled, ctx.state.quietModeMaxToolPreviewLines);
+      },
+      onQuietModeMaxToolPreviewLinesChange: lines => {
+        const current = loadSettings();
+        current.preferences.quietModeMaxToolPreviewLines = lines;
+        saveSettings(current);
+        ctx.state.quietModeMaxToolPreviewLines = lines;
+        applyQuietModeToRenderedTools(ctx, ctx.state.quietMode, lines);
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();

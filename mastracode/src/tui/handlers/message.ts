@@ -245,6 +245,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         component.setExpanded(state.toolOutputExpanded);
         if (state.quietMode) {
           component.setQuietModeDisplay('quiet');
+          component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
         }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);

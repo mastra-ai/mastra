@@ -698,6 +698,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           if (!replacedWithInline) {
             if (state.quietMode) {
               toolComponent.setQuietModeDisplay('quiet');
+              toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
             }
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);

@@ -36,8 +36,10 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       omReflectionThreshold: null,
       omCavemanObservations: null,
       subagentModels: {},
+      goalJudgeModel: null,
+      goalMaxTurns: null,
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2 },
     storage,
     customProviders: [],
     customModelPacks: [
@@ -61,6 +63,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    observability: { resources: {}, localTracing: false },
     ...overrides,
   };
 }
@@ -103,6 +106,17 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
+      expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+    });
+  });
+
+  it('normalizes quiet mode preview line limits', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 2.9 }, storage: {} }), 'utf-8');
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }), 'utf-8');
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
     });
   });
 

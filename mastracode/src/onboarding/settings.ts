@@ -181,6 +181,8 @@ export interface GlobalSettings {
     thinkingLevel: ThinkingLevelSetting;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
+    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
+    quietModeMaxToolPreviewLines: number;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -252,6 +254,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -280,11 +283,13 @@ function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
   const raw = rawPreferences && typeof rawPreferences === 'object' ? (rawPreferences as Record<string, unknown>) : {};
+  const maxPreviewLines = typeof raw.quietModeMaxToolPreviewLines === 'number' ? raw.quietModeMaxToolPreviewLines : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
 
   return {
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    quietModeMaxToolPreviewLines: Math.max(0, Math.floor(maxPreviewLines)),
   };
 }
 

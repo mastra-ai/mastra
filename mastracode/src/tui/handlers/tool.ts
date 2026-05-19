@@ -32,6 +32,7 @@ function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolEx
   if (!ctx.state.quietMode) return;
 
   component.setQuietModeDisplay('quiet');
+  component.setQuietPreviewLineLimit(ctx.state.quietModeMaxToolPreviewLines);
 }
 
 function reconcileToolBoundaries(ctx: EventHandlerContext): void {

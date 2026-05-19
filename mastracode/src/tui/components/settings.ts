@@ -24,6 +24,7 @@ export interface SettingsConfig {
   currentModelId: string;
   escapeAsCancel: boolean;
   quietMode: boolean;
+  quietModeMaxToolPreviewLines: number;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -35,6 +36,7 @@ export interface SettingsCallbacks {
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
   onQuietModeChange: (enabled: boolean) => void;
+  onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onApiKeys?: () => void;
   onClose: () => void;
@@ -175,6 +177,10 @@ class StorageBackendSubmenu extends Container {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+function quietPreviewLinesLabel(lines: number): string {
+  return lines === 0 ? 'None' : `${lines} line${lines === 1 ? '' : 's'}`;
+}
 
 function storageLabel(config: SettingsConfig): string {
   if (config.storageBackend === 'pg') return 'PostgreSQL';
@@ -353,6 +359,31 @@ export class SettingsComponent extends Box implements Focusable {
             () => done(),
           ),
       },
+      ...(config.quietMode
+        ? [
+            {
+              id: 'quietModeMaxToolPreviewLines',
+              label: 'Quiet mode tool preview lines',
+              description: 'Maximum compact tool detail preview lines. Set to None to hide previews.',
+              currentValue: quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines),
+              submenu: (_currentValue: string, done: (value?: string) => void) =>
+                new SelectSubmenu(
+                  [0, 1, 2, 4, 8].map(lines => ({
+                    value: String(lines),
+                    label: `  ${quietPreviewLinesLabel(lines)}`,
+                    description: lines === 0 ? 'Hide compact tool detail previews' : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
+                  })),
+                  String(config.quietModeMaxToolPreviewLines),
+                  value => {
+                    config.quietModeMaxToolPreviewLines = Number(value);
+                    callbacks.onQuietModeMaxToolPreviewLinesChange(config.quietModeMaxToolPreviewLines);
+                    done(quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines));
+                  },
+                  () => done(),
+                ),
+            },
+          ]
+        : []),
       {
         id: 'storageBackend',
         label: 'Storage backend',

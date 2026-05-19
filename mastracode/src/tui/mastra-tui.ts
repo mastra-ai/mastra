@@ -131,6 +131,7 @@ export class MastraTUI {
     // Load user preferences
     const savedSettings = loadSettings();
     this.state.quietMode = savedSettings.preferences.quietMode;
+    this.state.quietModeMaxToolPreviewLines = savedSettings.preferences.quietModeMaxToolPreviewLines;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);

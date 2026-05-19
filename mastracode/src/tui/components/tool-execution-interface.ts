@@ -23,6 +23,7 @@ export interface IToolExecutionComponent {
   updateResult(result: ToolResult, isPartial?: boolean): void;
   setExpanded(expanded: boolean): void;
   setQuietModeDisplay?(mode: QuietToolDisplayMode): void;
+  setQuietPreviewLineLimit?(limit: number): void;
   getChatSpacingKind?(): ChatSpacingKind | undefined;
   getCompactToolGroupKey?(): string | undefined;
   getCompactToolGroupSummary?(): string | undefined;
