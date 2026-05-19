@@ -300,18 +300,32 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #sendSubscribeToBroker(topic: string): Promise<void> {
+    let waiter: SubscribeWaiter | undefined;
     const subscribed = new Promise<void>((resolve, reject) => {
+      waiter = { resolve, reject };
       const waiters = this.#subscribeWaiters.get(topic) ?? [];
-      waiters.push({ resolve, reject });
+      waiters.push(waiter);
       this.#subscribeWaiters.set(topic, waiters);
     });
     try {
       await this.#sendToBroker({ type: 'subscribe', topic });
     } catch (error) {
-      this.#settleSubscribeWaiters(topic, error instanceof Error ? error : new Error(String(error)));
+      this.#removeSubscribeWaiter(topic, waiter);
       throw error;
     }
     await subscribed;
+  }
+
+  #removeSubscribeWaiter(topic: string, waiter: SubscribeWaiter | undefined) {
+    if (!waiter) return;
+    const waiters = this.#subscribeWaiters.get(topic);
+    if (!waiters) return;
+    const nextWaiters = waiters.filter(item => item !== waiter);
+    if (nextWaiters.length === 0) {
+      this.#subscribeWaiters.delete(topic);
+      return;
+    }
+    this.#subscribeWaiters.set(topic, nextWaiters);
   }
 
   #settleSubscribeWaiters(topic: string, error?: Error) {
