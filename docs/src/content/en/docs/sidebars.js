@@ -718,6 +718,11 @@ const sidebars = {
           label: 'Running in CI',
         },
         {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
+        },
+        {
           type: 'category',
           label: 'Datasets',
           items: [
