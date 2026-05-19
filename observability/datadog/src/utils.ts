@@ -129,7 +129,7 @@ export function toDate(value: Date | string | number): Date {
  */
 export function safeStringify(data: unknown): string {
   try {
-    return JSON.stringify(data);
+    return JSON.stringify(data) ?? '';
   } catch {
     if (typeof data === 'object' && data !== null) {
       return `[Non-serializable ${data.constructor?.name || 'Object'}]`;
@@ -158,6 +158,10 @@ function isGeminiContentArray(data: any): data is Array<{ role: string; parts: a
   return Array.isArray(data) && data.every(m => m?.role && Array.isArray(m?.parts));
 }
 
+function toMessageContent(content: any): string {
+  return typeof content === 'string' ? content : safeStringify(content);
+}
+
 /**
  * Maps a {role, content}[] message array into the Datadog message shape,
  * stringifying any non-string content (e.g. multimodal part arrays).
@@ -166,7 +170,7 @@ function toDatadogMessages(messages: Array<{ role: string; content: any }>): Arr
   return messages
     .map(m => ({
       role: m.role,
-      content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
+      content: toMessageContent(m.content),
     }))
     .filter(m => !(m.role === 'user' && m.content.trim().length === 0));
 }

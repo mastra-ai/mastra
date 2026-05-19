@@ -161,6 +161,10 @@ describe('safeStringify', () => {
     expect(safeStringify('hello')).toBe('"hello"');
     expect(safeStringify(123)).toBe('123');
   });
+
+  it('returns an empty string for undefined values', () => {
+    expect(safeStringify(undefined)).toBe('');
+  });
 });
 
 describe('formatInput', () => {
@@ -200,6 +204,12 @@ describe('formatInput', () => {
 
     it('drops blank string input instead of creating an empty user message', () => {
       const result = formatInput('   ', SpanType.MODEL_GENERATION);
+
+      expect(result).toEqual([]);
+    });
+
+    it('drops undefined input instead of throwing during empty message filtering', () => {
+      const result = formatInput(undefined, SpanType.MODEL_GENERATION);
 
       expect(result).toEqual([]);
     });
