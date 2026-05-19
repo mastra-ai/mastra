@@ -164,7 +164,9 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
   const sourceFile = Program.addSourceFileAtPath(file);
 
   for (const moduleSpecifier of getModuleSpecifiers(sourceFile)) {
-    const hasExternal = Array.from(bundledPackages).some(pkg => matchesBundledPackage(moduleSpecifier.getLiteralValue(), pkg));
+    const hasExternal = Array.from(bundledPackages).some(pkg =>
+      matchesBundledPackage(moduleSpecifier.getLiteralValue(), pkg),
+    );
 
     if (hasExternal) {
       importsToReplace.add(moduleSpecifier);
@@ -191,9 +193,10 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
     }
 
     let pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
-    const exportSpecifier = pkgJson.name && pkgJson.name !== pkgName
-      ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
-      : moduleSpecifier.getLiteralValue();
+    const exportSpecifier =
+      pkgJson.name && pkgJson.name !== pkgName
+        ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
+        : moduleSpecifier.getLiteralValue();
     let typesFiles = resolveExports(pkgJson, exportSpecifier, {
       conditions: ['types'],
     });
