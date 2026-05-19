@@ -53,6 +53,8 @@ import {
 } from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 
+const TRACKED_COMMANDS = new Set(['login', 'models', 'mode', 'memory-gateway', 'custom-providers', 'threads', 'new']);
+
 /**
  * Dispatch a slash command input to the appropriate handler.
  * Returns true if the command was handled (or was unknown), false if not a command.
@@ -62,6 +64,15 @@ export async function dispatchSlashCommand(
   state: TUIState,
   buildCtx: () => SlashCommandContext,
 ): Promise<boolean> {
+  const trackCommand = (ctx: SlashCommandContext, command: string) => {
+    if (!TRACKED_COMMANDS.has(command)) return;
+    ctx.analytics?.trackCommand(command, {
+      action: 'attempted',
+      threadId: state.harness.getCurrentThreadId(),
+      resourceId: state.harness.getResourceId(),
+      mode: state.harness.getCurrentModeId(),
+    });
+  };
   const trimmedInput = input.trim();
 
   const slashMatch = trimmedInput.match(/^(\/\/?)([\s\S]*)$/);
@@ -96,13 +107,20 @@ export async function dispatchSlashCommand(
   const args =
     command === 'goal' && rawArgsText && !goalSubcommands.has(firstGoalArg ?? '') ? [rawArgsText] : parsedArgs;
 
+  if (!command) {
+    return true;
+  }
+
   if (isGoalJudgeInputLocked(state) && !canRunSlashCommandDuringGoalJudge(command, args)) {
     showGoalJudgeInputLockInfo(state);
     return true;
   }
 
+  const ctx = buildCtx();
+  trackCommand(ctx, command);
+
   if (command.startsWith('goal/')) {
-    await handleGoalSourceCommand(state, command.slice('goal/'.length), args, buildCtx());
+    await handleGoalSourceCommand(state, command.slice('goal/'.length), args, ctx);
     return true;
   }
 
@@ -113,103 +131,103 @@ export async function dispatchSlashCommand(
 
   switch (command) {
     case 'new':
-      await handleNewCommand(buildCtx());
+      await handleNewCommand(ctx);
       return true;
     case 'clone':
-      await handleCloneCommand(buildCtx());
+      await handleCloneCommand(ctx);
       return true;
     case 'threads':
-      await handleThreadsCommand(buildCtx());
+      await handleThreadsCommand(ctx);
       return true;
     case 'thread':
-      await handleThreadCommand(buildCtx());
+      await handleThreadCommand(ctx);
       return true;
     case 'skills':
-      await handleSkillsCommand(buildCtx());
+      await handleSkillsCommand(ctx);
       return true;
     case 'thread:tag-dir':
-      await handleThreadTagDirCommand(buildCtx());
+      await handleThreadTagDirCommand(ctx);
       return true;
     case 'sandbox':
-      await handleSandboxCmd(buildCtx(), args);
+      await handleSandboxCmd(ctx, args);
       return true;
     case 'mode':
-      await handleModeCommand(buildCtx(), args);
+      await handleModeCommand(ctx, args);
       return true;
     case 'models':
-      await handleModelsPackCommand(buildCtx());
+      await handleModelsPackCommand(ctx);
       return true;
     case 'custom-providers':
-      await handleCustomProvidersCommand(buildCtx());
+      await handleCustomProvidersCommand(ctx);
       return true;
     case 'subagents':
-      await handleSubagentsCommand(buildCtx());
+      await handleSubagentsCommand(ctx);
       return true;
     case 'om':
-      await handleOMCommand(buildCtx());
+      await handleOMCommand(ctx);
       return true;
     case 'think':
-      await handleThinkCommand(buildCtx(), args);
+      await handleThinkCommand(ctx, args);
       return true;
     case 'permissions':
-      await handlePermissionsCommand(buildCtx(), args);
+      await handlePermissionsCommand(ctx, args);
       return true;
     case 'yolo':
-      handleYoloCommand(buildCtx());
+      handleYoloCommand(ctx);
       return true;
     case 'settings':
-      await handleSettingsCommand(buildCtx());
+      await handleSettingsCommand(ctx);
       return true;
     case 'login':
-      await handleLoginCommand(buildCtx(), 'login');
+      await handleLoginCommand(ctx, 'login');
       return true;
     case 'logout':
-      await handleLoginCommand(buildCtx(), 'logout');
+      await handleLoginCommand(ctx, 'logout');
       return true;
     case 'cost':
-      handleCostCommand(buildCtx());
+      handleCostCommand(ctx);
       return true;
     case 'diff':
-      await handleDiffCommand(buildCtx(), args[0]);
+      await handleDiffCommand(ctx, args[0]);
       return true;
     case 'name':
-      await handleNameCommand(buildCtx(), args);
+      await handleNameCommand(ctx, args);
       return true;
     case 'resource':
-      await handleResourceCommand(buildCtx(), args);
+      await handleResourceCommand(ctx, args);
       return true;
     case 'exit':
-      handleExitCommand(buildCtx());
+      handleExitCommand(ctx);
       return true;
     case 'help':
-      handleHelpCommand(buildCtx());
+      handleHelpCommand(ctx);
       return true;
     case 'hooks':
-      handleHooksCommand(buildCtx(), args);
+      handleHooksCommand(ctx, args);
       return true;
     case 'mcp':
-      await handleMcpCommand(buildCtx(), args);
+      await handleMcpCommand(ctx, args);
       return true;
     case 'review':
-      await handleReviewCmd(buildCtx(), args);
+      await handleReviewCmd(ctx, args);
       return true;
     case 'report-issue':
-      await handleReportIssueCmd(buildCtx(), args);
+      await handleReportIssueCmd(ctx, args);
       return true;
     case 'setup':
-      await handleSetupCommand(buildCtx());
+      await handleSetupCommand(ctx);
       return true;
     case 'browser':
-      await handleBrowserCommand(buildCtx(), args);
+      await handleBrowserCommand(ctx, args);
       return true;
     case 'theme':
-      await handleThemeCommand(buildCtx(), args);
+      await handleThemeCommand(ctx, args);
       return true;
     case 'update':
-      await handleUpdateCommand(buildCtx());
+      await handleUpdateCommand(ctx);
       return true;
     case 'memory-gateway':
-      await handleMemoryGatewayCommand(buildCtx());
+      await handleMemoryGatewayCommand(ctx);
       return true;
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());
