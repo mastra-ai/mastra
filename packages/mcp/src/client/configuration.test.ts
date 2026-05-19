@@ -118,4 +118,72 @@ describe('MCPClient tool discovery retries', () => {
     expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(capabilities).toMatchObject(customCapabilities);
   });
+
+  it('forwards coerceSchemasTo into InternalMastraMCPClient', async () => {
+    const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      coerceSchemasTo: 'zod',
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/sse'),
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect((internalClient as any).coerceSchemasTo).toBe('zod');
+  });
+
+  it('generates distinct ids for matching servers with different schema coercion modes', () => {
+    const servers = {
+      weather: {
+        url: new URL('http://localhost:1234/sse'),
+      },
+    };
+
+    const jsonSchemaClient = new MCPClient({
+      servers,
+    });
+    clients.push(jsonSchemaClient);
+
+    const zodClient = new MCPClient({
+      servers,
+      coerceSchemasTo: 'zod',
+    });
+    clients.push(zodClient);
+
+    expect(zodClient).not.toBe(jsonSchemaClient);
+    expect((zodClient as any).id).not.toBe((jsonSchemaClient as any).id);
+  });
+
+  it('does not reuse an explicit-id cached client when schema coercion mode changes', () => {
+    const id = `configuration-test-${++clientId}`;
+    const servers = {
+      weather: {
+        url: new URL('http://localhost:1234/sse'),
+      },
+    };
+
+    const jsonSchemaClient = new MCPClient({
+      id,
+      servers,
+    });
+    clients.push(jsonSchemaClient);
+
+    const zodClient = new MCPClient({
+      id,
+      servers,
+      coerceSchemasTo: 'zod',
+    });
+    clients.push(zodClient);
+
+    expect(zodClient).not.toBe(jsonSchemaClient);
+    expect((zodClient as any).coerceSchemasTo).toBe('zod');
+  });
 });

@@ -148,6 +148,71 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
   });
 });
 
+describe('InternalMastraMCPClient - MCP schema coercion', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  let client: InternalMastraMCPClient;
+
+  afterEach(async () => {
+    await client?.disconnect();
+    testServer?.httpServer.close();
+  });
+
+  it("coerces MCP JSON Schema input schemas to Zod when coerceSchemasTo is 'zod'", async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'zod-coercion-client',
+      server: { url: testServer.baseUrl },
+      coerceSchemasTo: 'zod',
+    } as any);
+    await client.connect();
+
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+
+    expect(greetTool?.inputSchema).toBeDefined();
+    expect(typeof (greetTool?.inputSchema as any).safeParse).toBe('function');
+  });
+
+  it("does not invoke Function during MCP input schema validation when coerceSchemasTo is 'zod'", async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'zod-no-codegen-client',
+      server: { url: testServer.baseUrl },
+      coerceSchemasTo: 'zod',
+    } as any);
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'greet',
+          description: 'A simple greeting tool',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              name: { type: 'string' as const, description: 'Name to greet', default: 'World' },
+            },
+          },
+        },
+      ],
+    } as Awaited<ReturnType<Client['listTools']>>);
+
+    const functionSpy = vi.spyOn(globalThis, 'Function');
+
+    try {
+      const tools = await client.tools();
+      const greetTool = tools.greet;
+      const result = await greetTool?.inputSchema?.['~standard'].validate({ name: 'Ada' });
+
+      expect(result).toEqual({ value: { name: 'Ada' } });
+      expect(functionSpy).not.toHaveBeenCalled();
+    } finally {
+      functionSpy.mockRestore();
+    }
+  });
+});
+
 describe('MastraMCPClient with Streamable HTTP', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -273,7 +338,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   // return structuredContent in the response, the full CallToolResult envelope
   // should be returned as-is. We don't pass outputSchema to createTool, so
   // Zod won't strip unrecognised keys. The MCP SDK validates structuredContent
-  // against outputSchema internally via AJV.
+  // against outputSchema internally using its configured JSON Schema validator.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -458,7 +523,8 @@ describe('MastraMCPClient - no outputSchema', () => {
 describe('MastraMCPClient - outputSchema with structuredContent', () => {
   // When a tool has an outputSchema and returns structuredContent, the
   // structuredContent is returned directly. We don't pass outputSchema to
-  // createTool so there's no Zod stripping — the MCP SDK validates via AJV.
+  // createTool so there's no Zod stripping. The MCP SDK validates structuredContent
+  // using its configured JSON Schema validator.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;

@@ -3911,6 +3911,9 @@ importers:
       fast-deep-equal:
         specifier: ^3.1.3
         version: 3.1.3
+      zod-from-json-schema:
+        specifier: ^0.1.0
+        version: 0.1.0
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
@@ -28931,6 +28934,9 @@ packages:
 
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
+
+  zod-from-json-schema@0.1.0:
+    resolution: {integrity: sha512-yPcDmFziXePHO8iK4WXl4WcqlKolohQKEdhbJadCzZ/+/ayr1IELxWrVQ/NSUKiuIweNiDlZoi6dgle4Bd1baw==}
 
   zod-from-json-schema@0.5.2:
     resolution: {integrity: sha512-/dNaicfdhJTOuUd4RImbLUE2g5yrSzzDjI/S6C2vO2ecAGZzn9UcRVgtyLSnENSmAOBRiSpUdzDS6fDWX3Z35g==}
@@ -56539,6 +56545,10 @@ snapshots:
       readable-stream: 4.7.0
 
   zod-from-json-schema@0.0.5:
+    dependencies:
+      zod: 3.25.76
+
+  zod-from-json-schema@0.1.0:
     dependencies:
       zod: 3.25.76
 
