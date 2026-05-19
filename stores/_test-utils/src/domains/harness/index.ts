@@ -595,17 +595,18 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('blocks active-session admission while a thread delete fence is held', async () => {
         if (!harness) return;
+        const harnessStorage = harness;
 
-        await harness.withThreadDeleteFence(
+        await harnessStorage.withThreadDeleteFence(
           { threadId: 'thread-1', ownerId: 'deleter', ttlMs: 30_000 },
           async fence => {
             await expect(
-              harness.createOrLoadActiveSession(createSampleSessionRecord(), {
+              harnessStorage.createOrLoadActiveSession(createSampleSessionRecord(), {
                 initialLease: { ownerId: 'h', ttlMs: 30_000 },
               }),
             ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
             await expect(
-              harness.saveSession(createSampleSessionRecord({ id: 'direct-blocked' }), {
+              harnessStorage.saveSession(createSampleSessionRecord({ id: 'direct-blocked' }), {
                 ownerId: 'h',
                 ifVersion: 0,
               }),
@@ -1668,14 +1669,15 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('clears active thread delete fences', async () => {
         if (!harness) return;
+        const harnessStorage = harness;
 
-        await harness.withThreadDeleteFence(
+        await harnessStorage.withThreadDeleteFence(
           { threadId: 'reset-thread', ownerId: 'deleter', ttlMs: 30_000 },
           async () => {
-            await harness.dangerouslyClearAll();
+            await harnessStorage.dangerouslyClearAll();
 
             await expect(
-              harness.createOrLoadActiveSession(
+              harnessStorage.createOrLoadActiveSession(
                 createSampleSessionRecord({ id: 'after-reset', threadId: 'reset-thread' }),
                 {
                   initialLease: { ownerId: 'h', ttlMs: 30_000 },

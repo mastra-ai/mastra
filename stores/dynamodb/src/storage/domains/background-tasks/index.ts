@@ -81,6 +81,67 @@ function fromElectroRecord(data: Record<string, any>): BackgroundTask {
   };
 }
 
+function buildBackgroundTaskUpdateFields(update: UpdateBackgroundTask): {
+  setFields: Record<string, unknown>;
+  removeFields: string[];
+} {
+  const setFields: Record<string, unknown> = {};
+  // ElectroDB's .set() ignores undefined values, so any field explicitly set
+  // to undefined must be cleared via .remove() instead.
+  const removeFields: string[] = [];
+
+  if ('status' in update && update.status !== undefined) {
+    setFields.status = update.status;
+  }
+  if ('retryCount' in update && update.retryCount !== undefined) {
+    setFields.retryCount = update.retryCount;
+  }
+  if ('result' in update) {
+    if (update.result === undefined || update.result === null) {
+      removeFields.push('result');
+    } else {
+      setFields.result = serializeJson(update.result);
+    }
+  }
+  if ('error' in update) {
+    if (update.error === undefined || update.error === null) {
+      removeFields.push('error');
+    } else {
+      setFields.error = serializeJson(update.error);
+    }
+  }
+  if ('suspendPayload' in update) {
+    if (update.suspendPayload === undefined || update.suspendPayload === null) {
+      removeFields.push('suspendPayload');
+    } else {
+      setFields.suspendPayload = serializeJson(update.suspendPayload);
+    }
+  }
+  if ('startedAt' in update) {
+    if (update.startedAt === undefined || update.startedAt === null) {
+      removeFields.push('startedAtIso');
+    } else {
+      setFields.startedAtIso = update.startedAt.toISOString();
+    }
+  }
+  if ('suspendedAt' in update) {
+    if (update.suspendedAt === undefined || update.suspendedAt === null) {
+      removeFields.push('suspendedAtIso');
+    } else {
+      setFields.suspendedAtIso = update.suspendedAt.toISOString();
+    }
+  }
+  if ('completedAt' in update) {
+    if (update.completedAt === undefined || update.completedAt === null) {
+      removeFields.push('completedAtIso');
+    } else {
+      setFields.completedAtIso = update.completedAt.toISOString();
+    }
+  }
+
+  return { setFields, removeFields };
+}
+
 export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
   private service: Service<Record<string, any>>;
 
@@ -92,6 +153,25 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await deleteTableData(this.service, TABLE_BACKGROUND_TASKS);
+  }
+
+  private isConditionalCheckFailed(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      const err = error as { name?: string; code?: string; __type?: string; message?: string; cause?: unknown };
+      if (
+        err.name === 'ConditionalCheckFailedException' ||
+        err.code === 'ConditionalCheckFailedException' ||
+        (err.__type?.includes('ConditionalCheckFailedException') ?? false)
+      ) {
+        return true;
+      }
+      if (err.message?.includes('conditional request failed')) return true;
+      if (err.cause && typeof err.cause === 'object') {
+        const cause = err.cause as { name?: string; code?: string };
+        return cause.name === 'ConditionalCheckFailedException' || cause.code === 'ConditionalCheckFailedException';
+      }
+    }
+    return false;
   }
 
   async createTask(task: BackgroundTask): Promise<void> {
@@ -112,59 +192,7 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
 
   async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     try {
-      const setFields: Record<string, unknown> = {};
-      // ElectroDB's .set() ignores undefined values, so any field explicitly set
-      // to undefined must be cleared via .remove() instead.
-      const removeFields: string[] = [];
-
-      if ('status' in update && update.status !== undefined) {
-        setFields.status = update.status;
-      }
-      if ('retryCount' in update && update.retryCount !== undefined) {
-        setFields.retryCount = update.retryCount;
-      }
-      if ('result' in update) {
-        if (update.result === undefined || update.result === null) {
-          removeFields.push('result');
-        } else {
-          setFields.result = serializeJson(update.result);
-        }
-      }
-      if ('error' in update) {
-        if (update.error === undefined || update.error === null) {
-          removeFields.push('error');
-        } else {
-          setFields.error = serializeJson(update.error);
-        }
-      }
-      if ('suspendPayload' in update) {
-        if (update.suspendPayload === undefined || update.suspendPayload === null) {
-          removeFields.push('suspendPayload');
-        } else {
-          setFields.suspendPayload = serializeJson(update.suspendPayload);
-        }
-      }
-      if ('startedAt' in update) {
-        if (update.startedAt === undefined || update.startedAt === null) {
-          removeFields.push('startedAtIso');
-        } else {
-          setFields.startedAtIso = update.startedAt.toISOString();
-        }
-      }
-      if ('suspendedAt' in update) {
-        if (update.suspendedAt === undefined || update.suspendedAt === null) {
-          removeFields.push('suspendedAtIso');
-        } else {
-          setFields.suspendedAtIso = update.suspendedAt.toISOString();
-        }
-      }
-      if ('completedAt' in update) {
-        if (update.completedAt === undefined || update.completedAt === null) {
-          removeFields.push('completedAtIso');
-        } else {
-          setFields.completedAtIso = update.completedAt.toISOString();
-        }
-      }
+      const { setFields, removeFields } = buildBackgroundTaskUpdateFields(update);
 
       if (Object.keys(setFields).length === 0 && removeFields.length === 0) return;
 
@@ -179,6 +207,37 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { taskId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    try {
+      const { setFields, removeFields } = buildBackgroundTaskUpdateFields(update);
+
+      if (Object.keys(setFields).length === 0 && removeFields.length === 0) return false;
+
+      let op = this.service.entities.background_task
+        .patch({ entity: ENTITY, id: taskId })
+        .where((attr: any, op: any) => op.eq(attr.status, expectedStatus)) as any;
+      if (Object.keys(setFields).length > 0) op = op.set(setFields);
+      if (removeFields.length > 0) op = op.remove(removeFields);
+      await op.go();
+      return true;
+    } catch (error) {
+      if (this.isConditionalCheckFailed(error)) return false;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'BACKGROUND_TASKS_UPDATE_IF_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { taskId, expectedStatus },
         },
         error,
       );

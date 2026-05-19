@@ -6,7 +6,13 @@ import type {
   TaskListResult,
   UpdateBackgroundTask,
 } from '@mastra/core/background-tasks';
-import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import {
+  BackgroundTasksStorage,
+  createStorageErrorId,
+  TABLE_BACKGROUND_TASKS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
 
@@ -133,6 +139,26 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
 
     // ClickHouse ReplacingMergeTree — insert replaces by primary key
     await this.createTask(merged);
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    throw new MastraError(
+      {
+        id: createStorageErrorId('CLICKHOUSE', 'UPDATE_BACKGROUND_TASK_IF_STATUS', 'NOT_SUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          taskId,
+          expectedStatus,
+          updateStatus: update.status ?? null,
+        },
+      },
+      'ClickHouse background task storage uses ReplacingMergeTree rows and cannot safely provide the atomic conditional writes required by background task dispatch. Use a transactional storage adapter for background tasks.',
+    );
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

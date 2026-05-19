@@ -42,6 +42,14 @@ export type StorageRequest =
       ids: string[];
     }
   | {
+      op: 'updateIfFieldEquals';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      field: string;
+      expectedValue: string | number | boolean | null;
+      patch: Record<string, any>;
+    }
+  | {
       op: 'mergeWorkflowStepResult';
       tableName: TABLE_NAMES | string;
       workflowName: string;

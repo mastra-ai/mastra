@@ -237,6 +237,66 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     await request.query(`UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @p${idx}`);
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const setClauses: string[] = [];
+    const params: Record<string, any> = {};
+    let idx = 1;
+
+    if ('status' in update) {
+      setClauses.push(`[status] = @p${idx}`);
+      params[`p${idx++}`] = update.status;
+    }
+    if ('result' in update) {
+      setClauses.push(`[result] = @p${idx}`);
+      params[`p${idx++}`] = serializeJson(update.result);
+    }
+    if ('error' in update) {
+      setClauses.push(`[error] = @p${idx}`);
+      params[`p${idx++}`] = serializeJson(update.error);
+    }
+    if ('suspendPayload' in update) {
+      setClauses.push(`[suspend_payload] = @p${idx}`);
+      params[`p${idx++}`] = serializeJson(update.suspendPayload);
+    }
+    if ('retryCount' in update) {
+      setClauses.push(`[retry_count] = @p${idx}`);
+      params[`p${idx++}`] = update.retryCount;
+    }
+    if ('startedAt' in update) {
+      setClauses.push(`[startedAt] = @p${idx}`);
+      params[`p${idx++}`] = update.startedAt?.toISOString() ?? null;
+    }
+    if ('suspendedAt' in update) {
+      setClauses.push(`[suspendedAt] = @p${idx}`);
+      params[`p${idx++}`] = update.suspendedAt?.toISOString() ?? null;
+    }
+    if ('completedAt' in update) {
+      setClauses.push(`[completedAt] = @p${idx}`);
+      params[`p${idx++}`] = update.completedAt?.toISOString() ?? null;
+    }
+
+    if (setClauses.length === 0) return false;
+
+    const taskIdParam = `p${idx++}`;
+    const statusParam = `p${idx}`;
+    params[taskIdParam] = taskId;
+    params[statusParam] = expectedStatus;
+
+    const request = this.pool.request();
+    for (const [name, value] of Object.entries(params)) {
+      request.input(name, value);
+    }
+
+    const result = await request.query(
+      `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @${taskIdParam} AND [status] = @${statusParam}`,
+    );
+    return (result.rowsAffected?.[0] ?? 0) > 0;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const request = this.pool.request();
     request.input('p1', taskId);

@@ -311,6 +311,22 @@ export async function handleTypedOperation(
       return { ok: true };
     }
 
+    case 'updateIfFieldEquals': {
+      // The check and patch stay inside this single Convex mutation transaction.
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+
+      if (!existing || existing[request.field] !== request.expectedValue) {
+        return { ok: true, result: false };
+      }
+
+      const { id: _, ...patch } = request.patch;
+      await ctx.db.patch(existing._id, patch);
+      return { ok: true, result: true };
+    }
+
     case 'mergeWorkflowStepResult': {
       if (convexTable !== CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
         return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
@@ -535,6 +551,9 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
       return { ok: true };
     }
 
+    case 'updateIfFieldEquals':
+      return { ok: true, result: false };
+
     default:
       return { ok: false, error: `Unsupported operation ${(request as any).op}` };
   }
@@ -661,6 +680,22 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
       );
       await deleteDocs(ctx, docsToDelete);
       return { ok: true };
+    }
+
+    case 'updateIfFieldEquals': {
+      // The check and patch stay inside this single Convex mutation transaction.
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_table_primary', (q: any) => q.eq('table', tableName).eq('primaryKey', String(request.id)))
+        .unique();
+
+      if (!existing || existing.record?.[request.field] !== request.expectedValue) {
+        return { ok: true, result: false };
+      }
+
+      const { id: _, ...patch } = request.patch;
+      await ctx.db.patch(existing._id, { record: { ...existing.record, ...patch } });
+      return { ok: true, result: true };
     }
 
     default:

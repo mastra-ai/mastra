@@ -29,6 +29,8 @@ export * from './domains/schedules/data';
 export type TestCapabilities = {
   /** Whether the adapter supports listing scores by span (defaults to true) */
   listScoresBySpan?: boolean;
+  /** Whether background task storage supports atomic status-conditional updates (defaults to true) */
+  backgroundTasksUpdateIfStatus?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
@@ -104,7 +106,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createAgentsTests({ storage });
     createDatasetsTests({ storage });
     createExperimentsTests({ storage });
-    createBackgroundTasksTests({ storage });
+    createBackgroundTasksTests({ storage, capabilities });
     createSchedulesTests({ storage });
     createHarnessTest({ storage });
   });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import type { Event } from '../events/types';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
 import { createBackgroundTask } from './create';
@@ -15,6 +16,10 @@ const testStorage = new MockStore();
 
 /** Wait for async microtasks/timers to settle */
 const tick = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function dispatchWithPrivateHandler(manager: BackgroundTaskManager, event: Event): Promise<boolean> {
+  return (manager as unknown as { handleDispatch(event: Event): Promise<boolean> }).handleDispatch(event);
+}
 
 /**
  * Spin up a private Mastra + bg-task manager scoped to a single test. Tests
@@ -144,6 +149,123 @@ describe('BackgroundTaskManager', () => {
       const result = await manager.getTask(task.id);
       expect(result?.status).toBe('failed');
       expect(result?.error?.message).toContain('No executor');
+    });
+
+    it('keeps task context when dispatch claim loses to another worker', async () => {
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      const taskId = 'claim-race';
+      await backgroundTasksStore!.createTask({
+        id: taskId,
+        status: 'pending',
+        toolName: 'tool',
+        toolCallId: 'call-claim-race',
+        args: {},
+        agentId: 'agent-1',
+        runId: 'run-claim-race',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+      });
+      manager.registerTaskContext(taskId, ctx(vi.fn().mockResolvedValue('ok')));
+      const claim = vi.spyOn(backgroundTasksStore!, 'updateTaskIfStatus').mockResolvedValueOnce(false);
+
+      const nacked = await dispatchWithPrivateHandler(manager, {
+        id: 'event-claim-race',
+        type: 'task.dispatch',
+        data: { taskId },
+        runId: taskId,
+        createdAt: new Date(),
+      });
+
+      expect(nacked).toBe(false);
+      expect(manager.taskContexts.has(taskId)).toBe(true);
+      expect(claim).toHaveBeenCalledWith(taskId, 'pending', expect.objectContaining({ status: 'running' }));
+      claim.mockRestore();
+    });
+
+    it('keeps task context until fan-out cleanup when dispatch claim loses to a terminal transition', async () => {
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      const taskId = 'claim-cancel-race';
+      await backgroundTasksStore!.createTask({
+        id: taskId,
+        status: 'pending',
+        toolName: 'tool',
+        toolCallId: 'call-claim-cancel-race',
+        args: {},
+        agentId: 'agent-1',
+        runId: 'run-claim-cancel-race',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+      });
+      manager.registerTaskContext(taskId, ctx(vi.fn().mockResolvedValue('ok')));
+      const claim = vi.spyOn(backgroundTasksStore!, 'updateTaskIfStatus').mockImplementationOnce(async () => {
+        await backgroundTasksStore!.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
+        return false;
+      });
+
+      const nacked = await dispatchWithPrivateHandler(manager, {
+        id: 'event-claim-cancel-race',
+        type: 'task.dispatch',
+        data: { taskId },
+        runId: taskId,
+        createdAt: new Date(),
+      });
+
+      expect(nacked).toBe(false);
+      expect(manager.taskContexts.has(taskId)).toBe(true);
+      expect(claim).toHaveBeenCalledWith(taskId, 'pending', expect.objectContaining({ status: 'running' }));
+      claim.mockRestore();
+
+      const cancelledTask = await backgroundTasksStore!.getTask(taskId);
+      await manager.publishLifecycleEvent('task.cancelled', cancelledTask!);
+      await tick();
+
+      expect(manager.taskContexts.has(taskId)).toBe(false);
+    });
+
+    it('clears retained task context on fan-out cancellation after claim contention', async () => {
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      const taskId = 'claim-running-cancel-race';
+      await backgroundTasksStore!.createTask({
+        id: taskId,
+        status: 'pending',
+        toolName: 'tool',
+        toolCallId: 'call-claim-running-cancel-race',
+        args: {},
+        agentId: 'agent-1',
+        runId: 'run-claim-running-cancel-race',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+      });
+      manager.registerTaskContext(taskId, ctx(vi.fn().mockResolvedValue('ok')));
+      const claim = vi.spyOn(backgroundTasksStore!, 'updateTaskIfStatus').mockImplementationOnce(async () => {
+        await backgroundTasksStore!.updateTask(taskId, { status: 'running', startedAt: new Date() });
+        return false;
+      });
+
+      const nacked = await dispatchWithPrivateHandler(manager, {
+        id: 'event-claim-running-cancel-race',
+        type: 'task.dispatch',
+        data: { taskId },
+        runId: taskId,
+        createdAt: new Date(),
+      });
+      claim.mockRestore();
+
+      expect(nacked).toBe(false);
+      expect(manager.taskContexts.has(taskId)).toBe(true);
+
+      await backgroundTasksStore!.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
+      const cancelledTask = await backgroundTasksStore!.getTask(taskId);
+      await manager.publishLifecycleEvent('task.cancelled', cancelledTask!);
+      await tick();
+
+      expect(manager.taskContexts.has(taskId)).toBe(false);
     });
   });
 

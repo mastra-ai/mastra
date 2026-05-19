@@ -39,6 +39,19 @@ function toRecord(task: BackgroundTask): Record<string, any> {
   };
 }
 
+function toUpdateValues(update: UpdateBackgroundTask): Record<string, any> {
+  const values: Record<string, any> = {};
+  if ('status' in update) values.status = update.status!;
+  if ('result' in update) values.result = serializeJson(update.result);
+  if ('error' in update) values.error = serializeJson(update.error);
+  if ('suspendPayload' in update) values.suspend_payload = serializeJson(update.suspendPayload);
+  if ('retryCount' in update) values.retry_count = update.retryCount!;
+  if ('startedAt' in update) values.startedAt = update.startedAt ?? new Date(0);
+  if ('suspendedAt' in update) values.suspendedAt = update.suspendedAt ?? new Date(0);
+  if ('completedAt' in update) values.completedAt = update.completedAt ?? new Date(0);
+  return values;
+}
+
 function fromRecord(row: Record<string, any>): BackgroundTask {
   const parseJson = (val: unknown): any => {
     if (val == null || val === '') return undefined;
@@ -138,6 +151,21 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     const table = await this.client.openTable(TABLE_BACKGROUND_TASKS);
     await table.delete(`id = '${escapeStr(taskId)}'`);
     await table.add([toRecord(merged)], { mode: 'append' });
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const values = toUpdateValues(update);
+    if (Object.keys(values).length === 0) return false;
+    const table = await this.client.openTable(TABLE_BACKGROUND_TASKS);
+    const result = await table.update({
+      where: `id = '${escapeStr(taskId)}' AND status = '${escapeStr(expectedStatus)}'`,
+      values,
+    });
+    return result.rowsUpdated > 0;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

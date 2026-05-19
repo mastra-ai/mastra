@@ -1,4 +1,10 @@
-import type { BackgroundTask, TaskFilter, TaskListResult, UpdateBackgroundTask } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
@@ -22,6 +28,11 @@ function serializeJson(v: unknown): any {
   return v ?? undefined;
 }
 
+function serializeJsonUpdate(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? null;
+}
+
 function toStored(task: BackgroundTask): StoredTask {
   return {
     ...task,
@@ -36,9 +47,23 @@ function toStored(task: BackgroundTask): StoredTask {
   };
 }
 
+function toStoredUpdate(update: UpdateBackgroundTask): Record<string, any> {
+  const stored: Record<string, any> = {};
+  if ('status' in update) stored.status = update.status!;
+  if ('result' in update) stored.result = serializeJsonUpdate(update.result);
+  if ('error' in update) stored.error = serializeJsonUpdate(update.error);
+  if ('suspendPayload' in update) stored.suspendPayload = serializeJsonUpdate(update.suspendPayload);
+  if ('retryCount' in update) stored.retryCount = update.retryCount!;
+  if ('startedAt' in update) stored.startedAt = update.startedAt?.toISOString() ?? null;
+  if ('suspendedAt' in update) stored.suspendedAt = update.suspendedAt?.toISOString() ?? null;
+  if ('completedAt' in update) stored.completedAt = update.completedAt?.toISOString() ?? null;
+  return stored;
+}
+
 function fromStored(stored: StoredTask): BackgroundTask {
-  const parseJson = (val?: string): any => {
-    if (!val) return undefined;
+  const parseJson = (val?: unknown): any => {
+    if (val == null || val === '') return undefined;
+    if (typeof val !== 'string') return val;
     try {
       return JSON.parse(val);
     } catch {
@@ -103,6 +128,20 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     // Convex has no update — delete and re-insert
     await this.#db.deleteMany(TABLE_BACKGROUND_TASKS, [taskId]);
     await this.#db.insert({ tableName: TABLE_BACKGROUND_TASKS, record: toStored(merged) });
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    return this.#db.updateIfFieldEquals({
+      tableName: TABLE_BACKGROUND_TASKS,
+      id: taskId,
+      field: 'status',
+      expectedValue: expectedStatus,
+      patch: toStoredUpdate(update),
+    });
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

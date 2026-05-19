@@ -1,4 +1,10 @@
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
@@ -92,6 +98,44 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
     const record = toStorageRecord(merged);
     const { key, processedRecord } = processRecord(TABLE_BACKGROUND_TASKS, record);
     await this.client.set(key, processedRecord);
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const patch: Record<string, any> = {};
+
+    if ('status' in update) patch.status = update.status;
+    if ('result' in update) patch.result = update.result ?? null;
+    if ('error' in update) patch.error = update.error ?? null;
+    if ('suspendPayload' in update) patch.suspend_payload = update.suspendPayload ?? null;
+    if ('retryCount' in update) patch.retry_count = update.retryCount;
+    if ('startedAt' in update) patch.startedAt = update.startedAt?.toISOString() ?? null;
+    if ('suspendedAt' in update) patch.suspendedAt = update.suspendedAt?.toISOString() ?? null;
+    if ('completedAt' in update) patch.completedAt = update.completedAt?.toISOString() ?? null;
+
+    if (Object.keys(patch).length === 0) return false;
+
+    const key = getKey(TABLE_BACKGROUND_TASKS, { id: taskId });
+    const result = await this.client.eval(
+      `
+local raw = redis.call("GET", KEYS[1])
+if not raw then return 0 end
+local record = cjson.decode(raw)
+if record["status"] ~= ARGV[1] then return 0 end
+local patch = cjson.decode(ARGV[2])
+for key, value in pairs(patch) do
+  record[key] = value
+end
+redis.call("SET", KEYS[1], cjson.encode(record))
+return 1
+`,
+      [key],
+      [expectedStatus, JSON.stringify(patch)],
+    );
+    return Number(result) === 1;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

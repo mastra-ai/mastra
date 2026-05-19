@@ -5,9 +5,12 @@ import { createSampleTask } from './data';
 
 export interface BackgroundTasksTestOptions {
   storage: MastraStorage;
+  capabilities?: {
+    backgroundTasksUpdateIfStatus?: boolean;
+  };
 }
 
-export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptions) {
+export function createBackgroundTasksTests({ storage, capabilities = {} }: BackgroundTasksTestOptions) {
   let bgStorage: BackgroundTasksStorage;
 
   beforeAll(async () => {
@@ -173,6 +176,96 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(resumed!.status).toBe('running');
         expect(resumed!.suspendPayload).toBeUndefined();
         expect(resumed!.suspendedAt).toBeUndefined();
+      });
+    });
+
+    describe('updateTaskIfStatus', () => {
+      const supportsUpdateIfStatus = capabilities.backgroundTasksUpdateIfStatus !== false;
+
+      it.runIf(supportsUpdateIfStatus)('updates task when status matches', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ id: 'update-if-status-match' });
+        await bgStorage.createTask(task);
+
+        const updated = await bgStorage.updateTaskIfStatus(task.id, 'pending', {
+          status: 'running',
+          startedAt: new Date(),
+          retryCount: 1,
+        });
+
+        const result = await bgStorage.getTask(task.id);
+        expect(updated).toBe(true);
+        expect(result!.status).toBe('running');
+        expect(result!.startedAt).toBeInstanceOf(Date);
+        expect(result!.retryCount).toBe(1);
+      });
+
+      it.runIf(supportsUpdateIfStatus)('does not update task when status mismatches', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ id: 'update-if-status-mismatch', status: 'running', startedAt: new Date() });
+        await bgStorage.createTask(task);
+
+        const updated = await bgStorage.updateTaskIfStatus(task.id, 'pending', {
+          status: 'completed',
+          result: { data: 'should-not-write' },
+          completedAt: new Date(),
+        });
+
+        const result = await bgStorage.getTask(task.id);
+        expect(updated).toBe(false);
+        expect(result!.status).toBe('running');
+        expect(result!.result).toBeUndefined();
+        expect(result!.completedAt).toBeUndefined();
+      });
+
+      it.runIf(supportsUpdateIfStatus)('returns false for missing task', async () => {
+        if (!bgStorage) return;
+
+        await expect(
+          bgStorage.updateTaskIfStatus('missing-task', 'pending', {
+            status: 'running',
+            startedAt: new Date(),
+          }),
+        ).resolves.toBe(false);
+      });
+
+      it.runIf(supportsUpdateIfStatus)('clears nullable fields when status matches', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          id: 'update-if-status-clear',
+          status: 'suspended',
+          startedAt: new Date(),
+          suspendedAt: new Date(),
+          suspendPayload: { checkpoint: 'approval' },
+        });
+        await bgStorage.createTask(task);
+
+        const updated = await bgStorage.updateTaskIfStatus(task.id, 'suspended', {
+          status: 'running',
+          startedAt: undefined,
+          suspendedAt: undefined,
+          suspendPayload: undefined,
+        });
+
+        const result = await bgStorage.getTask(task.id);
+        expect(updated).toBe(true);
+        expect(result!.status).toBe('running');
+        expect(result!.startedAt).toBeUndefined();
+        expect(result!.suspendedAt).toBeUndefined();
+        expect(result!.suspendPayload).toBeUndefined();
+      });
+
+      it.runIf(!supportsUpdateIfStatus)('fails closed when conditional updates are unsupported', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ id: 'update-if-status-unsupported' });
+        await bgStorage.createTask(task);
+
+        await expect(
+          bgStorage.updateTaskIfStatus(task.id, 'pending', {
+            status: 'running',
+            startedAt: new Date(),
+          }),
+        ).rejects.toThrow(/not supported|NOT_SUPPORTED/i);
       });
     });
 

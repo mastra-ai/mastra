@@ -145,6 +145,29 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     await collection.updateOne({ id: taskId }, { $set });
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const $set: Record<string, any> = {};
+
+    if ('status' in update) $set.status = update.status;
+    if ('result' in update) $set.result = update.result ?? null;
+    if ('error' in update) $set.error = update.error ?? null;
+    if ('suspendPayload' in update) $set.suspend_payload = update.suspendPayload ?? null;
+    if ('retryCount' in update) $set.retry_count = update.retryCount;
+    if ('startedAt' in update) $set.startedAt = update.startedAt?.toISOString() ?? null;
+    if ('suspendedAt' in update) $set.suspendedAt = update.suspendedAt?.toISOString() ?? null;
+    if ('completedAt' in update) $set.completedAt = update.completedAt?.toISOString() ?? null;
+
+    if (Object.keys($set).length === 0) return false;
+
+    const collection = await this.getCollection();
+    const result = await collection.updateOne({ id: taskId, status: expectedStatus }, { $set });
+    return result.modifiedCount > 0;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const collection = await this.getCollection();
     const doc = await collection.findOne({ id: taskId });

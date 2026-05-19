@@ -182,6 +182,69 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     }
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const columns: string[] = [];
+    const values: SqlParam[] = [];
+
+    if ('status' in update) {
+      columns.push('status');
+      values.push(update.status as string);
+    }
+    if ('result' in update) {
+      columns.push('result');
+      values.push(serializeJson(update.result));
+    }
+    if ('error' in update) {
+      columns.push('error');
+      values.push(serializeJson(update.error));
+    }
+    if ('suspendPayload' in update) {
+      columns.push('suspend_payload');
+      values.push(serializeJson(update.suspendPayload));
+    }
+    if ('retryCount' in update) {
+      columns.push('retry_count');
+      values.push(update.retryCount as number);
+    }
+    if ('startedAt' in update) {
+      columns.push('startedAt');
+      values.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      columns.push('suspendedAt');
+      values.push(update.suspendedAt?.toISOString() ?? null);
+    }
+    if ('completedAt' in update) {
+      columns.push('completedAt');
+      values.push(update.completedAt?.toISOString() ?? null);
+    }
+
+    if (columns.length === 0) return false;
+
+    try {
+      const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
+      const setClauses = columns.map(column => `${column} = ?`).join(', ');
+      const rows = await this.#db.executeQuery({
+        sql: `UPDATE ${fullTableName} SET ${setClauses} WHERE id = ? AND status = ? RETURNING id`,
+        params: [...values, taskId, expectedStatus],
+      });
+      return Array.isArray(rows) && rows.length > 0;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_DO', 'BACKGROUND_TASKS_UPDATE_IF_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     try {
       const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);

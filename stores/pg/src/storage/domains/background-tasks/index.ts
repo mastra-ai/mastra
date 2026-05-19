@@ -250,6 +250,59 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     await this.#db.client.none(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE "id" = $${paramIdx}`, params);
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const setClauses: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if ('status' in update) {
+      setClauses.push(`"status" = $${paramIdx++}`);
+      params.push(update.status);
+    }
+    if ('result' in update) {
+      setClauses.push(`"result" = $${paramIdx++}`);
+      params.push(serializeJson(update.result));
+    }
+    if ('error' in update) {
+      setClauses.push(`"error" = $${paramIdx++}`);
+      params.push(serializeJson(update.error));
+    }
+    if ('suspendPayload' in update) {
+      setClauses.push(`"suspend_payload" = $${paramIdx++}`);
+      params.push(serializeJson(update.suspendPayload));
+    }
+    if ('retryCount' in update) {
+      setClauses.push(`"retry_count" = $${paramIdx++}`);
+      params.push(update.retryCount);
+    }
+    if ('startedAt' in update) {
+      setClauses.push(`"startedAt" = $${paramIdx++}`);
+      params.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      setClauses.push(`"suspendedAt" = $${paramIdx++}`);
+      params.push(update.suspendedAt?.toISOString() ?? null);
+    }
+    if ('completedAt' in update) {
+      setClauses.push(`"completedAt" = $${paramIdx++}`);
+      params.push(update.completedAt?.toISOString() ?? null);
+    }
+
+    if (setClauses.length === 0) return false;
+
+    const table = getTableName(getSchemaName(this.#schema));
+    params.push(taskId, expectedStatus);
+    const result = await this.#db.client.query(
+      `UPDATE ${table} SET ${setClauses.join(', ')} WHERE "id" = $${paramIdx++} AND "status" = $${paramIdx}`,
+      params,
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const table = getTableName(getSchemaName(this.#schema));
     const row = await this.#db.client.oneOrNone(`SELECT * FROM ${table} WHERE "id" = $1`, [taskId]);

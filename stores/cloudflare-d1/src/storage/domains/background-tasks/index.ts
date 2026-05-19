@@ -168,6 +168,55 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     });
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const sets: string[] = [];
+    const params: any[] = [];
+    if ('status' in update) {
+      sets.push('status = ?');
+      params.push(update.status);
+    }
+    if ('result' in update) {
+      sets.push('result = ?');
+      params.push(serializeJson(update.result));
+    }
+    if ('error' in update) {
+      sets.push('error = ?');
+      params.push(serializeJson(update.error));
+    }
+    if ('suspendPayload' in update) {
+      sets.push('suspend_payload = ?');
+      params.push(serializeJson(update.suspendPayload));
+    }
+    if ('retryCount' in update) {
+      sets.push('retry_count = ?');
+      params.push(update.retryCount);
+    }
+    if ('startedAt' in update) {
+      sets.push('startedAt = ?');
+      params.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      sets.push('suspendedAt = ?');
+      params.push(update.suspendedAt?.toISOString() ?? null);
+    }
+    if ('completedAt' in update) {
+      sets.push('completedAt = ?');
+      params.push(update.completedAt?.toISOString() ?? null);
+    }
+    if (sets.length === 0) return false;
+    params.push(taskId, expectedStatus);
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
+    const rows = await this.#db.executeQuery({
+      sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ? AND status = ? RETURNING id`,
+      params,
+    });
+    return Array.isArray(rows) && rows.length > 0;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     const { sql, params } = createSqlBuilder().select('*').from(fullTableName).where('id = ?', taskId).build();

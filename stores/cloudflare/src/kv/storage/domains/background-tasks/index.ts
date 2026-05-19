@@ -5,7 +5,8 @@ import type {
   TaskListResult,
   UpdateBackgroundTask,
 } from '@mastra/core/background-tasks';
-import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { BackgroundTasksStorage, createStorageErrorId, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 
@@ -86,6 +87,26 @@ export class BackgroundTasksStorageCloudflare extends BackgroundTasksStorage {
     if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
     await this.#db.putKV({ tableName: TABLE_BACKGROUND_TASKS, key: taskId, value: toRecord(merged) });
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    throw new MastraError(
+      {
+        id: createStorageErrorId('CLOUDFLARE', 'UPDATE_BACKGROUND_TASK_IF_STATUS', 'NOT_SUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          taskId,
+          expectedStatus,
+          updateStatus: update.status ?? null,
+        },
+      },
+      'Cloudflare KV does not support the atomic conditional writes required by background task dispatch. Use Cloudflare Durable Objects or D1 storage for background tasks.',
+    );
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

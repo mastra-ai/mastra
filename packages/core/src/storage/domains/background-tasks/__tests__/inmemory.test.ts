@@ -73,6 +73,21 @@ describe('BackgroundTasksInMemory', () => {
     });
   });
 
+  describe('updateTaskIfStatus', () => {
+    it('updates only when the current status matches', async () => {
+      const task = makeTask({ status: 'running' });
+      await storage.createTask(task);
+
+      await expect(
+        storage.updateTaskIfStatus(task.id, 'running', { status: 'pending', startedAt: undefined }),
+      ).resolves.toBe(true);
+      await expect(storage.getTask(task.id)).resolves.toMatchObject({ status: 'pending' });
+
+      await expect(storage.updateTaskIfStatus(task.id, 'running', { status: 'failed' })).resolves.toBe(false);
+      await expect(storage.getTask(task.id)).resolves.toMatchObject({ status: 'pending' });
+    });
+  });
+
   describe('getTask', () => {
     it('returns null for non-existent task', async () => {
       const result = await storage.getTask('non-existent');

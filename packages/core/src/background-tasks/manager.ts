@@ -20,6 +20,9 @@ const TOPIC_DISPATCH = 'background-tasks';
 const TOPIC_RESULT = 'background-tasks-result';
 const WORKER_GROUP = 'background-task-workers';
 
+const isTerminalBackgroundTaskStatus = (status: BackgroundTaskStatus) =>
+  status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timed_out';
+
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   config: Required<
@@ -112,6 +115,8 @@ export class BackgroundTaskManager {
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
         await this.handleResult(event);
+      } else if (event.type === 'task.cancelled') {
+        this.handleCancel(event);
       }
       await ack?.();
     };
@@ -489,12 +494,9 @@ export class BackgroundTaskManager {
   ): Promise<BackgroundTask> {
     const storage = await this.getStorage();
 
-    const isTerminal = (status: string) =>
-      status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timed_out';
-
     for (const id of taskIds) {
       const task = await storage.getTask(id);
-      if (task && isTerminal(task.status)) {
+      if (task && isTerminalBackgroundTaskStatus(task.status)) {
         return task;
       }
     }
@@ -519,7 +521,7 @@ export class BackgroundTaskManager {
       const pollInterval = setInterval(async () => {
         for (const id of taskIds) {
           const task = await storage.getTask(id);
-          if (task && isTerminal(task.status)) {
+          if (task && isTerminalBackgroundTaskStatus(task.status)) {
             clearInterval(pollInterval);
             if (timeout) clearTimeout(timeout);
             if (progressInterval) clearInterval(progressInterval);
@@ -785,17 +787,38 @@ export class BackgroundTaskManager {
       this.deregisterTaskContext(taskId);
       return false;
     }
-    if (!task || task.status === 'cancelled') {
+    if (!task) {
       this.deregisterTaskContext(taskId);
+      return false;
+    }
+    if (task.status !== 'pending') {
+      // Keep taskContexts registered on claim contention so local hooks can
+      // still observe the worker that owns the final completion. Terminal
+      // statuses are also consumed through fan-out result/cancel events; do
+      // not race those handlers by deregistering here.
       return false;
     }
 
     const restorePending = async () => {
-      await storage.updateTask(taskId, { status: 'pending', startedAt: undefined });
-      this.deregisterTaskContext(taskId);
+      const restored = await storage.updateTaskIfStatus(taskId, 'running', { status: 'pending', startedAt: undefined });
+      if (restored) this.deregisterTaskContext(taskId);
     };
 
-    await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount: deliveryAttempt - 1 });
+    const claimed = await storage.updateTaskIfStatus(taskId, 'pending', {
+      status: 'running',
+      startedAt: new Date(),
+      retryCount: deliveryAttempt - 1,
+    });
+    if (!claimed) {
+      const latestTask = await storage.getTask(taskId);
+      if (!latestTask) {
+        this.deregisterTaskContext(taskId);
+      }
+      // Keep taskContexts registered only on active claim contention so local
+      // hooks can still observe the worker that owns the final completion.
+      // Terminal statuses are cleaned up by the fan-out result/cancel handlers.
+      return false;
+    }
 
     // Publish running lifecycle event (fan-out, for stream consumers)
     const runningTask = await storage.getTask(taskId);
@@ -864,7 +887,7 @@ export class BackgroundTaskManager {
     }
 
     const restoreSuspended = async () => {
-      await storage.updateTask(taskId, {
+      await storage.updateTaskIfStatus(taskId, 'running', {
         status: 'suspended',
         startedAt: task.startedAt,
         suspendPayload: task.suspendPayload,
@@ -872,12 +895,13 @@ export class BackgroundTaskManager {
       });
     };
 
-    await storage.updateTask(taskId, {
+    const claimed = await storage.updateTaskIfStatus(taskId, 'suspended', {
       status: 'running',
       startedAt: new Date(),
       suspendPayload: undefined,
       suspendedAt: undefined,
     });
+    if (!claimed) return;
     const resumedTask = await storage.getTask(taskId);
     if (this.shuttingDown) {
       await restoreSuspended();

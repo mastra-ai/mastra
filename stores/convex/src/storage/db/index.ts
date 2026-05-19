@@ -151,6 +151,29 @@ export class ConvexDB extends MastraBase {
     });
   }
 
+  public async updateIfFieldEquals({
+    tableName,
+    id,
+    field,
+    expectedValue,
+    patch,
+  }: {
+    tableName: TABLE_NAMES;
+    id: string;
+    field: string;
+    expectedValue: string | number | boolean | null;
+    patch: Record<string, any>;
+  }): Promise<boolean> {
+    return this.client.callStorage<boolean>({
+      op: 'updateIfFieldEquals',
+      tableName,
+      id,
+      field,
+      expectedValue,
+      patch: this.normalizeRecord(tableName, patch),
+    });
+  }
+
   public async mergeWorkflowStepResult({
     workflowName,
     runId,

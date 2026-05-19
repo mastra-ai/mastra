@@ -90,12 +90,10 @@ const requiredBindingTables = [
 
 const bindingsWithout = (missingTable: (typeof requiredBindingTables)[number]) =>
   Object.fromEntries(
-    requiredBindingTables
-      .filter(table => table !== missingTable)
-      .map(table => [table, kvBindings[table]]),
+    requiredBindingTables.filter(table => table !== missingTable).map(table => [table, kvBindings[table]]),
   );
 
-createTestSuite(new CloudflareStore(TEST_CONFIG));
+createTestSuite(new CloudflareStore(TEST_CONFIG), { backgroundTasksUpdateIfStatus: false });
 
 // Pre-configured client acceptance tests (using bindings)
 createClientAcceptanceTests({
