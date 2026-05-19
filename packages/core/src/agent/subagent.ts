@@ -28,7 +28,6 @@ export type SubAgentGenerateResult = Pick<FullOutput, 'text' | 'finishReason' | 
   toolResults?: SubAgentToolResult[];
   suspendPayload?: unknown;
   resumeSchema?: unknown;
-  /** Token usage for the sub-agent execution. Optional because custom SubAgent implementations may not provide it. */
   usage?: FullOutput['usage'];
 };
 
