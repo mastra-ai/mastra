@@ -1,5 +1,51 @@
 # @mastra/core
 
+## 1.36.0-alpha.4
+
+### Minor Changes
+
+- Added `activateAfterIdle: "auto"` for Observational Memory early activation. ([#16663](https://github.com/mastra-ai/mastra/pull/16663))
+
+  Mastra can now choose an idle activation timeout from the active model provider's prompt cache behavior. OpenAI also respects `providerOptions.openai.promptCacheRetention` when available.
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        activateAfterIdle: 'auto',
+        activateOnProviderChange: true,
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a startup bug in `MastraCompositeStore.init()` when using `default` or `editor`. ([#16786](https://github.com/mastra-ai/mastra/pull/16786))
+
+  Before this fix, the composite initialized inner domains directly and could skip parent store initialization. That could skip adapter setup steps and cause missing-table errors during startup (most visibly with `LibSQLStore` on a local file).
+
+  Now, `MastraCompositeStore.init()` runs parent `default` and `editor` initialization first, then initializes only domains not already covered by those parents. This preserves adapter-specific initialization behavior and prevents startup races.
+
+  Fixes #16782.
+
+- Agent signals can now coordinate active thread runs across agents that share a PubSub instance, so thread subscribers and signal senders can observe the same run instead of being limited to one runtime instance. ([#16665](https://github.com/mastra-ai/mastra/pull/16665))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { EventEmitterPubSub } from '@mastra/core/events';
+
+  const pubsub = new EventEmitterPubSub();
+  const agent = new Agent({
+    id: 'agent',
+    name: 'Agent',
+    instructions: 'Help the user',
+    model,
+    pubsub,
+  });
+  ```
+
 ## 1.36.0-alpha.3
 
 ### Minor Changes
