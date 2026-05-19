@@ -2035,6 +2035,8 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.tags).toContain('experiment');
       expect(result.tags).toContain('metric-tag');
       expect(result.tags).toContain('log-tag');
+      expect(result.tags).toHaveLength(new Set(result.tags).size);
+      expect(result.tags.filter(tag => tag === 'metric-tag')).toHaveLength(1);
     });
   });
 

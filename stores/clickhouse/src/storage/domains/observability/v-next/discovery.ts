@@ -50,7 +50,7 @@ export async function getEntityTypes(
 ): Promise<GetEntityTypesResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'entityType' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'entityType' ORDER BY value`,
   );
 
   const validTypes = new Set(Object.values(EntityType));
@@ -77,7 +77,7 @@ export async function getEntityNames(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value`,
     params,
   );
   return { names: rows.map(r => r.value) };
@@ -91,7 +91,7 @@ export async function getServiceNames(
 ): Promise<GetServiceNamesResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'serviceName' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'serviceName' ORDER BY value`,
   );
   return { serviceNames: rows.map(r => r.value) };
 }
@@ -102,7 +102,7 @@ export async function getEnvironments(
 ): Promise<GetEnvironmentsResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'environment' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'environment' ORDER BY value`,
   );
   return { environments: rows.map(r => r.value) };
 }
@@ -120,7 +120,7 @@ export async function getTags(client: ClickHouseClient, args: GetTagsArgs): Prom
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value`,
     params,
   );
   return { tags: rows.map(r => r.value) };
