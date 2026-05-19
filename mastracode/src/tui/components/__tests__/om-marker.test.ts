@@ -46,6 +46,20 @@ describe('OMMarkerComponent activation rendering', () => {
     expect(activationText).not.toContain('TTL');
   });
 
+  it('renders combined observation activation counts', () => {
+    const activationMarker = new OMMarkerComponent({
+      type: 'om_activation',
+      operationType: 'observation',
+      tokensActivated: 9300,
+      observationTokens: 525,
+      activationCount: 2,
+    });
+
+    const activationText = stripAnsi(activationMarker.render(120).join('\n'));
+
+    expect(activationText).toContain('✓ Activated 2 observations: -9.3k msg tokens, +0.5k obs tokens');
+  });
+
   it('renders provider-change activation as a separate muted line', () => {
     const providerChangeMarker = new OMMarkerComponent({
       type: 'om_activation_provider_change',
