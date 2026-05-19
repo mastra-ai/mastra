@@ -13,6 +13,6 @@ export default defineConfig({
   sourcemap: true,
   external: ['@mastra/core', '@azure/storage-blob', '@azure/identity'],
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set());
   },
 });
