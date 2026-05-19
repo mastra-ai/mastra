@@ -62,9 +62,35 @@ export function encodeDeltaCursor(value: unknown): string {
   return String(value ?? 0);
 }
 
-/** Reject anything other than a non-negative integer cursor. */
+/**
+ * Postgres `bigint` upper bound (2^63 - 1). The cursor goes into a
+ * `$N::bigint` cast server-side; values above this overflow and fail with
+ * "value out of range" before the query even runs.
+ */
+const PG_BIGINT_MAX = 9223372036854775807n;
+
+/** Reject anything other than a non-negative integer cursor fitting in a Postgres bigint. */
 export function validateCursorId(cursor: string): string {
   if (!/^\d+$/.test(cursor)) {
+    throw new MastraError({
+      id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Invalid observability delta cursor',
+    });
+  }
+  let value: bigint;
+  try {
+    value = BigInt(cursor);
+  } catch {
+    throw new MastraError({
+      id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Invalid observability delta cursor',
+    });
+  }
+  if (value < 0n || value > PG_BIGINT_MAX) {
     throw new MastraError({
       id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

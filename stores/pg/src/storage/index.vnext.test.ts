@@ -77,7 +77,7 @@ describe('PostgresStoreVNext', () => {
       });
 
       try {
-        await expect(store.init()).resolves.not.toThrow();
+        await store.init();
         const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
         expect(['native', 'partman', 'timescale']).toContain(observability.partitionMode);
       } finally {

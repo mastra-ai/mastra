@@ -324,8 +324,15 @@ export async function getMetricLabelValues(
 }
 
 /**
- * Force-refresh every cached discovery key. Intended for the future
- * `mastra observability discovery refresh` CLI command.
+ * Force-refresh the six unscoped discovery cache keys: `entity_types`,
+ * `entity_names`, `service_names`, `environments`, `tags`, and
+ * `metric_names`. Scoped keys (`entity_names:<entityType>`,
+ * `tags:<entityType>`, `metric_label_keys:<metric>`,
+ * `metric_label_values:<metric>:<key>`) are not touched here — they refresh
+ * lazily on read against their own keys.
+ *
+ * Intended for the future `mastra observability discovery refresh` CLI
+ * command.
  */
 export async function refreshAllDiscoveryCaches(
   client: DbClient,

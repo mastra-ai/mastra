@@ -174,24 +174,27 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
   await ensureNativePartitions(client, schema, { futureDays: 0, includeYesterday: false });
 
   for (const table of ALL_SIGNAL_TABLES) {
-    const fullName = `${schema}.${table}`;
-    // create_parent is idempotent across versions via the conditional check.
+    // pg_partman stores `parent_table` in canonical `format('%I.%I', ...)`
+    // form — quoted only when the identifier requires it. Use the same
+    // expression server-side so the EXISTS check matches the row that
+    // `create_parent` will insert, regardless of schema case.
     const exists = await client.oneOrNone<{ exists: boolean }>(
       `SELECT EXISTS (
-         SELECT 1 FROM partman.part_config WHERE parent_table = $1
+         SELECT 1 FROM partman.part_config
+         WHERE parent_table = format('%I.%I', $1::text, $2::text)
        ) AS "exists"`,
-      [fullName],
+      [schema, table],
     );
     if (exists?.exists) continue;
 
     await client.none(
       `SELECT partman.create_parent(
-         p_parent_table := $1,
-         p_control := $2,
+         p_parent_table := format('%I.%I', $1::text, $2::text),
+         p_control := $3,
          p_type := 'native',
          p_interval := '1 day'
        )`,
-      [fullName, SIGNAL_TIME_COLUMN[table]],
+      [schema, table, SIGNAL_TIME_COLUMN[table]],
     );
   }
 }

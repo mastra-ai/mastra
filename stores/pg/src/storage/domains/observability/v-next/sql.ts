@@ -27,10 +27,13 @@ const JSONB_COLUMNS = new Set([
 
 const TEXT_ARRAY_COLUMNS = new Set(['tags']);
 
-/** Encode a JS value for a jsonb column. Returns null for nullish. */
+/**
+ * Encode a JS value for a `$N::jsonb` cast. Always `JSON.stringify` so a
+ * plain string like `"hello"` becomes `"hello"` (a valid JSON scalar) and
+ * not the bare word `hello`, which Postgres rejects when cast to jsonb.
+ */
 function encodeJsonb(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === 'string') return value;
   return JSON.stringify(value);
 }
 

@@ -107,7 +107,7 @@ export function toDateOrNull(value: unknown): Date | null {
   if (value == null || value === '') return null;
   if (value instanceof Date) return value;
   const d = new Date(value as string | number);
-  if (isNaN(d.getTime()) || d.getTime() === 0) return null;
+  if (isNaN(d.getTime())) return null;
   return d;
 }
 

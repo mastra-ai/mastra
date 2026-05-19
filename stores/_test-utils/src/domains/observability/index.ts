@@ -1316,13 +1316,21 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
     describe('batchCreateFeedback', () => {
       // Some legacy observability adapters do not implement the feedback
       // surface yet. Detect at runtime via a tiny insert and skip the whole
-      // suite when the method throws "not implemented".
+      // suite when the method throws "not implemented". Any OTHER error is
+      // re-thrown so real regressions surface — silencing them here would
+      // hide actual bugs behind a green test.
       let feedbackSupported = false;
       beforeAll(async () => {
         try {
           await observabilityStorage.batchCreateFeedback({ feedbacks: [] });
           feedbackSupported = true;
-        } catch {
+        } catch (error) {
+          const id = (error as { id?: string } | undefined)?.id;
+          const msg = (error as { message?: string } | undefined)?.message ?? '';
+          const isNotImplemented =
+            (typeof id === 'string' && id.includes('NOT_IMPLEMENTED')) ||
+            /not implemented/i.test(msg);
+          if (!isNotImplemented) throw error;
           feedbackSupported = false;
         }
       });
