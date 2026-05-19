@@ -217,7 +217,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   setQuietPreviewLineLimit(limit: number): void {
-    this.quietPreviewLineLimit = Math.max(0, Math.floor(limit));
+    const normalizedLimit = Number.isFinite(limit) ? limit : 2;
+    this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
     this.rebuild();
   }
 
@@ -317,7 +318,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.updateBgColor();
     this.contentBox.clear();
 
-    if (this.quietDisplayMode === 'quiet' && this.toolName !== MC_TOOLS.EXECUTE_COMMAND) {
+    if (
+      this.quietDisplayMode === 'quiet' &&
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      !(this.result && !this.isPartial && this.isErrorResult())
+    ) {
       this.renderCompactTool();
       return;
     }
@@ -399,7 +404,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private formatQuietActivePreview(preview: string): string {
-    if (this.toolName === MC_TOOLS.WRITE_FILE || this.toolName === MC_TOOLS.STRING_REPLACE_LSP) {
+    if (
+      this.toolName === MC_TOOLS.VIEW ||
+      this.toolName === MC_TOOLS.WRITE_FILE ||
+      this.toolName === MC_TOOLS.STRING_REPLACE_LSP
+    ) {
       return this.highlightQuietCodePreview(preview);
     }
 
@@ -525,14 +534,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private formatQuietViewPreview(): string {
     if (!this.result) return '';
 
-    const path = this.getFirstStringArg('path');
     const output = this.getFormattedOutput();
     if (!output || !this.looksLikeViewOutput(output)) return '';
 
     const argsObj = this.args as Record<string, unknown> | undefined;
     const viewRange = argsObj?.view_range as [number, number] | undefined;
     const startLine = viewRange?.[0] ?? (argsObj?.offset as number | undefined) ?? 1;
-    return highlightCode(output, path, startLine);
+    return getPlainCodeFromViewOutput(output, startLine);
   }
 
   private formatQuietListPreview(): string {
@@ -2152,8 +2160,8 @@ function getLanguageFromPath(path: string): string | undefined {
   return ext ? langMap[ext] : undefined;
 }
 
-/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
-function highlightCode(content: string, path: string, startLine?: number): string {
+/** Strip line number formatting (cat -n or workspace →) from view-style output */
+function getPlainCodeFromViewOutput(content: string, startLine?: number): string {
   let lines = content.split('\n').map(line => line.trimEnd());
   // Remove known headers:
   // - "[Truncated N tokens]" from token truncation
@@ -2190,15 +2198,20 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     codeLines.pop();
   }
 
-  // Apply syntax highlighting
+  return codeLines.join('\n');
+}
+
+/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
+function highlightCode(content: string, path: string, startLine?: number): string {
+  const code = getPlainCodeFromViewOutput(content, startLine);
   try {
-    return highlight(codeLines.join('\n'), {
+    return highlight(code, {
       language: getLanguageFromPath(path),
       ignoreIllegals: true,
       theme: CODE_HIGHLIGHT_THEME,
     });
   } catch {
-    return codeLines.join('\n');
+    return code;
   }
 }
 /** Parse a `Name: message\n  at ...` error string into an Error object.

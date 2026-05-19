@@ -166,6 +166,7 @@ export function handleOMBufferingStart(
   state.activeActivationTTLMarker = undefined;
   state.activeActivationProviderChangeMarker = undefined;
   if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
     state.activeBufferingMarker = undefined;
     state.ui.requestRender();
     return;

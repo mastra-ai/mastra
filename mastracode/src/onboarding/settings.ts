@@ -276,6 +276,7 @@ const DEFAULTS: GlobalSettings = {
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
@@ -283,18 +284,19 @@ function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
     : DEFAULTS.preferences.thinkingLevel;
 }
 
+function parseQuietModeMaxToolPreviewLines(value: unknown): number {
+  const rawValue = typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
+  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
+}
+
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
   const raw = rawPreferences && typeof rawPreferences === 'object' ? (rawPreferences as Record<string, unknown>) : {};
-  const maxPreviewLines =
-    typeof raw.quietModeMaxToolPreviewLines === 'number'
-      ? raw.quietModeMaxToolPreviewLines
-      : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
 
   return {
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
-    quietModeMaxToolPreviewLines: Math.max(0, Math.floor(maxPreviewLines)),
+    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
   };
 }
 

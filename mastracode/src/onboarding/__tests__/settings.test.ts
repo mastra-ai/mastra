@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   getCustomProviderId,
@@ -126,6 +126,32 @@ describe('customProviders parsing/persistence', () => {
         'utf-8',
       );
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 999 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(8);
+
+      writeFileSync(filePath, '{}', 'utf-8');
+      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
+        onboarding: { quietModePreferenceSelected: true },
+        models: {},
+        preferences: { quietModeMaxToolPreviewLines: Number.NaN },
+        storage: {},
+      });
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      vi.mocked(JSON.parse).mockRestore();
+
+      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
+        onboarding: { quietModePreferenceSelected: true },
+        models: {},
+        preferences: { quietModeMaxToolPreviewLines: Number.POSITIVE_INFINITY },
+        storage: {},
+      });
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      vi.mocked(JSON.parse).mockRestore();
     });
   });
 

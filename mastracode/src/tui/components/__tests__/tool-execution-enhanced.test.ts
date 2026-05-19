@@ -5,7 +5,7 @@ import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-e
 const ui = { requestRender() {} } as any;
 
 function stripAnsi(text: string): string {
-  return text.replace(/\u001b\[[0-9;]*m/g, '');
+  return text.replace(/\u001b\[[0-9;]*m/g, '').replace(/\u001b\]8;;[^\u0007]*\u0007/g, '').replace(/\u001b\]8;;\u0007/g, '');
 }
 
 describe('ToolExecutionComponentEnhanced quiet display', () => {
@@ -34,6 +34,26 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).toContain('│ const second = 2;');
     expect(visible).toContain('╰──');
     expect(output.split('\n')).toHaveLength(4);
+  });
+
+  it('wraps quiet view previews before applying ANSI syntax highlighting', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'src/example.ts', offset: 1, limit: 1, showLineNumbers: true },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      ui,
+    );
+    const longLine = `     1→const value = '${'x'.repeat(400)}';`;
+
+    component.updateResult({
+      content: [{ type: 'text', text: longLine }],
+      isError: false,
+    });
+
+    const output = component.render(120).join('\n');
+    const withoutCompleteAnsiSequences = output.replace(/\u001b\[[0-9;]*m/g, '');
+    expect(withoutCompleteAnsiSequences).not.toContain('\u001b');
+    expect(stripAnsi(output)).toContain('│ const value =');
   });
 
   it('shows exactly the immediate dirname and filename once continuation paths are available', () => {
@@ -218,28 +238,6 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     expect(active.render(100).join('\n')).toContain(`\u001b[93mview`);
 
-    const failed = new ToolExecutionComponentEnhanced(
-      'view',
-      { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
-      ui,
-    );
-    failed.updateResult({ content: [{ type: 'text', text: 'failed' }], isError: true });
-    const failedOutput = failed.render(100).join('\n');
-    expect(failedOutput).toContain(`\u001b[91mview`);
-    expect(failedOutput).toContain('✗');
-
-    const failedEdit = new ToolExecutionComponentEnhanced(
-      'string_replace_lsp',
-      { path: 'src/example.ts', old_string: 'missing', new_string: 'replacement' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
-      ui,
-    );
-    failedEdit.updateResult({ content: [{ type: 'text', text: 'The specified text was not found.' }], isError: false });
-    const failedEditOutput = failedEdit.render(100).join('\n');
-    expect(failedEditOutput).toContain(`\u001b[91medit`);
-    expect(failedEditOutput).toContain('✗');
-
     const complete = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts' },
@@ -248,6 +246,44 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     complete.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
     expect(complete.render(100).join('\n')).toContain(`\u001b[93mview`);
+  });
+
+  it('renders quiet non-shell tool validation errors with actionable details', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'ask_user',
+      {},
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({
+      content: [{ type: 'text', text: 'Validation error: missing required parameter "question"' }],
+      isError: true,
+    });
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('Tool validation failed: ask_user');
+    expect(output).toContain('Parameter: question');
+    expect(output).toContain('Required parameter is missing');
+    expect(output).toContain('Make sure to provide a "question" parameter');
+    expect(output).not.toMatch(/^ask_user .*✗$/m);
+  });
+
+  it('renders quiet non-shell tool errors through detailed renderers', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'src/example.ts', old_string: 'missing', new_string: 'replacement' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({ content: [{ type: 'text', text: 'The specified text was not found.' }], isError: false });
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('╭──');
+    expect(output).toContain('edit src/example.ts');
+    expect(output).toContain('✗');
+    expect(output).not.toMatch(/^edit .*✗$/m);
   });
 
   it('renders quiet edit tools with line ranges from the tool result', () => {
