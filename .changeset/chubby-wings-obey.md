@@ -2,7 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-Removed support for the `onOpenAutoFocus` and `onCloseAutoFocus` props on `PopoverContent`. To control focus when the popover opens or closes, use `initialFocus` and `finalFocus` instead.
+`PopoverContent` no longer forwards the underlying library's auto-focus event handlers (`onOpenAutoFocus`, `onCloseAutoFocus`). To control focus when the popover opens or closes, use `initialFocus` and `finalFocus`.
 
 ```tsx
 // Before
