@@ -1,6 +1,8 @@
 import { Button, cn } from '@mastra/playground-ui';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useAgentColor } from '../../contexts/agent-color-context';
 import { ChatTextarea } from './chat-textarea';
 
 interface ChatComposerProps {
@@ -15,14 +17,7 @@ interface ChatComposerProps {
   inputTestId?: string;
   submitTestId?: string;
   containerTestId?: string;
-  tone?: 'neutral' | 'success' | 'info';
 }
-
-const toneClasses = {
-  neutral: 'border-border1 focus-within:border-neutral3',
-  success: 'border-accent1Dark focus-within:border-accent1',
-  info: 'border-accent5Dark focus-within:border-accent5',
-};
 
 export const ChatComposer = ({
   draft,
@@ -36,19 +31,32 @@ export const ChatComposer = ({
   inputTestId,
   submitTestId,
   containerTestId,
-  tone = 'neutral',
 }: ChatComposerProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const agentColor = useAgentColor();
 
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
 
+  const containerStyle = useMemo<CSSProperties>(() => {
+    const base: CSSProperties = { viewTransitionName: 'chat-composer' };
+    if (!agentColor) return base;
+    return {
+      ...base,
+      ['--agent-color-fg' as string]: agentColor.foreground,
+      ['--agent-color-bg' as string]: agentColor.background,
+    };
+  }, [agentColor]);
+
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className={cn('rounded-3xl border bg-surface2 px-3 pt-2.5 transition-colors', toneClasses[tone])}
-        style={{ viewTransitionName: 'chat-composer' }}
+        className={cn(
+          'rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors',
+          agentColor && 'focus-within:border-[var(--agent-color-fg)]',
+        )}
+        style={containerStyle}
         data-testid={containerTestId}
       >
         <ChatTextarea

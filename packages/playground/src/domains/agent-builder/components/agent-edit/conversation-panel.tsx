@@ -192,7 +192,6 @@ const ConversationComposer = () => {
       inputTestId="agent-builder-conversation-input"
       submitTestId="agent-builder-conversation-submit"
       containerTestId="agent-builder-conversation-composer"
-      tone="info"
     />
   );
 };

@@ -6,9 +6,9 @@ import { z } from 'zod-v4';
 
 import type { useBuilderAgentFeatures } from './use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
-import { buildAgentBuilderToolDescription } from '@/domains/agent-builder/services/agent-builder-tool/build-tool-description';
-import { buildAgentBuilderToolSchema } from '@/domains/agent-builder/services/agent-builder-tool/build-tool-schema';
-import { routeToolInputToFormKeys } from '@/domains/agent-builder/services/agent-builder-tool/route-tool-input';
+import { buildAgentBuilderToolDescription } from '@/domains/agent-builder/services/build-tool-description';
+import { buildAgentBuilderToolSchema } from '@/domains/agent-builder/services/build-tool-schema';
+import { routeToolInputToFormKeys } from '@/domains/agent-builder/services/route-tool-input';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
 import { cleanProviderId } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm';

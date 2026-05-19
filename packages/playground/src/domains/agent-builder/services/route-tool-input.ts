@@ -1,4 +1,4 @@
-import type { AgentTool } from '../../types/agent-tool';
+import type { AgentTool } from '../types/agent-tool';
 
 export interface ToolInputEntry {
   id: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentTool } from '../../../types/agent-tool';
-import { routeToolInputToFormKeys } from '../../agent-builder-tool/route-tool-input';
+import type { AgentTool } from '../../types/agent-tool';
+import { routeToolInputToFormKeys } from '../route-tool-input';
 
 describe('routeToolInputToFormKeys', () => {
   it('routes tool ids to tools and agent ids to agents based on the available type map', () => {

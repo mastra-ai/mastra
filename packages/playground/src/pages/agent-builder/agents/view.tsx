@@ -7,6 +7,7 @@ import { AgentChatPanelChat } from '@/domains/agent-builder/components/agent-edi
 import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
 import { ViewTopBar } from '@/domains/agent-builder/components/agent-view/view-top-bar';
+import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { ViewPageProvider, useViewPage } from '@/domains/agent-builder/contexts/view-page-context';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
@@ -65,16 +66,22 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
   if (hasBrowser) {
     return (
       <FormProvider {...formMethods}>
-        <BrowserToolCallsProvider>
-          <BrowserSessionProvider agentId={agentId} threadId={threadId}>
-            {body}
-          </BrowserSessionProvider>
-        </BrowserToolCallsProvider>
+        <AgentColorProvider>
+          <BrowserToolCallsProvider>
+            <BrowserSessionProvider agentId={agentId} threadId={threadId}>
+              {body}
+            </BrowserSessionProvider>
+          </BrowserToolCallsProvider>
+        </AgentColorProvider>
       </FormProvider>
     );
   }
 
-  return <FormProvider {...formMethods}>{body}</FormProvider>;
+  return (
+    <FormProvider {...formMethods}>
+      <AgentColorProvider>{body}</AgentColorProvider>
+    </FormProvider>
+  );
 };
 
 const ViewTopBarSlot = () => {

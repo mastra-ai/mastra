@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentTool } from '../../../types/agent-tool';
-import { buildAgentBuilderToolSchema } from '../../agent-builder-tool/build-tool-schema';
+import type { AgentTool } from '../../types/agent-tool';
+import { buildAgentBuilderToolSchema } from '../build-tool-schema';
 
 const allOff = {
   tools: false,

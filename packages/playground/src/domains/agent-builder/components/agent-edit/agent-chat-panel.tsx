@@ -121,7 +121,6 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
         inputTestId="agent-builder-agent-chat-input"
         submitTestId="agent-builder-agent-chat-submit"
         containerTestId="agent-builder-agent-chat-composer"
-        tone="success"
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AgentColorProvider } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderTitle } from '../agent-builder-title';
 
@@ -26,7 +27,9 @@ const FormWrapper = ({
   return (
     <MemoryRouter>
       <TooltipProvider>
-        <FormProvider {...methods}>{children}</FormProvider>
+        <FormProvider {...methods}>
+          <AgentColorProvider>{children}</AgentColorProvider>
+        </FormProvider>
       </TooltipProvider>
     </MemoryRouter>
   );
@@ -155,5 +158,30 @@ describe('AgentBuilderTitle', () => {
     expect(toggle.disabled).toBe(true);
     fireEvent.click(toggle);
     expect(onModeToggle).not.toHaveBeenCalled();
+  });
+
+  it('tints the mode badge with an hsl background/color derived from the agent name', () => {
+    render(
+      <FormWrapper defaults={{ name: 'Support agent' }}>
+        <AgentBuilderTitle mode="build" />
+      </FormWrapper>,
+    );
+
+    const badge = screen.getByTestId('agent-builder-mode-badge-build');
+    // jsdom normalizes inline color/background-color from hsl() to rgb(), so we
+    // assert the property is present with a non-empty color value.
+    expect(badge.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
+    expect(badge.style.color).toMatch(/^(rgb|hsl)\(/);
+  });
+
+  it('falls back to variant colors (no inline style) when the agent name is whitespace', () => {
+    render(
+      <FormWrapper defaults={{ name: '   ' }}>
+        <AgentBuilderTitle mode="build" />
+      </FormWrapper>,
+    );
+
+    const badge = screen.getByTestId('agent-builder-mode-badge-build');
+    expect(badge.getAttribute('style')).toBeNull();
   });
 });

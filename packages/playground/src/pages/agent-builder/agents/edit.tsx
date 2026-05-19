@@ -16,6 +16,7 @@ import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent
 import { EditTopBar } from '@/domains/agent-builder/components/agent-edit/edit-top-bar';
 import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
+import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -54,7 +55,9 @@ const EditPageForm = () => {
 
   return (
     <FormProvider {...formMethods}>
-      <EditPageBody />
+      <AgentColorProvider>
+        <EditPageBody />
+      </AgentColorProvider>
     </FormProvider>
   );
 };

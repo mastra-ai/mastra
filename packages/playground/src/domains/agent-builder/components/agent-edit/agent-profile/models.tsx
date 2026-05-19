@@ -1,8 +1,10 @@
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Searchbar, Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { toProviders } from '@/domains/agent-builder/services/to-providers';
@@ -63,7 +65,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
 
   return (
     <div className="h-full">
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4" data-testid="model-card-picker">
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-4" data-testid="model-card-picker">
         <div data-testid="model-card-picker-search" className="shrink-0">
           <Searchbar
             onSearch={setSearch}
@@ -125,6 +127,25 @@ interface ModelListEntryProps {
 }
 
 const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntryProps) => {
+  const agentColor = useAgentColor();
+  const hasAgentColor = agentColor !== null;
+  const useAgentColors = isSelected && hasAgentColor;
+
+  const containerStyle: CSSProperties | undefined = hasAgentColor
+    ? {
+        ['--agent-color-fg' as string]: agentColor.foreground,
+        ...(isSelected ? { borderColor: agentColor.foreground } : null),
+      }
+    : undefined;
+
+  const checkStyle: CSSProperties | undefined = useAgentColors
+    ? {
+        borderColor: agentColor.foreground,
+        backgroundColor: agentColor.background,
+        color: agentColor.foreground,
+      }
+    : undefined;
+
   return (
     <button
       key={`${entry.provider}__${entry.model}`}
@@ -133,10 +154,18 @@ const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntr
       disabled={disabled}
       aria-pressed={isSelected}
       data-testid={`model-card-${entry.provider}-${entry.model}`}
+      style={containerStyle}
       className={cn(
         'flex items-center gap-3 rounded-md border bg-surface3 px-3 py-2.5 text-left transition-colors',
-        'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
-        isSelected ? 'border-accent1 bg-surface4 ring-1 ring-accent1' : 'border-border1',
+        hasAgentColor
+          ? 'focus-visible:!border-[var(--agent-color-fg)] focus-visible:outline-none'
+          : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
+        hasAgentColor && 'hover:bg-surface4',
+        isSelected
+          ? useAgentColors
+            ? 'bg-surface4'
+            : 'border-accent1 bg-surface4 ring-1 ring-accent1'
+          : 'border-border1',
         disabled && 'cursor-not-allowed opacity-60',
       )}
     >
@@ -152,9 +181,14 @@ const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntr
       <span
         aria-hidden="true"
         data-testid={`model-card-check-${entry.provider}-${entry.model}`}
+        style={checkStyle}
         className={cn(
           'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-          isSelected ? 'border-accent1 bg-accent1 text-surface1' : 'border-border1 bg-transparent',
+          isSelected
+            ? useAgentColors
+              ? ''
+              : 'border-accent1 bg-accent1 text-surface1'
+            : 'border-border1 bg-transparent',
         )}
       >
         {isSelected && <Check className="h-3 w-3" />}

@@ -1,8 +1,8 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { z } from 'zod-v4';
-import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
-import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
-import type { AgentTool } from '../../types/agent-tool';
+import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
+import type { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
+import type { AgentTool } from '../types/agent-tool';
 
 interface AvailableWorkspace {
   id: string;
