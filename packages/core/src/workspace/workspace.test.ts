@@ -2325,16 +2325,15 @@ Line 3 conclusion`;
           },
         });
 
-        const instructions = await workspace.getInstructionsAsync({
+        const adminInstructions = await workspace.getInstructionsAsync({
           requestContext: new RequestContext([['role', 'admin']]),
         });
-        const pathContext = await workspace.getPathContextAsync({
+        const userInstructions = await workspace.getInstructionsAsync({
           requestContext: new RequestContext([['role', 'user']]),
         });
 
-        expect(instructions).toContain(dirA);
-        expect(pathContext.filesystem?.basePath).toBe(dirB);
-        expect(pathContext.instructions).toContain(dirB);
+        expect(adminInstructions).toContain(dirA);
+        expect(userInstructions).toContain(dirB);
       } finally {
         await fs.rm(dirA, { recursive: true, force: true });
         await fs.rm(dirB, { recursive: true, force: true });
@@ -2489,16 +2488,15 @@ Line 3 conclusion`;
         },
       });
 
-      const instructions = await workspace.getInstructionsAsync({
+      const adminInstructions = await workspace.getInstructionsAsync({
         requestContext: new RequestContext([['role', 'admin']]),
       });
-      const pathContext = await workspace.getPathContextAsync({
+      const userInstructions = await workspace.getInstructionsAsync({
         requestContext: new RequestContext([['role', 'user']]),
       });
 
-      expect(instructions).toContain(path.join(tempDir, 'admin'));
-      expect(pathContext.sandbox?.workingDirectory).toBe(path.join(tempDir, 'user'));
-      expect(pathContext.instructions).toContain(path.join(tempDir, 'user'));
+      expect(adminInstructions).toContain(path.join(tempDir, 'admin'));
+      expect(userInstructions).toContain(path.join(tempDir, 'user'));
     });
 
     it('should forward the synthesized requestContext to provider instruction hooks', async () => {

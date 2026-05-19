@@ -1362,21 +1362,6 @@ export class Workspace<
     return this.getPathContextForProviders(this._fs, this._sandbox);
   }
 
-  /**
-   * Async variant of getPathContext that resolves dynamic providers.
-   *
-   * @deprecated Use {@link getInstructionsAsync} instead.
-   */
-  async getPathContextAsync(opts?: { requestContext?: RequestContext }): Promise<PathContext> {
-    const requestContext = opts?.requestContext ?? new RequestContext();
-    const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
-    const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
-
-    // Forward the resolved requestContext so provider getInstructions hooks see
-    // the same context used to resolve them, even when the caller didn't pass one.
-    return this.getPathContextForProviders(filesystem, sandbox, { ...opts, requestContext });
-  }
-
   private getPathContextForProviders(
     filesystem: WorkspaceFilesystem | undefined,
     sandbox: WorkspaceSandbox | undefined,
