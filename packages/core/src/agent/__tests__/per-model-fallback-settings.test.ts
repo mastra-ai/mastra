@@ -208,6 +208,41 @@ describe('Per-fallback-entry settings', () => {
       });
     });
 
+    it('should let processInputStep override merged providerOptions before stream execution', async () => {
+      const primary = createRecordingStreamModel('provider-options-processor-override', 'ok');
+
+      const overrideProviderOptionsProcessor = {
+        id: 'override-provider-options-processor',
+        processInputStep: async () => ({
+          providerOptions: { openai: { promptCacheRetention: 'in_memory' } } as any,
+        }),
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'provider-options-processor-override',
+        name: 'ProviderOptions Processor Override Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            providerOptions: { openai: { promptCacheRetention: '24h' } } as any,
+          },
+        ],
+        inputProcessors: [overrideProviderOptionsProcessor],
+      });
+
+      await (
+        await agent.stream('Hello', {
+          providerOptions: { openai: { user: 'abc' } } as any,
+        })
+      ).text;
+
+      expect(primary.doStreamCalls[0]?.providerOptions).toEqual({
+        openai: { promptCacheRetention: 'in_memory' },
+      });
+    });
+
     it('should not leak primary providerOptions into the fallback after failover', async () => {
       const primary = createThrowingStreamModel('primary-fail', 429);
       const secondary = createRecordingStreamModel('secondary-provider', 'secondary response');
