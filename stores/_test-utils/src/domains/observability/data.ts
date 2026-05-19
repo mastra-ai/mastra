@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { CreateSpanRecord, SpanRecord } from '@mastra/core/storage';
+import type { CreateFeedbackRecord, CreateSpanRecord, SpanRecord } from '@mastra/core/storage';
 
 /**
  * Default base date for testing - can be overridden
@@ -134,6 +134,20 @@ export function createOldSchemaSpan(overrides: Partial<CreateSpanRecord> = {}): 
   };
 }
 
+/**
+ * Creates a feedback record for testing with sensible defaults.
+ */
+export function createFeedbackRecord(overrides: Partial<CreateFeedbackRecord> = {}): CreateFeedbackRecord {
+  return {
+    feedbackId: overrides.feedbackId ?? `feedback-${randomUUID()}`,
+    timestamp: overrides.timestamp ?? DEFAULT_BASE_DATE,
+    feedbackType: 'thumbs',
+    feedbackSource: 'human',
+    value: 1,
+    ...overrides,
+  };
+}
+
 // Re-export types and enums for convenience
 export { SpanType, EntityType };
-export type { CreateSpanRecord, SpanRecord };
+export type { CreateSpanRecord, SpanRecord, CreateFeedbackRecord };

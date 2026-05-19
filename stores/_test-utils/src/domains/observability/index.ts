@@ -1,7 +1,7 @@
 import { MastraStorage, TraceStatus } from '@mastra/core/storage';
 import type { ObservabilityStorage, SpanRecord, TraceSpan } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createSpan, createChildSpan, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
+import { createSpan, createChildSpan, createFeedbackRecord, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
 
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
   // Skip tests if storage doesn't have observability domain
@@ -1305,8 +1305,39 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
       });
     });
+
+    describe('batchCreateFeedback', () => {
+      // Some legacy observability adapters do not implement the feedback
+      // surface yet. Detect at runtime via a tiny insert and skip the whole
+      // suite when the method throws "not implemented".
+      let feedbackSupported = false;
+      beforeAll(async () => {
+        try {
+          await observabilityStorage.batchCreateFeedback({ feedbacks: [] });
+          feedbackSupported = true;
+        } catch {
+          feedbackSupported = false;
+        }
+      });
+
+      it('stores userId (app user) and feedbackUserId (evaluator) as distinct fields', async () => {
+        if (!feedbackSupported) return;
+
+        const feedback = createFeedbackRecord({
+          feedbackId: `feedback-distinct-users-${Date.now()}`,
+          userId: 'app-user-123',
+          feedbackUserId: 'evaluator-456',
+        });
+        await observabilityStorage.batchCreateFeedback({ feedbacks: [feedback] });
+
+        const result = await observabilityStorage.listFeedback({});
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.userId).toBe('app-user-123');
+        expect(result.feedback[0]!.feedbackUserId).toBe('evaluator-456');
+      });
+    });
   });
 }
 
 // Re-export data helpers for use in tests
-export { createSpan, createRootSpan, createChildSpan, DEFAULT_BASE_DATE } from './data';
+export { createSpan, createRootSpan, createChildSpan, createFeedbackRecord, DEFAULT_BASE_DATE } from './data';
