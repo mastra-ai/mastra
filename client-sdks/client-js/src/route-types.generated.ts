@@ -77456,6 +77456,63 @@ export interface GetEditorBuilderSettings_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /editor/settings/model-policy
+// ============================================================================
+export type GetEditorSettingsModelPolicy_QueryParams = {
+  surface: 'builder' | 'editor';
+};
+
+export type GetEditorSettingsModelPolicy_Response = {
+  active: boolean;
+  pickerVisible?: boolean | undefined;
+  allowed?:
+    | (
+        | {
+            kind: 'custom';
+            provider: string;
+            modelId?: string | undefined;
+          }
+        | {
+            provider: string;
+            modelId?: string | undefined;
+          }
+      )[]
+    | undefined;
+  default?:
+    | (
+        | {
+            kind: 'custom';
+            provider: string;
+            modelId: string;
+          }
+        | {
+            provider: string;
+            modelId: string;
+          }
+      )
+    | undefined;
+};
+
+export type GetEditorSettingsModelPolicy_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetEditorSettingsModelPolicy_QueryParams extends never
+      ? {}
+      : {} extends GetEditorSettingsModelPolicy_QueryParams
+        ? { query?: GetEditorSettingsModelPolicy_QueryParams }
+        : { query: GetEditorSettingsModelPolicy_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorSettingsModelPolicy_RouteContract {
+  pathParams: never;
+  queryParams: GetEditorSettingsModelPolicy_QueryParams;
+  body: never;
+  request: GetEditorSettingsModelPolicy_Request;
+  response: GetEditorSettingsModelPolicy_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /editor/builder/infrastructure
 // ============================================================================
 export type GetEditorBuilderInfrastructure_Response = {
@@ -78585,6 +78642,7 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/settings/model-policy': GetEditorSettingsModelPolicy_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
   'GET /editor/builder/registries/:registryId/search': GetEditorBuilderRegistriesRegistryIdSearch_RouteContract;
@@ -78864,6 +78922,9 @@ export interface Client {
   };
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;
+  };
+  '/editor/settings/model-policy': {
+    GET: GetEditorSettingsModelPolicy_RouteContract;
   };
   '/embedders': {
     GET: GetEmbedders_RouteContract;

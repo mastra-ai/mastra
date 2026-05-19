@@ -9,7 +9,12 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
+import type {
+  BuilderModelPolicy,
+  DefaultModelEntry,
+  ModelPolicy,
+  ProviderModelEntry,
+} from '@mastra/core/agent-builder/ee';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { LogLevel } from '@mastra/core/logger';
@@ -2985,7 +2990,7 @@ export interface BuilderAgentFeatures {
  * Re-exported from `@mastra/core/agent-builder/ee` so SDK consumers don't need
  * a second import for admin model configuration types. Owned by core.
  */
-export type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry, ModelProviderId };
+export type { BuilderModelPolicy, DefaultModelEntry, ModelPolicy, ProviderModelEntry, ModelProviderId };
 
 /**
  * Response from GET /editor/builder/settings
