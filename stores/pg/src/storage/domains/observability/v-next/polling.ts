@@ -57,7 +57,15 @@ export function assertDeltaPollingEnabled(): void {
   });
 }
 
-/** Coerce a cursor value into the opaque string form the public API expects. */
+/**
+ * Coerce a cursor value into the opaque string form the public API expects.
+ *
+ * Returns `"0"` for a null/undefined input (e.g. `MAX("cursorId")` on an
+ * empty table). Callers treat `"0"` as "start of stream" — passing it back
+ * as `after` matches every row since `bigserial` starts at 1. There's
+ * therefore no way to distinguish "empty table" from "explicit bootstrap"
+ * by inspecting the cursor alone; if that matters, check `delta.hasMore`.
+ */
 export function encodeDeltaCursor(value: unknown): string {
   return String(value ?? 0);
 }

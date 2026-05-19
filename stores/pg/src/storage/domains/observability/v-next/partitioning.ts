@@ -124,12 +124,22 @@ export async function ensureNativePartitions(
  * future `mastra retention` CLI command.
  */
 export async function listPartitions(client: DbClient, schema: string, table: string): Promise<string[]> {
+  // Resolve the parent oid via pg_class/pg_namespace rather than casting a
+  // hand-built string to regclass — regclass casts go through search_path
+  // and throw on identifiers that don't resolve, even when the schema is
+  // valid. The join is exact match on (nspname, relname) and works for any
+  // schema regardless of search_path.
   const rows = await client.manyOrNone<{ partition: string }>(
     `SELECT inhrelid::regclass::text AS partition
      FROM pg_inherits
-     WHERE inhparent = ($1::text || '.' || $2::text)::regclass
+     WHERE inhparent = (
+       SELECT c.oid
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = $1 AND c.relname = $2
+     )
      ORDER BY 1`,
-    [`"${schema}"`, `"${table}"`],
+    [schema, table],
   );
   return rows.map(r => r.partition);
 }
@@ -149,11 +159,16 @@ export async function listPartitions(client: DbClient, schema: string, table: st
 export async function ensureTimescaleHypertables(client: DbClient, schema: string): Promise<void> {
   for (const table of ALL_SIGNAL_TABLES) {
     const tableExpr = qualifiedTable(schema, table);
-    const timeColumn = SIGNAL_TIME_COLUMN[table];
+    // SIGNAL_TIME_COLUMN values are hardcoded constants (`endedAt` /
+    // `timestamp`). Inline them as quoted identifier literals so we avoid the
+    // `$N::name` overload-resolution path on `create_hypertable(regclass,
+    // name, ...)` — some Timescale versions fail to bind that signature when
+    // the column name is passed as a parameter.
+    const timeColumn = `"${SIGNAL_TIME_COLUMN[table]}"`;
 
     await client.none(
-      `SELECT create_hypertable($1::regclass, $2::name, chunk_time_interval => INTERVAL '1 day', if_not_exists => true)`,
-      [tableExpr, timeColumn],
+      `SELECT create_hypertable($1::regclass, ${timeColumn}, chunk_time_interval => INTERVAL '1 day', if_not_exists => true)`,
+      [tableExpr],
     );
   }
 }
@@ -169,6 +184,11 @@ export async function ensureTimescaleHypertables(client: DbClient, schema: strin
  *
  * Retention is intentionally NOT configured here — it stays opt-in via the
  * future Mastra CLI surface.
+ *
+ * Tested against pg_partman 4.x. The 5.x line changed several `create_parent`
+ * defaults (e.g. `p_type` no longer accepts `'native'`); if you're on 5.x and
+ * this throws, pin pg_partman to 4.x or override `partitioning.mode` to
+ * `'native'` and let this adapter manage partitions itself.
  */
 export async function ensurePartmanHypertables(client: DbClient, schema: string): Promise<void> {
   await ensureNativePartitions(client, schema, { futureDays: 0, includeYesterday: false });

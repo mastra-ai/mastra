@@ -100,7 +100,15 @@ import type {
 import type { DbClient } from '../../../client';
 import { resolvePgConfig } from '../../../db';
 import type { PgDomainConfig } from '../../../db';
-import { allIndexDDL, allTableDDL, migrationDDL, qualifiedTable, TABLE_DISCOVERY } from './ddl';
+import {
+  ALL_SIGNAL_TABLES,
+  allIndexDDL,
+  allTableDDL,
+  migrationDDL,
+  qualifiedTable,
+  TABLE_DISCOVERY,
+  TABLE_SPAN_EVENTS,
+} from './ddl';
 import * as discoveryOps from './discovery';
 import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
@@ -562,12 +570,15 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async dangerouslyClearAll(): Promise<void> {
     try {
+      // Iterate ALL_SIGNAL_TABLES so a future signal added to the constant
+      // is truncated automatically. Tracing has its own helper that runs the
+      // span TRUNCATE; we skip it here to avoid running it twice.
       await tracingOps.dangerouslyClearTracing(this.#client, this.#schema);
-      const cache = qualifiedTable(this.#schema, TABLE_DISCOVERY);
-      for (const t of ['mastra_metric_events', 'mastra_log_events', 'mastra_score_events', 'mastra_feedback_events']) {
+      for (const t of ALL_SIGNAL_TABLES) {
+        if (t === TABLE_SPAN_EVENTS) continue;
         await this.#client.none(`TRUNCATE TABLE ${qualifiedTable(this.#schema, t)}`);
       }
-      await this.#client.none(`TRUNCATE TABLE ${cache}`);
+      await this.#client.none(`TRUNCATE TABLE ${qualifiedTable(this.#schema, TABLE_DISCOVERY)}`);
     } catch (error) {
       wrapError('DANGEROUSLY_CLEAR_ALL', error);
     }

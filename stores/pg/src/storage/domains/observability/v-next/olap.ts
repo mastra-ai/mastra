@@ -48,6 +48,11 @@ const INTERVAL_SECONDS: Record<AggregationInterval, number> = {
  * Returns a bucket expression that floors `column` to the start of the
  * requested interval. The expression is portable across Postgres versions
  * and works equally on a Timescale hypertable.
+ *
+ * Buckets are UTC-aligned (floor of Unix epoch). A `1d` bucket spans
+ * `00:00:00Z` → `23:59:59Z`, not local midnight. Charts that need
+ * local-day buckets should set the desired offset on the time-range filter
+ * rather than expect this helper to honor a session timezone.
  */
 export function bucketSql(column: string, interval: AggregationInterval): string {
   const seconds = INTERVAL_SECONDS[interval] ?? 3_600;

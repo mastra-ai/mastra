@@ -47,11 +47,13 @@ export function applyCommonFilters(
   const prefix = options.prefix ?? '';
 
   if (filters.timestamp?.start) {
-    acc.conditions.push(`${prefix}"${tsCol}" >= $${acc.next++}`);
+    const op = filters.timestamp.startExclusive ? '>' : '>=';
+    acc.conditions.push(`${prefix}"${tsCol}" ${op} $${acc.next++}`);
     acc.params.push(filters.timestamp.start.toISOString());
   }
   if (filters.timestamp?.end) {
-    acc.conditions.push(`${prefix}"${tsCol}" <= $${acc.next++}`);
+    const op = filters.timestamp.endExclusive ? '<' : '<=';
+    acc.conditions.push(`${prefix}"${tsCol}" ${op} $${acc.next++}`);
     acc.params.push(filters.timestamp.end.toISOString());
   }
   pushEq(acc, 'traceId', filters.traceId, prefix);
@@ -75,6 +77,10 @@ export function applyCommonFilters(
   pushEq(acc, 'experimentId', filters.experimentId, prefix);
   pushEq(acc, 'environment', filters.environment, prefix);
   pushEq(acc, 'serviceName', filters.serviceName, prefix);
+  // `source` is the deprecated legacy field name across logs / metrics /
+  // scores / feedback. New code should set `executionSource`; we accept
+  // both at the storage layer so old callers keep working. `executionSource`
+  // wins when both are set.
   pushEq(acc, 'executionSource', filters.executionSource ?? filters.source, prefix);
 
   if (filters.tags != null && Array.isArray(filters.tags) && filters.tags.length > 0) {

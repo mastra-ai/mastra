@@ -70,19 +70,19 @@ function buildListTracesFilters(
   }
 
   if (filters.startedAt?.start) {
-    conditions.push(`r."startedAt" >= $${i++}`);
+    conditions.push(`r."startedAt" ${filters.startedAt.startExclusive ? '>' : '>='} $${i++}`);
     params.push(filters.startedAt.start.toISOString());
   }
   if (filters.startedAt?.end) {
-    conditions.push(`r."startedAt" <= $${i++}`);
+    conditions.push(`r."startedAt" ${filters.startedAt.endExclusive ? '<' : '<='} $${i++}`);
     params.push(filters.startedAt.end.toISOString());
   }
   if (filters.endedAt?.start) {
-    conditions.push(`r."endedAt" >= $${i++}`);
+    conditions.push(`r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++}`);
     params.push(filters.endedAt.start.toISOString());
   }
   if (filters.endedAt?.end) {
-    conditions.push(`r."endedAt" <= $${i++}`);
+    conditions.push(`r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++}`);
     params.push(filters.endedAt.end.toISOString());
   }
   if (filters.spanType !== undefined) {
@@ -354,19 +354,19 @@ function buildListBranchesFilters(
   if (!filters) return { conditions, params, nextParamIdx: i };
 
   if (filters.startedAt?.start) {
-    conditions.push(`r."startedAt" >= $${i++}`);
+    conditions.push(`r."startedAt" ${filters.startedAt.startExclusive ? '>' : '>='} $${i++}`);
     params.push(filters.startedAt.start.toISOString());
   }
   if (filters.startedAt?.end) {
-    conditions.push(`r."startedAt" <= $${i++}`);
+    conditions.push(`r."startedAt" ${filters.startedAt.endExclusive ? '<' : '<='} $${i++}`);
     params.push(filters.startedAt.end.toISOString());
   }
   if (filters.endedAt?.start) {
-    conditions.push(`r."endedAt" >= $${i++}`);
+    conditions.push(`r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++}`);
     params.push(filters.endedAt.start.toISOString());
   }
   if (filters.endedAt?.end) {
-    conditions.push(`r."endedAt" <= $${i++}`);
+    conditions.push(`r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++}`);
     params.push(filters.endedAt.end.toISOString());
   }
   if (filters.traceId !== undefined) {

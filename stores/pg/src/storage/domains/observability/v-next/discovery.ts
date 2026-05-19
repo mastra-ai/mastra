@@ -65,6 +65,15 @@ export interface DiscoveryConfig {
 }
 
 /**
+ * In-process dedupe for concurrent background refreshes against the same
+ * cache key. Without this, N concurrent stale reads on the same key fire N
+ * `refresh()` queries and each writes to the cache table — a classic
+ * stampede. The map keys are `"schema:cacheKey"` so multiple schemas using
+ * the same key don't share an entry.
+ */
+const inFlightRefreshes = new Map<string, Promise<void>>();
+
+/**
  * Read the cache row for `cacheKey` and decide whether to refresh.
  * Always returns the values stored in the cache (which may be stale or empty
  * on first call). The refresh runs in the background.
@@ -77,12 +86,14 @@ async function readWithRefresh(
   ttlSeconds: number,
 ): Promise<string[]> {
   const table = qualifiedTable(schema, TABLE_DISCOVERY);
-  const row = await client.oneOrNone<{ values: string[]; refreshedAt: string }>(
+  // pg returns `timestamptz` as a JS Date — type the field accordingly.
+  const row = await client.oneOrNone<{ values: string[]; refreshedAt: Date }>(
     `SELECT "values", "refreshedAt" FROM ${table} WHERE "cacheKey" = $1`,
     [cacheKey],
   );
 
-  const stale = !row || Date.now() - new Date(row.refreshedAt).getTime() > ttlSeconds * 1000;
+  const refreshedAtMs = row ? new Date(row.refreshedAt).getTime() : 0;
+  const stale = !row || Date.now() - refreshedAtMs > ttlSeconds * 1000;
 
   if (stale) {
     if (!row) {
@@ -91,13 +102,27 @@ async function readWithRefresh(
       await upsertCache(client, schema, cacheKey, values);
       return values;
     }
-    // Cached but stale: kick off a background refresh. Detach from the
-    // returned promise so the caller doesn't wait.
-    void refresh()
-      .then(values => upsertCache(client, schema, cacheKey, values))
-      .catch(() => {
-        // Swallow; next reader will try again.
-      });
+    // Cached but stale: kick off a background refresh, but dedupe so
+    // concurrent readers don't all hit the database.
+    const dedupeKey = `${schema}:${cacheKey}`;
+    if (!inFlightRefreshes.has(dedupeKey)) {
+      const promise = refresh()
+        .then(values => upsertCache(client, schema, cacheKey, values))
+        .catch((error: unknown) => {
+          // Surface refresh failures — silently swallowing them would mask
+          // real DB/connectivity issues behind permanently stale data. Use
+          // console.warn since the discovery helpers don't currently take a
+          // logger; the next reader will retry.
+          console.warn(
+            `[observability/v-next] background refresh failed for discovery cache key "${cacheKey}":`,
+            error,
+          );
+        })
+        .finally(() => {
+          inFlightRefreshes.delete(dedupeKey);
+        });
+      inFlightRefreshes.set(dedupeKey, promise);
+    }
   }
 
   return row?.values ?? [];
