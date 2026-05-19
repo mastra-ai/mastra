@@ -20,8 +20,8 @@
 
   /* Dark theme (default) */
   --surface1: oklch(0% 0 0deg);
-  --surface2: oklch(16.84% 0 0deg);
-  --surface3: oklch(19.13% 0 0deg);
+  --surface2: oklch(16% 0 0deg);
+  --surface3: oklch(18% 0 0deg);
   --surface4: oklch(21.78% 0 0deg);
   --surface5: oklch(24.35% 0 0deg / 90%);
   --surface6: oklch(30.92% 0 0deg);
@@ -53,14 +53,13 @@
 
   --error: oklch(0.637 0.237 25.331);
   --overlay: oklch(0% 0 0deg / 75%);
-  --border1: oklch(100% 0 0deg / 6%);
-  --border2: oklch(100% 0 0deg / 10%);
+  --border1: oklch(100% 0 0deg / 7%);
+  --border2: oklch(100% 0 0deg / 11%);
+  --surface-overlay-soft: oklch(100% 0 0deg / 4%);
+  --surface-overlay-strong: oklch(100% 0 0deg / 7%);
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
   --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
   --sidebar-nav-active: oklch(100% 0 0deg / 11%);
-  --section-card-bg: oklch(100% 0 0deg / 1.4%);
-  --section-card-header: oklch(100% 0 0deg / 3.5%);
-  --section-card-border: oklch(100% 0 0deg / 4.5%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -118,12 +117,11 @@ html.light {
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
+  --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
+  --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
   --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
   --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
-  --section-card-bg: oklch(20.8% 0 0deg / 1.4%);
-  --section-card-header: oklch(20.8% 0 0deg / 3.5%);
-  --section-card-border: oklch(20.8% 0 0deg / 6%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -177,18 +175,6 @@ html.light {
 
 @utility bg-sidebar-nav-active {
   background-color: var(--sidebar-nav-active);
-}
-
-@utility bg-section-card {
-  background-color: var(--section-card-bg);
-}
-
-@utility bg-section-card-header {
-  background-color: var(--section-card-header);
-}
-
-@utility border-section-card {
-  border-color: var(--section-card-border);
 }
 
 @theme {
@@ -354,6 +340,8 @@ html.light {
   --color-overlay: var(--overlay);
   --color-border1: var(--border1);
   --color-border2: var(--border2);
+  --color-surface-overlay-soft: var(--surface-overlay-soft);
+  --color-surface-overlay-strong: var(--surface-overlay-strong);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -466,4 +454,21 @@ html.light {
 
 .animate-click-ripple {
   animation: click-ripple 300ms ease-out forwards;
+}
+
+/* Temporary highlight for delta-arrived list rows.
+   Same color as the featured / hover state (var(--surface5)), starts fully
+   visible and immediately fades out to transparent over 2s. */
+@keyframes fade-row-highlight {
+  0% {
+    background-color: var(--surface5);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-row-highlight {
+  animation: fade-row-highlight 2000ms ease-out forwards;
 }

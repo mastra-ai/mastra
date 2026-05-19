@@ -46,6 +46,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   clientTools?: AgentExecutionOptions<OUTPUT>['clientTools'];
   /** Tool selection strategy */
   toolChoice?: AgentExecutionOptions<OUTPUT>['toolChoice'];
+  /** Tool names enabled for this execution */
+  activeTools?: AgentExecutionOptions<OUTPUT>['activeTools'];
   /** Model-specific settings like temperature */
   modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
   /** Require approval for all tool calls */

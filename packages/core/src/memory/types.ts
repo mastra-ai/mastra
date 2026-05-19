@@ -397,7 +397,7 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
-export type ObservationalMemoryActivationTTL = number | string | false;
+export type ObservationalMemoryActivationTTL = number | string | 'auto' | false;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -511,6 +511,7 @@ export interface ObservationalMemoryObservationConfig {
   /**
    * Time before buffered observations are force-activated after inactivity.
    * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * `"auto"` to choose a provider-aware TTL from the actor model's prompt-cache behavior,
    * or `false` to disable top-level `activateAfterIdle` for observations.
    * If unset, top-level `activateAfterIdle` is used for observations.
    */
@@ -659,6 +660,7 @@ export interface ObservationalMemoryReflectionConfig {
   /**
    * Time before buffered reflections are force-activated after inactivity.
    * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * `"auto"` to choose a provider-aware TTL from the actor model's prompt-cache behavior,
    * or `false` to disable idle activation for reflections.
    * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
    */
@@ -774,7 +776,8 @@ export interface ObservationalMemoryOptions {
 
   /**
    * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `"auto"` to choose a provider-aware TTL from the actor model's prompt-cache behavior.
    * When the gap between the current time and the last assistant message part's `createdAt`
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached. Useful to align with prompt cache TTLs.
@@ -785,6 +788,7 @@ export interface ObservationalMemoryOptions {
    * @example 300_000
    * @example "5m"
    * @example "1hr"
+   * @example "auto"
    */
   activateAfterIdle?: ObservationalMemoryActivationTTL;
 
