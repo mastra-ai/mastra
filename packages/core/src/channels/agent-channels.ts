@@ -14,7 +14,7 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute, CorsOptions } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
-import { getChatModule } from './chat-lazy';
+import { chatModule, getChatModule } from './chat-lazy';
 
 import {
   formatArgsSummary,
@@ -244,6 +244,19 @@ export interface ChannelConfig {
   tools?: boolean;
 
   /**
+   * Stream agent text deltas to the platform as the agent generates them, instead of
+   * buffering and posting once per step. On Slack this uses native message streaming;
+   * other adapters fall back to post + edit handled by the Chat SDK.
+   *
+   * - `false` (default) — buffer text and post once per `step-finish`.
+   * - `true` — stream with default options.
+   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval (fallback path).
+   *
+   * @default false
+   */
+  streaming?: boolean | { updateIntervalMs?: number };
+
+  /**
    * Additional options passed directly to the Chat SDK.
    * Use this for advanced configuration not exposed by Mastra.
    *
@@ -364,6 +377,8 @@ export class AgentChannels {
   private handlerOverrides: ChannelHandlers;
   /** Additional Chat SDK options. */
   private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
+  /** Stream config: `false` = buffered post, otherwise options forwarded to `StreamingPlan`. */
+  private streaming: false | { updateIntervalMs?: number };
   /** Thread context config for fetching prior messages. */
   private threadContext: { maxMessages?: number };
   /** Determines whether a mime type should be sent inline to the model. */
@@ -444,6 +459,7 @@ export class AgentChannels {
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
     this.chatOptions = config.chatOptions ?? {};
+    this.streaming = config.streaming === true ? {} : config.streaming === undefined ? false : config.streaming;
     this.threadContext = config.threadContext ?? {};
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
@@ -1440,6 +1456,9 @@ export class AgentChannels {
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
 
+    const streamingEnabled = this.streaming !== false;
+    const streamingOptions = this.streaming === false ? undefined : this.streaming;
+
     interface TrackedTool {
       displayName: string;
       argsSummary: string;
@@ -1453,17 +1472,110 @@ export class AgentChannels {
     let textBuffer = '';
     let toolCalls = new Map<string, TrackedTool>();
 
-    // Typing indicator: refresh on each generation chunk, debounced to avoid
-    // hammering the platform API. Slack/Discord auto-expire the indicator
-    // after ~5-10s, so when generation stops the indicator clears naturally.
-    let lastTypingAt = 0;
-    const refreshTyping = () => {
-      const now = Date.now();
-      if (now - lastTypingAt < 5_000) return;
-      lastTypingAt = now;
-      sdkThread.startTyping().catch(e => {
+    // Adaptive typing status: only call startTyping(status) when the status text
+    // actually changes — avoids hammering the platform API on every text-delta.
+    // Slack Assistant mode displays the status; other adapters show a generic
+    // typing indicator and ignore the text.
+    let currentTypingStatus: string | undefined;
+    const setTypingStatus = (status: string) => {
+      if (status === currentTypingStatus) return;
+      currentTypingStatus = status;
+      sdkThread.startTyping(status).catch(e => {
         this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
       });
+    };
+
+    // Streaming text session: when `streaming` is enabled, text deltas push into
+    // an async iterable consumed by `sdkThread.post(...)` so the platform sees
+    // text progressively. The session opens on the first text-delta of a run and
+    // closes on step-finish / finish / error / abort / out-of-band chunk so the
+    // next message (tool card, file, follow-up text) lands in the right order.
+    interface StreamingSession {
+      push: (piece: string) => void;
+      close: () => void;
+      done: Promise<void>;
+    }
+    let streamingSession: StreamingSession | null = null;
+
+    const openStreamingSession = (): StreamingSession => {
+      let buffer: string[] = [];
+      let closed = false;
+      let resolveNext: (() => void) | undefined;
+      const waitForNext = () =>
+        new Promise<void>(resolve => {
+          resolveNext = resolve;
+        });
+
+      async function* iterate(): AsyncGenerator<string> {
+        while (true) {
+          while (buffer.length > 0) {
+            yield buffer.shift()!;
+          }
+          if (closed) return;
+          await waitForNext();
+        }
+      }
+
+      const iterable = iterate();
+      const postable = streamingOptions
+        ? new (chatModule().StreamingPlan)(iterable, {
+            updateIntervalMs: streamingOptions.updateIntervalMs,
+          })
+        : iterable;
+
+      const done = (async () => {
+        try {
+          await sdkThread.post(postable as Parameters<Thread['post']>[0]);
+        } catch (e) {
+          this.logger?.warn('[CHANNEL] streaming post failed, falling back to buffered text', { error: e });
+          // Drain whatever was queued plus anything pushed after the failure
+          // and post it as a single buffered message.
+          const fallback = buffer.join('');
+          buffer = [];
+          if (!closed) {
+            await waitForNext();
+            fallback.concat(buffer.join(''));
+          }
+          const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+          if (cleaned) {
+            try {
+              await sdkThread.post(cleaned);
+            } catch (postErr) {
+              this.logger?.debug('[CHANNEL] buffered fallback also failed', { error: postErr });
+            }
+          }
+        }
+      })();
+
+      return {
+        push: piece => {
+          if (closed) return;
+          buffer.push(piece);
+          if (resolveNext) {
+            const r = resolveNext;
+            resolveNext = undefined;
+            r();
+          }
+        },
+        close: () => {
+          if (closed) return;
+          closed = true;
+          if (resolveNext) {
+            const r = resolveNext;
+            resolveNext = undefined;
+            r();
+          }
+        },
+        done,
+      };
+    };
+
+    const closeStreamingSession = async () => {
+      if (!streamingSession) return;
+      const session = streamingSession;
+      streamingSession = null;
+      session.close();
+      await session.done;
     };
 
     const seedApprovalContext = () => {
@@ -1479,14 +1591,17 @@ export class AgentChannels {
     seedApprovalContext();
 
     const flushText = async () => {
-      // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
+      // Streaming path: close the active streaming session (if any) so that
+      // any subsequent out-of-band post (tool card, file, error) lands after
+      // the streamed text in platform message order.
+      if (streamingEnabled) {
+        await closeStreamingSession();
+        return;
+      }
+      // Buffered path: strip zero-width chars (U+200B, U+200C, U+200D, U+FEFF)
+      // that LLMs sometimes emit, then post the accumulated text.
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
       if (cleanedText) {
-        this.log('debug', `[${platform}] flushText posting`, {
-          sdkThreadId: sdkThread.id,
-          isDM: (sdkThread as any).isDM,
-          textLength: cleanedText.length,
-        });
         await sdkThread.post(cleanedText);
         textBuffer = '';
       }
@@ -1496,9 +1611,7 @@ export class AgentChannels {
       textBuffer = '';
       toolCalls = new Map();
       seedApprovalContext();
-      // Reset the debounce so the next run's first generation chunk fires
-      // startTyping() immediately rather than being suppressed.
-      lastTypingAt = 0;
+      currentTypingStatus = undefined;
     };
 
     for await (const chunk of stream) {
@@ -1511,15 +1624,20 @@ export class AgentChannels {
 
       // --- Text accumulation ---
       if (chunk.type === 'text-delta') {
-        if (chunk.payload.text) {
-          refreshTyping();
+        const piece = chunk.payload.text;
+        if (!piece) continue;
+        setTypingStatus('Typing…');
+        if (streamingEnabled) {
+          if (!streamingSession) streamingSession = openStreamingSession();
+          streamingSession.push(piece);
+        } else {
+          textBuffer += piece;
         }
-        textBuffer += chunk.payload.text;
         continue;
       }
 
       if (chunk.type === 'reasoning-delta') {
-        refreshTyping();
+        setTypingStatus('Thinking…');
         continue;
       }
 
@@ -1597,10 +1715,9 @@ export class AgentChannels {
       // --- Tool call: post eager "Running…" card ---
       if (chunk.type === 'tool-call') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-        refreshTyping();
         await flushText();
-
         const displayName = stripToolPrefix(chunk.payload.toolName);
+        setTypingStatus(`Using ${displayName}…`);
         const rawArgs = (
           typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
         ) as Record<string, unknown>;
@@ -1624,6 +1741,9 @@ export class AgentChannels {
       // --- Tool result: edit the "Running…" card with the outcome ---
       if (chunk.type === 'tool-result') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+        // Tool finished — revert status until the next text/tool/reasoning chunk
+        // sets a more specific one.
+        setTypingStatus('Thinking…');
 
         // Look in the per-run tracked tools first; fall back to any approval card that was
         // posted by the click handler (the resumed run's tool-result arrives via the thread

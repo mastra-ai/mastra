@@ -679,6 +679,11 @@ export class Agent<
     }
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
+    // Propagate logger so channel-level logs flow through the configured logger
+    // instead of being silently dropped.
+    if (this.logger) {
+      agentChannels.__setLogger(this.logger);
+    }
   }
 
   /**
@@ -2332,6 +2337,9 @@ export class Agent<
   __registerPrimitives(p: MastraPrimitives) {
     if (p.logger) {
       this.__setLogger(p.logger);
+      // Propagate logger to any AgentChannels already attached to this agent
+      // (channels may be set via constructor before primitives register).
+      this.#agentChannels?.__setLogger(p.logger);
     }
 
     // Store primitives for later use when creating LLM instances
