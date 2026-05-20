@@ -241,6 +241,9 @@ export interface TUIState {
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
   pendingApprovalDismiss: (() => void) | null;
 
+  /** GitHub PR badges currently syncing. */
+  githubSyncingPrSubscriptions: GithubPrSubscriptionBadge[];
+
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
   statusLine?: Text;
@@ -345,6 +348,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingNewThread: false,
     currentThreadTitle: undefined,
     activeGithubPrSubscriptions: [],
+    githubSyncingPrSubscriptions: [],
     threadPreviewCache: new Map(),
     attemptedThreadPreviewIds: new Set(),
 

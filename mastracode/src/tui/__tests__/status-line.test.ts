@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const { visibleWidthMock, chalkRgbMock } = vi.hoisted(() => ({
+const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(() => ({
   visibleWidthMock: vi.fn((value: string) => value.length),
   chalkRgbMock: vi.fn(),
+  applyGradientSweepMock: vi.fn((value: string) => value),
 }));
 
 vi.mock('@mariozechner/pi-tui', () => ({
@@ -32,7 +33,7 @@ vi.mock('chalk', () => {
 });
 
 vi.mock('../components/obi-loader.js', () => ({
-  applyGradientSweep: (value: string) => value,
+  applyGradientSweep: applyGradientSweepMock,
 }));
 
 vi.mock('../components/om-progress.js', () => ({
@@ -94,6 +95,7 @@ function createState() {
     },
     pendingQueuedActions: [],
     activeGithubPrSubscriptions: [],
+    githubSyncingPrSubscriptions: [],
     goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
@@ -105,6 +107,7 @@ describe('updateStatusLine', () => {
   beforeEach(() => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
+    applyGradientSweepMock.mockClear();
     process.stdout.columns = 200;
   });
 
@@ -221,6 +224,30 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('PR#16515 Review thread');
+    expect(applyGradientSweepMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('PR#16515'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('animates the active GitHub PR subscription while syncing', () => {
+    const state = createState();
+    state.currentThreadTitle = 'Review thread';
+    state.activeGithubPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 16515 }];
+    state.githubSyncingPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 16515 }];
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.25),
+      getFadeProgress: vi.fn(() => 0.5),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('PR#16515', 0.25, '#38bdf8', 0.5);
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('PR#16515 Review thread');
   });

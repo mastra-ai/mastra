@@ -25,7 +25,7 @@ vi.mock('../display.js', () => ({
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { handleAgentAborted, handleAgentEnd } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
-import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui.js';
+import { MastraTUI, consumePendingImages, handleGithubAutoUnsubscribe, syncInitialThreadState } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
 
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
@@ -1048,6 +1048,89 @@ describe('MastraTUI queueing', () => {
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     expect(state.pendingQueuedActions).toEqual(['message']);
     expect(state.pendingFollowUpMessages).toEqual([{ content: 'queued' }]);
+  });
+});
+
+describe('handleGithubAutoUnsubscribe', () => {
+  it('removes active and syncing PR badges for the current thread', () => {
+    const statusLine = { setText: vi.fn() };
+    const ui = { requestRender: vi.fn() };
+    const state = {
+      harness: {
+        getResourceId: vi.fn(() => 'resource-1'),
+        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        getDisplayState: vi.fn(() => ({
+          omProgress: {
+            status: 'idle',
+            thresholdPercent: 0,
+            pendingTokens: 0,
+            threshold: 100_000,
+            reflectionThresholdPercent: 0,
+            observationTokens: 0,
+            reflectionThreshold: 100_000,
+            buffered: {
+              observations: { projectedMessageRemoval: 0 },
+              reflection: { status: 'idle', inputObservationTokens: 0, observationTokens: 0 },
+            },
+          },
+          bufferingMessages: false,
+          bufferingObservations: false,
+        })),
+        listModes: vi.fn(() => []),
+        getFullModelId: vi.fn(() => 'openai/gpt-5.5'),
+        getFollowUpCount: vi.fn(() => 0),
+      },
+      activeGithubPrSubscriptions: [
+        { repo: 'mastra-ai/mastra', prNumber: 16843 },
+        { repo: 'mastra-ai/mastra', prNumber: 16515 },
+      ],
+      githubSyncingPrSubscriptions: [{ repo: 'mastra-ai/mastra', prNumber: 16843 }],
+      projectInfo: { rootPath: '.', gitBranch: 'main' },
+      pendingQueuedActions: [],
+      modelAuthStatus: { hasAuth: true },
+      goalManager: { getGoal: vi.fn(() => null) },
+      statusLine,
+      memoryStatusLine: { setText: vi.fn() },
+      ui,
+    } as unknown as TUIState;
+
+    const handled = handleGithubAutoUnsubscribe(state, {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 16843,
+    });
+
+    expect(handled).toBe(true);
+    expect(state.activeGithubPrSubscriptions).toEqual([{ repo: 'mastra-ai/mastra', prNumber: 16515 }]);
+    expect(state.githubSyncingPrSubscriptions).toEqual([]);
+    expect(statusLine.setText).toHaveBeenCalled();
+    expect(ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('ignores auto-unsubscribe events for inactive threads', () => {
+    const ui = { requestRender: vi.fn() };
+    const state = {
+      harness: {
+        getResourceId: vi.fn(() => 'resource-1'),
+        getCurrentThreadId: vi.fn(() => 'thread-1'),
+      },
+      activeGithubPrSubscriptions: [{ repo: 'mastra-ai/mastra', prNumber: 16843 }],
+      githubSyncingPrSubscriptions: [{ repo: 'mastra-ai/mastra', prNumber: 16843 }],
+      ui,
+    } as unknown as TUIState;
+
+    const handled = handleGithubAutoUnsubscribe(state, {
+      resourceId: 'resource-1',
+      threadId: 'thread-2',
+      repo: 'mastra-ai/mastra',
+      prNumber: 16843,
+    });
+
+    expect(handled).toBe(false);
+    expect(state.activeGithubPrSubscriptions).toEqual([{ repo: 'mastra-ai/mastra', prNumber: 16843 }]);
+    expect(state.githubSyncingPrSubscriptions).toEqual([{ repo: 'mastra-ai/mastra', prNumber: 16843 }]);
+    expect(ui.requestRender).not.toHaveBeenCalled();
   });
 });
 

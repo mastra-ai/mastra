@@ -1,5 +1,6 @@
 import { defaultGithubCommandRunner, ghSignals } from '../../github-signals/index.js';
 import { addGithubPrSubscriptionBadge, removeGithubPrSubscriptionBadge } from '../state.js';
+import type { GithubPrSubscriptionBadge } from '../state.js';
 import type { SlashCommandContext } from './types.js';
 
 const USAGE = `Usage:
@@ -243,12 +244,32 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
     return;
   }
 
-  await ctx.githubSignals.init({ memory, ...thread });
-  const result = await ctx.githubSignals.syncThread({ ...thread, repo, prNumber });
-  ctx.updateStatusLine();
-  ctx.showInfo(
-    result.pendingDelivered > 0
-      ? `Delivered ${result.pendingDelivered} pending GitHub notification${result.pendingDelivered === 1 ? '' : 's'}.`
-      : 'GitHub PR notifications synced. No pending notifications.',
-  );
+  const syncingBadge: GithubPrSubscriptionBadge | undefined = prNumber
+    ? { prNumber, ...(repo ? { repo } : {}) }
+    : ctx.state.activeGithubPrSubscriptions[0];
+  if (syncingBadge) {
+    ctx.state.githubSyncingPrSubscriptions = addGithubPrSubscriptionBadge(
+      ctx.state.githubSyncingPrSubscriptions ?? [],
+      syncingBadge,
+    );
+    ctx.updateStatusLine();
+  }
+
+  try {
+    await ctx.githubSignals.init({ memory, ...thread });
+    const result = await ctx.githubSignals.syncThread({ ...thread, repo, prNumber });
+    ctx.showInfo(
+      result.pendingDelivered > 0
+        ? `Delivered ${result.pendingDelivered} pending GitHub notification${result.pendingDelivered === 1 ? '' : 's'}.`
+        : 'GitHub PR notifications synced. No pending notifications.',
+    );
+  } finally {
+    if (syncingBadge) {
+      ctx.state.githubSyncingPrSubscriptions = removeGithubPrSubscriptionBadge(
+        ctx.state.githubSyncingPrSubscriptions ?? [],
+        syncingBadge,
+      );
+    }
+    ctx.updateStatusLine();
+  }
 }

@@ -8,6 +8,7 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
+import type { GithubAutoUnsubscribeEvent } from '../github-signals/index.js';
 import {
   OnboardingInlineComponent,
   getAvailableModePacks,
@@ -70,7 +71,7 @@ import {
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata, removeGithubPrSubscriptionBadge } from './state.js';
 import { updateStatusLine } from './status-line.js';
 
 // =============================================================================
@@ -87,6 +88,18 @@ export type { MastraTUIOptions } from './state.js';
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
+
+export function handleGithubAutoUnsubscribe(state: TUIState, event: GithubAutoUnsubscribeEvent): boolean {
+  if (event.resourceId !== state.harness.getResourceId()) return false;
+  if (event.threadId !== state.harness.getCurrentThreadId()) return false;
+
+  const badge = { prNumber: event.prNumber, ...(event.repo ? { repo: event.repo } : {}) };
+  state.activeGithubPrSubscriptions = removeGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions, badge);
+  state.githubSyncingPrSubscriptions = removeGithubPrSubscriptionBadge(state.githubSyncingPrSubscriptions ?? [], badge);
+  updateStatusLine(state);
+  state.ui.requestRender();
+  return true;
+}
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.harness.getCurrentThreadId();
@@ -131,6 +144,15 @@ export class MastraTUI {
 
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
+    this.attachGithubAutoUnsubscribeHandler(this.state.options.githubSignals);
+    const enableGithubSignals = this.state.options.enableGithubSignals;
+    if (enableGithubSignals) {
+      this.state.options.enableGithubSignals = async () => {
+        const githubSignals = await enableGithubSignals();
+        this.attachGithubAutoUnsubscribeHandler(githubSignals);
+        return githubSignals;
+      };
+    }
 
     // Load user preferences
     const savedSettings = loadSettings();
@@ -178,6 +200,12 @@ export class MastraTUI {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
       queueFollowUpMessage: text => this.queueFollowUpMessage(text),
+    });
+  }
+
+  private attachGithubAutoUnsubscribeHandler(githubSignals: MastraTUIOptions['githubSignals']): void {
+    githubSignals?.onAutoUnsubscribe(event => {
+      handleGithubAutoUnsubscribe(this.state, event);
     });
   }
 

@@ -41,6 +41,7 @@ export interface GithubInboxNotification {
   commentAuthor?: string;
   commentBody?: string;
   commentCreatedAt?: string;
+  commentUpdatedAt?: string;
   commentHtmlUrl?: string;
   failedChecks?: Array<{ name: string; status: string; url?: string }>;
   prState?: string;
@@ -71,6 +72,7 @@ interface GithubNotificationRow {
   comment_author: string | null;
   comment_body: string | null;
   comment_created_at: string | null;
+  comment_updated_at: string | null;
   comment_html_url: string | null;
   failed_checks_json: string | null;
   pr_state: string | null;
@@ -249,8 +251,8 @@ export class GithubNotificationStore {
     for (const notification of notifications) {
       await this.#execute({
         sql: `INSERT INTO github_notifications
-          (account_key, notification_id, repo, pr_number, title, subject_type, reason, url, subject_url, latest_comment_url, comment_author, comment_body, comment_created_at, comment_html_url, failed_checks_json, pr_state, pr_merged, pr_closed_at, pr_merged_at, pr_html_url, pr_mergeable, pr_mergeable_state, pr_head_sha, pr_mergeability_checked_at, updated_at, touched_at, payload_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (account_key, notification_id, repo, pr_number, title, subject_type, reason, url, subject_url, latest_comment_url, comment_author, comment_body, comment_created_at, comment_updated_at, comment_html_url, failed_checks_json, pr_state, pr_merged, pr_closed_at, pr_merged_at, pr_html_url, pr_mergeable, pr_mergeable_state, pr_head_sha, pr_mergeability_checked_at, updated_at, touched_at, payload_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(account_key, notification_id) DO UPDATE SET
             repo = excluded.repo,
             pr_number = excluded.pr_number,
@@ -263,6 +265,7 @@ export class GithubNotificationStore {
             comment_author = excluded.comment_author,
             comment_body = excluded.comment_body,
             comment_created_at = excluded.comment_created_at,
+            comment_updated_at = excluded.comment_updated_at,
             comment_html_url = excluded.comment_html_url,
             failed_checks_json = excluded.failed_checks_json,
             pr_state = excluded.pr_state,
@@ -291,6 +294,7 @@ export class GithubNotificationStore {
           notification.commentAuthor ?? null,
           notification.commentBody ?? null,
           notification.commentCreatedAt ?? null,
+          notification.commentUpdatedAt ?? null,
           notification.commentHtmlUrl ?? null,
           notification.failedChecks ? JSON.stringify(notification.failedChecks) : null,
           notification.prState ?? null,
@@ -483,6 +487,7 @@ export class GithubNotificationStore {
       comment_author TEXT,
       comment_body TEXT,
       comment_created_at TEXT,
+      comment_updated_at TEXT,
       comment_html_url TEXT,
       failed_checks_json TEXT,
       pr_state TEXT,
@@ -502,6 +507,7 @@ export class GithubNotificationStore {
     await this.#addColumnIfMissing('github_notifications', 'comment_author', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'comment_body', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'comment_created_at', 'TEXT');
+    await this.#addColumnIfMissing('github_notifications', 'comment_updated_at', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'comment_html_url', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'failed_checks_json', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'pr_state', 'TEXT');
@@ -601,6 +607,7 @@ function rowToNotification(row: GithubNotificationRow): GithubInboxNotification 
     commentAuthor: row.comment_author ?? undefined,
     commentBody: row.comment_body ?? undefined,
     commentCreatedAt: row.comment_created_at ?? undefined,
+    commentUpdatedAt: row.comment_updated_at ?? undefined,
     commentHtmlUrl: row.comment_html_url ?? undefined,
     failedChecks: parseFailedChecks(row.failed_checks_json),
     prState: row.pr_state ?? undefined,

@@ -225,7 +225,8 @@ describe('addUserMessage', () => {
       createReminderMessage({
         type: 'system_reminder',
         reminderType: 'github-pending-notifications',
-        message: '2 new GitHub notifications are pending. Call the github tool with action: "pending" to deliver them.',
+        message:
+          '2 new GitHub notifications are pending. If you\'re busy, keep working; when you\'re done, call the github tool with action: "pending" to review them.',
         repo: 'mastra-ai/mastra',
         prNumber: 16515,
         count: 2,

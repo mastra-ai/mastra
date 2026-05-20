@@ -207,6 +207,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
             notification.commentAuthor = getString(comment, ['user', 'login']);
             notification.commentBody = getString(comment, ['body']);
             notification.commentCreatedAt = getString(comment, ['created_at']);
+            notification.commentUpdatedAt = getString(comment, ['updated_at']);
             notification.commentHtmlUrl = getString(comment, ['html_url']);
           }
         } catch (error) {
@@ -325,6 +326,7 @@ function getEnrichmentFingerprint(notification: GithubInboxNotification): string
     commentAuthor: notification.commentAuthor,
     commentBody: notification.commentBody,
     commentCreatedAt: notification.commentCreatedAt,
+    commentUpdatedAt: notification.commentUpdatedAt,
     commentHtmlUrl: notification.commentHtmlUrl,
     failedChecks: notification.failedChecks,
     prState: notification.prState,

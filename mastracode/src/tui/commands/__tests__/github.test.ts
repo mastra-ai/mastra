@@ -41,7 +41,7 @@ function createCtx(
     syncThread: vi.fn(),
   };
   const ctx = {
-    state: { activeGithubPrSubscriptions: [] },
+    state: { activeGithubPrSubscriptions: [], githubSyncingPrSubscriptions: [] },
     harness,
     githubSignals,
     showInfo: vi.fn((message: string) => infoMessages.push(message)),
@@ -226,12 +226,18 @@ describe('handleGithubCommand', () => {
     expect(infoMessages[0]).toContain('Unsubscribed from GitHub PR #123');
   });
 
-  it('syncs the current thread and reports delivered pending notifications', async () => {
+  it('syncs the current thread, animates the PR badge, and reports delivered pending notifications', async () => {
+    let resolveSync: ((value: { pendingDelivered: number }) => void) | undefined;
     const init = vi.fn(async () => {});
-    const syncThread = vi.fn(async () => ({ pendingDelivered: 2 }));
+    const syncThread = vi.fn(() => new Promise<{ pendingDelivered: number }>(resolve => (resolveSync = resolve)));
     const { ctx, memory, infoMessages } = createCtx({ githubSignals: { init, syncThread } });
 
-    await handleGithubCommand(ctx, ['sync', '123', 'mastra-ai/mastra']);
+    const pending = handleGithubCommand(ctx, ['sync', '123', 'mastra-ai/mastra']);
+    await vi.waitFor(() => expect(syncThread).toHaveBeenCalled());
+
+    expect(ctx.state.githubSyncingPrSubscriptions).toEqual([{ repo: 'mastra-ai/mastra', prNumber: 123 }]);
+    resolveSync?.({ pendingDelivered: 2 });
+    await pending;
 
     expect(init).toHaveBeenCalledWith({ memory, resourceId: 'resource-1', threadId: 'thread-1' });
     expect(syncThread).toHaveBeenCalledWith({
@@ -240,7 +246,21 @@ describe('handleGithubCommand', () => {
       repo: 'mastra-ai/mastra',
       prNumber: 123,
     });
-    expect(ctx.updateStatusLine).toHaveBeenCalled();
+    expect(ctx.state.githubSyncingPrSubscriptions).toEqual([]);
+    expect(ctx.updateStatusLine).toHaveBeenCalledTimes(2);
     expect(infoMessages[0]).toContain('Delivered 2 pending GitHub notifications');
+  });
+
+  it('clears the syncing PR badge when sync fails', async () => {
+    const init = vi.fn(async () => {});
+    const syncThread = vi.fn(async () => {
+      throw new Error('sync failed');
+    });
+    const { ctx } = createCtx({ githubSignals: { init, syncThread } });
+
+    await expect(handleGithubCommand(ctx, ['sync', '123', 'mastra-ai/mastra'])).rejects.toThrow('sync failed');
+
+    expect(ctx.state.githubSyncingPrSubscriptions).toEqual([]);
+    expect(ctx.updateStatusLine).toHaveBeenCalledTimes(2);
   });
 });

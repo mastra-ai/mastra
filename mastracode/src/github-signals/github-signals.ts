@@ -61,6 +61,15 @@ export type GithubSignalStreamOptionsGetter = (
   context: GithubSignalStreamOptionsContext,
 ) => GithubSignalStreamOptions | undefined | Promise<GithubSignalStreamOptions | undefined>;
 
+export interface GithubAutoUnsubscribeEvent {
+  resourceId: string;
+  threadId: string;
+  repo?: string;
+  prNumber: number;
+}
+
+export type GithubAutoUnsubscribeHandler = (event: GithubAutoUnsubscribeEvent) => void | Promise<void>;
+
 export interface GithubSignalsOptions {
   repo?: string;
   pollIntervalMs?: number;
@@ -72,6 +81,7 @@ export interface GithubSignalsOptions {
   authorizedPermissions?: GithubPermission[];
   authorizedBots?: string[];
   notificationPoller?: GithubNotificationPoller;
+  onAutoUnsubscribe?: GithubAutoUnsubscribeHandler;
 }
 
 type NormalizedGithubSignalsOptions = Required<
@@ -86,7 +96,7 @@ type NormalizedGithubSignalsOptions = Required<
     | 'authorizedBots'
   >
 > &
-  Pick<GithubSignalsOptions, 'repo' | 'getStreamOptions'>;
+  Pick<GithubSignalsOptions, 'repo' | 'getStreamOptions' | 'onAutoUnsubscribe'>;
 
 export interface GithubSignalsAddAgentOptions {
   id?: string;
@@ -135,6 +145,7 @@ export interface GithubSignalsSyncThreadOptions {
 
 interface GithubSubscriptionPersistence {
   update(subscription: GithubPRSubscriptionMetadata): Promise<void>;
+  remove?(subscription: GithubPRSubscriptionMetadata): Promise<void>;
 }
 
 export interface GithubCommandResult {
@@ -170,6 +181,7 @@ export interface GithubPRSubscriptionMetadata {
   updatedAt: string;
   lastCheckFingerprint?: string;
   lastCommentTimestamp?: string;
+  lastCommentFingerprints?: Record<string, { updatedAt: string; bodyFingerprint: string }>;
   lastReviewTimestamp?: string;
   lastPrStateFingerprint?: string;
   lastNotificationUpdatedAt?: string;
@@ -225,6 +237,7 @@ interface PendingGithubNotificationBucket {
   lastQueuedAt: string;
   noticeSent: boolean;
   acknowledgeAfterDelivery?: ActiveSubscription;
+  unsubscribeAfterDelivery?: ActiveSubscription;
 }
 
 interface GithubPRSnapshot {
@@ -235,7 +248,7 @@ interface GithubPRSnapshot {
   closedAt?: string;
   mergedAt?: string;
   failedChecks: Array<{ name: string; status: string; url?: string }>;
-  comments: Array<{ id: string; body?: string; author?: string; createdAt?: string; url?: string }>;
+  comments: Array<{ id: string; body?: string; author?: string; createdAt?: string; updatedAt?: string; url?: string }>;
   reviews: Array<{ id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string }>;
 }
 
@@ -392,6 +405,38 @@ function truncateProcessedSignalIds(ids: string[]) {
 
 function stableFingerprint(value: unknown): string {
   return JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
+}
+
+function getCommentBodyFingerprint(body: string | undefined): string {
+  return stableFingerprint({ body: body ?? '' });
+}
+
+function getSnapshotCommentUpdatedAt(comment: GithubPRSnapshot['comments'][number]): string | undefined {
+  return comment.updatedAt ?? comment.createdAt;
+}
+
+function getSnapshotCommentState(comments: GithubPRSnapshot['comments']) {
+  return Object.fromEntries(
+    comments
+      .map(comment => {
+        const updatedAt = getSnapshotCommentUpdatedAt(comment);
+        if (!updatedAt) return undefined;
+        return [comment.id, { updatedAt, bodyFingerprint: getCommentBodyFingerprint(comment.body) }] as const;
+      })
+      .filter((entry): entry is readonly [string, { updatedAt: string; bodyFingerprint: string }] => !!entry),
+  );
+}
+
+function getCachedCommentKey(notification: GithubInboxNotification): string | undefined {
+  return notification.latestCommentUrl ?? notification.commentHtmlUrl ?? notification.subjectUrl;
+}
+
+function getCachedCommentUpdatedAt(notification: GithubInboxNotification): string | undefined {
+  return notification.commentUpdatedAt ?? notification.commentCreatedAt ?? notification.updatedAt;
+}
+
+function getUpdatedCommentDetails(body: string | undefined): string {
+  return `Updated comment:\n\n${summarizeText(body, 'No comment body.')}`;
 }
 
 function getCommandErrorMessage(error: unknown) {
@@ -626,6 +671,7 @@ export class GithubSignals {
       getStreamOptions: options.getStreamOptions,
       authorizedPermissions: options.authorizedPermissions ?? [...DEFAULT_AUTHORIZED_PERMISSIONS],
       authorizedBots: options.authorizedBots ?? [],
+      onAutoUnsubscribe: options.onAutoUnsubscribe,
     };
     this.#notificationPoller = options.notificationPoller;
     this.processor = new GithubSignalsProcessor(this, this.#options);
@@ -633,6 +679,11 @@ export class GithubSignals {
 
   addAgent(agent: Agent<any, any, any, any>, options: GithubSignalsAddAgentOptions = {}) {
     this.#agents.set(options.id ?? agent.id, { agent, getStreamOptions: options.getStreamOptions });
+    return this;
+  }
+
+  onAutoUnsubscribe(handler: GithubAutoUnsubscribeHandler | undefined) {
+    this.#options.onAutoUnsubscribe = handler;
     return this;
   }
 
@@ -819,6 +870,7 @@ export class GithubSignals {
     if (!memory.updateThread) return undefined;
     return {
       update: subscription => this.#persistSubscription(memory, thread, subscription),
+      remove: subscription => this.#persistSubscriptionRemoval(memory, thread, subscription),
     };
   }
 
@@ -835,6 +887,22 @@ export class GithubSignals {
     if (!metadata.subscriptions[key]) return;
 
     metadata.subscriptions[key] = { ...subscription };
+    await this.#persistThreadSubscriptions(memory, thread, metadata.subscriptions);
+  }
+
+  async #persistSubscriptionRemoval(
+    memory: GithubSignalsMemory,
+    fallbackThread: GithubSignalsThread,
+    subscription: GithubPRSubscriptionMetadata,
+  ) {
+    const thread =
+      (await memory.getThreadById?.({ threadId: subscription.threadId, resourceId: subscription.resourceId })) ??
+      fallbackThread;
+    const metadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+    const key = threadSubscriptionKey(subscription);
+    if (!metadata.subscriptions[key]) return;
+
+    delete metadata.subscriptions[key];
     await this.#persistThreadSubscriptions(memory, thread, metadata.subscriptions);
   }
 
@@ -910,6 +978,7 @@ export class GithubSignals {
           seenNotificationIds: notifications.map(notification => notification.id).slice(-MAX_PROCESSED_SIGNAL_IDS),
           lastCheckFingerprint: getFailedChecksFingerprint(snapshot.failedChecks),
           lastCommentTimestamp: getLatestTimestamp(snapshot.comments, comment => comment.createdAt),
+          lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
           lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
           lastPrStateFingerprint: getSnapshotPrStateFingerprint(snapshot),
           lastErrorFingerprint: undefined,
@@ -922,6 +991,7 @@ export class GithubSignals {
         ...subscription,
         lastCheckFingerprint: getFailedChecksFingerprint(snapshot.failedChecks),
         lastCommentTimestamp: getLatestTimestamp(snapshot.comments, comment => comment.createdAt),
+        lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
         lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
         lastPrStateFingerprint: getSnapshotPrStateFingerprint(snapshot),
         lastErrorFingerprint: undefined,
@@ -1149,11 +1219,25 @@ export class GithubSignals {
       const currentGithubLogin = notification.commentAuthor ? await this.#getCurrentGithubLogin() : undefined;
       if (!isActionableCachedNotification(notification, currentGithubLogin)) continue;
 
+      const cachedCommentKey = getCachedCommentKey(notification);
+      const cachedCommentUpdatedAt = getCachedCommentUpdatedAt(notification);
+      const previousCachedComment = cachedCommentKey
+        ? subscription.lastCommentFingerprints?.[cachedCommentKey]
+        : undefined;
+      const cachedCommentBodyFingerprint = getCommentBodyFingerprint(notification.commentBody);
+      const isUpdatedCachedComment =
+        !!cachedCommentKey &&
+        !!cachedCommentUpdatedAt &&
+        !!previousCachedComment &&
+        cachedCommentUpdatedAt !== previousCachedComment.updatedAt &&
+        cachedCommentBodyFingerprint !== previousCachedComment.bodyFingerprint;
       const deliveryClaim = getCachedDeliveryClaim(
         this.#notificationPoller,
         subscription,
         notification,
-        getCachedNotificationDeliveryKey(notification),
+        isUpdatedCachedComment && cachedCommentUpdatedAt
+          ? `${getCachedNotificationDeliveryKey(notification)}:comment-updated:${cachedCommentUpdatedAt}:${cachedCommentBodyFingerprint}`
+          : getCachedNotificationDeliveryKey(notification),
       );
       if (!this.#activeThreads.has(activeThreadKey(subscription))) {
         const claimed = await this.#claimNotificationDelivery(deliveryClaim);
@@ -1165,13 +1249,15 @@ export class GithubSignals {
         subscription,
         {
           kind: 'comment',
-          title: notification.title,
-          details: summarizeText(
-            notification.commentBody,
-            notification.reason
-              ? `GitHub notification (${notification.reason}): ${notification.title}`
-              : `GitHub notification: ${notification.title}`,
-          ),
+          title: isUpdatedCachedComment ? `Updated GitHub comment` : notification.title,
+          details: isUpdatedCachedComment
+            ? getUpdatedCommentDetails(notification.commentBody)
+            : summarizeText(
+                notification.commentBody,
+                notification.reason
+                  ? `GitHub notification (${notification.reason}): ${notification.title}`
+                  : `GitHub notification: ${notification.title}`,
+              ),
           url:
             notification.commentHtmlUrl ?? notification.latestCommentUrl ?? notification.subjectUrl ?? notification.url,
           user: notification.commentAuthor,
@@ -1181,8 +1267,23 @@ export class GithubSignals {
       if (delivery === 'queued') queuedDelivery = true;
     }
 
+    const latestCommentFingerprints = { ...(subscription.lastCommentFingerprints ?? {}) };
+    for (const notification of notifications) {
+      const cachedCommentKey = getCachedCommentKey(notification);
+      const cachedCommentUpdatedAt = getCachedCommentUpdatedAt(notification);
+      if (!cachedCommentKey || !cachedCommentUpdatedAt || !notification.commentBody) continue;
+      latestCommentFingerprints[cachedCommentKey] = {
+        updatedAt: cachedCommentUpdatedAt,
+        bodyFingerprint: getCommentBodyFingerprint(notification.commentBody),
+      };
+    }
+
     if (acknowledgedCachedDelivery && !queuedDelivery) {
-      const finalSubscription = { ...subscription, ...acknowledgedCachedDelivery };
+      const finalSubscription = {
+        ...subscription,
+        ...acknowledgedCachedDelivery,
+        lastCommentFingerprints: latestCommentFingerprints,
+      };
       Object.assign(subscription, finalSubscription);
       this.#activeSubscriptions.set(subscription.key, finalSubscription);
       await subscription.persistence?.update(finalSubscription);
@@ -1222,13 +1323,22 @@ export class GithubSignals {
         kind,
         title: notification.prMerged ? 'GitHub PR merged' : 'GitHub PR closed',
         details: notification.prMerged
-          ? `PR #${notification.prNumber} was merged: ${notification.title}`
+          ? getMergedNotificationDetails(notification.prNumber, notification.title)
           : `PR #${notification.prNumber} was closed without merge: ${notification.title}`,
         url: notification.prHtmlUrl ?? notification.subjectUrl ?? notification.url,
       },
-      { acknowledgeAfterDelivery: acknowledgedSubscription, deliveryClaim },
+      {
+        acknowledgeAfterDelivery: acknowledgedSubscription,
+        deliveryClaim,
+        ...(notification.prMerged ? { unsubscribeAfterDelivery: acknowledgedSubscription } : {}),
+      },
     );
     if (delivery === 'queued') return 'queued';
+
+    if (notification.prMerged) {
+      await this.#autoUnsubscribeMergedSubscription(acknowledgedSubscription);
+      return 'sent';
+    }
 
     Object.assign(subscription, acknowledgedSubscription);
     this.#activeSubscriptions.set(subscription.key, acknowledgedSubscription);
@@ -1377,21 +1487,44 @@ export class GithubSignals {
   ) {
     await this.#emitCheckNotifications(registeredAgent, subscription, snapshot.failedChecks);
 
-    const newComments = snapshot.comments.filter(comment =>
-      isAfterTimestamp(comment.createdAt, subscription.lastCommentTimestamp ?? subscription.createdAt),
-    );
-    for (const comment of newComments) {
+    const previousCommentFingerprints = subscription.lastCommentFingerprints ?? {};
+    const changedComments = snapshot.comments
+      .map(comment => {
+        const updatedAt = getSnapshotCommentUpdatedAt(comment);
+        const previous = previousCommentFingerprints[comment.id];
+        const bodyFingerprint = getCommentBodyFingerprint(comment.body);
+        const isNew = isAfterTimestamp(comment.createdAt, subscription.lastCommentTimestamp ?? subscription.createdAt);
+        const isUpdated =
+          !!updatedAt && !!previous && updatedAt !== previous.updatedAt && bodyFingerprint !== previous.bodyFingerprint;
+        return isNew || isUpdated ? { comment, isUpdated, updatedAt, bodyFingerprint } : undefined;
+      })
+      .filter(
+        (
+          entry,
+        ): entry is {
+          comment: GithubPRSnapshot['comments'][number];
+          isUpdated: boolean;
+          updatedAt: string | undefined;
+          bodyFingerprint: string;
+        } => !!entry,
+      );
+    const currentGithubLogin = changedComments.some(({ comment }) => comment.author)
+      ? await this.#getCurrentGithubLogin()
+      : undefined;
+    for (const { comment, isUpdated } of changedComments) {
+      if (isCurrentGithubUser(comment.author, currentGithubLogin)) continue;
       if (!(await this.#isAuthorizedAuthor(subscription, comment.author))) continue;
       await this.#handleNotification(registeredAgent, subscription, {
         kind: 'comment',
-        title: `GitHub comment`,
-        details: summarizeText(comment.body, 'No comment body.'),
+        title: isUpdated ? `Updated GitHub comment` : `GitHub comment`,
+        details: isUpdated ? getUpdatedCommentDetails(comment.body) : summarizeText(comment.body, 'No comment body.'),
         url: comment.url,
         user: comment.author,
       });
     }
-    const latestCommentTimestamp = getLatestTimestamp(newComments, comment => comment.createdAt);
+    const latestCommentTimestamp = getLatestTimestamp(snapshot.comments, comment => comment.createdAt);
     if (latestCommentTimestamp) subscription.lastCommentTimestamp = latestCommentTimestamp;
+    subscription.lastCommentFingerprints = getSnapshotCommentState(snapshot.comments);
 
     await this.#emitSnapshotReviewAndStateNotifications(registeredAgent, subscription, snapshot);
   }
@@ -1428,15 +1561,35 @@ export class GithubSignals {
       prStateFingerprint !== subscription.lastPrStateFingerprint &&
       isAfterTimestamp(prStateTimestamp, subscription.createdAt)
     ) {
-      await this.#handleNotification(registeredAgent, subscription, {
-        kind: snapshot.merged ? 'pr-merged' : 'pr-closed',
-        title: snapshot.merged ? 'GitHub PR merged' : 'GitHub PR closed',
-        details: snapshot.merged
-          ? `PR #${subscription.prNumber} was merged: ${snapshot.title ?? 'GitHub PR'}`
-          : `PR #${subscription.prNumber} was closed without merge: ${snapshot.title ?? 'GitHub PR'}`,
-        url: snapshot.url,
-      });
-      subscription.lastPrStateFingerprint = prStateFingerprint;
+      const acknowledgedSubscription: ActiveSubscription = {
+        ...subscription,
+        lastPrStateFingerprint: prStateFingerprint,
+        lastErrorFingerprint: undefined,
+        nextPollAt: undefined,
+        updatedAt: this.#options.now().toISOString(),
+      };
+      const delivery = await this.#handleNotification(
+        registeredAgent,
+        subscription,
+        {
+          kind: snapshot.merged ? 'pr-merged' : 'pr-closed',
+          title: snapshot.merged ? 'GitHub PR merged' : 'GitHub PR closed',
+          details: snapshot.merged
+            ? getMergedNotificationDetails(subscription.prNumber, snapshot.title ?? 'GitHub PR')
+            : `PR #${subscription.prNumber} was closed without merge: ${snapshot.title ?? 'GitHub PR'}`,
+          url: snapshot.url,
+        },
+        {
+          acknowledgeAfterDelivery: acknowledgedSubscription,
+          ...(snapshot.merged ? { unsubscribeAfterDelivery: acknowledgedSubscription } : {}),
+        },
+      );
+      if (delivery === 'queued') return;
+      if (snapshot.merged) {
+        await this.#autoUnsubscribeMergedSubscription(acknowledgedSubscription);
+        return;
+      }
+      Object.assign(subscription, acknowledgedSubscription);
     }
 
     subscription.lastErrorFingerprint = undefined;
@@ -1515,7 +1668,11 @@ export class GithubSignals {
     registeredAgent: RegisteredGithubAgent,
     subscription: ActiveSubscription,
     notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
-    options: { acknowledgeAfterDelivery?: ActiveSubscription; deliveryClaim?: PendingGithubDeliveryClaim } = {},
+    options: {
+      acknowledgeAfterDelivery?: ActiveSubscription;
+      deliveryClaim?: PendingGithubDeliveryClaim;
+      unsubscribeAfterDelivery?: ActiveSubscription;
+    } = {},
   ): Promise<'sent' | 'queued'> {
     if (!this.#activeThreads.has(activeThreadKey(subscription))) {
       await this.#sendNotification(registeredAgent, subscription, notification);
@@ -1530,7 +1687,11 @@ export class GithubSignals {
     registeredAgent: RegisteredGithubAgent,
     subscription: ActiveSubscription,
     notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
-    options: { acknowledgeAfterDelivery?: ActiveSubscription; deliveryClaim?: PendingGithubDeliveryClaim } = {},
+    options: {
+      acknowledgeAfterDelivery?: ActiveSubscription;
+      deliveryClaim?: PendingGithubDeliveryClaim;
+      unsubscribeAfterDelivery?: ActiveSubscription;
+    } = {},
   ) {
     const key = subscription.key;
     const queuedAt = this.#options.now().toISOString();
@@ -1567,13 +1728,21 @@ export class GithubSignals {
           subscription.lastPrStateFingerprint,
       };
     }
+    if (options.unsubscribeAfterDelivery) {
+      bucket.unsubscribeAfterDelivery = options.unsubscribeAfterDelivery;
+    }
     if (
-      options.deliveryClaim &&
-      bucket.notifications.some(
-        pending =>
-          pending.deliveryClaim?.notificationId === options.deliveryClaim?.notificationId &&
-          pending.deliveryClaim?.notificationUpdatedAt === options.deliveryClaim?.notificationUpdatedAt,
-      )
+      bucket.notifications.some(pending => {
+        const isSameDeliveryClaim =
+          options.deliveryClaim &&
+          pending.deliveryClaim?.notificationId === options.deliveryClaim.notificationId &&
+          pending.deliveryClaim?.notificationUpdatedAt === options.deliveryClaim.notificationUpdatedAt;
+        const isSameNotification =
+          pending.notification.kind === notification.kind &&
+          pending.notification.title === notification.title &&
+          pending.notification.details === notification.details;
+        return isSameDeliveryClaim || isSameNotification;
+      })
     ) {
       return;
     }
@@ -1595,7 +1764,7 @@ export class GithubSignals {
     const result = registeredAgent.agent.sendSignal(
       createSignal({
         type: 'system-reminder',
-        contents: `${count} new GitHub ${count === 1 ? 'notification is' : 'notifications are'} pending. Call the github tool with action: "pending" to deliver them.`,
+        contents: `${count} new GitHub ${count === 1 ? 'notification is' : 'notifications are'} pending. If you're busy, keep working; when you're done, call the github tool with action: "pending" to review them.`,
         attributes: {
           type: GITHUB_PENDING_NOTIFICATIONS_SIGNAL,
           pr: subscription.prNumber,
@@ -1628,16 +1797,18 @@ export class GithubSignals {
 
   async deliverPendingNotifications(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
     const buckets = this.#getPendingNotificationBuckets(filter);
+    let deliveredCount = 0;
 
     for (const [key, bucket] of buckets) {
       const registeredAgent = this.#agents.get(bucket.subscription.agentId);
       if (!registeredAgent) continue;
       const delivered = await this.#sendPendingNotifications(registeredAgent, bucket);
+      deliveredCount += delivered.length;
       await this.#acknowledgePendingDelivery(bucket, delivered);
       this.#pendingNotifications.delete(key);
     }
 
-    return buckets.reduce((count, [, bucket]) => count + bucket.notifications.length, 0);
+    return deliveredCount;
   }
 
   #getPendingNotificationBuckets(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
@@ -1668,6 +1839,12 @@ export class GithubSignals {
       await this.#claimNotificationDelivery(pending.deliveryClaim);
     }
 
+    const unsubscribeAfterDelivery = bucket.unsubscribeAfterDelivery;
+    if (unsubscribeAfterDelivery && deliveredNotifications.length > 0) {
+      await this.#autoUnsubscribeMergedSubscription(unsubscribeAfterDelivery);
+      return;
+    }
+
     const acknowledgedSubscription = bucket.acknowledgeAfterDelivery;
     if (!acknowledgedSubscription) return;
 
@@ -1679,6 +1856,18 @@ export class GithubSignals {
   async #hasNotificationDelivery(deliveryClaim: PendingGithubDeliveryClaim | undefined) {
     if (!deliveryClaim) return false;
     return (await this.#notificationPoller?.store.hasNotificationDelivery(deliveryClaim)) ?? false;
+  }
+
+  async #autoUnsubscribeMergedSubscription(subscription: ActiveSubscription) {
+    this.#activeSubscriptions.delete(subscription.key);
+    await subscription.persistence?.remove?.(subscription);
+    this.#ensureTimer();
+    await this.#options.onAutoUnsubscribe?.({
+      resourceId: subscription.resourceId,
+      threadId: subscription.threadId,
+      ...(subscription.repo ? { repo: subscription.repo } : {}),
+      prNumber: subscription.prNumber,
+    });
   }
 
   async #claimNotificationDelivery(deliveryClaim: PendingGithubDeliveryClaim | undefined) {
@@ -1769,12 +1958,16 @@ export class GithubSignals {
   }
 }
 
+function getMergedNotificationDetails(prNumber: number, title: string) {
+  return `PR #${prNumber} was merged: ${title}\n\nThis thread has been automatically unsubscribed from this PR. If you still need updates, resubscribe with the github tool.`;
+}
+
+function isCurrentGithubUser(author: string | undefined, currentGithubLogin: string | undefined) {
+  return !!currentGithubLogin && !!author && author.toLowerCase() === currentGithubLogin.toLowerCase();
+}
+
 function isActionableCachedNotification(notification: GithubInboxNotification, currentGithubLogin?: string) {
-  if (
-    currentGithubLogin &&
-    notification.commentAuthor &&
-    notification.commentAuthor.toLowerCase() === currentGithubLogin.toLowerCase()
-  ) {
+  if (isCurrentGithubUser(notification.commentAuthor, currentGithubLogin)) {
     return false;
   }
 
@@ -2000,7 +2193,7 @@ function hasPrWorkEvidence(messages: unknown[]) {
   return messages.some(message =>
     messageContains(
       message,
-      /\bgh\s+pr\b|\bgh\s+pr\s+(view|checkout|create|status|checks)\b|\bgit\s+push\b|github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/i,
+      /(?:\bgh\s+pr\s+(?:view|checkout|create|status|checks)\b|\/github\s+subscribe\b|github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+|(?:\b(?:PR\s*#?\d+|pull request)\b.{0,80}\b(?:review|approved|approval|ci|checks?|merge|conflict|comment)\b)|(?:\b(?:review|approved|approval|ci|checks?|merge|conflict|comment)\b.{0,80}\b(?:PR\s*#?\d+|pull request)\b))/i,
     ),
   );
 }
@@ -2054,6 +2247,7 @@ function normalizeComment(value: unknown): GithubPRSnapshot['comments'][number] 
     body: typeof record.body === 'string' ? record.body : undefined,
     author: normalizeAuthor(record.author ?? record.user),
     createdAt,
+    updatedAt: normalizeTimestamp(record.updatedAt ?? record.updated_at),
     url:
       typeof record.url === 'string' ? record.url : typeof record.html_url === 'string' ? record.html_url : undefined,
   };

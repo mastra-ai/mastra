@@ -810,11 +810,10 @@ describe('GithubSignals', () => {
 
     await github.poll();
 
-    expect(commandRunner).toHaveBeenCalledTimes(2);
+    expect(commandRunner).toHaveBeenCalledTimes(3);
     expect(sendSignal).toHaveBeenCalledTimes(2);
     const calls = sendSignal.mock.calls as any[];
     expect(calls[0][0]).toMatchObject({
-      contents: 'PR #123 was merged: feat: ship it',
       attributes: {
         type: 'github-pr-merged',
         kind: 'pr-merged',
@@ -822,6 +821,9 @@ describe('GithubSignals', () => {
         url: 'https://github.com/mastra-ai/mastra/pull/123',
       },
     });
+    expect(calls[0][0].contents).toContain('PR #123 was merged: feat: ship it');
+    expect(calls[0][0].contents).toContain('automatically unsubscribed');
+    expect(calls[0][0].contents).toContain('resubscribe with the github tool');
     expect(calls[1][0]).toMatchObject({
       contents: 'PR #124 was closed without merge: fix: not today',
       attributes: {
@@ -1357,8 +1359,213 @@ describe('GithubSignals', () => {
     });
     expect((sendSignal.mock.calls as any[])[1][0]).toMatchObject({
       attributes: { type: 'github-pr-merged', kind: 'pr-merged' },
-      contents: 'PR #123 was merged: feat: ship it',
     });
+    expect((sendSignal.mock.calls as any[])[1][0].contents).toContain('PR #123 was merged: feat: ship it');
+    expect((sendSignal.mock.calls as any[])[1][0].contents).toContain('automatically unsubscribed');
+    github.destroy();
+  });
+
+  it('auto-unsubscribes after delivering a merged PR snapshot notification', async () => {
+    const onAutoUnsubscribe = vi.fn();
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: ship it',
+        state: 'closed',
+        merged: true,
+        closedAt: '2026-01-02T00:02:00.000Z',
+        mergedAt: '2026-01-02T00:02:00.000Z',
+      }),
+    ]);
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      commandRunner,
+      onAutoUnsubscribe,
+    });
+    const sendSignal = createSendSignalMock();
+    const persistence = { update: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    const subscription = {
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      lastCheckFingerprint: '[]',
+    };
+    github.addSubscription(subscription, persistence);
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({ type: 'github-pr-merged', kind: 'pr-merged' }),
+        contents: expect.stringContaining('automatically unsubscribed'),
+      }),
+      expect.anything(),
+    );
+    expect(persistence.remove).toHaveBeenCalledWith(expect.objectContaining({ prNumber: 123 }));
+    expect(onAutoUnsubscribe).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+    expect(persistence.update).not.toHaveBeenCalledWith(expect.objectContaining({ prNumber: 123 }));
+    github.destroy();
+  });
+
+  it('defers auto-unsubscribe for queued merged PR notifications until delivery', async () => {
+    const onAutoUnsubscribe = vi.fn();
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: ship it',
+        state: 'closed',
+        merged: true,
+        closedAt: '2026-01-02T00:02:00.000Z',
+        mergedAt: '2026-01-02T00:02:00.000Z',
+      }),
+    ]);
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      commandRunner,
+      onAutoUnsubscribe,
+    });
+    const sendSignal = createSendSignalMock();
+    const persistence = { update: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription(
+      {
+        ...context,
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        lastCheckFingerprint: '[]',
+      },
+      persistence,
+    );
+    github.markActive(context);
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(((sendSignal.mock.calls as any[])[0] as any[])?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+    expect(persistence.remove).not.toHaveBeenCalled();
+    expect(persistence.update).not.toHaveBeenCalled();
+    expect(onAutoUnsubscribe).not.toHaveBeenCalled();
+
+    const deliveredCount = await github.deliverPendingNotifications(context);
+
+    expect(deliveredCount).toBe(1);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(((sendSignal.mock.calls as any[])[1] as any[])?.[0]).toMatchObject({
+      attributes: { type: 'github-pr-merged', kind: 'pr-merged', pr: 123 },
+      contents: expect.stringContaining('automatically unsubscribed'),
+    });
+    expect(persistence.remove).toHaveBeenCalledWith(expect.objectContaining({ prNumber: 123 }));
+    expect(onAutoUnsubscribe).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+    github.destroy();
+  });
+
+  it('does not queue duplicate merged PR snapshot notifications while active', async () => {
+    const onAutoUnsubscribe = vi.fn();
+    const mergedSnapshot = createSnapshot({
+      title: 'feat: ship it',
+      state: 'closed',
+      merged: true,
+      closedAt: '2026-01-02T00:02:00.000Z',
+      mergedAt: '2026-01-02T00:02:00.000Z',
+    });
+    const commandRunner = createSnapshotCommandRunner([mergedSnapshot, mergedSnapshot]);
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      commandRunner,
+      onAutoUnsubscribe,
+    });
+    const sendSignal = createSendSignalMock();
+    const persistence = { update: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription(
+      {
+        ...context,
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        lastCheckFingerprint: '[]',
+      },
+      persistence,
+    );
+    github.markActive(context);
+
+    await github.poll();
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(((sendSignal.mock.calls as any[])[0] as any[])?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+
+    const deliveredCount = await github.deliverPendingNotifications(context);
+
+    expect(deliveredCount).toBe(1);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(((sendSignal.mock.calls as any[])[1] as any[])?.[0]).toMatchObject({
+      attributes: { type: 'github-pr-merged', kind: 'pr-merged', pr: 123 },
+    });
+    expect(persistence.remove).toHaveBeenCalledTimes(1);
+    expect(onAutoUnsubscribe).toHaveBeenCalledTimes(1);
+    github.destroy();
+  });
+
+  it('does not auto-unsubscribe after a closed-without-merge PR notification', async () => {
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'fix: not today',
+        state: 'closed',
+        merged: false,
+        closedAt: '2026-01-02T00:02:00.000Z',
+      }),
+    ]);
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const persistence = { update: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription(
+      {
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      persistence,
+    );
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: expect.objectContaining({ type: 'github-pr-closed' }) }),
+      expect.anything(),
+    );
+    expect(persistence.remove).not.toHaveBeenCalled();
+    expect(persistence.update).toHaveBeenCalledWith(expect.objectContaining({ prNumber: 123 }));
     github.destroy();
   });
 
@@ -1400,6 +1607,150 @@ describe('GithubSignals', () => {
 
     github.destroy();
     vi.useRealTimers();
+  });
+
+  it('filters snapshot comments authored by the current GitHub user', async () => {
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'my own comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'TylerBarnes' },
+            },
+            {
+              id: 'comment-2',
+              body: 'reviewer comment',
+              createdAt: '2026-01-02T00:02:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    commandRunner.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'api' && args[1] === 'user') return { stdout: 'TylerBarnes\n' };
+      return createSnapshotCommandRunner(
+        [
+          createSnapshot({
+            comments: [
+              {
+                id: 'comment-1',
+                body: 'my own comment',
+                createdAt: '2026-01-02T00:01:00.000Z',
+                author: { login: 'TylerBarnes' },
+              },
+              {
+                id: 'comment-2',
+                body: 'reviewer comment',
+                createdAt: '2026-01-02T00:02:00.000Z',
+                author: { login: 'reviewer' },
+              },
+            ],
+          }),
+        ],
+        { reviewer: 'write' },
+      )(args);
+    });
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      lastCheckFingerprint: '[]',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect((sendSignal.mock.calls as any[])[0]?.[0]).toMatchObject({
+      contents: 'reviewer comment',
+      attributes: { type: 'github-comment', user: 'reviewer' },
+    });
+    github.destroy();
+  });
+
+  it('delivers updated snapshot comments only when the body changes', async () => {
+    const snapshotRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'I am going to review now',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              updatedAt: '2026-01-02T00:02:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'I am going to review now',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              updatedAt: '2026-01-02T00:03:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'Review complete: found one issue',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              updatedAt: '2026-01-02T00:04:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[0] === 'api' && args[1] === 'user') return { stdout: 'TylerBarnes\n' };
+      return snapshotRunner(args);
+    });
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+    await github.poll();
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect((sendSignal.mock.calls as any[])[0]?.[0]).toMatchObject({
+      contents: 'I am going to review now',
+      attributes: { type: 'github-comment', user: 'reviewer' },
+    });
+    expect((sendSignal.mock.calls as any[])[1]?.[0]).toMatchObject({
+      contents: 'Updated comment:\n\nReview complete: found one issue',
+      attributes: { type: 'github-comment', title: 'Updated GitHub comment', user: 'reviewer' },
+    });
+    github.destroy();
   });
 
   it('polls subscribed idle threads on the interval after startup', async () => {
@@ -1482,7 +1833,8 @@ describe('GithubSignals', () => {
     const [pendingReminder, target] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(pendingReminder).toMatchObject({
       type: 'system-reminder',
-      contents: '1 new GitHub notification is pending. Call the github tool with action: "pending" to deliver them.',
+      contents:
+        '1 new GitHub notification is pending. If you\'re busy, keep working; when you\'re done, call the github tool with action: "pending" to review them.',
       attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
     });
     expect(target).toMatchObject({ ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'persist' } });
@@ -1743,9 +2095,10 @@ describe('GithubSignals', () => {
 
     expect(sendSignal).toHaveBeenCalledTimes(2);
     expect((sendSignal.mock.calls as any[])[1]?.[0]).toMatchObject({
-      contents: 'PR #123 was merged: feat: ship it',
       attributes: { type: 'github-pr-merged', pr: 123 },
     });
+    expect((sendSignal.mock.calls as any[])[1]?.[0].contents).toContain('PR #123 was merged: feat: ship it');
+    expect((sendSignal.mock.calls as any[])[1]?.[0].contents).toContain('automatically unsubscribed');
     expect(claimDelivery).toHaveBeenCalledWith(
       expect.objectContaining({
         notificationId: 'merged-thread',
@@ -2573,7 +2926,41 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
-  it('sends the PR subscription hint once when recent messages look like PR work', async () => {
+  it('sends the PR subscription hint once when recent messages include strong PR work evidence', async () => {
+    const harness = createHarness();
+    const github = new GithubSignals({
+      repo: 'mastra-ai/mastra',
+      commandRunner: createSnapshotCommandRunner([createSnapshot()]),
+    });
+    github.processor.__registerMastra(harness.mastra as any);
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+
+    await processOutputStep(github, harness, [], {
+      toolCalls: [{ toolName: 'execute_command', args: { command: 'gh pr checks 123 --repo mastra-ai/mastra' } }],
+    });
+    await processOutputStep(github, harness, [], {
+      toolCalls: [{ toolName: 'execute_command', args: { command: 'gh pr checks 123 --repo mastra-ai/mastra' } }],
+    });
+
+    const unsubscribe = ghSignals.prUnsubscribe({ prNumber: 123, repo: 'mastra-ai/mastra' }).toDBMessage({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+    await processSignals(github, harness, [unsubscribe]);
+    await processOutputStep(github, harness, [], {
+      toolCalls: [{ toolName: 'execute_command', args: { command: 'gh pr checks 123 --repo mastra-ai/mastra' } }],
+    });
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(((sendSignal.mock.calls as any[])[0] as any[])?.[0]).toMatchObject({
+      type: 'system-reminder',
+      attributes: { type: 'github-subscription-hint' },
+    });
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptionHintShown).toBe(true);
+  });
+
+  it('does not send the PR subscription hint for bare git push activity', async () => {
     const harness = createHarness();
     const github = new GithubSignals({
       repo: 'mastra-ai/mastra',
@@ -2586,25 +2973,9 @@ describe('GithubSignals', () => {
     await processOutputStep(github, harness, [], {
       toolCalls: [{ toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } }],
     });
-    await processOutputStep(github, harness, [], {
-      toolCalls: [{ toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } }],
-    });
 
-    const unsubscribe = ghSignals.prUnsubscribe({ prNumber: 123, repo: 'mastra-ai/mastra' }).toDBMessage({
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-    });
-    await processSignals(github, harness, [unsubscribe]);
-    await processOutputStep(github, harness, [], {
-      toolCalls: [{ toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } }],
-    });
-
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(((sendSignal.mock.calls as any[])[0] as any[])?.[0]).toMatchObject({
-      type: 'system-reminder',
-      attributes: { type: 'github-subscription-hint' },
-    });
-    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptionHintShown).toBe(true);
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect((harness.thread.metadata as any).mastra?.githubSignals?.subscriptionHintShown).toBeUndefined();
   });
 
   it('backs off and dedupes GitHub rate limit failures', async () => {
