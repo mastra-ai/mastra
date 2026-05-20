@@ -1,6 +1,6 @@
 import {
   AgentIcon,
-  ButtonWithTooltip,
+  Button,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
@@ -73,19 +73,19 @@ function Agents() {
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
             {showCreateCta && (
-              <ButtonWithTooltip as={FrameworkLink} to={createRoute} tooltipContent="Create an agent">
+              <Button as={FrameworkLink} to={createRoute} tooltip="Create an agent">
                 <Plus />
-              </ButtonWithTooltip>
+              </Button>
             )}
-            <ButtonWithTooltip
+            <Button
               as="a"
               href="https://mastra.ai/en/docs/agents/overview"
               target="_blank"
               rel="noopener noreferrer"
-              tooltipContent="Go to Agents documentation"
+              tooltip="Go to Agents documentation"
             >
               <BookIcon />
-            </ButtonWithTooltip>
+            </Button>
           </PageLayout.Column>
         </PageLayout.Row>
         <div className="max-w-120">
