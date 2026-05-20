@@ -1,8 +1,11 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } from './source-hash';
+
+// Use a local .test-tmp dir instead of os.tmpdir() — some CI runners
+// (e.g. starsling-ubuntu) have flaky /tmp behaviour with rapid write/read cycles.
+const TEST_TMP_ROOT = join(__dirname, '.test-tmp');
 
 describe('source-hash', () => {
   let testDir: string;
@@ -10,8 +13,7 @@ describe('source-hash', () => {
   let outputDir: string;
 
   beforeEach(async () => {
-    // Create a unique temp directory for each test
-    testDir = join(tmpdir(), `source-hash-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    testDir = join(TEST_TMP_ROOT, `source-hash-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mastraDir = join(testDir, 'src', 'mastra');
     outputDir = join(testDir, '.mastra');
 
@@ -25,7 +27,6 @@ describe('source-hash', () => {
 
   describe('computeSourceHash', () => {
     it('should compute a deterministic hash for source files', async () => {
-      // Create some source files
       await writeFile(join(mastraDir, 'index.ts'), 'export const mastra = {}');
       await writeFile(join(testDir, 'package.json'), '{"name": "test"}');
 
@@ -42,7 +43,6 @@ describe('source-hash', () => {
 
       const hash1 = await computeSourceHash(testDir, mastraDir);
 
-      // Change the content
       await writeFile(join(mastraDir, 'index.ts'), 'export const mastra = { changed: true }');
 
       const hash2 = await computeSourceHash(testDir, mastraDir);
@@ -56,7 +56,6 @@ describe('source-hash', () => {
 
       const hash1 = await computeSourceHash(testDir, mastraDir);
 
-      // Add a new file
       await writeFile(join(mastraDir, 'agent.ts'), 'export const agent = {}');
 
       const hash2 = await computeSourceHash(testDir, mastraDir);
@@ -70,7 +69,6 @@ describe('source-hash', () => {
 
       const hash1 = await computeSourceHash(testDir, mastraDir);
 
-      // Add a test file (should be ignored)
       await writeFile(join(mastraDir, 'index.test.ts'), 'test()');
 
       const hash2 = await computeSourceHash(testDir, mastraDir);
@@ -79,30 +77,28 @@ describe('source-hash', () => {
     });
 
     it('should include workspace root lockfile in hash for monorepos', async () => {
-      // Create a nested project structure simulating a monorepo
-      const workspaceRoot = join(tmpdir(), `workspace-root-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      const workspaceRoot = join(
+        TEST_TMP_ROOT,
+        `workspace-root-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
       const projectDir = join(workspaceRoot, 'packages', 'my-app');
       const projectMastraDir = join(projectDir, 'src', 'mastra');
 
       await mkdir(projectMastraDir, { recursive: true });
 
-      // Create workspace root lockfile
       await writeFile(join(workspaceRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 1');
 
-      // Create project files
       await writeFile(join(projectMastraDir, 'index.ts'), 'export const mastra = {}');
       await writeFile(join(projectDir, 'package.json'), '{"name": "my-app"}');
 
       const hash1 = await computeSourceHash(projectDir, projectMastraDir);
 
-      // Change workspace root lockfile
       await writeFile(join(workspaceRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 2');
 
       const hash2 = await computeSourceHash(projectDir, projectMastraDir);
 
       expect(hash1).not.toBe(hash2);
 
-      // Cleanup
       await rm(workspaceRoot, { recursive: true, force: true });
     });
   });
@@ -136,7 +132,6 @@ describe('source-hash', () => {
       await writeFile(join(mastraDir, 'index.ts'), 'export const mastra = {}');
       await writeFile(join(testDir, 'package.json'), '{"name": "test"}');
 
-      // Remove the output dir to simulate no build
       await rm(join(outputDir, 'output'), { recursive: true });
 
       const result = await checkBuildStaleness(testDir, mastraDir, outputDir);
@@ -161,7 +156,6 @@ describe('source-hash', () => {
       await writeFile(join(testDir, 'package.json'), '{"name": "test"}');
       await writeFile(join(outputDir, 'output', 'index.mjs'), 'built code');
 
-      // Write manifest with old hash
       await writeBuildManifest(outputDir, 'sha256:old-hash');
 
       const result = await checkBuildStaleness(testDir, mastraDir, outputDir);
@@ -177,7 +171,6 @@ describe('source-hash', () => {
       await writeFile(join(testDir, 'package.json'), '{"name": "test"}');
       await writeFile(join(outputDir, 'output', 'index.mjs'), 'built code');
 
-      // Compute current hash and write manifest with it
       const currentHash = await computeSourceHash(testDir, mastraDir);
       await writeBuildManifest(outputDir, currentHash);
 
