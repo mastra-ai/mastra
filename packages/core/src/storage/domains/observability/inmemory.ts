@@ -83,6 +83,8 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetStructureResponse,
   GetTraceArgs,
   GetTraceResponse,
@@ -174,6 +176,43 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const cursorId = this.db.observabilityNextCursorId;
     this.db.observabilityNextCursorId += 1;
     return cursorId;
+  }
+
+  /**
+   * Upserts a record into an append-only collection keyed by an id field.
+   *
+   * If an existing record with the same id is found, it is replaced in place
+   * (preserving its cursor id so delta polling does not re-emit it). Otherwise
+   * the record is appended and a fresh cursor id is allocated.
+   */
+  private upsertByIdField<T extends Record<string, unknown>>(
+    records: T[],
+    cursorIds: Map<T, number>,
+    record: T,
+    idField: keyof T,
+  ): void {
+    const id = record[idField];
+    if (id == null) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_MISSING_RECORD_ID',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Observability record is missing required id field '${String(idField)}'`,
+      });
+    }
+    const existingIndex = records.findIndex(existing => existing[idField] === id);
+    if (existingIndex !== -1) {
+      const previous = records[existingIndex]!;
+      const cursorId = cursorIds.get(previous);
+      cursorIds.delete(previous);
+      records[existingIndex] = record;
+      if (cursorId !== undefined) {
+        cursorIds.set(record, cursorId);
+      }
+      return;
+    }
+    records.push(record);
+    cursorIds.set(record, this.allocateObservabilityCursorId());
   }
 
   private encodeDeltaCursor(cursorId?: number | null): string {
@@ -513,6 +552,22 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
 
     return { span };
+  }
+
+  async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    const { traceId, spanIds } = args;
+    const traceEntry = this.db.traces.get(traceId);
+    if (!traceEntry) {
+      return { traceId, spans: [] };
+    }
+
+    const spans: SpanRecord[] = [];
+    for (const spanId of spanIds) {
+      const span = traceEntry.spans[spanId];
+      if (span) spans.push(span);
+    }
+
+    return { traceId, spans };
   }
 
   async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
@@ -1088,8 +1143,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
     for (const metric of args.metrics) {
       const record = metric as MetricRecord;
-      this.db.metricRecords.push(record);
-      this.db.metricCursorIds.set(record, this.allocateObservabilityCursorId());
+      this.upsertByIdField(this.db.metricRecords, this.db.metricCursorIds, record, 'metricId');
     }
   }
 
@@ -1412,26 +1466,32 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const intervalMs = this.intervalToMs(args.interval);
 
     if (args.groupBy && args.groupBy.length > 0) {
-      const seriesMap = new Map<string, Map<number, MetricRecord[]>>();
+      // Keep colliding display names (label values containing `|`) on separate
+      // series by keying on the original value tuple instead of the joined
+      // display string.
+      const seriesMap = new Map<string, { displayName: string; buckets: Map<number, MetricRecord[]> }>();
       for (const m of filtered) {
-        const key = args.groupBy
-          .map(col => String((m as Record<string, unknown>)[col] ?? m.labels[col] ?? ''))
-          .join('|');
-        if (!seriesMap.has(key)) seriesMap.set(key, new Map());
+        const values = args.groupBy.map(col => String((m as Record<string, unknown>)[col] ?? m.labels[col] ?? ''));
+        const key = JSON.stringify(values);
+        const displayName = values.join('|');
+        let entry = seriesMap.get(key);
+        if (!entry) {
+          entry = { displayName, buckets: new Map() };
+          seriesMap.set(key, entry);
+        }
         const bucket = Math.floor(m.timestamp.getTime() / intervalMs) * intervalMs;
-        const bucketMap = seriesMap.get(key)!;
-        if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
-        bucketMap.get(bucket)!.push(m);
+        if (!entry.buckets.has(bucket)) entry.buckets.set(bucket, []);
+        entry.buckets.get(bucket)!.push(m);
       }
 
       return {
-        series: Array.from(seriesMap.entries()).map(([name, bucketMap]) => {
-          const seriesRecords = Array.from(bucketMap.values()).flat();
+        series: Array.from(seriesMap.values()).map(({ displayName, buckets }) => {
+          const seriesRecords = Array.from(buckets.values()).flat();
           const costSummary = this.summarizeCost(seriesRecords);
           return {
-            name,
+            name: displayName,
             costUnit: costSummary.costUnit,
-            points: Array.from(bucketMap.entries())
+            points: Array.from(buckets.entries())
               .sort(([a], [b]) => a - b)
               .map(([ts, records]) => ({
                 timestamp: new Date(ts),
@@ -1563,14 +1623,37 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return { values };
   }
 
+  /**
+   * Iterates every record across spans, logs, and metrics with shared
+   * context fields. Discovery operations need to surface entities and
+   * dimensions emitted on any observability surface, not just spans.
+   */
+  private *iterateObservabilityContextRecords(): Generator<{
+    entityType?: string | null;
+    entityName?: string | null;
+    serviceName?: string | null;
+    environment?: string | null;
+    tags?: readonly string[] | null;
+  }> {
+    for (const [, traceEntry] of this.db.traces) {
+      for (const span of Object.values(traceEntry.spans)) {
+        yield span;
+      }
+    }
+    for (const log of this.db.logRecords) {
+      yield log as unknown as { entityType?: string | null };
+    }
+    for (const metric of this.db.metricRecords) {
+      yield metric as unknown as { entityType?: string | null };
+    }
+  }
+
   async getEntityTypes(_args: GetEntityTypesArgs): Promise<GetEntityTypesResponse> {
     const validTypes = new Set(Object.values(EntityType));
     const typeSet = new Set<EntityType>();
-    for (const [, traceEntry] of this.db.traces) {
-      for (const span of Object.values(traceEntry.spans)) {
-        if (span.entityType && validTypes.has(span.entityType as EntityType)) {
-          typeSet.add(span.entityType as EntityType);
-        }
+    for (const record of this.iterateObservabilityContextRecords()) {
+      if (record.entityType && validTypes.has(record.entityType as EntityType)) {
+        typeSet.add(record.entityType as EntityType);
       }
     }
     return { entityTypes: Array.from(typeSet).sort() };
@@ -1578,45 +1661,37 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async getEntityNames(args: GetEntityNamesArgs): Promise<GetEntityNamesResponse> {
     const nameSet = new Set<string>();
-    for (const [, traceEntry] of this.db.traces) {
-      for (const span of Object.values(traceEntry.spans)) {
-        if (!span.entityName) continue;
-        if (args.entityType && span.entityType !== args.entityType) continue;
-        nameSet.add(span.entityName);
-      }
+    for (const record of this.iterateObservabilityContextRecords()) {
+      if (!record.entityName) continue;
+      if (args.entityType && record.entityType !== args.entityType) continue;
+      nameSet.add(record.entityName);
     }
     return { names: Array.from(nameSet).sort() };
   }
 
   async getServiceNames(_args: GetServiceNamesArgs): Promise<GetServiceNamesResponse> {
     const nameSet = new Set<string>();
-    for (const [, traceEntry] of this.db.traces) {
-      for (const span of Object.values(traceEntry.spans)) {
-        if (span.serviceName) nameSet.add(span.serviceName);
-      }
+    for (const record of this.iterateObservabilityContextRecords()) {
+      if (record.serviceName) nameSet.add(record.serviceName);
     }
     return { serviceNames: Array.from(nameSet).sort() };
   }
 
   async getEnvironments(_args: GetEnvironmentsArgs): Promise<GetEnvironmentsResponse> {
     const envSet = new Set<string>();
-    for (const [, traceEntry] of this.db.traces) {
-      for (const span of Object.values(traceEntry.spans)) {
-        if (span.environment) envSet.add(span.environment);
-      }
+    for (const record of this.iterateObservabilityContextRecords()) {
+      if (record.environment) envSet.add(record.environment);
     }
     return { environments: Array.from(envSet).sort() };
   }
 
   async getTags(args: GetTagsArgs): Promise<GetTagsResponse> {
     const tagSet = new Set<string>();
-    for (const [, traceEntry] of this.db.traces) {
-      for (const span of Object.values(traceEntry.spans)) {
-        if (!span.tags) continue;
-        if (args.entityType && span.entityType !== args.entityType) continue;
-        for (const tag of span.tags) {
-          tagSet.add(tag);
-        }
+    for (const record of this.iterateObservabilityContextRecords()) {
+      if (!record.tags) continue;
+      if (args.entityType && record.entityType !== args.entityType) continue;
+      for (const tag of record.tags) {
+        tagSet.add(tag);
       }
     }
     return { tags: Array.from(tagSet).sort() };
@@ -1629,8 +1704,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
     for (const log of args.logs) {
       const record = log as LogRecord;
-      this.db.logRecords.push(record);
-      this.db.logCursorIds.set(record, this.allocateObservabilityCursorId());
+      this.upsertByIdField(this.db.logRecords, this.db.logCursorIds, record, 'logId');
     }
   }
 
@@ -1747,8 +1821,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       scoreSource,
       source: scoreSource,
     } as ScoreRecord;
-    this.db.scoreRecords.push(record);
-    this.db.scoreCursorIds.set(record, this.allocateObservabilityCursorId());
+    this.upsertByIdField(this.db.scoreRecords, this.db.scoreCursorIds, record, 'scoreId');
   }
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
@@ -1759,8 +1832,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         scoreSource,
         source: scoreSource,
       } as ScoreRecord;
-      this.db.scoreRecords.push(record);
-      this.db.scoreCursorIds.set(record, this.allocateObservabilityCursorId());
+      this.upsertByIdField(this.db.scoreRecords, this.db.scoreCursorIds, record, 'scoreId');
     }
   }
 
@@ -2099,8 +2171,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         args.feedback.userId ??
         (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
     } as FeedbackRecord;
-    this.db.feedbackRecords.push(record);
-    this.db.feedbackCursorIds.set(record, this.allocateObservabilityCursorId());
+    this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
   }
 
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
@@ -2112,8 +2183,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         feedbackUserId:
           fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
       } as FeedbackRecord;
-      this.db.feedbackRecords.push(record);
-      this.db.feedbackCursorIds.set(record, this.allocateObservabilityCursorId());
+      this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
     }
   }
 

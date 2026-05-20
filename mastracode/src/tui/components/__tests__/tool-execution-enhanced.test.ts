@@ -1,5 +1,6 @@
+import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
-import { theme } from '../../theme.js';
+import { theme, tintHex } from '../../theme.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -28,8 +29,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     const visible = stripAnsi(output);
     expect(output).toContain('view');
-    expect(output).toContain('src/example.ts');
-    expect(output).toContain(theme.fg('dim', ':10-14'));
+    expect(visible).toContain('src/example.ts:10-14');
     expect(output).not.toContain('path=');
     expect(output).not.toContain('✓');
     expect(output).not.toContain('╭──');
@@ -39,7 +39,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(4);
   });
 
-  it('wraps quiet view previews before applying ANSI syntax highlighting', () => {
+  it('highlights quiet view previews before truncating displayed lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts', offset: 1, limit: 1, showLineNumbers: true },
@@ -54,8 +54,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = component.render(120).join('\n');
-    const withoutCompleteAnsiSequences = output.replace(/\u001b\[[0-9;]*m/g, '');
-    expect(withoutCompleteAnsiSequences).not.toContain('\u001b');
+    expect(stripAnsi(output)).not.toContain('\u001b');
     expect(stripAnsi(output)).toContain('│ const value =');
   });
 
@@ -223,13 +222,45 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       isError: false,
     });
 
-    const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('list src (5 results)');
+    const rendered = component.render(100).join('\n');
+    const output = stripAnsi(rendered);
+    expect(output).toContain('▐list▌src (5 results)');
     expect(output).not.toContain('│ .');
-    expect(output).toContain('│ src/a.ts');
-    expect(output).toContain('│ src/b.ts');
+    expect(rendered).toContain(theme.fg('toolOutput', 'src/a.ts'));
+    expect(rendered).toContain(theme.fg('toolOutput', 'src/b.ts'));
     expect(output).not.toContain('src/c.ts');
     expect(output).toContain('╰──');
+  });
+
+  it('renders quiet web search with query summary and compact result preview', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'web_search',
+      { query: 'muted cli-highlight theme' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            sources: [
+              { title: 'cli-highlight README', url: 'https://github.com/felixfbecker/cli-highlight' },
+              { title: 'highlight.js Themes', url: 'https://highlightjs.org' },
+            ],
+          }),
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('▐web▌"muted cli-highlight theme"');
+    expect(output).toContain('│ cli-highlight README');
+    expect(output).toContain('│ https://github.com/felixfbecker/cli-highlight');
+    expect(output).not.toContain('highlight.js Themes');
+    expect(output).not.toContain('sources');
   });
 
   it('colors quiet compact tool labels by status', () => {
@@ -239,7 +270,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       { quietDisplayMode: 'quiet', collapsedByDefault: true },
       ui,
     );
-    expect(active.render(100).join('\n')).toContain(`\u001b[93mview`);
+    expect(stripAnsi(active.render(100).join('\n'))).toContain('▐view▌src/example.ts');
 
     const complete = new ToolExecutionComponentEnhanced(
       'view',
@@ -248,7 +279,28 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
     complete.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
-    expect(complete.render(100).join('\n')).toContain(`\u001b[93mview`);
+    expect(stripAnsi(complete.render(100).join('\n'))).toContain('▐view▌src/example.ts');
+  });
+
+  it('uses the active mode color for quiet compact tool badges', () => {
+    const modeColor = '#3366cc';
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, compactToolModeColor: modeColor },
+      ui,
+    );
+
+    component.updateResult({
+      content: [{ type: 'text', text: '     1→const value = true;' }],
+      isError: false,
+    });
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain(chalk.hex(modeColor)('▐'));
+    expect(output).toContain(chalk.bgHex(modeColor).hex('#000000').bold('view'));
+    expect(output).toContain(chalk.bgHex('#0f0f0f').hex(modeColor)('src/example.ts'));
+    expect(output).toContain(chalk.hex(tintHex(modeColor, 0.35))('│'));
   });
 
   it('renders quiet non-shell tool validation errors with actionable details', () => {
@@ -265,11 +317,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('Tool validation failed: ask_user');
-    expect(output).toContain('Parameter: question');
-    expect(output).toContain('Required parameter is missing');
-    expect(output).toContain('Make sure to provide a "question" parameter');
-    expect(output).not.toMatch(/^ask_user .*✗$/m);
+    expect(output).toContain('ask_user');
+    expect(output).toContain('✗');
+    expect(output).toContain('Validation error: missing required parameter "question"');
+    expect(output).not.toContain('╭──');
   });
 
   it('renders quiet non-shell tool errors through detailed renderers', () => {
@@ -283,10 +334,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.updateResult({ content: [{ type: 'text', text: 'The specified text was not found.' }], isError: false });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('╭──');
-    expect(output).toContain('edit src/example.ts');
+    expect(output).toContain('edit');
+    expect(output).toContain('src/example.ts');
     expect(output).toContain('✗');
-    expect(output).not.toMatch(/^edit .*✗$/m);
+    expect(output).toContain('The specified text was not found.');
+    expect(output).not.toContain('╭──');
   });
 
   it('renders quiet edit tools with line ranges from the tool result', () => {
@@ -303,11 +355,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
     expect(output).toContain('edit');
-    expect(output).toContain('src/example.ts');
-    expect(output).toContain(theme.fg('dim', ':42-44'));
-    expect(stripAnsi(output)).toContain('new');
-    expect(stripAnsi(output)).not.toContain('old →');
+    expect(visible).toContain('src/example.ts:42-44');
+    expect(visible).toContain('new');
+    expect(visible).not.toContain('old →');
     expect(output).not.toContain('old_string=');
     expect(output.split('\n')).toHaveLength(3);
   });
@@ -396,7 +448,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const lines = component.render(100).map(stripAnsi);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('write /tmp/example.ts');
+    expect(lines[0]).toContain('▐write▌/tmp/example.ts');
     expect(lines.join('\n')).not.toContain('first line');
     expect(component.hasQuietStreamingPreview()).toBe(false);
   });
@@ -459,7 +511,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     second.setCompactToolContinuation(true, '/tmp/a.ts');
     const lines = second.render(100);
     expect(lines).toHaveLength(4);
-    expect(stripAnsi(lines[0]!)).toContain('├─');
+    expect(stripAnsi(lines[0]!)).toContain('●─');
     expect(stripAnsi(lines[1]!)).toContain('const second = 2;');
     expect(stripAnsi(lines[2]!)).toContain('const third = 3;');
     expect(stripAnsi(lines[3]!)).toContain('╰──');
@@ -478,7 +530,23 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const lines = component.render(100).map(stripAnsi);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('╰─');
-    expect(lines[0]).not.toContain('├─');
+    expect(lines[0]).not.toContain('●─');
+  });
+
+  it('does not use orange dot continuation markers when preview lines are disabled', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/a.ts', content: 'const first = 1;' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, '/tmp/previous.ts');
+    component.setCompactToolHasFollowingContinuation(true);
+    const lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('├─');
+    expect(lines[0]).not.toContain('●─');
   });
 
   it('uses an open continuation header when the continuation has preview lines', () => {
@@ -492,9 +560,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.setCompactToolHasFollowingContinuation(true);
     component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
     const lines = component.render(100).map(stripAnsi);
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     expect(lines[1]).toContain('│ const first = 1;');
     expect(lines[2]).toContain('│ const second = 2;');
+    expect(lines[3]).toContain('│');
     expect(lines.join('\n')).not.toContain('╰─');
   });
 
@@ -511,7 +580,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines[0]).toContain('grep');
     expect(lines[0]).not.toContain('foo');
     expect(lines[1]).toContain('│');
-    expect(lines[1]).toContain('foo');
+    expect(lines[1]).toContain(theme.fg('toolOutput', 'foo'));
     expect(stripAnsi(lines[2]!)).toContain('╰──');
 
     component.updateArgs({ pattern: 'foo', path: 'src/**/*.ts' });
@@ -520,7 +589,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines[0]).toContain('src/**/*.ts');
     expect(lines[0]).not.toContain('foo');
     expect(lines[1]).toContain('│');
-    expect(lines[1]).toContain('foo');
+    expect(lines[1]).toContain(theme.fg('toolOutput', 'foo'));
     expect(lines[1]).not.toContain('src/**/*.ts');
     expect(stripAnsi(lines[2]!)).toContain('╰──');
 
@@ -549,7 +618,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('limits quiet shell output to eight content lines', () => {
+  it('limits quiet shell output to fifteen content lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },
@@ -559,17 +628,19 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     component.updateResult(
       {
-        content: [{ type: 'text', text: Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n') }],
+        content: [{ type: 'text', text: Array.from({ length: 16 }, (_, i) => `line ${i + 1}`).join('\n') }],
         isError: false,
       },
       false,
     );
 
     const output = component.render(100).join('\n');
-    expect(output).toContain('line 3');
-    expect(output).toContain('line 10');
-    expect(output).not.toContain('line 2');
-    expect(output.split('\n').filter(line => line.includes('│'))).toHaveLength(8);
+    const lines = output.split('\n');
+    expect(output).toContain(theme.fg('success', ' ✓'));
+    expect(output).toContain('line 2');
+    expect(output).toContain('line 16');
+    expect(lines.some(line => line.includes('line 1 ') || line.includes('line 1│'))).toBe(false);
+    expect(lines.filter(line => line.includes('line '))).toHaveLength(15);
   });
 
   it('keeps quiet detail lines visible after completion', () => {
@@ -598,8 +669,383 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
 
     const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
     expect(output).toContain('\u001b[93m$');
     expect(output).not.toContain('⟶');
+    expect(visible).not.toContain('├');
+    expect(visible.split('\n')).toHaveLength(3);
+  });
+
+  it('syntax highlights quiet shell command footers as bash', () => {
+    const command = 'if [ -f package.json ]; then echo "ok"; fi';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(`$ ${command}`);
+    expect(output).toContain(chalk.blue('if'));
+    expect(output).toContain(theme.fg('toolArgs', 'echo'));
+    expect(output).toContain(theme.fg('toolArgs', '-f'));
+  });
+
+  it('keeps shell keywords inside quoted strings highlighted as strings', () => {
+    const command = 'echo "if then fi" && printf \'done\'';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(command);
+    expect(output).toContain(chalk.white('"if then fi"'));
+    expect(output).not.toContain(chalk.blue('then'));
+    expect(output).toContain(chalk.white("'done'"));
+  });
+
+  it('keeps quoted shell strings highlighted after wrapping', () => {
+    const command = `echo "${'quoted '.repeat(40)}if then fi"`;
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(80).join('\n');
+    const footerLines = stripAnsi(output)
+      .split('\n')
+      .filter(line => line.startsWith('│') && line.trim() !== '│');
+    expect(footerLines.length).toBeGreaterThan(1);
+    expect(stripAnsi(output)).toContain('then fi"');
+    expect(output).toContain(chalk.white('then fi"'));
+    expect(output).not.toContain(chalk.blue('then'));
+  });
+
+  it('preserves standalone ampersands in quiet shell command footers', () => {
+    const command = 'sleep 1 & wait && echo ok 2>&1';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(command);
+    expect(output).toContain(theme.fg('muted', '&'));
+    expect(output).toContain(theme.fg('muted', '>'));
+  });
+
+  it('wraps long quiet shell commands in the footer instead of truncating them', () => {
+    const command =
+      'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = stripAnsi(component.render(60).join('\n'));
+    const footerLines = output.split('\n').filter(line => line.startsWith('│') && line.trim() !== '│');
+    expect(output).not.toContain('…');
+    expect(output).toContain('--reporter=dot');
+    expect(component.render(60).join('\n')).toContain(theme.fg('toolArgs', '--reporter=dot'));
+    expect(footerLines.length).toBeGreaterThan(1);
+    expect(footerLines[0]).toContain('│ $ pnpm');
+    expect(footerLines[1]).toMatch(/^│   \S/);
+  });
+
+  it('keeps base shell command color on wrapped continuation lines', () => {
+    const command =
+      'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot && pnpm --filter mastracode lint && pnpm --filter mastracode check';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(120).join('\n');
+    const wrappedLine = output.split('\n').find(line => stripAnsi(line).includes('lint && pnpm --filter'));
+    expect(wrappedLine).toContain(theme.fg('toolArgs', 'lint'));
+  });
+
+  it('shows same-file continuation paths while edit args are still streaming', () => {
+    const first = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'packages/app/src/example.ts', old_string: 'a', new_string: 'b' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    first.updateResult(
+      { content: [{ type: 'text', text: 'Edited packages/app/src/example.ts (lines 4-4)' }], isError: false },
+      false,
+    );
+
+    const second = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'packages/app/src/example.ts', old_string: 'b', new_string: 'c' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    second.setCompactToolContinuation(true, 'packages/app/src/example.ts:4-4');
+
+    const visible = stripAnsi(second.render(100).join('\n'));
+    expect(visible).toContain('src/example.ts');
+    expect(visible).toMatch(/●─+ \/src\/example\.ts/);
+    expect(visible).not.toMatch(/^\s*[●├─ ]+$/m);
+
+    second.updateResult(
+      {
+        content: [{ type: 'text', text: 'Replaced 1 occurrence in packages/app/src/example.ts (lines 8-8)' }],
+        isError: false,
+      },
+      false,
+    );
+    second.setCompactToolContinuation(true, 'packages/app/src/example.ts:4-4');
+    const completedVisible = stripAnsi(second.render(100).join('\n'));
+    expect(completedVisible).toContain('src/example.ts:8-8');
+    expect(completedVisible).toMatch(/●─+ \/src\/example\.ts:8-8/);
+  });
+
+  it('keeps same-file continuation connector geometry when both edits have line ranges', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      {
+        path: '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts',
+        new_string: 'const suffix = true;',
+      },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult(
+      {
+        content: [
+          {
+            type: 'text',
+            text: 'Replaced 1 occurrence in /tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts (lines 38-43)',
+          },
+        ],
+        isError: false,
+      },
+      false,
+    );
+    component.setCompactToolContinuation(
+      true,
+      '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts:26-29',
+    );
+
+    const visible = stripAnsi(component.render(220).join('\n'));
+    expect(visible).toContain('/components/payment-metho');
+    expect(visible).toMatch(/●─+ \/components\/payment-metho/);
+  });
+
+  it('renders standalone incomplete continuations with a tool label instead of a blank call', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      {},
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true);
+
+    const visible = stripAnsi(component.render(100).join('\n'));
+    expect(visible).toContain('edit');
+    expect(visible.trim()).not.toBe('');
+  });
+
+  it('renders grouped empty continuations as a dot instead of flashing the tool label', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      {},
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(
+      true,
+      '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts:26-29',
+    );
+
+    const firstLine = stripAnsi(component.render(120)[0] ?? '');
+    expect(firstLine).toContain('●─');
+    expect(firstLine).not.toContain('edit');
+  });
+
+  it('does not render connector-only continuation headers when summaries fully overlap', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'mastracode/src/tui/handlers/tool.ts', new_string: 'reconcileToolBoundaries(ctx);' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true, 'mastracode/src/tui/handlers/tool.ts');
+
+    const lines = stripAnsi(component.render(120).join('\n')).split('\n');
+    expect(lines[0]).toContain('/handlers/tool.ts');
+    expect(lines[0]).not.toMatch(/^\s*[●╰├─ ]+▌?\s*$/);
+  });
+
+  it('renders quiet non-shell failures in compact style with error detail', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'src/example.ts', old_string: 'missing', new_string: 'replacement' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'Error: missing replacement' }], isError: true }, false);
+
+    const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
+    expect(visible).toContain('edit');
+    expect(visible).toContain('src/example.ts');
+    expect(visible).toContain('✗');
+    expect(visible).toContain('Error: missing replacement');
+    expect(visible).not.toContain('╭──');
+  });
+
+  it('renders browser tools without duplicating args as preview lines', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'browser_goto',
+      { url: 'https://example.com' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'navigated' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(100).join('\n'));
+    expect(visible).toContain('browser_goto');
+    expect(visible).toContain('https://example.com');
+    expect(visible.split('https://example.com')).toHaveLength(2);
+    expect(visible).not.toContain('url=');
+  });
+
+  it('unwraps browser evaluate and snapshot results instead of showing success JSON', () => {
+    const evaluate = new ToolExecutionComponentEnhanced(
+      'browser_evaluate',
+      { script: 'document.title' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    evaluate.updateResult(
+      {
+        content: [{ type: 'text', text: '{"success":true,"result":{"title":"","url":"about:blank"}}' }],
+        isError: false,
+      },
+      false,
+    );
+
+    const snapshot = new ToolExecutionComponentEnhanced(
+      'browser_snapshot',
+      { interactiveOnly: false, maxDepth: 3 },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    snapshot.updateResult(
+      { content: [{ type: 'text', text: '{"success":true,"snapshot":"- button Demo"}' }], isError: false },
+      false,
+    );
+
+    const output = stripAnsi(`${evaluate.render(120).join('\n')}\n${snapshot.render(120).join('\n')}`);
+    expect(output).toContain('title: ""');
+    expect(output).toContain('url: about:blank');
+    expect(output).toContain('- button Demo');
+    expect(output).not.toContain('"success"');
+    expect(output).not.toContain('{');
+  });
+
+  it('renders process file stat and generic result previews', () => {
+    const processOutput = new ToolExecutionComponentEnhanced(
+      'get_process_output',
+      { pid: '1234' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    processOutput.updateResult(
+      { content: [{ type: 'text', text: 'quiet-process-demo-1\nquiet-process-demo-2' }], isError: false },
+      false,
+    );
+
+    const stat = new ToolExecutionComponentEnhanced(
+      'file_stat',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    stat.updateResult(
+      {
+        content: [{ type: 'text', text: 'src/example.ts Type: file Size: 123 bytes Modified: today' }],
+        isError: false,
+      },
+      false,
+    );
+
+    const generic = new ToolExecutionComponentEnhanced(
+      'custom_tool',
+      { file: 'src/example.ts', line: 1 },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    generic.updateResult({ content: [{ type: 'text', text: '{"action":"exit","count":2}' }], isError: false }, false);
+
+    const visible = stripAnsi(
+      `${processOutput.render(120).join('\n')}\n${stat.render(120).join('\n')}\n${generic.render(120).join('\n')}`,
+    );
+    expect(visible).toContain('process');
+    expect(visible).toContain('1234');
+    expect(visible).toContain('quiet-process-demo-1');
+    expect(visible).toContain('stat');
+    expect(visible).toContain('Type: file Size: 123 bytes Modified: today');
+    expect(visible).toContain('custom_tool');
+    expect(visible).toContain('action: exit');
+    expect(visible).toContain('count: 2');
+  });
+
+  it('uses the active continuation dot while a continuation is still streaming', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true, 'src/other.ts');
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('●─');
+    expect(visible).not.toContain('╰─');
+  });
+
+  it('renders deliberate browser skill workspace and process summaries', () => {
+    const cases: Array<[string, Record<string, unknown>, string[]]> = [
+      ['browser_type', { ref: 'e12', text: 'hello' }, ['browser_type', 'e12', '"hello"']],
+      [
+        'skill_read',
+        { skillName: 'mastra-docs', path: 'references/style.md' },
+        ['skill_read', 'mastra-docs references/style.md'],
+      ],
+      ['file_stat', { path: 'src/example.ts' }, ['stat', 'src/example.ts']],
+      ['get_process_output', { pid: '1234' }, ['process', '1234']],
+      ['ast_smart_edit', { path: 'src/example.ts', transform: 'rename' }, ['ast_edit', 'src/example.ts']],
+    ];
+
+    for (const [toolName, args, expectedParts] of cases) {
+      const component = new ToolExecutionComponentEnhanced(
+        toolName,
+        args,
+        { quietDisplayMode: 'quiet', collapsedByDefault: true },
+        ui,
+      );
+      const visible = stripAnsi(component.render(120).join('\n'));
+      for (const expected of expectedParts) expect(visible).toContain(expected);
+      expect(visible).not.toContain('path=');
+      expect(visible).not.toContain('pid=');
+    }
   });
 });
 
