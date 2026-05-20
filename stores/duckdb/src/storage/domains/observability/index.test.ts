@@ -1,11 +1,32 @@
+import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
+
+let sharedSuiteStore: DuckDBStore | undefined;
+
+createObservabilityVNextTests({
+  capabilities: {
+    label: 'DuckDB',
+    preferredStrategy: 'event-sourced',
+  },
+  getStorage: async () => {
+    sharedSuiteStore = new DuckDBStore({ path: ':memory:' });
+    await sharedSuiteStore.init();
+    return (await sharedSuiteStore.getStore('observability')) as ObservabilityStorage;
+  },
+  cleanup: async storage => {
+    await storage.dangerouslyClearAll();
+    await sharedSuiteStore?.db.close();
+    sharedSuiteStore = undefined;
+  },
+});
 
 async function setupLegacyStore(): Promise<DuckDBStore> {
   const legacyStore = new DuckDBStore({ path: ':memory:' });
