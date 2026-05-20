@@ -39,14 +39,18 @@ export class SchedulerWorker extends MastraWorker {
       return;
     }
 
+    // Only forward keys the caller actually set. WorkflowScheduler applies its
+    // own defaults via `??`, so passing explicit `undefined` here would defeat
+    // those defaults — including the 10s tick interval.
+    const schedulerConfig: SchedulerWorkerConfig = {};
+    if (this.#config.tickIntervalMs !== undefined) schedulerConfig.tickIntervalMs = this.#config.tickIntervalMs;
+    if (this.#config.batchSize !== undefined) schedulerConfig.batchSize = this.#config.batchSize;
+    if (this.#config.onError !== undefined) schedulerConfig.onError = this.#config.onError;
+
     this.#scheduler = new WorkflowScheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: {
-        tickIntervalMs: this.#config.tickIntervalMs,
-        batchSize: this.#config.batchSize,
-        onError: this.#config.onError,
-      },
+      config: schedulerConfig,
     });
   }
 

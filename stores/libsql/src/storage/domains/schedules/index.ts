@@ -92,6 +92,16 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
+
+    // Indexes that back the scheduler's hot path:
+    // - (status, next_fire_at) matches listDueSchedules (status filter + next_fire_at range/sort)
+    // - (schedule_id, actual_fire_at) matches listTriggers (schedule_id filter + actual_fire_at sort)
+    await this.#client.execute(
+      `CREATE INDEX IF NOT EXISTS idx_schedules_status_next_fire_at ON "${TABLE_SCHEDULES}" ("status", "next_fire_at")`,
+    );
+    await this.#client.execute(
+      `CREATE INDEX IF NOT EXISTS idx_schedule_triggers_schedule_actual_fire ON "${TABLE_SCHEDULE_TRIGGERS}" ("schedule_id", "actual_fire_at")`,
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {

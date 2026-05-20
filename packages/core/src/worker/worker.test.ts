@@ -137,6 +137,35 @@ describe('SchedulerWorker', () => {
     expect(worker.isRunning).toBe(false);
     await worker.stop(); // idempotent
   });
+
+  // The worker must not forward `tickIntervalMs: undefined` to the scheduler
+  // when the user gave no config — otherwise the 10s default is bypassed and
+  // `setInterval` runs at Node's ~1ms minimum, hammering storage.
+  it('uses the scheduler default tick interval when no config is supplied', async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const worker = new SchedulerWorker();
+    const deps = createMockDeps();
+    // Give the worker a schedules store so it actually arms the interval.
+    deps._storage.getStore.mockImplementation(async (name: string) =>
+      name === 'schedules'
+        ? {
+            listDueSchedules: vi.fn().mockResolvedValue([]),
+            updateScheduleNextFire: vi.fn().mockResolvedValue(false),
+            recordTrigger: vi.fn().mockResolvedValue(undefined),
+          }
+        : undefined,
+    );
+
+    try {
+      await worker.init(deps);
+      await worker.start();
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy.mock.calls[0]![1]).toBe(10_000);
+    } finally {
+      await worker.stop();
+      setIntervalSpy.mockRestore();
+    }
+  });
 });
 
 describe('BackgroundTaskWorker', () => {

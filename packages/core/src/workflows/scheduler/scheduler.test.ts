@@ -271,4 +271,33 @@ describe('WorkflowScheduler', () => {
     await scheduler.stop();
     expect(scheduler.isRunning).toBe(false);
   });
+
+  // A caller that forwards an optional config can easily end up passing
+  // `{ tickIntervalMs: undefined }`. The constructor must still use the
+  // 10s default, not let `undefined` reach `setInterval` (which Node clamps
+  // to ~1ms — that's how this regressed in production).
+  it('ignores explicit undefined fields in config (uses defaults instead)', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: {
+        tickIntervalMs: undefined,
+        batchSize: undefined,
+        onError: undefined,
+      } as any,
+    });
+
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    try {
+      await scheduler.start();
+      // Should have armed the interval with the 10s default, never with undefined.
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy.mock.calls[0]![1]).toBe(10_000);
+    } finally {
+      await scheduler.stop();
+      setIntervalSpy.mockRestore();
+    }
+  });
 });

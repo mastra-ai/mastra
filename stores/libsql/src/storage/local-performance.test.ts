@@ -146,6 +146,28 @@ describe('LibSQLStore local performance initialization', () => {
     );
   });
 
+  // The scheduler tick polls `listDueSchedules` (status + next_fire_at) every
+  // 10s. Without an index this degrades to a full table scan + sort on every
+  // tick. listTriggers does an analogous read on (schedule_id, actual_fire_at).
+  it('creates schedules indexes for scheduler hot paths', async () => {
+    const { client, statements } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({
+      id: 'local-file-schedules-indexes',
+      url: 'file:local-performance-schedules-indexes.db',
+    });
+    await store.init();
+
+    const executedSql = sqls(statements);
+    expect(executedSql).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_schedules_status_next_fire_at ON "mastra_schedules" ("status", "next_fire_at")',
+    );
+    expect(executedSql).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_schedule_triggers_schedule_actual_fire ON "mastra_schedule_triggers" ("schedule_id", "actual_fire_at")',
+    );
+  });
+
   it('caches local file DB init after success', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);

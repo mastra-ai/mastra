@@ -45,10 +45,15 @@ export class WorkflowScheduler extends MastraBase {
     super({ component: RegisteredLogger.WORKFLOW, name: 'WorkflowScheduler' });
     this.#schedulesStore = schedulesStore;
     this.#pubsub = pubsub;
+    // Spread caller config first, then apply defaults — order matters.
+    // If the caller passes `{ tickIntervalMs: undefined }` (easy to do when
+    // forwarding optional fields from another config object), the explicit
+    // `undefined` would otherwise overwrite the default and reach
+    // `setInterval(fn, undefined)`, which Node clamps to ~1ms.
     this.#config = {
+      ...config,
       tickIntervalMs: config?.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS,
       batchSize: config?.batchSize ?? DEFAULT_BATCH_SIZE,
-      ...config,
     };
   }
 
