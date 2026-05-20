@@ -184,6 +184,7 @@ export interface GithubPRSubscriptionMetadata {
   lastCommentFingerprints?: Record<string, { updatedAt: string; bodyFingerprint: string }>;
   lastReviewTimestamp?: string;
   lastPrStateFingerprint?: string;
+  lastMergeConflictFingerprint?: string;
   lastNotificationUpdatedAt?: string;
   seenNotificationIds?: string[];
   lastErrorFingerprint?: string;
@@ -247,6 +248,9 @@ interface GithubPRSnapshot {
   merged?: boolean;
   closedAt?: string;
   mergedAt?: string;
+  mergeable?: boolean | string | null;
+  mergeableState?: string;
+  headSha?: string;
   failedChecks: Array<{ name: string; status: string; url?: string }>;
   comments: Array<{ id: string; body?: string; author?: string; createdAt?: string; updatedAt?: string; url?: string }>;
   reviews: Array<{ id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string }>;
@@ -576,6 +580,11 @@ function getCachedPrConflictDeliveryKey(notification: GithubInboxNotification) {
   return `pr-conflict:${notification.prMergeableState ?? 'conflict'}:${notification.prHeadSha ?? notification.updatedAt}`;
 }
 
+function getSnapshotPrConflictFingerprint(snapshot: GithubPRSnapshot) {
+  if (!hasSnapshotMergeConflict(snapshot)) return undefined;
+  return `pr-conflict:${snapshot.mergeableState ?? snapshot.mergeable ?? 'conflict'}:${snapshot.headSha ?? ''}`;
+}
+
 function hasNewFailedCheckFingerprint(notification: GithubInboxNotification, subscription: ActiveSubscription) {
   if (!notification.failedChecks) return false;
   return getFailedChecksFingerprint(notification.failedChecks) !== subscription.lastCheckFingerprint;
@@ -585,9 +594,20 @@ function hasClosedPrState(notification: GithubInboxNotification) {
   return notification.prState?.toLowerCase() === 'closed';
 }
 
+function isMergeConflictState(value: unknown) {
+  if (value === false) return true;
+  if (typeof value !== 'string') return false;
+  return ['conflicting', 'dirty', 'blocked'].includes(value.toLowerCase());
+}
+
 function hasMergeConflict(notification: GithubInboxNotification) {
   if (hasClosedPrState(notification)) return false;
-  return notification.prMergeable === false || notification.prMergeableState?.toLowerCase() === 'dirty';
+  return isMergeConflictState(notification.prMergeable) || isMergeConflictState(notification.prMergeableState);
+}
+
+function hasSnapshotMergeConflict(snapshot: GithubPRSnapshot) {
+  if (snapshot.state?.toLowerCase() === 'closed') return false;
+  return isMergeConflictState(snapshot.mergeable) || isMergeConflictState(snapshot.mergeableState);
 }
 
 function formatReviewState(state: string | undefined) {
@@ -981,6 +1001,7 @@ export class GithubSignals {
           lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
           lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
           lastPrStateFingerprint: getSnapshotPrStateFingerprint(snapshot),
+          lastMergeConflictFingerprint: getSnapshotPrConflictFingerprint(snapshot),
           lastErrorFingerprint: undefined,
           updatedAt: this.#options.now().toISOString(),
         };
@@ -994,6 +1015,7 @@ export class GithubSignals {
         lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
         lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
         lastPrStateFingerprint: getSnapshotPrStateFingerprint(snapshot),
+        lastMergeConflictFingerprint: getSnapshotPrConflictFingerprint(snapshot),
         lastErrorFingerprint: undefined,
         updatedAt: this.#options.now().toISOString(),
       };
@@ -1147,6 +1169,9 @@ export class GithubSignals {
       merged: getBooleanFromPath(pr, ['merged']),
       closedAt: getStringFromPath(pr, ['closed_at']),
       mergedAt: getStringFromPath(pr, ['merged_at']),
+      mergeable: getBooleanFromPath(pr, ['mergeable']) ?? getStringFromPath(pr, ['mergeable']),
+      mergeableState: getStringFromPath(pr, ['mergeable_state']) ?? getStringFromPath(pr, ['mergeStateStatus']),
+      headSha,
       failedChecks: checkRuns
         .map(check => normalizeCheck(check))
         .filter(
@@ -1597,6 +1622,32 @@ export class GithubSignals {
       Object.assign(subscription, reviewAcknowledgement);
       this.#activeSubscriptions.set(subscription.key, reviewAcknowledgement);
       await subscription.persistence?.update(reviewAcknowledgement);
+    }
+
+    const mergeConflictFingerprint = getSnapshotPrConflictFingerprint(snapshot);
+    if (mergeConflictFingerprint !== subscription.lastMergeConflictFingerprint) {
+      const acknowledgedSubscription: ActiveSubscription = {
+        ...subscription,
+        lastMergeConflictFingerprint: mergeConflictFingerprint,
+        lastErrorFingerprint: undefined,
+        nextPollAt: undefined,
+        updatedAt: this.#options.now().toISOString(),
+      };
+      if (mergeConflictFingerprint) {
+        const delivery = await this.#handleNotification(
+          registeredAgent,
+          subscription,
+          {
+            kind: 'pr-conflict',
+            title: 'GitHub PR merge conflict',
+            details: `PR #${subscription.prNumber} has merge conflicts: ${snapshot.title ?? 'GitHub PR'}`,
+            url: snapshot.url,
+          },
+          { acknowledgeAfterDelivery: acknowledgedSubscription },
+        );
+        if (delivery === 'queued') return;
+      }
+      Object.assign(subscription, acknowledgedSubscription);
     }
 
     const prStateFingerprint = getSnapshotPrStateFingerprint(snapshot);

@@ -52,6 +52,9 @@ function createSnapshot({
   merged = false,
   closedAt,
   mergedAt,
+  mergeable,
+  mergeableState,
+  headSha,
   failedChecks = [],
   comments = [],
   reviews = [],
@@ -61,11 +64,26 @@ function createSnapshot({
   merged?: boolean;
   closedAt?: string;
   mergedAt?: string;
+  mergeable?: boolean | string | null;
+  mergeableState?: string;
+  headSha?: string;
   failedChecks?: unknown[];
   comments?: unknown[];
   reviews?: unknown[];
 } = {}) {
-  return { title, state, merged, closedAt, mergedAt, failedChecks, comments, reviews };
+  return {
+    title,
+    state,
+    merged,
+    closedAt,
+    mergedAt,
+    mergeable,
+    mergeableState,
+    headSha,
+    failedChecks,
+    comments,
+    reviews,
+  };
 }
 
 type TestSnapshot = ReturnType<typeof createSnapshot>;
@@ -97,7 +115,9 @@ function createSnapshotCommandRunner(snapshots: TestSnapshot[], permissions: Rec
           merged: currentSnapshot.merged,
           closed_at: currentSnapshot.closedAt,
           merged_at: currentSnapshot.mergedAt,
-          head: { sha: `sha-${snapshotIndex}` },
+          mergeable: currentSnapshot.mergeable,
+          mergeable_state: currentSnapshot.mergeableState,
+          head: { sha: currentSnapshot.headSha ?? `sha-${snapshotIndex}` },
         }),
       };
     }
@@ -909,6 +929,54 @@ describe('GithubSignals', () => {
         url: 'https://github.com/mastra-ai/mastra/pull/123',
       },
     });
+    github.destroy();
+  });
+
+  it('emits snapshot PR conflict notifications when no inbox notification changes', async () => {
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+    ]);
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner, now });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: 'PR #123 has merge conflicts: feat: needs merge work',
+        attributes: expect.objectContaining({
+          type: 'github-pr-conflict',
+          kind: 'pr-conflict',
+          pr: 123,
+          url: 'https://github.com/mastra-ai/mastra/pull/123',
+        }),
+      }),
+      expect.anything(),
+    );
     github.destroy();
   });
 
