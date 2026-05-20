@@ -3092,6 +3092,9 @@ importers:
       strip-json-comments:
         specifier: ^5.0.3
         version: 5.0.3
+      tinyglobby:
+        specifier: ^0.2.16
+        version: 0.2.16
       yocto-spinner:
         specifier: ^1.1.0
         version: 1.2.0
