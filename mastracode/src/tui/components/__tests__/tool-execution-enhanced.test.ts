@@ -727,6 +727,21 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).not.toContain(chalk.blue('then'));
   });
 
+  it('preserves standalone ampersands in quiet shell command footers', () => {
+    const command = 'sleep 1 & wait && echo ok 2>&1';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(command);
+    expect(output).toContain(theme.fg('muted', '&'));
+    expect(output).toContain(theme.fg('muted', '>'));
+  });
+
   it('wraps long quiet shell commands in the footer instead of truncating them', () => {
     const command =
       'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot';

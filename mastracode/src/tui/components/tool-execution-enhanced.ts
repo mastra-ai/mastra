@@ -509,14 +509,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private tokenizeQuietShellCommand(command: string): Array<{ text: string; color: (value: string) => string }> {
-    const tokens = command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;()<>]|[^\s|;&()<>]+/g) ?? [''];
+    const tokens =
+      command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;&()<>]|[^\s|;&()<>]+/g) ?? [''];
 
     return tokens.map(token => {
       if (/^\s+$/.test(token)) return { text: token, color: (value: string) => value };
       if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
         return { text: token, color: chalk.white };
       }
-      if (token === '&&' || token === '||' || token === '|' || token === ';') {
+      if (token === '&&' || token === '||' || token === '|' || token === ';' || token === '&') {
         return { text: token, color: (value: string) => theme.fg('muted', value) };
       }
       if (token === '(' || token === ')' || token === '<' || token === '>') {
