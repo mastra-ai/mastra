@@ -255,6 +255,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
+        reconcileChatBoundarySpacers(state.chatContainer);
 
         state.streamingComponent = new AssistantMessageComponent(
           undefined,

@@ -230,6 +230,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
+    reconcileToolBoundaries(ctx);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
@@ -345,6 +346,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
+    reconcileToolBoundaries(ctx);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
