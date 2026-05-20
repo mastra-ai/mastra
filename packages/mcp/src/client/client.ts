@@ -178,6 +178,51 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
 }
 
 /**
+ * Convert MCP CallToolResult content to AI SDK multimodal format for toModelOutput.
+ * Maps MCP image/audio content parts to { type: 'media', data, mediaType } so the
+ * model receives native multimodal tool results instead of serialized JSON.
+ *
+ * Returns undefined when the result has no multimodal content, which signals
+ * to the framework that no transformation is needed.
+ */
+function mcpContentToModelOutput(output: unknown): unknown {
+  if (output == null || typeof output !== 'object') return undefined;
+  const res = output as Record<string, unknown>;
+  const content = res.content;
+  if (!Array.isArray(content)) return undefined;
+
+  // Check if any content part is multimodal (image or audio)
+  const hasMultimodal = content.some(
+    (part: unknown) =>
+      part != null &&
+      typeof part === 'object' &&
+      ((part as Record<string, unknown>).type === 'image' || (part as Record<string, unknown>).type === 'audio'),
+  );
+  if (!hasMultimodal) return undefined;
+
+  // Map MCP content parts to AI SDK content format
+  const value = content
+    .map((part: unknown) => {
+      if (part == null || typeof part !== 'object') return null;
+      const p = part as Record<string, unknown>;
+      switch (p.type) {
+        case 'text':
+          return { type: 'text' as const, text: String(p.text ?? '') };
+        case 'image':
+          return { type: 'media' as const, data: String(p.data ?? ''), mediaType: String(p.mimeType ?? 'image/png') };
+        case 'audio':
+          return { type: 'media' as const, data: String(p.data ?? ''), mediaType: String(p.mimeType ?? 'audio/wav') };
+        default:
+          // For resource/resource_link/unknown types, serialize as text
+          return { type: 'text' as const, text: JSON.stringify(p) };
+      }
+    })
+    .filter(Boolean);
+
+  return { type: 'content', value };
+}
+
+/**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
  * This class handles the low-level connection, transport management, and protocol
@@ -807,6 +852,7 @@ export class InternalMastraMCPClient extends MastraBase {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
           },
+          toModelOutput: mcpContentToModelOutput,
           execute: async (
             input: any,
             context?: {
