@@ -1,5 +1,388 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.9
+
+### Patch Changes
+
+- Moved the `Dialog` component to Base UI. The public API is unchanged — `asChild` on `DialogTrigger` and `DialogClose` still works the same way, and open/close animations behave as before. ([#16821](https://github.com/mastra-ai/mastra/pull/16821))
+
+## 29.0.0-alpha.8
+
+### Minor Changes
+
+- Added `ContextMenu` for right-click interactions. Supports submenus, checkbox and radio items, keyboard shortcuts, and a `destructive` variant for dangerous actions like delete. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  import { ContextMenu } from '@mastra/playground-ui';
+
+  <ContextMenu>
+    <ContextMenu.Trigger className="…">Right click here</ContextMenu.Trigger>
+    <ContextMenu.Content>
+      <ContextMenu.Item>Rename</ContextMenu.Item>
+      <ContextMenu.Item variant="destructive">Delete</ContextMenu.Item>
+    </ContextMenu.Content>
+  </ContextMenu>;
+  ```
+
+### Patch Changes
+
+- Added a `destructive` variant on `DropdownMenu.Item` to highlight dangerous actions like delete. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  <DropdownMenu.Item variant="destructive">Delete project</DropdownMenu.Item>
+  ```
+
+- `PopoverContent` no longer forwards the underlying library's auto-focus event handlers (`onOpenAutoFocus`, `onCloseAutoFocus`). To control focus when the popover opens or closes, use `initialFocus` and `finalFocus`. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  // Before
+  <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} />
+
+  // After
+  <PopoverContent initialFocus={false} />
+  ```
+
+- Migrated the Slider component to base-ui with a refined neutral visual design. ([#16788](https://github.com/mastra-ai/mastra/pull/16788))
+
+  **What changed**
+  - Replaced `@radix-ui/react-slider` with `@base-ui/react/slider` as the underlying primitive
+  - Refreshed visuals: thin rounded thumb with white border and neutral inside, opacity-based track that adapts to any surface, neutral filled indicator (no green/accent color)
+  - Larger click target via padded `Slider.Control` and an invisible hit area on the thumb so it is easier to grab
+  - Added `cursor-pointer` on the control and `cursor-not-allowed` when disabled
+  - Removed the now unused `@radix-ui/react-slider` and `@radix-ui/react-tabs` dependencies
+
+  **API compatibility**
+
+  The public API is preserved. `onValueChange` and `onValueCommitted` are wrapped so consumers always receive `number[]`, even though base-ui returns `number | number[]` internally. Existing call sites like `<Slider value={[temperature]} onValueChange={value => setTemperature(value[0])} />` continue to work without changes.
+
+- Updated dependencies [[`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509)]:
+  - @mastra/core@1.36.0-alpha.8
+  - @mastra/client-js@1.20.0-alpha.8
+  - @mastra/react@0.4.0-alpha.8
+
+## 29.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0)]:
+  - @mastra/core@1.36.0-alpha.7
+  - @mastra/react@0.4.0-alpha.7
+  - @mastra/client-js@1.20.0-alpha.7
+
+## 29.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337)]:
+  - @mastra/core@1.36.0-alpha.6
+  - @mastra/client-js@1.20.0-alpha.6
+  - @mastra/react@0.4.0-alpha.6
+
+## 29.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+  - @mastra/client-js@1.20.0-alpha.5
+  - @mastra/react@0.4.0-alpha.5
+
+## 29.0.0-alpha.4
+
+### Minor Changes
+
+- Refreshed Button + Card design system tokens. ([#16769](https://github.com/mastra-ai/mastra/pull/16769))
+
+  **Button variants (breaking)**: consolidated to `default`, `primary`, `outline`, `ghost`. The `cta`, `contrast`, and unused `link` variants have been removed. `primary` now uses a high-contrast `neutral6` fill instead of `surface4`, so it reads clearly as the form submit action in both themes.
+
+  ```tsx
+  // Before
+  <Button variant="cta">Save</Button>
+  <Button variant="contrast">Done</Button>
+  <Button variant="link">Open</Button>
+
+  // After
+  <Button variant="primary">Save</Button>     // cta → primary (no brand green; theme-aware high contrast)
+  <Button variant="primary">Done</Button>     // contrast → primary (same recipe, renamed)
+  <Button as="a" href="…" variant="ghost">Open</Button>  // link → ghost (or plain <a> for inline text links)
+  ```
+
+  **New tokens**: `--surface-overlay-soft` and `--surface-overlay-strong` — alpha overlays of the opposite-theme color, used by `SectionCard` header strip and `DashboardCard` fill so cards read consistently on any surface.
+
+  **Other**:
+  - DashboardCard radius reduced to `rounded-xl` and padding tightened to `px-4 py-3` for better grid density.
+  - SectionCard wrapper no longer fills its background — header strip + border carry definition.
+  - Dark `surface2` / `surface3` darkened slightly (16.84% → 16%, 19.13% → 18%) so the main frame reads as a distinct surface.
+  - Dark `border1` / `border2` alphas bumped (6% → 7%, 10% → 11%) for closer dark/light parity.
+  - Removed deprecated `--section-card-*` tokens and their `@utility` blocks.
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/client-js@1.20.0-alpha.4
+  - @mastra/react@0.4.0-alpha.4
+
+## 29.0.0-alpha.3
+
+### Minor Changes
+
+- Removed `ButtonWithTooltip` from `@mastra/playground-ui`. Use `Button` with the `tooltip` prop instead. ([#16719](https://github.com/mastra-ai/mastra/pull/16719))
+
+  **Migration**
+
+  ```tsx
+  // before
+  import { ButtonWithTooltip } from '@mastra/playground-ui';
+
+  <ButtonWithTooltip tooltipContent="Search">
+    <Search />
+  </ButtonWithTooltip>;
+
+  // after
+  import { Button } from '@mastra/playground-ui';
+
+  <Button tooltip="Search">
+    <Search />
+  </Button>;
+  ```
+
+  `tooltip` supports the same values as `tooltipContent`. Icon-only buttons that pass a string `tooltip` now also get it as their `aria-label` automatically, matching how labelled controls have always behaved. Pass an explicit `aria-label` to override.
+
+### Patch Changes
+
+- The Traces list now updates live via delta polling. Previously the list was refetched every 10 seconds, replacing the whole page with no signal about what changed; now new traces appear within a few seconds of being created, with a brief highlight to draw attention. Status changes on already-visible rows (running → success / error) also propagate without intervention, and returning to the tab after being idle re-syncs from a fresh cursor. ([#16727](https://github.com/mastra-ai/mastra/pull/16727))
+
+  **New `useTraces` return fields**
+  - `isRefetching` — true while any meaningful refetch is in flight. Use it to drive a heartbeat indicator.
+  - `autoRefetch` / `setAutoRefetch` — pause / resume all automatic polling so the consumer can render an opt-out toggle.
+  - `recentlyAddedKeys` — `Set<string>` of `traceId:spanId` for rows that just arrived via delta polling. Drives the temporary highlight in `TracesListView`.
+
+  **New polling config**
+
+  Every timing in the hook is tunable per-instance via a new `polling` option:
+
+  ```ts
+  import { useTraces, type TracesPollingConfig } from '@mastra/playground-ui';
+
+  useTraces({
+    filters,
+    listMode,
+    polling: {
+      deltaPollIntervalMs: 10_000,
+      idleGuardThresholdMs: 5 * 60_000,
+    },
+  });
+  ```
+
+  Omitted fields fall through to the defaults (delta poll every 5s, idle reset after 15 min, status refresh every 60s, etc).
+
+  **TracesListView**
+
+  New optional `recentlyAddedKeys?: Set<string>` prop. Rows whose `traceId:spanId` is in the set get the `animate-row-highlight` class — a brief fade-out to transparent, added to `index.css`.
+
+  **Compatibility**
+
+  Requires `@mastra/server` and `@mastra/client-js` at the versions that ship the observability delta-polling endpoints, and a store that opts into delta polling (`@mastra/clickhouse`, `@mastra/duckdb`, and the in-memory store today). When unavailable — older server or a store without delta capability — the hook silently falls back to page-mode interval refetching. No consumer changes required.
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+  - @mastra/client-js@1.20.0-alpha.3
+  - @mastra/react@0.4.0-alpha.3
+
+## 29.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`6b25032`](https://github.com/mastra-ai/mastra/commit/6b250329fa4795b4d085cba4077c7998893c1d59), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/client-js@1.20.0-alpha.2
+  - @mastra/react@0.4.0-alpha.2
+
+## 29.0.0-alpha.1
+
+### Patch Changes
+
+- Moved the Level icon from its own column into the Name column, next to the trace name, on the Observability traces list. ([#16712](https://github.com/mastra-ai/mastra/pull/16712))
+
+- Added `align` and `stack` variants to `PageLayout.Row`. Use `stack="responsive"` for top bars that should collapse to a vertical stack on narrow viewports, and `align="center"` to vertically center children. Applied the new variants to the Prompts and Workflows top bars so the search field and primary action share a single row on desktop and stack on mobile. ([#16714](https://github.com/mastra-ai/mastra/pull/16714))
+
+  ```tsx
+  <PageLayout.Row align="center" stack="responsive">
+    <ListSearch ... />
+    <Button ...>Create</Button>
+  </PageLayout.Row>
+  ```
+
+- Fixed double-counted cache token costs in the Metrics dashboard. The Model Usage & Cost table and the Token Usage by Agent table were summing cache read/write costs on top of the total input cost, which already includes them. ([#16737](https://github.com/mastra-ai/mastra/pull/16737))
+
+- Migrated the Tooltip primitive to Base UI while preserving the existing API. The popup explicitly sets `role="tooltip"` so consumers can keep querying it via `getByRole('tooltip')` (Base UI does not add this role automatically). Existing `<TooltipTrigger asChild>` usage continues to work unchanged, and Base UI's native `render` prop is now also supported on `TooltipTrigger` so consumers wrapping anchors, custom router links, or icons can pass the element directly without an `asChild` adapter: ([#16713](https://github.com/mastra-ai/mastra/pull/16713))
+
+  ```tsx
+  // Still supported
+  <TooltipTrigger asChild>
+    <Button>Save</Button>
+  </TooltipTrigger>
+
+  // New: pass the element via Base UI's native API
+  <TooltipTrigger render={<Button>Save</Button>} />
+  ```
+
+  Also fixed the arrow rendering so the diagonal stroke meets the popup outline at the exact same pixel center on every side, removing the ~1px seam previously visible where the arrow joined the popup edge.
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`9692d60`](https://github.com/mastra-ai/mastra/commit/9692d60298e8f629d10de54867642a38955fb708), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25)]:
+  - @mastra/core@1.36.0-alpha.1
+  - @mastra/client-js@1.20.0-alpha.1
+  - @mastra/react@0.4.0-alpha.1
+
+## 29.0.0-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+  - @mastra/client-js@1.20.0-alpha.0
+  - @mastra/react@0.4.0-alpha.0
+
+## 28.0.1
+
+### Patch Changes
+
+- Fixed the Observability traces page on storage providers that don't support the Branches list mode. The page now falls back to Traces mode, hides the Branches option in the filter, and shows a dismissible notice instead of a full-screen error. ([#16601](https://github.com/mastra-ai/mastra/pull/16601))
+
+- Improved the Observability traces list to make the with-subtraces view more discoverable. ([#16643](https://github.com/mastra-ai/mastra/pull/16643))
+  - **Added:** A **Level** column whose icon distinguishes top-level **Trace** rows from nested **Subtrace** rows.
+  - **Added:** A tooltip legend on the **Level** header showing both icons side by side.
+  - **Added:** A standalone **Show subtraces** toggle next to **Add Filter** — off keeps the default top-level view, on includes subtraces.
+  - **Removed:** The **List mode** entry from the **Add Filter** menu (now driven by the toggle).
+
+  **Usage:** Open Observability → Traces → switch **Show subtraces** on. The **Level** column updates: top-level rows keep the Trace icon, nested rows show the Subtrace (↳) icon. The toggle is hidden automatically when the active storage provider doesn't support subtraces.
+
+- Removed the "Group traces by thread" option from the Observability traces page. The list now always displays a flat view of traces, without thread-id subheaders. To narrow results to a specific thread, use the Thread ID property in the Add filter menu (open Observability → Traces → Add filter → Thread ID → paste the threadId). ([#16633](https://github.com/mastra-ai/mastra/pull/16633))
+
+- Polished the property filter dropdown so the chevron icon next to each option keeps the same shape when its side panel opens ([#16635](https://github.com/mastra-ai/mastra/pull/16635))
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+  - @mastra/client-js@1.19.1
+  - @mastra/react@0.3.3
+
+## 28.0.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0-alpha.3
+  - @mastra/client-js@1.19.1-alpha.3
+  - @mastra/react@0.3.3-alpha.3
+
+## 28.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04)]:
+  - @mastra/core@1.35.0-alpha.2
+  - @mastra/client-js@1.19.1-alpha.2
+  - @mastra/react@0.3.3-alpha.2
+
+## 28.0.1-alpha.1
+
+### Patch Changes
+
+- Fixed the Observability traces page on storage providers that don't support the Branches list mode. The page now falls back to Traces mode, hides the Branches option in the filter, and shows a dismissible notice instead of a full-screen error. ([#16601](https://github.com/mastra-ai/mastra/pull/16601))
+
+- Improved the Observability traces list to make the with-subtraces view more discoverable. ([#16643](https://github.com/mastra-ai/mastra/pull/16643))
+  - **Added:** A **Level** column whose icon distinguishes top-level **Trace** rows from nested **Subtrace** rows.
+  - **Added:** A tooltip legend on the **Level** header showing both icons side by side.
+  - **Added:** A standalone **Show subtraces** toggle next to **Add Filter** — off keeps the default top-level view, on includes subtraces.
+  - **Removed:** The **List mode** entry from the **Add Filter** menu (now driven by the toggle).
+
+  **Usage:** Open Observability → Traces → switch **Show subtraces** on. The **Level** column updates: top-level rows keep the Trace icon, nested rows show the Subtrace (↳) icon. The toggle is hidden automatically when the active storage provider doesn't support subtraces.
+
+- Removed the "Group traces by thread" option from the Observability traces page. The list now always displays a flat view of traces, without thread-id subheaders. To narrow results to a specific thread, use the Thread ID property in the Add filter menu (open Observability → Traces → Add filter → Thread ID → paste the threadId). ([#16633](https://github.com/mastra-ai/mastra/pull/16633))
+
+- Polished the property filter dropdown so the chevron icon next to each option keeps the same shape when its side panel opens ([#16635](https://github.com/mastra-ai/mastra/pull/16635))
+
+- Updated dependencies [[`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2)]:
+  - @mastra/core@1.35.0-alpha.1
+  - @mastra/client-js@1.19.1-alpha.1
+  - @mastra/react@0.3.3-alpha.1
+
+## 28.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7)]:
+  - @mastra/core@1.34.1-alpha.0
+  - @mastra/client-js@1.19.1-alpha.0
+  - @mastra/react@0.3.3-alpha.0
+
+## 28.0.0
+
+### Minor Changes
+
+- Added a List mode filter to the Observability traces page for switching between Traces and Branches mode, and changed the default to Traces mode. Previously, the page opened in Branches mode; now it opens in Traces mode, and users can switch modes via the new "List mode" property in the Add filter menu. For example: open Observability → Traces (now defaults to Traces) → Add filter → List mode → pick Branches or Traces. ([#16587](https://github.com/mastra-ai/mastra/pull/16587))
+
+### Patch Changes
+
+- Removed the inset top gloss from the `shadow-dialog` token. The gloss read as a faint highlight band along the top edge of dropdown menus, popovers, selects, comboboxes, dialogs, tooltips, side dialogs and the main app container in dark mode. The token now applies a drop-shadow only and is consistent across light and dark themes. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Restyled `MainSidebar` and swapped sidebar icons to the new Figma design system set. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+  - Section titles are larger and medium-weight (`text-ui-sm`, `font-medium`), lowercase, muted — replacing the previous uppercase + wide-tracking treatment. Underline divider beneath the title removed in both expanded and collapsed states. Active indicator bar on the left edge removed.
+  - Nav items render flush: icons align horizontally with the section title, hover/active state now uses theme-aware sidebar surface tokens without item borders or shadows. The legacy `indent` option is still accepted but no longer changes layout.
+  - New sidebar icons: `WorkspacesIcon`, `RequestContextIcon`, `ScorersIcon`, `DatasetsIcon`, `ExperimentsIcon`, `MetricsIcon`. Existing icons `AgentIcon`, `PromptIcon`, `WorkflowIcon`, `ProcessorIcon`, `McpServerIcon`, `ToolsIcon`, `LogsIcon`, `TraceIcon` updated to match the Figma artwork. All icons accept `React.SVGProps<SVGSVGElement>` and inherit color via `currentColor`.
+
+- Improved Studio main content framing, persistent page breadcrumbs, accessible page headings, panel layering, and theme-aware navigation/card contrast. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Fixed a React/React DOM version mismatch that prevented Storybook from rendering in `@mastra/playground-ui`. ([#16529](https://github.com/mastra-ai/mastra/pull/16529))
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0
+  - @mastra/client-js@1.19.0
+  - @mastra/react@0.3.2
+
+## 28.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804)]:
+  - @mastra/core@1.34.0-alpha.3
+  - @mastra/client-js@1.19.0-alpha.3
+  - @mastra/react@0.3.2-alpha.3
+
+## 27.1.0-alpha.2
+
+### Minor Changes
+
+- Added a List mode filter to the Observability traces page for switching between Traces and Branches mode, and changed the default to Traces mode. Previously, the page opened in Branches mode; now it opens in Traces mode, and users can switch modes via the new "List mode" property in the Add filter menu. For example: open Observability → Traces (now defaults to Traces) → Add filter → List mode → pick Branches or Traces. ([#16587](https://github.com/mastra-ai/mastra/pull/16587))
+
+### Patch Changes
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/client-js@1.18.2-alpha.2
+  - @mastra/react@0.3.2-alpha.2
+
+## 27.0.2-alpha.1
+
+### Patch Changes
+
+- Removed the inset top gloss from the `shadow-dialog` token. The gloss read as a faint highlight band along the top edge of dropdown menus, popovers, selects, comboboxes, dialogs, tooltips, side dialogs and the main app container in dark mode. The token now applies a drop-shadow only and is consistent across light and dark themes. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Restyled `MainSidebar` and swapped sidebar icons to the new Figma design system set. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+  - Section titles are larger and medium-weight (`text-ui-sm`, `font-medium`), lowercase, muted — replacing the previous uppercase + wide-tracking treatment. Underline divider beneath the title removed in both expanded and collapsed states. Active indicator bar on the left edge removed.
+  - Nav items render flush: icons align horizontally with the section title, hover/active state now uses theme-aware sidebar surface tokens without item borders or shadows. The legacy `indent` option is still accepted but no longer changes layout.
+  - New sidebar icons: `WorkspacesIcon`, `RequestContextIcon`, `ScorersIcon`, `DatasetsIcon`, `ExperimentsIcon`, `MetricsIcon`. Existing icons `AgentIcon`, `PromptIcon`, `WorkflowIcon`, `ProcessorIcon`, `McpServerIcon`, `ToolsIcon`, `LogsIcon`, `TraceIcon` updated to match the Figma artwork. All icons accept `React.SVGProps<SVGSVGElement>` and inherit color via `currentColor`.
+
+- Improved Studio main content framing, persistent page breadcrumbs, accessible page headings, panel layering, and theme-aware navigation/card contrast. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Fixed a React/React DOM version mismatch that prevented Storybook from rendering in `@mastra/playground-ui`. ([#16529](https://github.com/mastra-ai/mastra/pull/16529))
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/client-js@1.18.2-alpha.1
+  - @mastra/react@0.3.2-alpha.1
+
 ## 27.0.2-alpha.0
 
 ### Patch Changes

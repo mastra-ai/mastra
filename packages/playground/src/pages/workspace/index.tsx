@@ -1,5 +1,5 @@
 import {
-  ButtonWithTooltip,
+  Button,
   ErrorState,
   NoDataPageLayout,
   PageLayout,
@@ -367,13 +367,9 @@ export default function Workspace() {
       {hasSearchCapability && (
         <PageLayout.TopArea>
           <PageLayout.Row className="justify-end">
-            <ButtonWithTooltip
-              onClick={() => setShowSearch(!showSearch)}
-              tooltipContent="Search workspace"
-              aria-label="Search workspace"
-            >
+            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
               <Search />
-            </ButtonWithTooltip>
+            </Button>
           </PageLayout.Row>
         </PageLayout.TopArea>
       )}

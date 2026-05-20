@@ -253,6 +253,11 @@ export interface AgentConfig<
    */
   description?: string;
   /**
+   * Metadata for classifying or filtering the agent in clients. Can be a static
+   * record or a function that resolves the metadata from the request context.
+   */
+  metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
+  /**
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
    */
@@ -394,6 +399,11 @@ export interface AgentConfig<
    * Reference to the Mastra runtime instance (injected automatically).
    */
   mastra?: Mastra;
+  /**
+   * Pub/sub system for coordinating runtime services such as thread signals.
+   * When omitted, the agent uses its Mastra instance pubsub or the default in-memory pubsub.
+   */
+  pubsub?: PubSub;
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */

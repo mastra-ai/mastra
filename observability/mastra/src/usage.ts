@@ -185,3 +185,59 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
 function sumDefinedValues<T extends object, K extends keyof T>(obj: T, keys: K[]): number {
   return keys.reduce((sum, key) => sum + ((obj[key] as number | undefined) ?? 0), 0);
 }
+
+function addOptional(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined && b === undefined) return undefined;
+  return (a ?? 0) + (b ?? 0);
+}
+
+function mergeInputDetails(
+  a: InputTokenDetails | undefined,
+  b: InputTokenDetails | undefined,
+): InputTokenDetails | undefined {
+  if (!a) return b ? { ...b } : undefined;
+  if (!b) return { ...a };
+  return {
+    text: addOptional(a.text, b.text),
+    cacheRead: addOptional(a.cacheRead, b.cacheRead),
+    cacheWrite: addOptional(a.cacheWrite, b.cacheWrite),
+    audio: addOptional(a.audio, b.audio),
+    image: addOptional(a.image, b.image),
+  };
+}
+
+function mergeOutputDetails(
+  a: OutputTokenDetails | undefined,
+  b: OutputTokenDetails | undefined,
+): OutputTokenDetails | undefined {
+  if (!a) return b ? { ...b } : undefined;
+  if (!b) return { ...a };
+  return {
+    text: addOptional(a.text, b.text),
+    reasoning: addOptional(a.reasoning, b.reasoning),
+    audio: addOptional(a.audio, b.audio),
+    image: addOptional(a.image, b.image),
+  };
+}
+
+/**
+ * Sum two UsageStats into a new one. Treats undefined fields as zero when
+ * the other side has a value, and preserves undefined when both are absent.
+ * Used to roll up internal model-generation usage onto a visible ancestor
+ * span so cost / token attribution survives internal-span filtering.
+ */
+export function addUsageStats(a: UsageStats | undefined, b: UsageStats): UsageStats {
+  if (!a) {
+    return {
+      ...b,
+      inputDetails: b.inputDetails ? { ...b.inputDetails } : undefined,
+      outputDetails: b.outputDetails ? { ...b.outputDetails } : undefined,
+    };
+  }
+  return {
+    inputTokens: addOptional(a.inputTokens, b.inputTokens),
+    outputTokens: addOptional(a.outputTokens, b.outputTokens),
+    inputDetails: mergeInputDetails(a.inputDetails, b.inputDetails),
+    outputDetails: mergeOutputDetails(a.outputDetails, b.outputDetails),
+  };
+}

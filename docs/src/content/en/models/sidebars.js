@@ -148,6 +148,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/atomic-chat',
+          label: 'Atomic Chat',
+        },
+        {
+          type: 'doc',
           id: 'providers/auriko',
           label: 'Auriko',
         },
@@ -278,6 +283,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/gmicloud',
+          label: 'GMI Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/google-vertex',
           label: 'Google Vertex AI',
         },
@@ -338,6 +348,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
@@ -374,12 +389,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
-          label: 'MiniMax Coding Plan (minimax.io)',
+          label: 'MiniMax Token Plan (minimax.io)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Coding Plan (minimaxi.com)',
+          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',
@@ -415,6 +430,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nano-gpt',
           label: 'NanoGPT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/nearai',
+          label: 'NEAR AI Cloud',
         },
         {
           type: 'doc',
@@ -463,6 +483,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
         },
@@ -505,6 +530,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
+        },
+        {
+          type: 'doc',
+          id: 'providers/routing-run',
+          label: 'routing.run',
         },
         {
           type: 'doc',
@@ -565,6 +595,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/umans-ai-coding-plan',
+          label: 'Umans AI Coding Plan',
         },
         {
           type: 'doc',

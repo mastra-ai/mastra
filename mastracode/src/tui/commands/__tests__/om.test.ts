@@ -23,6 +23,7 @@ function createSettings(overrides?: Partial<GlobalSettings['models']>): GlobalSe
       omObservationThreshold: null,
       omReflectionThreshold: null,
       omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
       ...overrides,
     },

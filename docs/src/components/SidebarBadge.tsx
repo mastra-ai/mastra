@@ -1,7 +1,7 @@
 import React from 'react'
 import styles from './SidebarBadge.module.css'
 
-type BadgeType = 'new' | 'advanced' | 'beta' | 'alpha' | 'experimental' | 'deprecated'
+type BadgeType = 'new' | 'advanced' | 'beta' | 'alpha' | 'deprecated'
 
 interface SidebarBadgeProps {
   type: BadgeType
@@ -18,8 +18,6 @@ export function SidebarBadge({ type }: SidebarBadgeProps) {
         return 'Beta'
       case 'alpha':
         return 'Alpha'
-      case 'experimental':
-        return 'Experimental'
       case 'deprecated':
         return 'Deprecated'
       default:

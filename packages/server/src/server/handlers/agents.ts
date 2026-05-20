@@ -212,6 +212,7 @@ export interface SerializedWorkflow {
 export interface SerializedAgent {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions?: SystemMessage;
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
@@ -524,6 +525,13 @@ async function formatAgentList({
   // Wrap each independent getter so a single failure doesn't abort the whole
   // serialization — the agent will still be listed with safe defaults, and the
   // failure is logged so the user can see what went wrong in `mastra dev`.
+  let metadata: Record<string, unknown> | undefined;
+  if (typeof agent.getMetadata === 'function') {
+    try {
+      metadata = await agent.getMetadata({ requestContext });
+    } catch {}
+  }
+
   let instructions: SystemMessage | undefined;
   try {
     instructions = await agent.getInstructions({ requestContext });
@@ -652,6 +660,7 @@ async function formatAgentList({
     id: agent.id || id,
     name: agent.name,
     description,
+    metadata,
     instructions,
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
@@ -796,6 +805,12 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
+  let metadata: Record<string, unknown> | undefined;
+  if (typeof agent.getMetadata === 'function') {
+    try {
+      metadata = await agent.getMetadata({ requestContext });
+    } catch {}
+  }
 
   const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
@@ -913,6 +928,7 @@ async function formatAgent({
   return {
     name: agent.name,
     description,
+    metadata,
     instructions,
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
@@ -1080,7 +1096,6 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_READ },
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
