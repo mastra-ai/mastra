@@ -178,7 +178,7 @@ describe('createWorkflow() with runner parameter', () => {
       const workflow = createWorkflow({
         id: 'chained-workflow',
         runner,
-      }).then('test-step', step);
+      }).then(step);
 
       expect(workflow).toBeDefined();
       expect(workflow.id).toBe('chained-workflow');

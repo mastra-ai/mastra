@@ -46,7 +46,6 @@ export interface TemporalRunnerOptions {
 
   /**
    * Optional timeout for workflow execution.
-   * Defaults to '1 minute'.
    */
   startToCloseTimeout?: string;
 }

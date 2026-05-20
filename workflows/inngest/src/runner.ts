@@ -42,18 +42,25 @@ export interface InngestRunnerOptions {
    * Optional Inngest flow control configuration.
    * Applied to all workflows using this runner.
    */
-  concurrency?: number;
+  concurrency?: {
+    limit: number;
+  };
+
   rateLimit?: {
     limit: number;
     period: string;
   };
+
   throttle?: {
     limit: number;
     period: string;
+    key?: string;
   };
+
   debounce?: {
     limit: number;
     period: string;
+    key?: string;
   };
   priority?: {
     run: number;
