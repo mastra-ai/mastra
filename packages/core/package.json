@@ -251,6 +251,16 @@
         "default": "./dist/harness/index.cjs"
       }
     },
+    "./harness/v1": {
+      "import": {
+        "types": "./dist/harness/v1/index.d.ts",
+        "default": "./dist/harness/v1/index.js"
+      },
+      "require": {
+        "types": "./dist/harness/v1/index.d.ts",
+        "default": "./dist/harness/v1/index.cjs"
+      }
+    },
     "./hooks": {
       "import": {
         "types": "./dist/hooks/index.d.ts",
