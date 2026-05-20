@@ -712,5 +712,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinOmPacks,
     effectiveDefaults,
     initGithubSignals,
+    githubSignals,
   };
 }
