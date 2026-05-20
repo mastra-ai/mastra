@@ -107,6 +107,11 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
         display_name: name,
         always_online: true,
       },
+      // Required by Slack when `assistant:write` scope is present.
+      // Surfaces the app in the AI Assistant picker.
+      assistant_view: {
+        assistant_description: shortDescription,
+      },
     },
     oauth_config: {
       redirect_urls: [oauthRedirectUrl],

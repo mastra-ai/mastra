@@ -384,6 +384,13 @@ export interface SlackAppManifest {
       url: string;
       usage_hint?: string;
     }>;
+    assistant_view?: {
+      assistant_description: string;
+      suggested_prompts?: Array<{
+        title: string;
+        message: string;
+      }>;
+    };
   };
   oauth_config?: {
     redirect_urls?: string[];

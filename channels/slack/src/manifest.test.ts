@@ -77,6 +77,12 @@ describe('buildManifest', () => {
     expect(scopes).toContain('assistant:write');
   });
 
+  it('declares assistant_view feature (required by assistant:write scope)', () => {
+    const manifest = buildManifest(baseOptions);
+    expect(manifest.features?.assistant_view).toBeDefined();
+    expect(manifest.features?.assistant_view?.assistant_description).toBeTruthy();
+  });
+
   describe('slash commands', () => {
     it('does not include commands scope without slash commands', () => {
       const manifest = buildManifest(baseOptions);
