@@ -186,7 +186,7 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
  *
  * @example
  * ```ts
- * const harness = new Harness({
+ * const harness = new HarnessLegacy({
  *   id: "my-coding-agent",
  *   storage: new LibSQLStore({ url: "file:./data.db" }),
  *   stateSchema: z.object({
@@ -206,7 +206,7 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
  * await harness.sendMessage({ content: "Hello!" })
  * ```
  */
-export class Harness<TState = {}> {
+export class HarnessLegacy<TState = {}> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;

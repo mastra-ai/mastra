@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 function createHarness(storage: InMemoryStore) {
   const agent = new Agent({
@@ -10,7 +10,7 @@ function createHarness(storage: InMemoryStore) {
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],

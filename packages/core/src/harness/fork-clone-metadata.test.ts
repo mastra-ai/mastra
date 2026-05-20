@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
 
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 import type * as Tools from './tools';
 import type { HarnessSubagent } from './types';
 
@@ -53,7 +53,7 @@ describe('Harness fork clone metadata wiring', () => {
       },
     ];
 
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test',
       resourceId: 'parent-resource',
       memory: memoryFactory as unknown as never,
@@ -112,7 +112,7 @@ describe('Harness fork clone metadata wiring', () => {
       },
     ];
 
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test',
       resourceId: 'parent-resource',
       memory: memoryFactory as unknown as never,

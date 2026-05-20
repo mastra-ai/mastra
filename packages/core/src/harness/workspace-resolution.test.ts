@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Workspace } from '../workspace/workspace';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 /**
  * Create a minimal Workspace instance for testing.
@@ -27,7 +27,7 @@ function createAgent() {
 describe('Harness workspace — static instance', () => {
   it('getWorkspace() returns the workspace immediately', () => {
     const ws = createMockWorkspace();
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
@@ -39,7 +39,7 @@ describe('Harness workspace — static instance', () => {
 
   it('hasWorkspace() returns true', () => {
     const ws = createMockWorkspace();
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
@@ -51,7 +51,7 @@ describe('Harness workspace — static instance', () => {
 
   it('resolveWorkspace() returns the existing workspace without calling workspaceFn', async () => {
     const ws = createMockWorkspace();
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
@@ -70,12 +70,12 @@ describe('Harness workspace — static instance', () => {
 describe('Harness workspace — dynamic factory', () => {
   let ws: Workspace;
   let workspaceFn: ReturnType<typeof vi.fn>;
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     ws = createMockWorkspace('dynamic-ws');
     workspaceFn = vi.fn().mockResolvedValue(ws);
-    harness = new Harness({
+    harness = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
@@ -111,7 +111,7 @@ describe('Harness workspace — dynamic factory', () => {
 
   it('resolveWorkspace() returns undefined when factory returns undefined', async () => {
     const nullFactory = vi.fn().mockResolvedValue(undefined);
-    const h = new Harness({
+    const h = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
@@ -128,10 +128,10 @@ describe('Harness workspace — dynamic factory', () => {
 // ===========================================================================
 
 describe('Harness workspace — none configured', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
-    harness = new Harness({
+    harness = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
@@ -160,7 +160,7 @@ describe('buildRequestContext caches dynamic workspace', () => {
   it('getWorkspace() returns the resolved workspace after buildRequestContext runs', async () => {
     const ws = createMockWorkspace('ctx-ws');
     const factory = vi.fn().mockResolvedValue(ws);
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],

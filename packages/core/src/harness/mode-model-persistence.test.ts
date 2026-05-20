@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 type HarnessTestState = { currentModelId?: string };
 
@@ -12,8 +12,8 @@ const agent = () =>
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-function createHarness(storage: InMemoryStore): Harness<HarnessTestState> {
-  return new Harness<HarnessTestState>({
+function createHarness(storage: InMemoryStore): HarnessLegacy<HarnessTestState> {
+  return new HarnessLegacy<HarnessTestState>({
     id: 'test-harness',
     storage,
     stateSchema: undefined,

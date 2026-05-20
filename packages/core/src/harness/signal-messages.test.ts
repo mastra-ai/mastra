@@ -4,7 +4,7 @@ import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 import type { HarnessEvent } from './types';
 
 function createTextStreamModel(responseText: string) {
@@ -45,7 +45,7 @@ function createHarness(
     model: createTextStreamModel('Hello'),
   }),
 ) {
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -346,7 +346,7 @@ describe('Harness signal messages', () => {
       instructions: 'You are a test agent.',
       model: createTextStreamModel('unused'),
     });
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'subscription-tool-harness',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
