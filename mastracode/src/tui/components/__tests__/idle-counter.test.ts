@@ -14,13 +14,13 @@ describe('formatIdleDuration', () => {
 });
 
 describe('IdleCounterComponent', () => {
-  it('stays hidden until one minute idle, then renders like a temporal-gap marker', () => {
+  it('reserves one stable line until one minute idle, then renders like a temporal-gap marker', () => {
     const component = new IdleCounterComponent();
 
-    expect(component.render(80)).toEqual([]);
+    expect(component.render(80)).toEqual(['']);
 
     component.setIdleStartedAt(0, 59_999);
-    expect(component.render(80)).toEqual([]);
+    expect(component.render(80)).toEqual(['']);
 
     component.update(60_000);
     expect(component.render(80).join('\n')).toContain('1 minute idle');
@@ -30,6 +30,6 @@ describe('IdleCounterComponent', () => {
     expect(component.render(80).join('\n')).toContain('1 hour 36 minutes idle');
 
     component.setIdleStartedAt(undefined);
-    expect(component.render(80)).toEqual([]);
+    expect(component.render(80)).toEqual(['']);
   });
 });
