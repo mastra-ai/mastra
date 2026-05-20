@@ -74,7 +74,22 @@ const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
   name: chalk.hex('#c4b5fd'),
 };
 
-const SHELL_CONTROL_WORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac', 'in', 'function']);
+const SHELL_CONTROL_WORDS = new Set([
+  'if',
+  'then',
+  'else',
+  'elif',
+  'fi',
+  'for',
+  'while',
+  'until',
+  'do',
+  'done',
+  'case',
+  'esac',
+  'in',
+  'function',
+]);
 
 export interface ToolExecutionOptions {
   showImages?: boolean;
@@ -882,7 +897,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private formatEmptyCompactContinuationLine(): string {
     const railColor = this.getQuietToolRailColor();
     const isStreamingContinuation = !this.isComplete() && this.quietPreviewLineLimit > 0;
-    if (isStreamingContinuation) return `${chalk.hex(this.getCompactToolAccentColor(this.getCompactToolLabelColor()))('●')}${chalk.hex(railColor)('─')}`;
+    if (isStreamingContinuation)
+      return `${chalk.hex(this.getCompactToolAccentColor(this.getCompactToolLabelColor()))('●')}${chalk.hex(railColor)('─')}`;
     return chalk.hex(railColor)(this.compactToolHasFollowingContinuation ? '├─' : '╰─');
   }
 
@@ -897,10 +913,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsBg = this.getCompactToolArgsBg(toolLabelColor);
     const argsColor = this.getCompactToolArgsColor(toolLabelColor);
     const railColor = this.getQuietToolRailColor();
-    const isStreamingContinuation = this.compactToolContinuation && !this.isComplete() && this.quietPreviewLineLimit > 0;
-    const branch = hasFollowing || isStreamingContinuation
-      ? `${hasPreview || isStreamingContinuation ? chalk.hex(color)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
-      : chalk.hex(railColor)(`╰─${separator}${linePrefix}`);
+    const isStreamingContinuation =
+      this.compactToolContinuation && !this.isComplete() && this.quietPreviewLineLimit > 0;
+    const branch =
+      hasFollowing || isStreamingContinuation
+        ? `${hasPreview || isStreamingContinuation ? chalk.hex(color)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
+        : chalk.hex(railColor)(`╰─${separator}${linePrefix}`);
     const continuationSummary = ` ${summary.slice(linePrefix.length)}`;
     const trail = continuationSummary ? chalk.hex(argsBg)('▌') : '';
     return `${branch}${this.formatCompactSummaryBadge(continuationSummary, argsBg, argsColor)}${trail}`;
@@ -1110,7 +1128,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
   private formatBrowserSummary(): string {
     const argsObj = this.args as Record<string, unknown> | undefined;
-    const first = (...keys: string[]) => keys.map(key => argsObj?.[key]).find(value => value !== undefined && value !== null);
+    const first = (...keys: string[]) =>
+      keys.map(key => argsObj?.[key]).find(value => value !== undefined && value !== null);
     const quote = (value: unknown) => (typeof value === 'string' ? `"${value}"` : String(value));
 
     switch (this.toolName) {
@@ -1119,26 +1138,43 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case 'browser_snapshot': {
         const interactiveOnly = first('interactiveOnly');
         const maxDepth = first('maxDepth');
-        return [interactiveOnly !== undefined ? `interactive=${interactiveOnly}` : '', maxDepth !== undefined ? `depth=${maxDepth}` : '']
+        return [
+          interactiveOnly !== undefined ? `interactive=${interactiveOnly}` : '',
+          maxDepth !== undefined ? `depth=${maxDepth}` : '',
+        ]
           .filter(Boolean)
           .join(' ');
       }
       case 'browser_click':
-        return [this.getFirstStringArg('ref'), first('button') ? `button=${first('button')}` : '', first('clickCount') ? `x${first('clickCount')}` : '']
+        return [
+          this.getFirstStringArg('ref'),
+          first('button') ? `button=${first('button')}` : '',
+          first('clickCount') ? `x${first('clickCount')}` : '',
+        ]
           .filter(Boolean)
           .join(' ');
       case 'browser_type':
-        return [this.getFirstStringArg('ref'), this.getFirstStringArg('text') ? quote(this.getFirstStringArg('text')) : '']
+        return [
+          this.getFirstStringArg('ref'),
+          this.getFirstStringArg('text') ? quote(this.getFirstStringArg('text')) : '',
+        ]
           .filter(Boolean)
           .join(' ');
       case 'browser_press':
         return this.getFirstStringArg('key');
       case 'browser_select':
-        return [this.getFirstStringArg('ref'), first('value', 'label', 'index') !== undefined ? quote(first('value', 'label', 'index')) : '']
+        return [
+          this.getFirstStringArg('ref'),
+          first('value', 'label', 'index') !== undefined ? quote(first('value', 'label', 'index')) : '',
+        ]
           .filter(Boolean)
           .join(' ');
       case 'browser_scroll':
-        return [this.getFirstStringArg('direction'), first('amount') !== undefined ? `${first('amount')}px` : '', this.getFirstStringArg('ref')]
+        return [
+          this.getFirstStringArg('direction'),
+          first('amount') !== undefined ? `${first('amount')}px` : '',
+          this.getFirstStringArg('ref'),
+        ]
           .filter(Boolean)
           .join(' ');
       case 'browser_wait':
@@ -1346,11 +1382,23 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const isLast = index === footerLines.length - 1;
         const suffixFits = isLast && this.stripAnsi(footerLine).length + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
-        this.contentBox.addChild(new Text(renderLine(`${prefix}${footerLine}${suffix}`, value => value), 0, 0));
+        this.contentBox.addChild(
+          new Text(
+            renderLine(`${prefix}${footerLine}${suffix}`, value => value),
+            0,
+            0,
+          ),
+        );
       });
       const lastFooterLine = footerLines[footerLines.length - 1] ?? '';
       if (this.stripAnsi(lastFooterLine).length + footerSuffixWidth > footerWrapWidth) {
-        this.contentBox.addChild(new Text(renderLine(`  ${footerSuffix}`, value => value), 0, 0));
+        this.contentBox.addChild(
+          new Text(
+            renderLine(`  ${footerSuffix}`, value => value),
+            0,
+            0,
+          ),
+        );
       }
       this.contentBox.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, 0, 0));
     };
