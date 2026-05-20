@@ -10,6 +10,7 @@ import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
 import { createFavoritesTests } from './domains/favorites';
 import { createSchedulesTests } from './domains/schedules';
+import { createSkillsTests } from './domains/skills';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -105,6 +106,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createExperimentsTests({ storage });
     createBackgroundTasksTests({ storage });
     createFavoritesTests({ storage });
+    createSkillsTests({ storage });
     createSchedulesTests({ storage });
   });
 }

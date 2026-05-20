@@ -20,6 +20,7 @@ import type {
   SkillVersionSortDirection,
 } from './base';
 import { SkillsStorage } from './base';
+import { skillSnapshotFieldValuesEqual } from './skill-snapshot-field-equal';
 
 export class InMemorySkillsStorage extends SkillsStorage {
   private db: InMemoryDB;
@@ -172,8 +173,10 @@ export class InMemorySkillsStorage extends SkillsStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+          !skillSnapshotFieldValuesEqual(
+            configFields[field as keyof typeof configFields],
+            latestConfig[field as keyof typeof latestConfig],
+          ),
       );
 
       // Only create a new version if something actually changed

@@ -9,6 +9,7 @@ import type {
 } from '../../types';
 import type { SkillVersion, CreateSkillVersionInput, ListSkillVersionsInput, ListSkillVersionsOutput } from './base';
 import { SkillsStorage } from './base';
+import { skillSnapshotFieldValuesEqual } from './skill-snapshot-field-equal';
 
 export class FilesystemSkillsStorage extends SkillsStorage {
   private helpers: FilesystemVersionedHelpers<StorageSkillType, SkillVersion>;
@@ -144,8 +145,10 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+          !skillSnapshotFieldValuesEqual(
+            configFields[field as keyof typeof configFields],
+            latestConfig[field as keyof typeof latestConfig],
+          ),
       );
 
       if (changedFields.length > 0) {
