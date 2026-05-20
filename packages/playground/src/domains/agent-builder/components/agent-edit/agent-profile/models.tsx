@@ -114,7 +114,7 @@ interface ModelListProps {
 
 const ModelList = ({ visibleEntries, selectedProvider, selectedModel, disabled, onChange }: ModelListProps) => {
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid min-h-0 grid-cols-1 content-start gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
       {visibleEntries.map(entry => {
         const cleanedProvider = cleanProviderId(entry.provider);
         const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;

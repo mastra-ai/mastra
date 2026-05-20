@@ -47,10 +47,7 @@ export const AgentProfileTabs = ({
   const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
 
   return (
-    <div
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
-      data-testid="agent-profile-tabs"
-    >
+    <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <TabList variant="line" sticky className="!bg-surface3 px-6">
           {modelTabEnabled && <Tab value="model">Model</Tab>}
@@ -61,7 +58,7 @@ export const AgentProfileTabs = ({
           {integrationsTabEnabled && <Tab value="integrations">Integrations</Tab>}
         </TabList>
 
-        <div className="min-h-0 overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto h-full">
           {modelTabEnabled && (
             <TabContent value="model" className={tabContentClassName}>
               <Models editable={isEditable} />
