@@ -94,7 +94,9 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                   </Icon>
                 </li>
               )}
-              <li ref={setEndOfListElement} />
+              <li>
+                <div ref={setEndOfListElement} />
+              </li>
             </ThreadListItems>
           )}
         </ThreadList>

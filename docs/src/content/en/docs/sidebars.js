@@ -137,16 +137,24 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/signals',
-          label: 'Signals',
+          id: 'agents/acp',
+          label: 'ACP',
           customProps: {
-            tags: ['alpha'],
+            tags: ['new'],
           },
         },
         {
           type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
+          },
         },
         {
           type: 'doc',
@@ -708,6 +716,11 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+        {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
         },
         {
           type: 'category',
