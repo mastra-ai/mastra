@@ -398,6 +398,9 @@ export class GoalManager {
       if (output) {
         return { decision: output.decision, reason: output.reason };
       }
+      if (options.abortSignal?.aborted) {
+        return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
+      }
 
       // Follow up: the judge failed to produce a structured decision. Send a
       // follow-up prompt asking it to respond with the required JSON. The judge

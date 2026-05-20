@@ -448,17 +448,24 @@ function formatTaskCheckResult(taskCheck: ReturnType<typeof summarizeTaskCheck>)
   return response;
 }
 
-/**
- * Enforce single in_progress invariant by demoting all but the last
- * in_progress task back to pending. Returns the (possibly mutated) list.
- */
+function hasMultipleInProgress(tasks: TaskItemSnapshot[]): boolean {
+  return tasks.filter(task => task.status === 'in_progress').length > 1;
+}
+
+function multipleInProgressError(tasks: TaskItemSnapshot[]): TaskToolResult {
+  return {
+    content: 'Only one task can be in_progress at a time.',
+    tasks,
+    isError: true,
+  };
+}
+
 function demoteExtraInProgress(tasks: TaskItemSnapshot[]): TaskItemSnapshot[] {
   const inProgressIndices = tasks.reduce<number[]>((acc, t, i) => {
     if (t.status === 'in_progress') acc.push(i);
     return acc;
   }, []);
   if (inProgressIndices.length <= 1) return tasks;
-  // Keep the last one — demote all earlier ones
   const keepIndex = inProgressIndices[inProgressIndices.length - 1]!;
   return tasks.map((t, i) =>
     t.status === 'in_progress' && i !== keepIndex ? { ...t, status: 'pending' as const } : t,
@@ -558,7 +565,10 @@ States:
       }
 
       return await mutateTasks(harnessCtx, currentTasks => {
-        const normalizedTasks = demoteExtraInProgress(assignTaskIds(tasks, currentTasks));
+        const normalizedTasks = assignTaskIds(tasks, currentTasks);
+        if (hasMultipleInProgress(normalizedTasks)) {
+          return multipleInProgressError(currentTasks);
+        }
 
         return {
           content: formatTaskListResult(normalizedTasks),
