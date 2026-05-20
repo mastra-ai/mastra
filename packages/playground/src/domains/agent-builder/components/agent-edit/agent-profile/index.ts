@@ -4,3 +4,4 @@ export { AgentProfileAvatar } from './agent-profile-avatar';
 export { AgentProfileDetails } from './agent-profile-details';
 export { AgentProfileTabs } from './agent-profile-tabs';
 export { AgentProfileInitialStep } from './agent-profile-initial-step';
+export { AgentProfileModelStep } from './agent-profile-model-step';

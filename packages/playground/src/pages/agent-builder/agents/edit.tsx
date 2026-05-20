@@ -1,5 +1,4 @@
 import { Spinner } from '@mastra/playground-ui';
-import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -7,6 +6,7 @@ import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent
 import {
   AgentProfile,
   AgentProfileInitialStep,
+  AgentProfileModelStep,
   AgentProfileAvatar,
   AgentProfileDetails,
   AgentProfileHero,
@@ -16,9 +16,8 @@ import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-edit
 import { ConversationPanelChat } from '@/domains/agent-builder/components/agent-edit/conversation-panel';
 import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-edit/delete-agent-action';
 import { EditTopBar } from '@/domains/agent-builder/components/agent-edit/edit-top-bar';
-import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
-import { AgentColorProvider, useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
+import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -103,7 +102,7 @@ const EditPageBody = () => {
 };
 
 const EditTopBarSlot = () => {
-  const { autosave, onModeToggle, canPublishToChannel, agentId } = useEditPage();
+  const { autosave, onModeToggle } = useEditPage();
   const isRunning = useStreamRunning();
 
   return (
@@ -115,20 +114,13 @@ const EditTopBarSlot = () => {
       rightAside={
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
       }
-      modeAction={
-        canPublishToChannel ? (
-          <div className="hidden lg:flex items-center gap-2">
-            <PublishToChannelButton agentId={agentId} />
-          </div>
-        ) : null
-      }
       mobileExtra={<MobileMenuSlot />}
     />
   );
 };
 
 const MobileMenuSlot = () => {
-  const { agentId, canPublishToChannel } = useEditPage();
+  const { agentId } = useEditPage();
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
@@ -138,7 +130,6 @@ const MobileMenuSlot = () => {
     <AgentBuilderMobileMenu
       agentId={agentId}
       showSetVisibility={!!capabilities?.enabled}
-      showPublishToChannel={canPublishToChannel}
       showDelete
       agentName={name}
       disabled={isRunning}
@@ -153,7 +144,6 @@ const ProfileSlot = () => {
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
   const { dirtyFields } = useFormState();
-  const agentColor = useAgentColor();
   const { step } = useWizard();
 
   const heroActions = (
@@ -174,25 +164,13 @@ const ProfileSlot = () => {
       <AgentProfileInitialStep
         isPreparing={!isReady}
         avatar={<AgentProfileAvatar disabled={isRunning} />}
-        details={
-          <div
-            style={
-              {
-                ['--agent-color-fg']: agentColor?.foreground,
-                ['--agent-color-bg']: agentColor?.background,
-                ['--agent-color-bg-tint']: agentColor?.tintBackground,
-                ['--agent-color-bg-tint-hover']: agentColor?.tintBackgroundHover,
-              } as CSSProperties
-            }
-          >
-            <AgentProfileDetails
-              disabled={isRunning}
-              className="px-24 justify-center items-center text-center [&_input]:text-center [&_textarea]:text-center [&_input]:text-[var(--agent-color-fg)] [&_textarea]:text-[var(--agent-color-fg)] [&_input]:bg-[var(--agent-color-bg-tint)] [&_textarea]:bg-[var(--agent-color-bg-tint)] [&_input:hover]:!bg-[var(--agent-color-bg-tint-hover)] [&_textarea:hover]:!bg-[var(--agent-color-bg-tint-hover)] [&_input:focus]:!bg-[var(--agent-color-bg-tint-hover)] [&_textarea:focus]:!bg-[var(--agent-color-bg-tint-hover)]"
-            />
-          </div>
-        }
+        details={<AgentProfileDetails mode="highlighted" disabled={isRunning} />}
       />
     );
+  }
+
+  if (step === 'model') {
+    return <AgentProfileModelStep />;
   }
 
   return (
@@ -203,6 +181,7 @@ const ProfileSlot = () => {
         actions={heroActions}
       />
       <AgentProfileTabs
+        agentId={agentId}
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}
         disabled={isRunning}

@@ -47,7 +47,7 @@ describe('Tools', () => {
     // jsdom normalizes inline color values from hsl() to rgb() for color properties.
     expect(container.style.borderColor).toMatch(/^(rgb|hsl)\(/);
     expect(container.style.boxShadow).toBe('');
-    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-fg)]');
+    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('border-accent1');
     expect(container.className).not.toContain('ring-1 ring-accent1');
     expect(container.className).not.toContain('focus-visible:ring');
@@ -84,10 +84,10 @@ describe('Tools', () => {
     );
 
     const container = getByTestId('tool-card-tool-unchecked-tool') as HTMLButtonElement;
-    expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
+    expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
     expect(container.style.borderColor).toBe('');
     expect(container.className).toContain('border-border1');
-    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-fg)]');
+    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-visible:ring');
   });
 });

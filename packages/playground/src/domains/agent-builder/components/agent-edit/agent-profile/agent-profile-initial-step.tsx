@@ -1,6 +1,7 @@
 import { Button, Skeleton } from '@mastra/playground-ui';
 import type { ReactNode } from 'react';
-import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
+import { AgentStepContainer } from './agent-step-container';
+import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
 import { startViewTransition } from '@/lib/routing';
 
@@ -11,8 +12,8 @@ export interface AgentProfileInitialStepProps {
 }
 
 export const AgentProfileInitialStep = ({ avatar, details, isPreparing }: AgentProfileInitialStepProps) => {
-  const agentColor = useAgentColor();
   const { next } = useWizard();
+  const isStreaming = useStreamRunning();
 
   const handleContinue = () => {
     startViewTransition(() => {
@@ -20,23 +21,14 @@ export const AgentProfileInitialStep = ({ avatar, details, isPreparing }: AgentP
     });
   };
 
-  const bannerStyle = agentColor
-    ? {
-        backgroundImage: `linear-gradient(to bottom right, ${agentColor.background}, ${agentColor.foreground})`,
-      }
-    : undefined;
-
   return (
-    <div className="relative w-full h-full border border-border1 bg-surface3 rounded-3xl overflow-hidden">
-      {bannerStyle && (
-        <div
-          aria-hidden
-          className={`absolute inset-0 rounded-3xl transition-opacity duration-500 ease-out ${
-            isPreparing ? 'opacity-0' : 'opacity-100'
-          }`}
-          style={bannerStyle}
-        />
-      )}
+    <AgentStepContainer
+      cta={
+        <Button onClick={handleContinue} disabled={isStreaming}>
+          Continue
+        </Button>
+      }
+    >
       <div className="relative w-full h-full flex flex-col items-center justify-center gap-4 py-6 px-6 text-center">
         {isPreparing ? (
           <>
@@ -57,10 +49,9 @@ export const AgentProfileInitialStep = ({ avatar, details, isPreparing }: AgentP
           <>
             {avatar}
             {details}
-            <Button onClick={handleContinue}>Continue</Button>
           </>
         )}
       </div>
-    </div>
+    </AgentStepContainer>
   );
 };

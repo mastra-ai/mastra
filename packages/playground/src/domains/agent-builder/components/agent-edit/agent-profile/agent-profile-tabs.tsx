@@ -2,13 +2,17 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../../types/agent-tool';
+import { Browser } from './browser';
 import { Instructions } from './instructions';
+import { Integrations } from './integrations';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
+import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 import { useBuilderModelPolicy } from '@/domains/builder';
 
 export interface AgentProfileTabsProps {
+  agentId: string;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
   disabled?: boolean;
@@ -21,6 +25,7 @@ export interface AgentProfileTabsProps {
  * tab → panel mapping is greppable in a single file.
  */
 export const AgentProfileTabs = ({
+  agentId,
   availableAgentTools,
   availableSkills,
   disabled = false,
@@ -28,30 +33,32 @@ export const AgentProfileTabs = ({
 }: AgentProfileTabsProps) => {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
+  const { data: channelPlatforms = [] } = useChannelPlatforms();
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
   const skillsTabEnabled = features.skills && availableSkills.length > 0;
+  const browserTabEnabled = features.browser;
+  const integrationsTabEnabled = channelPlatforms.some(platform => platform.id === 'slack' && platform.isConfigured);
 
-  const tabContentClassName = 'h-full min-h-0';
+  const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
   const isEditable = !disabled;
 
   const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
 
   return (
-    <div
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
-      data-testid="agent-profile-tabs"
-    >
+    <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <TabList variant="line" sticky className="!bg-surface3 px-6">
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
           <Tab value="instructions">Instructions</Tab>
           {skillsTabEnabled && <Tab value="skills">Skills</Tab>}
+          {browserTabEnabled && <Tab value="browser">Browser</Tab>}
+          {integrationsTabEnabled && <Tab value="integrations">Integrations</Tab>}
         </TabList>
 
-        <div className="min-h-0 overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto h-full">
           {modelTabEnabled && (
             <TabContent value="model" className={tabContentClassName}>
               <Models editable={isEditable} />
@@ -71,6 +78,18 @@ export const AgentProfileTabs = ({
           {skillsTabEnabled && (
             <TabContent value="skills" className={tabContentClassName}>
               <Skills availableSkills={availableSkills} editable={isEditable} />
+            </TabContent>
+          )}
+
+          {browserTabEnabled && (
+            <TabContent value="browser" className={tabContentClassName}>
+              <Browser editable={isEditable} />
+            </TabContent>
+          )}
+
+          {integrationsTabEnabled && (
+            <TabContent value="integrations" className={tabContentClassName}>
+              <Integrations agentId={agentId} editable={isEditable} />
             </TabContent>
           )}
         </div>
