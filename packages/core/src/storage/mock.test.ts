@@ -4,7 +4,50 @@ import { MessageList } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
 import type { MemoryStorage } from './domains';
+import { InMemoryHarness } from './domains/harness/inmemory';
 import { InMemoryStore } from './mock';
+
+describe('InMemoryStore - Harness domain', () => {
+  it('exposes the Harness v1 storage domain through getStore', async () => {
+    const store = new InMemoryStore();
+
+    const harness = await store.getStore('harness');
+
+    expect(harness).toBeInstanceOf(InMemoryHarness);
+  });
+
+  it('clears harness records with the shared in-memory database', async () => {
+    const store = new InMemoryStore();
+    const harness = await store.getStore('harness');
+
+    await harness!.saveSession(
+      {
+        id: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        origin: 'top-level',
+        subagentDepth: 0,
+        ownsThread: true,
+        modeId: 'default',
+        modelId: 'openai:gpt-4o-mini',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [],
+        state: {},
+        createdAt: 1_000,
+        lastActivityAt: 1_000,
+        version: 0,
+      },
+      { ownerId: 'owner-1', ifVersion: 0 },
+    );
+
+    store.clear();
+
+    await expect(harness!.loadSession({ sessionId: 'session-1' })).resolves.toBeNull();
+  });
+});
 
 describe('InMemoryStore - Thread Sorting', () => {
   let store: InMemoryStore;

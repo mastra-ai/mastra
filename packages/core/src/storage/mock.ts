@@ -7,6 +7,7 @@ import { InMemoryChannelsStorage } from './domains/channels/inmemory';
 import { DatasetsInMemory } from './domains/datasets/inmemory';
 import { ExperimentsInMemory } from './domains/experiments/inmemory';
 import { InMemoryFavoritesStorage } from './domains/favorites/inmemory';
+import { InMemoryHarness } from './domains/harness/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
@@ -76,6 +77,7 @@ export class InMemoryStore extends MastraCompositeStore {
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
       schedules: new InMemorySchedulesStorage({ db: this.#db }),
+      harness: new InMemoryHarness({ db: this.#db }),
     };
   }
 

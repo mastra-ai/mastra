@@ -3,8 +3,25 @@ import type { z } from 'zod';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
+import type { GoalState, PendingResume, PermissionRules, SessionGrants } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
-import type { HarnessMode, ToolCategory } from './shared';
+import type { HarnessMode } from './shared';
+
+export type {
+  AttachmentRecord,
+  GoalJudgeDecision,
+  GoalState,
+  LoadedAttachment,
+  PendingResume,
+  PermissionRules,
+  PersistedAttachment,
+  QueuedItem,
+  SessionGrants,
+  SessionRecord,
+  SessionSummary,
+  SessionWorkspaceState,
+  TokenUsage,
+} from '../../storage/domains/harness';
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
@@ -40,17 +57,6 @@ export interface HarnessLease {
   acquiredAt: number;
   expiresAt: number;
   renewCount?: number;
-}
-
-export interface PersistedAttachment {
-  id: string;
-  resourceId: string;
-  filename: string;
-  contentType: string;
-  size?: number;
-  url?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: Date;
 }
 
 export interface AttachmentRef {
@@ -97,8 +103,6 @@ export interface PendingPlanApproval extends PendingBase {
   transitionModeId?: string;
 }
 
-export type PendingResume = PendingApproval | PendingToolSuspension | PendingQuestion | PendingPlanApproval;
-
 export interface PendingReceipt {
   id: string;
   sessionId: string;
@@ -108,80 +112,12 @@ export interface PendingReceipt {
   createdAt: number;
 }
 
-export interface QueuedItem {
-  id: string;
-  content: string;
-  attachments?: AttachmentRef[];
-  model?: string;
-  mode?: string;
-  yolo?: boolean;
-  createdAt: number;
-  startedAt?: number;
-  runId?: string;
-}
-
-export interface SessionGrants {
-  categories?: Partial<Record<ToolCategory, boolean>>;
-  tools?: Record<string, boolean>;
-}
-
-export interface PermissionRules {
-  categories?: Partial<Record<ToolCategory, PermissionPolicy>>;
-  tools?: Record<string, PermissionPolicy>;
-}
-
-export interface GoalState {
-  id: string;
-  objective: string;
-  status: 'active' | 'paused' | 'done' | 'cleared';
-  judgeModel?: string;
-  maxTurns: number;
-  turnsUsed: number;
-  createdAt: number;
-  updatedAt: number;
-  doneReason?: string;
-  pausedReason?: 'requested' | 'budget_exhausted' | 'judge_failed';
-}
-
-export type GoalJudgeDecision =
-  | { type: 'done'; reason: string }
-  | { type: 'continue'; reason?: string; reminder?: string }
-  | { type: 'waiting'; reason?: string };
-
 export interface WorkspaceSessionBinding {
   providerId: string;
   workspaceId?: string;
   status: 'initializing' | 'ready' | 'destroying' | 'destroyed' | 'lost' | 'error';
   state?: unknown;
   metadata?: Record<string, unknown>;
-}
-
-export interface SessionRecord<TState = unknown> {
-  id: string;
-  resourceId: string;
-  threadId: string;
-  parentSessionId?: string;
-  ownsThread?: boolean;
-  origin?: 'top-level' | 'subagent-tool';
-  lifecycleState: SessionLifecycleState;
-  modeId: string;
-  modelId: string;
-  state: TState;
-  subagentDepth: number;
-  pendingResume?: PendingResume | null;
-  pendingQueue: QueuedItem[];
-  grants?: SessionGrants;
-  permissionRules?: PermissionRules;
-  goal?: GoalState | null;
-  workspace?: WorkspaceSessionBinding;
-  attachments?: PersistedAttachment[];
-  subagentModels?: Record<string, string | null>;
-  lease?: HarnessLease | null;
-  metadata?: Record<string, unknown>;
-  createdAt: Date;
-  updatedAt: Date;
-  closedAt?: Date;
-  version: number;
 }
 
 export interface HarnessRunOperationalState {
