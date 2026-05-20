@@ -84,4 +84,72 @@ describe('MockMemory working memory merge semantics', () => {
     const parsed = JSON.parse(wm!);
     expect(parsed).toEqual({ name: 'Alice' });
   });
+
+  it('deep-merges nested objects in schema mode', async () => {
+    const memory = new MockMemory({
+      enableWorkingMemory: true,
+      options: {
+        workingMemory: {
+          enabled: true,
+          schema: z.object({
+            user: z.object({
+              name: z.string().optional(),
+              address: z
+                .object({
+                  city: z.string().optional(),
+                  state: z.string().optional(),
+                })
+                .optional(),
+            }),
+          }),
+        },
+      },
+    });
+    await memory.createThread({ threadId, resourceId });
+
+    await callUpdateTool(memory, JSON.stringify({ user: { name: 'Alice', address: { city: 'NYC', state: 'NY' } } }));
+    await callUpdateTool(memory, JSON.stringify({ user: { address: { city: 'LA' } } }));
+
+    const wm = await memory.getWorkingMemory({ threadId, resourceId });
+    const parsed = JSON.parse(wm!);
+    // Deep merge: name preserved, state preserved, only city changed
+    expect(parsed).toEqual({ user: { name: 'Alice', address: { city: 'LA', state: 'NY' } } });
+  });
+
+  it('deletes keys set to null in schema mode', async () => {
+    const memory = await setupMemory(true);
+
+    await callUpdateTool(memory, JSON.stringify({ name: 'Alice', age: 30, location: 'NYC' }));
+    await callUpdateTool(memory, JSON.stringify({ age: null }));
+
+    const wm = await memory.getWorkingMemory({ threadId, resourceId });
+    const parsed = JSON.parse(wm!);
+    // null deletes the key
+    expect(parsed).toEqual({ name: 'Alice', location: 'NYC' });
+    expect(parsed.age).toBeUndefined();
+  });
+
+  it('replaces arrays entirely in schema mode', async () => {
+    const memory = new MockMemory({
+      enableWorkingMemory: true,
+      options: {
+        workingMemory: {
+          enabled: true,
+          schema: z.object({
+            tags: z.array(z.string()).optional(),
+            count: z.number().optional(),
+          }),
+        },
+      },
+    });
+    await memory.createThread({ threadId, resourceId });
+
+    await callUpdateTool(memory, JSON.stringify({ tags: ['a', 'b', 'c'], count: 3 }));
+    await callUpdateTool(memory, JSON.stringify({ tags: ['x'] }));
+
+    const wm = await memory.getWorkingMemory({ threadId, resourceId });
+    const parsed = JSON.parse(wm!);
+    // Arrays replace, count preserved
+    expect(parsed).toEqual({ tags: ['x'], count: 3 });
+  });
 });

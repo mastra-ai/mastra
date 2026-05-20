@@ -24,6 +24,54 @@ import type {
   SharedMemoryConfig,
 } from './types';
 
+/**
+ * Deep-merge working memory objects.
+ * Matches the semantics of `deepMergeWorkingMemory` in `@mastra/memory`:
+ * - `null` values delete the corresponding key
+ * - Arrays are replaced entirely (not merged element-by-element)
+ * - Nested plain objects are merged recursively
+ * - Primitives and new keys are set directly
+ */
+function deepMergeWorkingMemory(
+  existing: Record<string, unknown> | null | undefined,
+  update: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
+    return existing && typeof existing === 'object' ? { ...existing } : {};
+  }
+  if (!existing || typeof existing !== 'object') {
+    return update;
+  }
+
+  const result: Record<string, unknown> = { ...existing };
+
+  for (const key of Object.keys(update)) {
+    const updateValue = update[key];
+    const existingValue = result[key];
+
+    if (updateValue === null) {
+      delete result[key];
+    } else if (Array.isArray(updateValue)) {
+      result[key] = updateValue;
+    } else if (
+      typeof updateValue === 'object' &&
+      updateValue !== null &&
+      typeof existingValue === 'object' &&
+      existingValue !== null &&
+      !Array.isArray(existingValue)
+    ) {
+      result[key] = deepMergeWorkingMemory(
+        existingValue as Record<string, unknown>,
+        updateValue as Record<string, unknown>,
+      );
+    } else {
+      result[key] = updateValue;
+    }
+  }
+
+  return result;
+}
+
 export class MockMemory extends MastraMemory {
   constructor({
     storage,
@@ -44,7 +92,11 @@ export class MockMemory extends MastraMemory {
       options: {
         ...options,
         workingMemory: enableWorkingMemory
-          ? ({ ...options?.workingMemory, enabled: true, template: workingMemoryTemplate } as WorkingMemory)
+          ? ({
+              ...options?.workingMemory,
+              enabled: true,
+              ...(workingMemoryTemplate !== undefined ? { template: workingMemoryTemplate } : {}),
+            } as WorkingMemory)
           : options?.workingMemory,
         lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
       },
@@ -253,18 +305,13 @@ export class MockMemory extends MastraMemory {
               newData = memoryInput;
             }
 
-            if (
-              existingData &&
-              typeof existingData === 'object' &&
-              !Array.isArray(existingData) &&
-              newData &&
-              typeof newData === 'object' &&
-              !Array.isArray(newData)
-            ) {
-              workingMemory = JSON.stringify({
-                ...(existingData as Record<string, unknown>),
-                ...(newData as Record<string, unknown>),
-              });
+            if (newData && typeof newData === 'object' && !Array.isArray(newData)) {
+              workingMemory = JSON.stringify(
+                deepMergeWorkingMemory(
+                  existingData as Record<string, unknown> | null,
+                  newData as Record<string, unknown>,
+                ),
+              );
             } else {
               workingMemory = typeof newData === 'string' ? newData : JSON.stringify(newData);
             }
