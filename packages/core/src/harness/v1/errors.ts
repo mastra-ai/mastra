@@ -23,6 +23,24 @@ export class HarnessConfigError extends Error {
   }
 }
 
+export type HarnessRuntimeDependencyKind = 'mode' | 'agent' | 'workspace_provider';
+
+export class HarnessRuntimeDependencyDriftError extends Error {
+  readonly name = 'HarnessRuntimeDependencyDriftError';
+  readonly code = 'harness.runtime_dependency_drifted';
+
+  constructor(
+    public readonly dependencyKind: HarnessRuntimeDependencyKind,
+    public readonly dependencyId: string,
+    public readonly reason: string,
+    public readonly context?: string,
+  ) {
+    super(
+      `Runtime dependency drifted${context ? ` during ${context}` : ''}: ${dependencyKind} "${dependencyId}" ${reason}`,
+    );
+  }
+}
+
 /**
  * `harness.session({ sessionId })` could not find a record, or `{ sessionId,
  * resourceId }` found one whose `resourceId` did not match. Existence across

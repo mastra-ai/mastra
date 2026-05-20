@@ -139,6 +139,12 @@ export interface PendingResume {
   /** Mode whose backing agent produced this pending resume. */
   modeId?: string;
   /**
+   * Runtime identities captured when this work was admitted. Recovery uses
+   * these stable ids to fail closed if the process restarts with a different
+   * execution surface.
+   */
+  runtimeDependencies?: HarnessRuntimeDependencyRefs;
+  /**
    * Idempotency marker. Set by the resume helper before calling
    * `agent.resumeStream(...)` and observed on replay so a crash between
    * "wrote resumedAt" and "cleared pendingResume" does not double-resume.
@@ -408,6 +414,11 @@ export interface QueueAdmissionReceipt {
   admissionHash: string;
   queuedItemId: string;
   modeId?: string;
+  /**
+   * Runtime identities captured at queue admission. Legacy receipts omit this
+   * and fall back to id-only validation for backwards compatibility.
+   */
+  runtimeDependencies?: HarnessRuntimeDependencyRefs;
   status: 'queued' | 'admitting' | 'accepted' | 'completed' | 'admission_failed' | 'failed' | 'dead';
   runId?: string;
   signalId?: string;
@@ -423,6 +434,25 @@ export interface QueueAdmissionReceipt {
   deadAt?: number;
   nextAttemptAt?: number;
   updatedAt: number;
+}
+
+export interface HarnessRuntimeDependencyRefs {
+  modeId: string;
+  agentId?: string;
+  /**
+   * Evidence-only selected model id. The current Harness model catalog is a
+   * UX surface, not an execution registry, so recovery does not fail closed on
+   * this field until a stable runtime model registry exists.
+   */
+  modelId?: string;
+  /**
+   * Provider-backed workspaces persist the configured provider id. Shared
+   * workspaces have no durable provider id, so new work records a process-
+   * scoped shared sentinel and fails closed after restart. Explicitly null
+   * means no workspace was configured at admission. Undefined means legacy
+   * evidence that predates runtime dependency capture.
+   */
+  workspaceProviderId?: string | null;
 }
 
 export interface HarnessSessionEventRecord {

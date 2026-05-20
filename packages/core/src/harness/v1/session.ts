@@ -46,6 +46,7 @@ import type {
   AgentSignalResultStatus,
   HarnessStorage,
   HarnessStorageAttachmentUnavailableError,
+  HarnessRuntimeDependencyRefs,
   InboxResponseReceipt,
   QueueAdmissionReceipt,
   PendingResume,
@@ -384,8 +385,8 @@ export interface SessionDisplayState {
   // Tokens
   tokenUsage: TokenUsage;
 
-  // Pending interrupt (full payload, not just a boolean — UIs need the args)
-  pending: SessionRecord['pendingResume'] | null;
+  // Pending interrupt (full UX payload, not recovery-only metadata)
+  pending: SessionDisplayPending | null;
 
   // Queue
   queueDepth: number;
@@ -393,6 +394,14 @@ export interface SessionDisplayState {
 
   // Goal
   goal?: SessionRecord['goal'];
+}
+
+export type SessionDisplayPending = Omit<NonNullable<SessionRecord['pendingResume']>, 'runtimeDependencies'>;
+
+function pendingResumeForDisplay(pending: SessionRecord['pendingResume']): SessionDisplayPending | null {
+  if (!pending) return null;
+  const { runtimeDependencies: _runtimeDependencies, ...displayPending } = pending;
+  return displayPending;
 }
 
 /**
@@ -2173,13 +2182,14 @@ export class Session {
 
     // Resolve the effective mode (per-call override wins, else session's).
     const effectiveModeId = opts.mode ?? this._record.modeId;
+    const effectiveModelId = opts.model ?? this._record.modelId;
     const mode = this._harness._getMode(effectiveModeId);
     const agent = this._harness.getAgentForMode(effectiveModeId);
     const admissionHashes =
       opts.admissionId !== undefined
         ? this._computeMessageAdmissionHashes(opts, {
             modeId: effectiveModeId,
-            modelId: opts.model ?? this._record.modelId,
+            modelId: effectiveModelId,
           })
         : undefined;
     const admissionHash = admissionHashes?.primary;
@@ -2257,6 +2267,7 @@ export class Session {
       requestContext = await Promise.race([
         this._buildRequestContext({
           modeId: effectiveModeId,
+          modelId: effectiveModelId,
           abortSignal: turnAbortSignal,
         }),
         activeTurnWaiter.promise,
@@ -2292,7 +2303,10 @@ export class Session {
         ]);
         const full = result as FullOutput<unknown>;
         this._recordTurnCompletion(full);
-        await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
+        await Promise.race([
+          this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
+          activeTurnWaiter.promise,
+        ]);
         this._emitTurnEvent({
           type: 'agent_end',
           reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2577,7 +2591,10 @@ export class Session {
           return full;
         })
         .then(async full => {
-          await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
+          await Promise.race([
+            this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
+            activeTurnWaiter.promise,
+          ]);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2650,7 +2667,10 @@ export class Session {
           throw err;
         }
       }
-      await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
+      await Promise.race([
+        this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
+        activeTurnWaiter.promise,
+      ]);
       this._emitTurnEvent({
         type: 'agent_end',
         reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -3242,6 +3262,7 @@ export class Session {
         const requestContext = await Promise.race([
           this._buildRequestContext({
             modeId: effectiveModeId,
+            modelId: this._record.modelId,
             abortSignal: turnAbortSignal,
           }),
           activeTurnWaiter.promise,
@@ -3278,7 +3299,10 @@ export class Session {
       const result: Promise<AgentResult> = completionOrDelete
         .then(async full => {
           this._recordTurnCompletion(full);
-          await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
+          await Promise.race([
+            this._maybeCaptureSuspend(full, undefined, effectiveModeId, this._record.modelId),
+            activeTurnWaiter.promise,
+          ]);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -3391,6 +3415,7 @@ export class Session {
         const requestContext = await Promise.race([
           this._buildRequestContext({
             modeId: effectiveModeId,
+            modelId: this._record.modelId,
             abortSignal: turnAbortSignal,
           }),
           activeTurnWaiter.promise,
@@ -3428,7 +3453,10 @@ export class Session {
       const result = completionOrDelete
         .then(async full => {
           this._recordTurnCompletion(full);
-          await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
+          await Promise.race([
+            this._maybeCaptureSuspend(full, undefined, effectiveModeId, this._record.modelId),
+            activeTurnWaiter.promise,
+          ]);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -3493,6 +3521,7 @@ export class Session {
     full: FullOutput<unknown>,
     queuedItemId = this._currentQueuedItemId,
     modeId = this._record.modeId,
+    modelId = this._modelIdForQueuedItem(queuedItemId),
   ): Promise<void> {
     if (full.finishReason !== 'suspended') return;
     const payload = full.suspendPayload as
@@ -3520,6 +3549,7 @@ export class Session {
       requestedAt: Date.now(),
       ...(queuedItemId !== undefined ? { queuedItemId } : {}),
       modeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(modeId, modelId),
       payload: this._buildResumePayload(kind, payload),
     };
 
@@ -3777,8 +3807,8 @@ export class Session {
       // Tokens — copy so the caller can't mutate the running aggregate
       tokenUsage: { ...this._tokenUsage },
 
-      // Pending interrupt — full payload, single field (see §5.1)
-      pending: rec.pendingResume ?? null,
+      // Pending interrupt — UX payload only; recovery metadata stays internal.
+      pending: pendingResumeForDisplay(rec.pendingResume),
 
       // Queue
       queueDepth: rec.pendingQueue.length,
@@ -4730,6 +4760,58 @@ export class Session {
       this._ensureQueuedItemContext(pendingQueuedItemId);
     }
 
+    // For plan-approval, resolve the active-mode flip before finalizing the
+    // resumed turn. Queued terminal resumes persist this flip with the
+    // completed receipt so crash recovery cannot observe "completed plan
+    // approval, old mode".
+    //
+    // Resolution order on approval:
+    //   1. Caller-supplied `transitionToMode` overrides everything.
+    //   2. Falls back to the submitting mode's declared `transitionsTo`
+    //      (captured into `pending.transitionModeId` at suspend time).
+    //   3. Otherwise no flip.
+    let modeFlipTarget: string | undefined;
+    if (expectedKind === 'plan-approval') {
+      const data = resumeData as { approved: boolean; transitionToMode?: string };
+      if (data.approved) {
+        const candidate = data.transitionToMode ?? pending.transitionModeId;
+        if (candidate && candidate !== this._record.modeId) {
+          // Validate the target mode exists before we hand off to the agent.
+          // (Caller-supplied `transitionToMode` is also validated up-front in
+          // `respondToPlanApproval`; this catches the pending-record path.)
+          this._harness._getMode(candidate);
+          modeFlipTarget = candidate;
+        }
+      }
+    }
+
+    const previousModeId = this._record.modeId;
+    const resumeModeId = this._modeIdForPendingResume(pending);
+    const resumeRuntimeDependencies = this._runtimeDependenciesForPendingResume(pending);
+    let agent: Agent;
+    try {
+      agent = this._harness._resolveAgentForRuntimeDependencies(
+        resumeRuntimeDependencies,
+        `pending ${expectedKind} resume`,
+      ).agent;
+    } catch (err) {
+      if (responseId !== undefined) {
+        await this._recordInboxResponsePreDispatchFailure(
+          {
+            responseId,
+            responseHash: responseHash!,
+            itemId,
+            queuedItemId: pendingQueuedItemId,
+            kind: expectedKind,
+            pending,
+            response: persistedResponse,
+          },
+          err,
+        );
+      }
+      throw err;
+    }
+
     // Mark resumed under the lease BEFORE calling the agent (idempotency
     // marker per §5.4 / §5.7). On crash here, the next caller observes
     // resumedAt set and rejects rather than double-resuming.
@@ -4817,34 +4899,6 @@ export class Session {
       );
     }
 
-    // For plan-approval, resolve the active-mode flip before finalizing the
-    // resumed turn. Queued terminal resumes persist this flip with the
-    // completed receipt so crash recovery cannot observe "completed plan
-    // approval, old mode".
-    //
-    // Resolution order on approval:
-    //   1. Caller-supplied `transitionToMode` overrides everything.
-    //   2. Falls back to the submitting mode's declared `transitionsTo`
-    //      (captured into `pending.transitionModeId` at suspend time).
-    //   3. Otherwise no flip.
-    let modeFlipTarget: string | undefined;
-    if (expectedKind === 'plan-approval') {
-      const data = resumeData as { approved: boolean; transitionToMode?: string };
-      if (data.approved) {
-        const candidate = data.transitionToMode ?? pending.transitionModeId;
-        if (candidate && candidate !== this._record.modeId) {
-          // Validate the target mode exists before we hand off to the agent.
-          // (Caller-supplied `transitionToMode` is also validated up-front in
-          // `respondToPlanApproval`; this catches the pending-record path.)
-          this._harness._getMode(candidate);
-          modeFlipTarget = candidate;
-        }
-      }
-    }
-
-    const previousModeId = this._record.modeId;
-    const resumeModeId = this._modeIdForPendingResume(pending);
-
     // Resumed runs run under a session-owned AbortController too, so
     // `session.abort()` can cancel an in-flight resume (e.g. ESC after the
     // user approved a tool that's now grinding through a long workflow).
@@ -4860,7 +4914,6 @@ export class Session {
         throw new HarnessSessionDeletedError(this.id);
       }
     };
-    const agent = this._harness.getAgentForMode(resumeModeId);
     let full: FullOutput<unknown>;
     try {
       assertResumedTurnNotDeleted();
@@ -4982,7 +5035,7 @@ export class Session {
       // Mirror message()'s post-run hook so the next respond* call sees the
       // new pending record.
       await Promise.race([
-        this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId),
+        this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId, resumeRuntimeDependencies.modelId),
         activeTurnWaiter.promise,
       ]);
 
@@ -5120,6 +5173,57 @@ export class Session {
     });
   }
 
+  private async _recordInboxResponsePreDispatchFailure(
+    input: {
+      responseId: string;
+      responseHash: string;
+      itemId: string;
+      queuedItemId?: string;
+      kind: PendingResume['kind'];
+      pending: PendingResume;
+      response: unknown;
+    },
+    err: unknown,
+  ): Promise<void> {
+    const failedAt = Date.now();
+    await this._flushUpdate(prev => {
+      const currentReceipt = getOwnRecordValue(prev.inboxResponseReceipts, input.responseId);
+      if (currentReceipt !== undefined) {
+        this._assertMatchingInboxReceipt(currentReceipt, {
+          kind: input.kind,
+          itemId: input.itemId,
+          responseId: input.responseId,
+          responseHash: input.responseHash,
+        });
+        return prev;
+      }
+      return {
+        ...prev,
+        inboxResponseReceipts: {
+          ...(prev.inboxResponseReceipts ?? {}),
+          [input.responseId]: {
+            responseId: input.responseId,
+            responseHash: input.responseHash,
+            resumeAttemptId: input.responseId,
+            itemId: input.itemId,
+            ...(input.queuedItemId !== undefined ? { queuedItemId: input.queuedItemId } : {}),
+            kind: input.kind,
+            runId: input.pending.runId,
+            toolCallId: input.pending.toolCallId,
+            pendingRequestedAt: input.pending.requestedAt,
+            response: input.response,
+            status: 'failed',
+            error: projectHarnessPublicError(err),
+            retryable: false,
+            acceptedAt: failedAt,
+            failedAt,
+            updatedAt: failedAt,
+          } satisfies InboxResponseReceipt,
+        },
+      };
+    });
+  }
+
   private async _markInboxResponseFailed(responseId: string, err: unknown): Promise<void> {
     const failedAt = Date.now();
     await this._flushUpdate(prev => {
@@ -5215,6 +5319,21 @@ export class Session {
     const queuedItem = queuedItemId ? this._record.pendingQueue.find(item => item.id === queuedItemId) : undefined;
     const receipt = queuedItemId ? this._record.queueAdmissionReceipts?.[queuedItemId] : undefined;
     return pending.modeId ?? receipt?.modeId ?? queuedItem?.mode ?? this._record.modeId;
+  }
+
+  private _modelIdForQueuedItem(queuedItemId: string | undefined): string {
+    const queuedItem = queuedItemId ? this._record.pendingQueue.find(item => item.id === queuedItemId) : undefined;
+    const receipt = queuedItemId ? this._record.queueAdmissionReceipts?.[queuedItemId] : undefined;
+    return queuedItem?.model ?? receipt?.runtimeDependencies?.modelId ?? this._record.modelId;
+  }
+
+  private _runtimeDependenciesForPendingResume(pending: PendingResume): HarnessRuntimeDependencyRefs {
+    const queuedItemId = this._queuedItemIdForPendingResume(pending);
+    const queuedItem = queuedItemId ? this._record.pendingQueue.find(item => item.id === queuedItemId) : undefined;
+    const receipt = queuedItemId ? this._record.queueAdmissionReceipts?.[queuedItemId] : undefined;
+    const modeId = this._modeIdForPendingResume(pending);
+    const modelId = queuedItem?.model ?? this._record.modelId;
+    return pending.runtimeDependencies ?? receipt?.runtimeDependencies ?? { modeId, ...(modelId ? { modelId } : {}) };
   }
 
   private async _maybeRecoverStaleQueuedResume(): Promise<QueueResumeRecoveryResult> {
@@ -5494,6 +5613,10 @@ export class Session {
       admissionHash,
       queuedItemId: item.id,
       modeId: effectiveModeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(
+        effectiveModeId,
+        item.model ?? this._record.modelId,
+      ),
       status: 'queued',
       attempts: 0,
       enqueuedAt: item.enqueuedAt,
@@ -5839,8 +5962,6 @@ export class Session {
     await this._validateQueuedAttachmentRefs(item);
     const currentReceipt = this._record.queueAdmissionReceipts?.[item.id];
     const effectiveModeId = currentReceipt?.modeId ?? item.mode ?? this._record.modeId;
-    const mode = this._harness._getMode(effectiveModeId);
-    const agent = this._harness.getAgentForMode(effectiveModeId);
     const identity = this._queueSignalIdentity(item);
     let shouldMarkAdmitting = true;
     if (currentReceipt) {
@@ -5864,14 +5985,31 @@ export class Session {
           },
         );
       }
-      if (
-        (currentReceipt.status === 'admitting' || currentReceipt.status === 'accepted') &&
-        currentReceipt.runId &&
-        currentReceipt.signalId
-      ) {
-        const recovered = await this._recoverQueuedDispatch(item, currentReceipt, agent, effectiveModeId);
-        if (recovered) return recovered;
-      }
+    }
+    if (
+      currentReceipt &&
+      (currentReceipt.status === 'admitting' || currentReceipt.status === 'accepted') &&
+      currentReceipt.runId &&
+      currentReceipt.signalId
+    ) {
+      const recoveredTerminal = await this._withActiveDeletedWaiter(activeDeleted =>
+        this._recoverQueuedTerminalEvidence(item, currentReceipt, effectiveModeId, activeDeleted),
+      );
+      if (recoveredTerminal) return recoveredTerminal;
+    }
+    const runtimeDependencies = this._runtimeDependenciesForQueuedTurn(item, currentReceipt, effectiveModeId);
+    const { mode, agent } = this._harness._resolveAgentForRuntimeDependencies(
+      runtimeDependencies,
+      `queued item "${item.id}" recovery`,
+    );
+    if (
+      currentReceipt &&
+      (currentReceipt.status === 'admitting' || currentReceipt.status === 'accepted') &&
+      currentReceipt.runId &&
+      currentReceipt.signalId
+    ) {
+      const recovered = await this._recoverQueuedDispatch(item, currentReceipt, agent, effectiveModeId);
+      if (recovered) return recovered;
     }
     if (shouldMarkAdmitting) {
       await this._updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
@@ -5906,6 +6044,7 @@ export class Session {
       const requestContext = await Promise.race([
         this._buildRequestContext({
           modeId: effectiveModeId,
+          modelId: this._modelIdForQueuedItem(item.id),
           abortSignal: turnAbortController.signal,
         }),
         activeTurnWaiter.promise,
@@ -5981,6 +6120,15 @@ export class Session {
     }
   }
 
+  private _runtimeDependenciesForQueuedTurn(
+    item: QueuedItem,
+    receipt: QueueAdmissionReceipt | undefined,
+    modeId: string,
+  ): HarnessRuntimeDependencyRefs {
+    const modelId = item.model ?? this._record.modelId;
+    return receipt?.runtimeDependencies ?? { modeId, ...(modelId ? { modelId } : {}) };
+  }
+
   private async _recoverQueuedDispatch(
     item: QueuedItem,
     receipt: QueueAdmissionReceipt,
@@ -5995,20 +6143,8 @@ export class Session {
         return this._awaitQueuedRunCompletion(item, receipt.runId!, receipt.signalId!, modeId, activeDeleted);
       }
 
-      const evidence = await this._raceActiveTurnWaiter(this._loadQueueSignalResultEvidence(receipt), activeDeleted);
-      if (evidence.status === 'completed') {
-        const full = evidence.result as FullOutput<unknown>;
-        await this._raceActiveTurnWaiter(this._markQueuedTurnCompleted(item.id, full), activeDeleted);
-        if (receipt.postRunFinalizedAt === undefined) {
-          await this._finalizeCompletedQueuedTurn(item, full, modeId, activeDeleted);
-        }
-        return full;
-      }
-      if (evidence.status === 'failed') {
-        throw publicErrorProjectionToError(
-          evidence.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
-        );
-      }
+      const terminalEvidence = await this._recoverQueuedTerminalEvidence(item, receipt, modeId, activeDeleted);
+      if (terminalEvidence) return terminalEvidence;
 
       const recovery = await this._raceActiveTurnWaiter(this._inspectQueueReceiptMemory(receipt), activeDeleted);
       if (recovery.status === 'pending') {
@@ -6020,6 +6156,32 @@ export class Session {
 
       return undefined;
     });
+  }
+
+  private async _recoverQueuedTerminalEvidence(
+    item: QueuedItem,
+    receipt: QueueAdmissionReceipt,
+    modeId: string,
+    activeTurnWaiter?: Promise<never>,
+  ): Promise<FullOutput<unknown> | undefined> {
+    if (!receipt.runId || !receipt.signalId) return undefined;
+
+    const evidence = await this._raceActiveTurnWaiter(this._loadQueueSignalResultEvidence(receipt), activeTurnWaiter);
+    if (evidence.status === 'completed') {
+      const full = evidence.result as FullOutput<unknown>;
+      await this._raceActiveTurnWaiter(this._markQueuedTurnCompleted(item.id, full), activeTurnWaiter);
+      if (receipt.postRunFinalizedAt === undefined) {
+        await this._finalizeCompletedQueuedTurn(item, full, modeId, activeTurnWaiter);
+      }
+      return full;
+    }
+    if (evidence.status === 'failed') {
+      throw publicErrorProjectionToError(
+        evidence.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
+      );
+    }
+
+    return undefined;
   }
 
   private _queueReceiptTerminalFailureError(queuedItemId: string): Error | undefined {
@@ -6248,7 +6410,7 @@ export class Session {
   }
 
   private async _registerQuestion(
-    params: RegisterQuestionParams & { runId?: string; toolCallId?: string; modeId?: string },
+    params: RegisterQuestionParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
   ): Promise<void> {
     this._assertOpenForTurn('ctx.registerQuestion');
     if (typeof params.questionId !== 'string' || params.questionId.length === 0) {
@@ -6278,6 +6440,10 @@ export class Session {
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
       modeId: params.modeId ?? this._record.modeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(
+        params.modeId ?? this._record.modeId,
+        params.modelId ?? this._modelIdForQueuedItem(this._currentQueuedItemId),
+      ),
       payload: {
         question: params.question,
         ...(params.options ? { options: params.options } : {}),
@@ -6307,7 +6473,7 @@ export class Session {
   }
 
   private async _registerPlanApproval(
-    params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string },
+    params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
   ): Promise<void> {
     this._assertOpenForTurn('ctx.registerPlanApproval');
     if (typeof params.planId !== 'string' || params.planId.length === 0) {
@@ -6335,6 +6501,10 @@ export class Session {
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
       modeId: submittingModeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(
+        submittingModeId,
+        params.modelId ?? this._modelIdForQueuedItem(this._currentQueuedItemId),
+      ),
       payload: {
         ...(params.title !== undefined ? { title: params.title } : {}),
         plan: params.plan,
@@ -6694,7 +6864,11 @@ export class Session {
    * of the session. Functional `setState` updates serialize through the
    * same `_flushUpdate` chain that backs `Session.setState`.
    */
-  private async _buildRequestContext(turn: { modeId: string; abortSignal: AbortSignal }): Promise<RequestContext> {
+  private async _buildRequestContext(turn: {
+    modeId: string;
+    modelId: string;
+    abortSignal: AbortSignal;
+  }): Promise<RequestContext> {
     const session = this;
     const stateSnapshot = (this._record.state ?? {}) as unknown;
     // Resolve the workspace eagerly so tools see a populated `ctx.workspace`
@@ -6721,8 +6895,9 @@ export class Session {
           updatesOrUpdater as Partial<unknown> | ((prev: unknown) => unknown),
         )) as HarnessRequestContext<unknown>['setState'],
       abortSignal: turn.abortSignal,
-      registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId }),
-      registerPlanApproval: params => session._registerPlanApproval({ ...params, modeId: turn.modeId }),
+      registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      registerPlanApproval: params =>
+        session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,

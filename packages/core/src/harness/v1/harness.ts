@@ -44,6 +44,7 @@ import type {
   AgentSignalResultStatus,
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
+  HarnessRuntimeDependencyRefs,
 } from '../../storage/domains/harness';
 import {
   HarnessStorageAttachmentInUseError,
@@ -67,6 +68,7 @@ import {
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
   HarnessModelNotFoundError,
+  HarnessRuntimeDependencyDriftError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
   HarnessSessionDeleteBlockedError,
@@ -1062,7 +1064,81 @@ export class Harness {
     if (!mode) {
       throw new HarnessConfigError('modeId', `unknown mode "${modeId}"`);
     }
-    return this.mastra.getAgent(mode.agentId as never) as Agent;
+    const mastra = this.mastra;
+    let agent: Agent | undefined;
+    try {
+      agent = mastra.getAgent(mode.agentId as never) as Agent | undefined;
+    } catch {
+      agent = undefined;
+    }
+    if (!agent) {
+      throw new HarnessConfigError(
+        `modes[${mode.id}].agentId`,
+        `references unknown agent "${mode.agentId}" — Mastra has no such agent registered`,
+      );
+    }
+    return agent;
+  }
+
+  /** @internal — capture stable runtime ids for work that may be recovered after restart. */
+  _runtimeDependenciesForMode(modeId: string, modelId?: string): HarnessRuntimeDependencyRefs {
+    const mode = this._getMode(modeId);
+    return {
+      modeId,
+      agentId: mode.agentId,
+      ...(modelId ? { modelId } : {}),
+      workspaceProviderId: this._workspaceDependencyId(),
+    };
+  }
+
+  /** @internal — validate persisted runtime ids before recovered work invokes an agent. */
+  _resolveAgentForRuntimeDependencies(
+    refs: HarnessRuntimeDependencyRefs,
+    context: string,
+  ): { mode: HarnessMode; agent: Agent } {
+    const mode = this._modesById.get(refs.modeId);
+    if (!mode) {
+      throw new HarnessRuntimeDependencyDriftError('mode', refs.modeId, 'is not registered on this harness', context);
+    }
+    if (refs.agentId !== undefined && refs.agentId !== mode.agentId) {
+      throw new HarnessRuntimeDependencyDriftError(
+        'agent',
+        refs.agentId,
+        `was recorded for mode "${refs.modeId}", but the mode now points at agent "${mode.agentId}"`,
+        context,
+      );
+    }
+    const agentId = refs.agentId ?? mode.agentId;
+    const mastra = this.mastra;
+    let agent: Agent | undefined;
+    try {
+      agent = mastra.getAgent(agentId as never) as Agent | undefined;
+    } catch {
+      agent = undefined;
+    }
+    if (!agent) {
+      throw new HarnessRuntimeDependencyDriftError(
+        'agent',
+        agentId,
+        'is not registered on this Mastra instance',
+        context,
+      );
+    }
+    if ('workspaceProviderId' in refs && this._workspaceDependencyId() !== refs.workspaceProviderId) {
+      throw new HarnessRuntimeDependencyDriftError(
+        'workspace_provider',
+        refs.workspaceProviderId ?? 'unconfigured',
+        `was recorded, but the current workspace dependency is "${this._workspaceDependencyId() ?? 'unconfigured'}"`,
+        context,
+      );
+    }
+    return { mode, agent };
+  }
+
+  private _workspaceDependencyId(): string | null {
+    if (this._workspaceKind === undefined) return null;
+    if (this._workspaceKind === 'shared') return `shared:${this.ownerId}`;
+    return this._workspaceRegistry.providerId ?? null;
   }
 
   /**

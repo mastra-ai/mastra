@@ -59,6 +59,7 @@ export {
   HarnessInboxItemNotFoundError,
   HarnessInboxResponseConflictError,
   HarnessQueueFullError,
+  HarnessRuntimeDependencyDriftError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
   HarnessSessionDeleteBlockedError,

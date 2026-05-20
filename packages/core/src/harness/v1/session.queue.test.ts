@@ -479,13 +479,15 @@ describe('Session.queue() — suspension', () => {
     });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
 
-    const queued = session.queue({ content: 'sensitive' });
+    const queued = session.queue({ content: 'sensitive', model: 'queued-model' });
     await new Promise(resolve => setImmediate(resolve));
 
     // Mid-flight: item still in the queue, suspension captured.
     expect(session.getRecord().pendingQueue?.length).toBe(1);
     expect(session.getRecord().pendingResume?.kind).toBe('tool-approval');
+    expect(session.getRecord().pendingResume?.runtimeDependencies?.modelId).toBe('queued-model');
     const receipt = Object.values(session.getRecord().queueAdmissionReceipts ?? {})[0];
+    expect(receipt?.runtimeDependencies?.modelId).toBe('queued-model');
     expect(receipt?.signalId).toBeDefined();
     let signalEvidence = await storage.loadMessageResultEvidence({
       harnessName: 'default',
@@ -1438,6 +1440,336 @@ describe('Session.queue() — crash replay', () => {
     });
   });
 
+  it('fails closed when replayed queued work references a missing mode', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-queued-missing-mode';
+    const queuedItemId = 'q-queued-missing-mode';
+    const now = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-queued-missing-mode',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [
+          {
+            id: queuedItemId,
+            admissionId: 'queue-missing-mode',
+            admissionHash: 'hash-missing-mode',
+            enqueuedAt: now,
+            content: 'do not run',
+            attachments: [],
+          },
+        ],
+        queueAdmissionReceipts: {
+          [queuedItemId]: {
+            admissionId: 'queue-missing-mode',
+            admissionHash: 'hash-missing-mode',
+            queuedItemId,
+            modeId: 'removed-mode',
+            runtimeDependencies: { modeId: 'removed-mode', agentId: 'removed-agent', modelId: 'default' },
+            status: 'accepted',
+            runId: 'stale-run',
+            signalId: 'stale-signal',
+            attempts: 1,
+            enqueuedAt: now,
+            acceptedAt: now,
+            updatedAt: now,
+          },
+        },
+        state: undefined,
+        createdAt: now,
+        lastActivityAt: now,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+
+    const replayAgent = new MockAgent({ id: 'default' });
+    const replayHarness = new Harness({
+      agents: { default: replayAgent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    const replaySession = await replayHarness.session({ sessionId });
+    await replaySession.waitForIdle({ timeoutMs: 1000 });
+
+    expect(replayAgent.streamCalls).toHaveLength(0);
+    expect(replaySession.getRecord().pendingQueue).toEqual([]);
+    expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'harness.runtime_dependency_drifted',
+        message: expect.stringContaining('mode "removed-mode" is not registered'),
+      },
+    });
+  });
+
+  it('fails closed when a replayed queued receipt observes mode-to-agent binding drift', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-queued-agent-drift';
+    const queuedItemId = 'q-queued-agent-drift';
+    const now = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-queued-agent-drift',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [
+          {
+            id: queuedItemId,
+            admissionId: 'queue-agent-drift',
+            admissionHash: 'hash-agent-drift',
+            enqueuedAt: now,
+            content: 'do not retarget',
+            attachments: [],
+          },
+        ],
+        queueAdmissionReceipts: {
+          [queuedItemId]: {
+            admissionId: 'queue-agent-drift',
+            admissionHash: 'hash-agent-drift',
+            queuedItemId,
+            modeId: 'default',
+            runtimeDependencies: { modeId: 'default', agentId: 'old-agent', modelId: 'default' },
+            status: 'accepted',
+            runId: 'stale-run',
+            signalId: 'stale-signal',
+            attempts: 1,
+            enqueuedAt: now,
+            acceptedAt: now,
+            updatedAt: now,
+          },
+        },
+        state: undefined,
+        createdAt: now,
+        lastActivityAt: now,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+
+    const newAgent = new MockAgent({ id: 'new-agent' });
+    const replayHarness = new Harness({
+      agents: { 'new-agent': newAgent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'new-agent' }],
+      defaultModeId: 'default',
+    });
+
+    const replaySession = await replayHarness.session({ sessionId });
+    await replaySession.waitForIdle({ timeoutMs: 1000 });
+
+    expect(newAgent.streamCalls).toHaveLength(0);
+    expect(replaySession.getRecord().pendingQueue).toEqual([]);
+    expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'harness.runtime_dependency_drifted',
+        message: expect.stringContaining('old-agent'),
+      },
+    });
+  });
+
+  it('fails closed when queued work admitted without a workspace provider replays with one configured', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-queued-workspace-drift';
+    const queuedItemId = 'q-queued-workspace-drift';
+    const now = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-queued-workspace-drift',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [
+          {
+            id: queuedItemId,
+            admissionId: 'queue-workspace-drift',
+            admissionHash: 'hash-workspace-drift',
+            enqueuedAt: now,
+            content: 'do not run with new workspace',
+            attachments: [],
+          },
+        ],
+        queueAdmissionReceipts: {
+          [queuedItemId]: {
+            admissionId: 'queue-workspace-drift',
+            admissionHash: 'hash-workspace-drift',
+            queuedItemId,
+            modeId: 'default',
+            runtimeDependencies: {
+              modeId: 'default',
+              agentId: 'default',
+              modelId: 'default',
+              workspaceProviderId: null,
+            },
+            status: 'accepted',
+            runId: 'stale-run',
+            signalId: 'stale-signal',
+            attempts: 1,
+            enqueuedAt: now,
+            acceptedAt: now,
+            updatedAt: now,
+          },
+        },
+        state: undefined,
+        createdAt: now,
+        lastActivityAt: now,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+
+    const replayAgent = new MockAgent({ id: 'default' });
+    const replayHarness = new Harness({
+      agents: { default: replayAgent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      workspace: {
+        kind: 'per-resource',
+        provider: {
+          providerId: 'workspace-now-configured',
+          resumable: false,
+          create: async () => ({}) as any,
+        },
+      },
+    });
+
+    const replaySession = await replayHarness.session({ sessionId });
+    await replaySession.waitForIdle({ timeoutMs: 1000 });
+
+    expect(replayAgent.streamCalls).toHaveLength(0);
+    expect(replaySession.getRecord().pendingQueue).toEqual([]);
+    expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'harness.runtime_dependency_drifted',
+        message: expect.stringContaining('workspace_provider "unconfigured"'),
+      },
+    });
+  });
+
+  it('fails closed when queued work admitted with a shared workspace replays after restart', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-queued-shared-workspace-drift';
+    const queuedItemId = 'q-queued-shared-workspace-drift';
+    const now = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-queued-shared-workspace-drift',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [
+          {
+            id: queuedItemId,
+            admissionId: 'queue-shared-workspace-drift',
+            admissionHash: 'hash-shared-workspace-drift',
+            enqueuedAt: now,
+            content: 'do not run with a new shared workspace',
+            attachments: [],
+          },
+        ],
+        queueAdmissionReceipts: {
+          [queuedItemId]: {
+            admissionId: 'queue-shared-workspace-drift',
+            admissionHash: 'hash-shared-workspace-drift',
+            queuedItemId,
+            modeId: 'default',
+            runtimeDependencies: {
+              modeId: 'default',
+              agentId: 'default',
+              modelId: 'default',
+              workspaceProviderId: 'shared:harness-old-owner',
+            },
+            status: 'accepted',
+            runId: 'stale-run',
+            signalId: 'stale-signal',
+            attempts: 1,
+            enqueuedAt: now,
+            acceptedAt: now,
+            updatedAt: now,
+          },
+        },
+        state: undefined,
+        createdAt: now,
+        lastActivityAt: now,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+
+    const replayAgent = new MockAgent({ id: 'default' });
+    const replayHarness = new Harness({
+      agents: { default: replayAgent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      workspace: {
+        kind: 'shared',
+        workspace: { init: vi.fn(async () => {}), destroy: vi.fn(async () => {}) } as any,
+      },
+    });
+
+    const replaySession = await replayHarness.session({ sessionId });
+    await replaySession.waitForIdle({ timeoutMs: 1000 });
+
+    expect(replayAgent.streamCalls).toHaveLength(0);
+    expect(replaySession.getRecord().pendingQueue).toEqual([]);
+    expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'harness.runtime_dependency_drifted',
+        message: expect.stringContaining('workspace_provider "shared:harness-old-owner"'),
+      },
+    });
+  });
+
   it('replays an accepted receipt when pending signal evidence has no persisted memory signal', async () => {
     const storage = new InMemoryStore();
     const harnessStore = await storage.getStore('harness');
@@ -1526,7 +1858,7 @@ describe('Session.queue() — crash replay', () => {
     expect(receipt?.signalId).not.toBe('stale-signal');
   });
 
-  it('completes an accepted receipt from durable signal result evidence after hydration', async () => {
+  it('completes an accepted receipt from durable signal result evidence after hydration even if runtime deps drifted', async () => {
     const storage = new InMemoryStore();
     const harnessStore = await storage.getStore('harness');
     if (!harnessStore) throw new Error('expected harness storage');
@@ -1565,6 +1897,7 @@ describe('Session.queue() — crash replay', () => {
             status: 'accepted',
             runId: 'stale-run',
             signalId: 'stale-signal',
+            runtimeDependencies: { modeId: 'default', agentId: 'old-agent', modelId: 'default' },
             attempts: 1,
             enqueuedAt: now,
             acceptedAt: now,
@@ -1592,12 +1925,12 @@ describe('Session.queue() — crash replay', () => {
       updatedAt: now,
     });
 
-    const replayAgent = new MockAgent({ id: 'default' });
+    const replayAgent = new MockAgent({ id: 'new-agent' });
     replayAgent.enqueueRun({ finishReason: 'stop', text: 'must not run' });
     const replayHarness = new Harness({
-      agents: { default: replayAgent } as any,
+      agents: { 'new-agent': replayAgent } as any,
       storage,
-      modes: [{ id: 'default', agentId: 'default' }],
+      modes: [{ id: 'default', agentId: 'new-agent' }],
       defaultModeId: 'default',
     });
 

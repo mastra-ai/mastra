@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
+import { InMemoryStore } from '../../storage/mock';
 import type { MastraModelOutput } from '../../stream/base/output';
 import { buildFakeOutput } from './__test-utils__/fake-output';
 
@@ -502,6 +503,68 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     await session.respondToQuestion({ answer: 'red' });
 
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ answer: 'red' });
+  });
+
+  it('fails closed when a recovered question resume observes mode-to-agent binding drift', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-question-agent-drift';
+    const requestedAt = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-question-agent-drift',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [],
+        pendingResume: {
+          kind: 'question',
+          itemId: 'question:tc-Q',
+          runId: 'run-Q',
+          toolCallId: 'tc-Q',
+          toolName: 'ask_user',
+          source: 'parent',
+          requestedAt,
+          modeId: 'default',
+          runtimeDependencies: { modeId: 'default', agentId: 'old-agent', modelId: 'default' },
+          payload: { question: 'pick' },
+        },
+        state: undefined,
+        createdAt: requestedAt,
+        lastActivityAt: requestedAt,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+    const agent = new FakeAgent();
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    const session = await harness.session({ sessionId });
+    await expect(
+      session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' }),
+    ).rejects.toMatchObject({ code: 'harness.runtime_dependency_drifted' });
+
+    expect(agent.resumeCalls).toHaveLength(0);
+    expect(session.getRecord().inboxResponseReceipts?.['answer-1']).toMatchObject({
+      status: 'failed',
+      error: { code: 'harness.runtime_dependency_drifted' },
+    });
+    expect(session.getRecord().pendingResume).toMatchObject({ runId: 'run-Q' });
+    expect(session.getRecord().pendingResume?.resumedAt).toBeUndefined();
   });
 
   it('rejects an active question resume when the live session is marked deleted', async () => {

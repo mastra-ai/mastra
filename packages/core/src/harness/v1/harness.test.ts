@@ -1481,6 +1481,20 @@ describe('Harness v1 — construction', () => {
     ).toThrow(HarnessConfigError);
   });
 
+  it('preserves the unbound Mastra config error when resolving mode agents', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    expect(() => harness.getAgentForMode('default')).toThrow(
+      expect.objectContaining({ field: 'mastra', name: 'HarnessConfigError' }),
+    );
+    expect(() =>
+      harness._resolveAgentForRuntimeDependencies({ modeId: 'default', agentId: 'default' }, 'queued item recovery'),
+    ).toThrow(expect.objectContaining({ field: 'mastra', name: 'HarnessConfigError' }));
+  });
+
   it('throws HarnessConfigError for duplicate mode ids', () => {
     expect(
       () =>

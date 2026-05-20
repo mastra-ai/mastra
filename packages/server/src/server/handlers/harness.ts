@@ -65,6 +65,7 @@ import { enforceThreadAccess, getEffectiveResourceId } from './utils';
 
 type SessionLifecycleStatus = 'active' | 'closing' | 'closed';
 type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+type PublicPendingResume = Omit<NonNullable<SessionRecord['pendingResume']>, 'runtimeDependencies'>;
 type UrlAttachmentInput = {
   kind: 'url';
   url: string;
@@ -1407,6 +1408,19 @@ function mapHarnessError(error: unknown): never {
   if (name === 'HarnessStorageChannelDiagnosticsUnsupportedError') {
     throwHarnessHttpError(501, 'harness.channel_diagnostics_unsupported', message, undefined, false);
   }
+  if (
+    name === 'HarnessRuntimeDependencyDriftError' ||
+    name === 'harness.runtime_dependency_drifted' ||
+    harnessErrorString(error, 'code') === 'harness.runtime_dependency_drifted'
+  ) {
+    const context = harnessErrorProp(error, 'context');
+    throwHarnessHttpError(409, 'harness.runtime_dependency_drifted', message, {
+      dependencyKind: harnessErrorString(error, 'dependencyKind') ?? harnessErrorString(error, 'kind'),
+      dependencyId: harnessErrorString(error, 'dependencyId') ?? harnessErrorString(error, 'id'),
+      reason: harnessErrorString(error, 'reason'),
+      ...(context !== undefined ? { context } : {}),
+    });
+  }
   if (name === 'HarnessQueueFullError') {
     throwHarnessHttpError(429, 'harness.queue_full', message, {
       sessionId: harnessErrorString(error, 'sessionId'),
@@ -1629,10 +1643,16 @@ function displayStateFromRecord(record: SessionRecord): SessionDisplayState {
     toolInputBuffers: {},
     activeSubagents: {},
     tokenUsage: { ...record.tokenUsage },
-    pending: record.pendingResume ?? null,
+    pending: pendingResumeForDisplay(record.pendingResume),
     queueDepth: record.pendingQueue.length,
     ...(record.goal !== undefined ? { goal: record.goal } : {}),
   };
+}
+
+function pendingResumeForDisplay(pending: SessionRecord['pendingResume']): PublicPendingResume | null {
+  if (!pending) return null;
+  const { runtimeDependencies: _runtimeDependencies, ...displayPending } = pending;
+  return displayPending;
 }
 
 function snapshotFromRecord(
@@ -1648,7 +1668,7 @@ function snapshotFromRecord(
       depth: record.pendingQueue.length,
       queuedItemIds: record.pendingQueue.map(item => item.id),
     },
-    pendingInbox: record.pendingResume ? [record.pendingResume] : [],
+    pendingInbox: record.pendingResume ? [pendingResumeForDisplay(record.pendingResume)] : [],
     durableWork: {
       active: [],
       recentTerminal: [],

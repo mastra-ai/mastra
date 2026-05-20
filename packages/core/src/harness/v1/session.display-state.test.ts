@@ -110,6 +110,8 @@ describe('Session.getDisplayState — shape', () => {
       question: 'pick one',
       options: [{ label: 'a' }, { label: 'b' }],
     });
+    expect((ds.pending as unknown as Record<string, unknown>).runtimeDependencies).toBeUndefined();
+    expect(session.getRecord().pendingResume?.runtimeDependencies).toBeDefined();
     // Legacy boolean fields are gone — make sure consumers know to use `pending`.
     expect((ds as unknown as Record<string, unknown>).hasPendingQuestion).toBeUndefined();
   });
