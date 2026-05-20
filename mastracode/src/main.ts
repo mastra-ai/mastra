@@ -21,6 +21,7 @@ let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
+let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
@@ -43,11 +44,12 @@ async function tuiMain(pipedInput?: string | null) {
     return browserPromise;
   };
 
-  const result = await createMastraCode();
+  const result = await createMastraCode({ unixSocketPubSub: true });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
+  signalsPubSub = result.signalsPubSub;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -119,7 +121,13 @@ async function tuiMain(pipedInput?: string | null) {
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), analytics?.shutdown()]);
+  const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+    analytics?.shutdown(),
+  ]);
 };
 
 process.on('beforeExit', () => {
