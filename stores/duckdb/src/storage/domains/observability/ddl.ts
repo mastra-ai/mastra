@@ -319,18 +319,15 @@ export const ALL_MIGRATIONS = [
 
   // Existing rows intentionally keep NULL cursorId values; delta polling only
   // applies to rows written by insert paths that explicitly call nextval().
-  // The DROP DEFAULT statements remediate databases created by a prior version
-  // that set `DEFAULT nextval(...)` on cursorId; that catalog default broke
-  // DuckDB WAL replay on reopen because the replayer cannot bind a function
-  // expression before the default database is attached. DROP DEFAULT is a safe
-  // no-op when the column has no default and replays cleanly through the WAL.
+  // Databases upgraded from a prior version may still carry a
+  // `DEFAULT nextval(...)` on cursorId, which breaks DuckDB WAL replay; that
+  // remediation lives in `dropLegacyCursorIdDefaults` and only runs when the
+  // bad default is detected in information_schema.
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE span_events ALTER COLUMN cursorId DROP DEFAULT`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE metric_events ALTER COLUMN cursorId DROP DEFAULT`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
@@ -357,7 +354,6 @@ export const ALL_MIGRATIONS = [
 
   // Logs. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE log_events ALTER COLUMN cursorId DROP DEFAULT`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
@@ -384,7 +380,6 @@ export const ALL_MIGRATIONS = [
 
   // Scores. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE score_events ALTER COLUMN cursorId DROP DEFAULT`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
@@ -415,7 +410,6 @@ export const ALL_MIGRATIONS = [
 
   // Feedback. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE feedback_events ALTER COLUMN cursorId DROP DEFAULT`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
