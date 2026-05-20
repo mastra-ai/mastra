@@ -1,6 +1,6 @@
 # Restart on `yj/magnificent-marquess`: extend `ToolProvider` with v1 capabilities
 
-**Status:** Phases 1–12 complete (automated smoke green; interactive OAuth scenarios deferred to manual reviewer pass). Phase 13 (PR open) is the last remaining step. See `RESTART-SMOKE-RESULTS.md`.
+**Status:** ✅ All phases (1–13) complete. PR #16837 open against `yj/magnificent-marquess`. PR #16672 closed as superseded. Interactive OAuth smoke scenarios deferred to manual reviewer pass — see `RESTART-SMOKE-RESULTS.md` and `RESTART-SMOKE-TEST.md`.
 **Base branch:** `yj/magnificent-marquess`
 **New branch:** `yj/mm/v1-tool-provider-extensions`
 **Reference (read-only):** `yj/mm/v1-integrations-plan` (archive — source for porting logic; symbols translated `ToolIntegration` → `ToolProvider` as we paste)
