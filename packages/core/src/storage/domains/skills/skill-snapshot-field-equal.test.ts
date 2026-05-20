@@ -31,4 +31,21 @@ describe('skillSnapshotFieldValuesEqual', () => {
   it('detects real value differences', () => {
     expect(skillSnapshotFieldValuesEqual({ metadata: { foo: 'bar' } }, { metadata: { foo: 'baz' } })).toBe(false);
   });
+
+  it('treats dates with the same timestamp as equal', () => {
+    expect(skillSnapshotFieldValuesEqual(new Date('2024-01-01T00:00:00Z'), new Date('2024-01-01T00:00:00Z'))).toBe(
+      true,
+    );
+  });
+
+  it('treats dates with different timestamps as not equal', () => {
+    expect(skillSnapshotFieldValuesEqual(new Date('2024-01-01T00:00:00Z'), new Date('2024-06-01T00:00:00Z'))).toBe(
+      false,
+    );
+  });
+
+  it('treats a date and a non-date as not equal', () => {
+    expect(skillSnapshotFieldValuesEqual(new Date('2024-01-01T00:00:00Z'), '2024-01-01T00:00:00.000Z')).toBe(false);
+    expect(skillSnapshotFieldValuesEqual(new Date('2024-01-01T00:00:00Z'), 1704067200000)).toBe(false);
+  });
 });
