@@ -173,7 +173,7 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
   const { Link } = useLinkComponent();
 
   return (
-    <div className="h-full w-full overflow-y-auto p-5">
+    <div>
       <Notice
         variant="note"
         title="Request context"
