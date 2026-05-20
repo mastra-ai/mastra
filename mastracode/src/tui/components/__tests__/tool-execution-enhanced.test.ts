@@ -708,6 +708,25 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain(chalk.white("'done'"));
   });
 
+  it('keeps quoted shell strings highlighted after wrapping', () => {
+    const command = `echo "${'quoted '.repeat(40)}if then fi"`;
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(80).join('\n');
+    const footerLines = stripAnsi(output)
+      .split('\n')
+      .filter(line => line.startsWith('│') && line.trim() !== '│');
+    expect(footerLines.length).toBeGreaterThan(1);
+    expect(stripAnsi(output)).toContain('then fi"');
+    expect(output).toContain(chalk.white('then fi"'));
+    expect(output).not.toContain(chalk.blue('then'));
+  });
+
   it('wraps long quiet shell commands in the footer instead of truncating them', () => {
     const command = 'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot';
     const component = new ToolExecutionComponentEnhanced(

@@ -75,7 +75,6 @@ const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
 };
 
 const SHELL_CONTROL_WORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac', 'in', 'function']);
-const SHELL_BUILTINS = new Set(['cd', 'echo', 'export', 'source', 'alias', 'unalias', 'set', 'unset', 'test', '[', 'printf']);
 
 export interface ToolExecutionOptions {
   showImages?: boolean;
@@ -494,64 +493,66 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
   }
 
-  private highlightQuietShellCommandLine(line: string): string {
-    const tokens = line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;()<>]|[^\s|;&()<>]+/g) ?? [''];
-    let expectsCommand = true;
+  private tokenizeQuietShellCommand(command: string): Array<{ text: string; color: (value: string) => string }> {
+    const tokens = command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;()<>]|[^\s|;&()<>]+/g) ?? [''];
 
-    return tokens
-      .map(token => {
-        if (/^\s+$/.test(token)) return token;
-        if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
-          expectsCommand = false;
-          return chalk.white(token);
-        }
-        if (token === '&&' || token === '||' || token === '|' || token === ';') {
-          expectsCommand = true;
-          return theme.fg('muted', token);
-        }
-        if (token === '(' || token === ')' || token === '<' || token === '>') {
-          return theme.fg('muted', token);
-        }
-        if (SHELL_CONTROL_WORDS.has(token)) {
-          expectsCommand = token === 'then' || token === 'do' || token === 'else';
-          return chalk.blue(token);
-        }
-        if (/^--?[A-Za-z0-9][\w-]*(?:=.*)?$/.test(token)) {
-          expectsCommand = false;
-          return theme.fg('toolArgs', token);
-        }
-        if (expectsCommand || SHELL_BUILTINS.has(token)) {
-          expectsCommand = false;
-          return theme.fg('toolArgs', token);
-        }
-        expectsCommand = false;
-        return theme.fg('toolArgs', token);
-      })
-      .join('');
+    return tokens.map(token => {
+      if (/^\s+$/.test(token)) return { text: token, color: (value: string) => value };
+      if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+        return { text: token, color: chalk.white };
+      }
+      if (token === '&&' || token === '||' || token === '|' || token === ';') {
+        return { text: token, color: (value: string) => theme.fg('muted', value) };
+      }
+      if (token === '(' || token === ')' || token === '<' || token === '>') {
+        return { text: token, color: (value: string) => theme.fg('muted', value) };
+      }
+      if (SHELL_CONTROL_WORDS.has(token)) {
+        return { text: token, color: chalk.blue };
+      }
+      return { text: token, color: (value: string) => theme.fg('toolArgs', value) };
+    });
   }
 
   private wrapQuietShellCommand(command: string, width: number): string[] {
-    const words = command.match(/\S+/g) ?? [''];
     const lines: string[] = [];
     let current = '';
+    let currentWidth = 0;
 
-    for (const word of words) {
-      let remaining = word;
-      while (remaining.length > width) {
-        if (current) {
-          lines.push(current);
-          current = '';
+    const pushCurrent = () => {
+      lines.push(current);
+      current = '';
+      currentWidth = 0;
+    };
+
+    for (const token of this.tokenizeQuietShellCommand(command)) {
+      let remaining = token.text;
+
+      while (remaining.length > 0) {
+        if (currentWidth === 0 && /^\s+$/.test(remaining)) break;
+
+        const available = width - currentWidth;
+        if (available <= 0) {
+          pushCurrent();
+          continue;
         }
-        lines.push(remaining.slice(0, width));
-        remaining = remaining.slice(width);
-      }
-      if (!current) {
-        current = remaining;
-      } else if (current.length + 1 + remaining.length <= width) {
-        current += ` ${remaining}`;
-      } else {
-        lines.push(current);
-        current = remaining;
+
+        if (remaining.length <= available) {
+          current += token.color(remaining);
+          currentWidth += remaining.length;
+          break;
+        }
+
+        if (currentWidth > 0 && !/^\s+$/.test(remaining)) {
+          pushCurrent();
+          continue;
+        }
+
+        const chunk = remaining.slice(0, available);
+        current += token.color(chunk);
+        currentWidth += chunk.length;
+        remaining = remaining.slice(available);
+        pushCurrent();
       }
     }
 
@@ -1345,8 +1346,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const isLast = index === footerLines.length - 1;
         const suffixFits = isLast && this.stripAnsi(footerLine).length + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
-        const highlightedFooterLine = this.highlightQuietShellCommandLine(footerLine);
-        this.contentBox.addChild(new Text(renderLine(`${prefix}${highlightedFooterLine}${suffix}`, value => value), 0, 0));
+        this.contentBox.addChild(new Text(renderLine(`${prefix}${footerLine}${suffix}`, value => value), 0, 0));
       });
       const lastFooterLine = footerLines[footerLines.length - 1] ?? '';
       if (this.stripAnsi(lastFooterLine).length + footerSuffixWidth > footerWrapWidth) {
