@@ -301,6 +301,7 @@ export interface StorageMCPClientToolsConfig {
  * `mastra_tool_provider_connections` storage table.
  */
 export interface StorageToolProviderConfigConnection {
+  kind: 'author' | 'invoker' | 'platform';
   connectionId: string;
   toolkit: string;
   label?: string;
