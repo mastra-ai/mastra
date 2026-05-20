@@ -9,7 +9,21 @@ import type { SlackInstallation } from './schemas';
  * `{ adapter, ...adapterConfig }` when wiring up `AgentChannels` manually.
  * The `adapter` instance itself is created by the provider.
  */
-export type SlackAdapterChannelConfig = Omit<ChannelAdapterConfig, 'adapter'>;
+export type SlackAdapterChannelConfig = Omit<ChannelAdapterConfig, 'adapter' | 'streaming'> & {
+  /**
+   * Stream agent text deltas to this adapter as the agent generates them, instead of
+   * buffering and posting once per step. On adapters with native streaming (e.g. Slack)
+   * this is rendered live; on adapters without it (e.g. Discord) the Chat SDK falls back
+   * to post + edit, which can feel noisy — leave it off there.
+   *
+   * - `true` (default) — stream with default options.
+   * - `false` — buffer text and post once per `step-finish`.
+   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval.
+   *
+   * @default true
+   */
+  streaming?: boolean | { updateIntervalMs?: number };
+};
 
 /** AgentChannels fields that the provider forwards. `adapters` and `userName` are provider-managed. */
 type ForwardedAgentChannelsOptions = Pick<
@@ -51,17 +65,6 @@ export interface SlackProviderConfig extends ForwardedAgentChannelsOptions, Slac
    * ```
    */
   handlers?: ChannelHandlers;
-
-  /**
-   * Per-adapter overrides applied to the Slack adapter entry inside
-   * `AgentChannels.adapters` — for example `cards`, `formatToolCall`,
-   * `formatError`.
-   *
-   * @deprecated Pass these fields at the top level of `SlackProviderConfig`
-   * instead. Top-level fields win; values from `adapterConfig` are merged in
-   * as a fallback for backwards compatibility.
-   */
-  adapterConfig?: SlackAdapterChannelConfig;
 
   /**
    * Slack App Configuration access token for programmatic app creation.
@@ -118,6 +121,17 @@ export interface SlackProviderConfig extends ForwardedAgentChannelsOptions, Slac
    * Use a 32+ character random string. Can be set via MASTRA_ENCRYPTION_KEY env var.
    */
   encryptionKey?: string;
+
+  /**
+   * Per-adapter overrides applied to the Slack adapter entry inside
+   * `AgentChannels.adapters` — for example `cards`, `formatToolCall`,
+   * `formatError`.
+   *
+   * @deprecated Pass these fields at the top level of `SlackProviderConfig`
+   * instead. Top-level fields win; values from `adapterConfig` are merged in
+   * as a fallback for backwards compatibility.
+   */
+  adapterConfig?: SlackAdapterChannelConfig;
 }
 
 // =============================================================================
