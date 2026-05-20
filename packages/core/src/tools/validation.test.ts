@@ -2283,3 +2283,115 @@ describe('prompt alias normalization (GitHub #14154)', () => {
     expect(result.data).toEqual({ prompt: 'from message' });
   });
 });
+
+describe('validateToolInput - Const Field Injection', () => {
+  it('should auto-inject missing const-constrained fields', () => {
+    const schema = z.object({
+      eventSpec: z.object({
+        '@type': z.literal('com.cvent.EventSpec'),
+        title: z.string(),
+        date: z.string(),
+      }),
+    });
+
+    const result = validateToolInput(
+      schema,
+      {
+        eventSpec: { title: 'Hackathon', date: '2026-06-01' }, // @type missing
+      },
+      'create-event',
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      eventSpec: {
+        '@type': 'com.cvent.EventSpec',
+        title: 'Hackathon',
+        date: '2026-06-01',
+      },
+    });
+  });
+
+  it('should overwrite wrong const-constrained field values', () => {
+    const schema = z.object({
+      eventSpec: z.object({
+        '@type': z.literal('com.cvent.EventSpec'),
+        title: z.string(),
+        date: z.string(),
+      }),
+    });
+
+    const result = validateToolInput(
+      schema,
+      {
+        eventSpec: { '@type': 'wrong.type', title: 'Hackathon', date: '2026-06-01' },
+      },
+      'create-event',
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      eventSpec: {
+        '@type': 'com.cvent.EventSpec',
+        title: 'Hackathon',
+        date: '2026-06-01',
+      },
+    });
+  });
+
+  it('should inject const fields inside array items', () => {
+    const schema = z.object({
+      items: z.array(
+        z.object({
+          '@type': z.literal('com.cvent.Item'),
+          name: z.string(),
+        }),
+      ),
+    });
+
+    const result = validateToolInput(
+      schema,
+      { items: [{ name: 'Alpha' }, { name: 'Beta' }] }, // @type missing in each
+      'create-items',
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: [
+        { '@type': 'com.cvent.Item', name: 'Alpha' },
+        { '@type': 'com.cvent.Item', name: 'Beta' },
+      ],
+    });
+  });
+
+  it('should inject const fields in deeply nested objects', () => {
+    const schema = z.object({
+      wrapper: z.object({
+        inner: z.object({
+          '@type': z.literal('com.cvent.DeepSpec'),
+          value: z.string(),
+        }),
+      }),
+    });
+
+    const result = validateToolInput(
+      schema,
+      {
+        wrapper: {
+          inner: { value: 'hello' }, // @type missing at deep level
+        },
+      },
+      'create-deep',
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      wrapper: {
+        inner: {
+          '@type': 'com.cvent.DeepSpec',
+          value: 'hello',
+        },
+      },
+    });
+  });
+});

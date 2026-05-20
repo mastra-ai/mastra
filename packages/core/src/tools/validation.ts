@@ -434,6 +434,66 @@ function coerceStringifiedJsonValues(schema: StandardSchemaWithJSON<unknown>, in
 }
 
 /**
+ * Auto-injects const-constrained field values into the input before validation.
+ *
+ * MCP API specs commonly use discriminator fields (e.g. `@type`) with a single
+ * valid constant value to guide server-side deserialization into the correct
+ * typed model. These fields are marked `required` in the JSON Schema:
+ *   { "@type": { "const": "com.cvent.EventSpec" } }
+ *
+ * The LLM has no way of knowing the correct constant value, so it either omits
+ * the field entirely or guesses incorrectly, causing validation to fail.
+ * Since a `const` field has exactly one valid value, this function recursively
+ * walks the JSON Schema — including `oneOf`/`anyOf`/`allOf` branches and array
+ * item schemas — finds all properties with a `const` constraint, and injects
+ * their values into the input before validation runs.
+ *
+ * Note: `$ref` is not resolved here. If `standardSchemaToJSONSchema` emits refs,
+ * those branches will be skipped silently (TODO: resolve $defs if needed).
+ *
+ * @param schema The JSON Schema object to walk for const-constrained properties
+ * @param input The input to process
+ * @returns The input with all const-constrained field values injected
+ */
+function injectConstFields(schema: Record<string, any>, input: unknown): unknown {
+  if (!schema || typeof schema !== 'object') return input;
+
+  // Only walk allOf — these branches all apply simultaneously and can be merged.
+  // oneOf/anyOf are mutually exclusive alternatives; injecting all of them
+  // would cause the last branch's const to overwrite earlier ones.
+  const allOf = schema['allOf'];
+  if (Array.isArray(allOf)) {
+    for (const branch of allOf) {
+      input = injectConstFields(branch as Record<string, any>, input);
+    }
+  }
+
+  // Handle arrays — walk each item against the item schema.
+  if (schema.type === 'array' && schema.items && Array.isArray(input)) {
+    const itemSchema = Array.isArray(schema.items) ? schema.items[0] : schema.items;
+    return (input as unknown[]).map(item => injectConstFields(itemSchema as Record<string, any>, item));
+  }
+
+  if (schema.type !== 'object' || !schema.properties) return input;
+  if (input == null || typeof input !== 'object' || Array.isArray(input)) return input;
+
+  const obj = { ...(input as Record<string, unknown>) };
+
+  for (const [key, propSchema] of Object.entries(schema.properties)) {
+    if (!propSchema || typeof propSchema !== 'object') continue;
+    const ps = propSchema as Record<string, any>;
+
+    if ('const' in ps) {
+      obj[key] = ps.const;
+    } else if (obj[key] != null) {
+      obj[key] = injectConstFields(ps, obj[key]);
+    }
+  }
+
+  return obj;
+}
+
+/**
  * Validates raw input data against a schema.
  *
  * @param schema The schema to validate against (or undefined to skip validation)
@@ -453,6 +513,9 @@ export function validateToolInput<T = unknown>(
   }
 
   // Validation pipeline:
+  // 0. injectConstFields: Auto-inject const-constrained field values into the input.
+  //    Handles LLMs that omit or incorrectly fill discriminator fields (e.g. @type)
+  //    which have exactly one valid constant value in the JSON Schema.
   //
   // 1. normalizeNullishInput: Convert top-level null/undefined to {} or [] based on schema type.
   //    Handles LLMs that send undefined instead of {} or [] for all-optional parameters.
@@ -472,6 +535,10 @@ export function validateToolInput<T = unknown>(
   // 5. If validation still fails, retry with null values stripped from object properties.
   //    This handles LLMs (e.g. Gemini) that send null for .optional() fields, where
   //    Zod expects undefined, not null. (GitHub #12362)
+
+  // Step 0: Auto-Inject const-constrained fields
+  const constJsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
+  input = injectConstFields(constJsonSchema as Record<string, any>, input);
 
   // Step 1: Normalize top-level null/undefined to appropriate default
   let normalizedInput = normalizeNullishInput(schema, input);
