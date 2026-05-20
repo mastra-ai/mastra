@@ -10,9 +10,9 @@
   "dependencies": {
     "zod": "^4.3.6",
     "typescript": "^5.9.3",
-    "@ai-sdk/openai": "^3.0.0",
-    "@ai-sdk/anthropic": "^3.0.0",
-    "ai": "^6.0.1",
+    "@ai-sdk/openai": "^3.0.64",
+    "@ai-sdk/anthropic": "^3.0.78",
+    "ai": "^6.0.184",
     "@mastra/client-js": "beta",
     "@mastra/core": "beta",
     "@mastra/libsql": "beta",
