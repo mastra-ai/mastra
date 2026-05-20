@@ -1,8 +1,10 @@
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import { HarnessSessionClosedError, HarnessValidationError } from './errors';
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe, EmitInput } from './events';
 import type { Harness } from './harness';
-import type { SessionLifecycleState } from './types';
+import type { HarnessMode } from './shared';
+import type { ModelAuthStatus, SessionLifecycleState } from './types';
 
 export interface SessionConstructorOptions {
   harness: Harness;
@@ -22,6 +24,7 @@ export class Session {
   private readonly emitter: EventEmitter;
   private lifecycle: SessionLifecycleState = 'live';
   private leaseRenewTimer?: ReturnType<typeof setTimeout>;
+  private flushChain: Promise<void> = Promise.resolve();
 
   constructor(opts: SessionConstructorOptions) {
     this.harness = opts.harness;
@@ -73,7 +76,11 @@ export class Session {
     return this.lifecycle !== 'live';
   }
 
-  getRecord(): SessionRecord {
+  get _internalRecordVersion(): number {
+    return this.record.version;
+  }
+
+  getRecord(): Readonly<SessionRecord> {
     return this.record;
   }
 
@@ -87,6 +94,54 @@ export class Session {
 
   _emit(event: EmitInput): HarnessEvent {
     return this.emitter.emit(event);
+  }
+
+  getCurrentMode(): HarnessMode {
+    this.assertLive('getCurrentMode()');
+    return this.harness._getMode(this.record.modeId);
+  }
+
+  async switchMode(opts: { mode: string }): Promise<void> {
+    this.assertLive('switchMode()');
+    this.harness._getMode(opts.mode);
+    const previousModeId = this.record.modeId;
+    if (previousModeId === opts.mode) return;
+
+    await this.flushUpdate(prev => ({ ...prev, modeId: opts.mode }));
+    this.emitter.emit({ type: 'mode_changed', modeId: opts.mode, previousModeId });
+  }
+
+  readonly models = Object.freeze({
+    current: (): string => this.modelsCurrent(),
+    hasSelected: (): boolean => this.modelsHasSelected(),
+    currentAuthStatus: (): Promise<ModelAuthStatus> => this.modelsCurrentAuthStatus(),
+    switch: (opts: { model: string }): Promise<void> => this.modelsSwitch(opts),
+    setSubagent: (opts: { agentType: string; model: string }): Promise<void> => this.modelsSetSubagent(opts),
+    getSubagent: (opts: { agentType: string }): string | null => this.modelsGetSubagent(opts),
+  });
+
+  async getState<TState = unknown>(): Promise<TState> {
+    this.assertLive('getState()');
+    return (this.record.state ?? {}) as TState;
+  }
+
+  setState<TState = unknown>(updates: Partial<TState>): Promise<void>;
+  setState<TState = unknown>(updater: (prev: TState) => TState): Promise<void>;
+  async setState<TState = unknown>(updatesOrUpdater: Partial<TState> | ((prev: TState) => TState)): Promise<void> {
+    this.assertLive('setState()');
+    let changedKeys: string[] = [];
+    await this.flushUpdate(prev => {
+      const current = (prev.state ?? {}) as TState;
+      const next =
+        typeof updatesOrUpdater === 'function'
+          ? (updatesOrUpdater as (prev: TState) => TState)(current)
+          : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
+      changedKeys = diffStateKeys(current, next);
+      return { ...prev, state: next };
+    });
+    if (changedKeys.length > 0) {
+      this.emitter.emit({ type: 'state_changed', changedKeys });
+    }
   }
 
   _markClosed(record: SessionRecord): void {
@@ -154,11 +209,116 @@ export class Session {
         ...this.record,
         ownerId: this.ownerId,
         leaseExpiresAt: lease.expiresAt,
-        version: lease.version,
+        version: Math.max(this.record.version, lease.version),
       };
       this.scheduleLeaseRenewal();
     } catch {
       await this.harness._evictSession(this, 'lease_lost');
     }
   }
+
+  private modelsCurrent(): string {
+    this.assertLive('models.current()');
+    return this.record.modelId;
+  }
+
+  private modelsHasSelected(): boolean {
+    this.assertLive('models.hasSelected()');
+    if (this.record.modelId && this.record.modelId.length > 0) return true;
+    if (Object.keys(this.record.subagentModelOverrides ?? {}).length > 0) return true;
+    return false;
+  }
+
+  private async modelsCurrentAuthStatus(): Promise<ModelAuthStatus> {
+    this.assertLive('models.currentAuthStatus()');
+    const modelId = this.record.modelId;
+    if (!modelId) return 'unknown';
+    const entry = await this.harness.models.get(modelId);
+    if (!entry) return 'unknown';
+    return this.harness.models.getAuthStatus(modelId);
+  }
+
+  private async modelsSwitch(opts: { model: string }): Promise<void> {
+    this.assertLive('models.switch()');
+    assertModelId('models.switch', opts.model);
+    const previousModelId = this.record.modelId;
+    if (previousModelId === opts.model) return;
+
+    await this.flushUpdate(prev => ({ ...prev, modelId: opts.model }));
+    this.emitter.emit({ type: 'model_changed', modelId: opts.model, previousModelId });
+  }
+
+  private async modelsSetSubagent(opts: { agentType: string; model: string }): Promise<void> {
+    this.assertLive('models.setSubagent()');
+    assertAgentType('models.setSubagent', opts.agentType);
+    assertModelId('models.setSubagent', opts.model);
+    const previousModelId = this.record.subagentModelOverrides?.[opts.agentType] ?? null;
+    if (previousModelId === opts.model) return;
+
+    await this.flushUpdate(prev => ({
+      ...prev,
+      subagentModelOverrides: {
+        ...(prev.subagentModelOverrides ?? {}),
+        [opts.agentType]: opts.model,
+      },
+    }));
+    this.emitter.emit({
+      type: 'model_override_set',
+      agentType: opts.agentType,
+      modelId: opts.model,
+      previousModelId,
+    });
+  }
+
+  private modelsGetSubagent(opts: { agentType: string }): string | null {
+    this.assertLive('models.getSubagent()');
+    assertAgentType('models.getSubagent', opts.agentType);
+    return this.record.subagentModelOverrides?.[opts.agentType] ?? null;
+  }
+
+  private flushUpdate(update: (prev: SessionRecord) => SessionRecord): Promise<void> {
+    const run = async (): Promise<void> => {
+      const next: SessionRecord = {
+        ...update(this.record),
+        lastActivityAt: Date.now(),
+      };
+      const saved = await this.storage.saveSession(next, {
+        ownerId: this.ownerId,
+        ifVersion: this.record.version,
+      });
+      this.record = { ...next, version: saved.version };
+    };
+    const next = this.flushChain.then(run, run);
+    this.flushChain = next.catch(() => {});
+    return next;
+  }
+
+  private assertLive(method: string): void {
+    if (this.lifecycle !== 'live') {
+      throw new HarnessSessionClosedError(this.id);
+    }
+    void method;
+  }
+}
+
+function assertAgentType(method: string, value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError(method, 'agentType must be a non-empty string');
+  }
+}
+
+function assertModelId(method: string, value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError(method, 'model must be a non-empty string');
+  }
+}
+
+function diffStateKeys(prev: unknown, next: unknown): string[] {
+  if (!isRecord(prev) || !isRecord(next)) return Object.is(prev, next) ? [] : ['*'];
+  const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+  return [...keys].filter(key => !Object.is(prev[key], next[key]));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
