@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
-import { theme, tintHex } from '../../theme.js';
+import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -299,8 +299,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     expect(output).toContain(chalk.hex(modeColor)('▐'));
     expect(output).toContain(chalk.bgHex(modeColor).hex('#000000').bold('view'));
-    expect(output).toContain(chalk.bgHex('#0f0f0f').hex(modeColor)('src/example.ts'));
-    expect(output).toContain(chalk.hex(tintHex(modeColor, 0.35))('│'));
+    expect(output).toContain(chalk.bgHex('#141414').hex(modeColor)('src/example.ts'));
+    expect(output).toContain(chalk.hex(ensureTerminalGlyphContrast(tintHex(modeColor, 0.35)))('│'));
   });
 
   it('renders quiet non-shell tool validation errors with actionable details', () => {
