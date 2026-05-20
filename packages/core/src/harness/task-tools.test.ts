@@ -446,7 +446,7 @@ describe('taskWriteTool', () => {
     ]);
   });
 
-  it('rejects task lists with multiple in-progress tasks', async () => {
+  it('auto-demotes earlier in-progress tasks when multiple are submitted', async () => {
     const initialTasks = [
       { id: 'existing', content: 'Existing task', status: 'pending' as const, activeForm: 'Tracking existing task' },
     ];
@@ -462,14 +462,12 @@ describe('taskWriteTool', () => {
       { requestContext: ctx.requestContext },
     );
 
-    expect(result).toEqual({
-      content: 'Only one task can be in_progress at a time.',
-      tasks: initialTasks,
-      isError: true,
-    });
-    expect(ctx.state.tasks).toBe(initialTasks);
-    expect(ctx.setState).not.toHaveBeenCalled();
-    expect(ctx.events).toEqual([]);
+    expect(result.isError).toBe(false);
+    // Only the last in_progress task keeps its status; earlier ones are demoted to pending
+    expect(ctx.state.tasks).toEqual([
+      { id: 'one', content: 'First task', status: 'pending', activeForm: 'Doing first task' },
+      { id: 'two', content: 'Second task', status: 'in_progress', activeForm: 'Doing second task' },
+    ]);
   });
 
   it('returns deterministic omitted ids that still resolve if an older schema strips ids', async () => {
@@ -555,7 +553,7 @@ describe('taskUpdateTool', () => {
     expect(ctx.events).toEqual([]);
   });
 
-  it('rejects updates that would create multiple in-progress tasks', async () => {
+  it('auto-demotes previous in-progress task when updating another to in_progress', async () => {
     const initialTasks = [
       {
         id: 'investigate',
@@ -575,14 +573,11 @@ describe('taskUpdateTool', () => {
       { requestContext: ctx.requestContext },
     );
 
-    expect(result).toEqual({
-      content: 'Only one task can be in_progress at a time.',
-      tasks: initialTasks,
-      isError: true,
-    });
-    expect(ctx.state.tasks).toBe(initialTasks);
-    expect(ctx.setState).not.toHaveBeenCalled();
-    expect(ctx.events).toEqual([]);
+    expect(result.isError).toBe(false);
+    expect(ctx.state.tasks).toEqual([
+      { id: 'investigate', content: 'Investigate issue', status: 'pending', activeForm: 'Investigating issue' },
+      { id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
+    ]);
   });
 });
 

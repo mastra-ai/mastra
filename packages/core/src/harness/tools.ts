@@ -448,16 +448,21 @@ function formatTaskCheckResult(taskCheck: ReturnType<typeof summarizeTaskCheck>)
   return response;
 }
 
-function hasMultipleInProgress(tasks: TaskItemSnapshot[]): boolean {
-  return tasks.filter(task => task.status === 'in_progress').length > 1;
-}
-
-function multipleInProgressError(tasks: TaskItemSnapshot[]) {
-  return {
-    content: 'Only one task can be in_progress at a time.',
-    tasks,
-    isError: true,
-  };
+/**
+ * Enforce single in_progress invariant by demoting all but the last
+ * in_progress task back to pending. Returns the (possibly mutated) list.
+ */
+function demoteExtraInProgress(tasks: TaskItemSnapshot[]): TaskItemSnapshot[] {
+  const inProgressIndices = tasks.reduce<number[]>((acc, t, i) => {
+    if (t.status === 'in_progress') acc.push(i);
+    return acc;
+  }, []);
+  if (inProgressIndices.length <= 1) return tasks;
+  // Keep the last one — demote all earlier ones
+  const keepIndex = inProgressIndices[inProgressIndices.length - 1]!;
+  return tasks.map((t, i) =>
+    t.status === 'in_progress' && i !== keepIndex ? { ...t, status: 'pending' as const } : t,
+  );
 }
 
 async function writeTasks(
@@ -553,10 +558,7 @@ States:
       }
 
       return await mutateTasks(harnessCtx, currentTasks => {
-        const normalizedTasks = assignTaskIds(tasks, currentTasks);
-        if (hasMultipleInProgress(normalizedTasks)) {
-          return multipleInProgressError(currentTasks);
-        }
+        const normalizedTasks = demoteExtraInProgress(assignTaskIds(tasks, currentTasks));
 
         return {
           content: formatTaskListResult(normalizedTasks),
@@ -622,19 +624,18 @@ Usage:
           };
         }
 
-        const updatedTasks = tasks.map((task, index) =>
-          index === taskIndex
-            ? {
-                ...task,
-                ...(content !== undefined ? { content } : {}),
-                ...(status !== undefined ? { status } : {}),
-                ...(activeForm !== undefined ? { activeForm } : {}),
-              }
-            : task,
+        const updatedTasks = demoteExtraInProgress(
+          tasks.map((task, index) =>
+            index === taskIndex
+              ? {
+                  ...task,
+                  ...(content !== undefined ? { content } : {}),
+                  ...(status !== undefined ? { status } : {}),
+                  ...(activeForm !== undefined ? { activeForm } : {}),
+                }
+              : task,
+          ),
         );
-        if (hasMultipleInProgress(updatedTasks)) {
-          return multipleInProgressError(tasks);
-        }
 
         return {
           content: formatTaskListResult(updatedTasks),

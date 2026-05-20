@@ -15,6 +15,8 @@ import type { SelectItem } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
+import { JudgeDisplayComponent } from '../components/judge-display.js';
+import { GradientAnimator } from '../components/obi-loader.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
@@ -74,8 +76,21 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('Goal is already done. Use /goal <text> to set a new goal.');
       return;
     }
+
+    const wasJudgeFailure = goal.lastPauseWasJudgeFailure;
     goalManager.resume();
     await goalManager.saveToThread(state);
+
+    if (wasJudgeFailure) {
+      // The goal was paused because the judge failed — retrigger the judge
+      // evaluation instead of prompting the main agent.
+      ctx.showInfo(
+        `Goal resumed: "${goal.objective}" — retriggering judge evaluation...`,
+      );
+      triggerGoalJudge(ctx);
+      return;
+    }
+
     ctx.showInfo(
       `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
     );
@@ -289,6 +304,93 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
     });
     selector.focused = true;
   });
+}
+
+/**
+ * Trigger a goal judge evaluation from the command context (e.g. after /goal resume
+ * following a judge failure). Mirrors the UI setup from maybeGoalContinuation in
+ * agent-lifecycle.ts but skips queue draining since there's no agent turn to follow up.
+ */
+function triggerGoalJudge(ctx: SlashCommandContext): void {
+  const { state } = ctx;
+  const goal = state.goalManager.getGoal();
+  if (!goal) return;
+  const evaluatedGoalId = goal.id;
+
+  if (!state.gradientAnimator) {
+    state.gradientAnimator = new GradientAnimator(() => {
+      ctx.updateStatusLine();
+    });
+  }
+  const abortController = new AbortController();
+  const judgeComponent = new JudgeDisplayComponent(null, goal.turnsUsed, goal.maxTurns);
+  const activeGoalJudge = { modelId: goal.judgeModelId, abortController, component: judgeComponent };
+  state.activeGoalJudge = activeGoalJudge;
+  state.chatContainer.addChild(judgeComponent);
+  state.gradientAnimator.start();
+  ctx.updateStatusLine();
+  state.ui.requestRender();
+
+  state.goalManager
+    .evaluateAfterTurn(state, {
+      abortSignal: abortController.signal,
+      onActivity: line => {
+        if (state.activeGoalJudge === activeGoalJudge) {
+          judgeComponent.addActivity(line);
+          state.ui.requestRender();
+        }
+      },
+    })
+    .then(async ({ continuation, judgeResult }) => {
+      if (state.activeGoalJudge !== activeGoalJudge) return;
+
+      const currentGoal = state.goalManager.getGoal();
+      if (!currentGoal || currentGoal.id !== evaluatedGoalId) return;
+
+      if (judgeResult) {
+        judgeComponent.setResult(judgeResult, currentGoal.turnsUsed, currentGoal.maxTurns);
+        state.ui.requestRender();
+      }
+
+      if (abortController.signal.aborted) {
+        state.userInitiatedAbort = false;
+        return;
+      }
+
+      if (continuation) {
+        if (currentGoal.status !== 'active') return;
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: continuation,
+            attributes: { type: 'goal-judge' },
+            metadata: {
+              goalId: currentGoal.id,
+              turnsUsed: currentGoal.turnsUsed,
+              maxTurns: currentGoal.maxTurns,
+              judgeModelId: currentGoal.judgeModelId,
+            },
+          }).accepted;
+        } catch (error) {
+          ctx.showError(`Failed to send goal continuation: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      } else if (currentGoal.status === 'paused') {
+        ctx.showInfo(
+          `Goal paused (attempt ${currentGoal.turnsUsed}/${currentGoal.maxTurns}). Use /goal resume to continue.`,
+        );
+      }
+    })
+    .catch(() => {
+      // Goal evaluation failed — don't block the TUI
+    })
+    .finally(() => {
+      if (state.activeGoalJudge === activeGoalJudge) {
+        state.activeGoalJudge = undefined;
+      }
+      state.gradientAnimator?.fadeOut();
+      ctx.updateStatusLine();
+      state.ui.requestRender();
+    });
 }
 
 async function startGoal(
