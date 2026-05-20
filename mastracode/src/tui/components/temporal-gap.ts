@@ -4,6 +4,7 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface TemporalGapOptions {
   message?: string;
@@ -16,6 +17,10 @@ export class TemporalGapComponent extends Container {
 
     this.addChild(new Text(theme.fg('dim', `  ⏳ ${resolveGapText(options)}`), BOX_INDENT, 0));
     this.addChild(new Spacer(1));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'system';
   }
 
   setExpanded(_expanded: boolean): void {}

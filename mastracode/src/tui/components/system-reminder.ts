@@ -9,6 +9,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_COLLAPSED_LINES = 10;
 const GENERIC_DYNAMIC_REMINDER_PREFIX = 'When using guidance from a discovered instruction file';
@@ -58,6 +59,10 @@ export class SystemReminderComponent extends Container {
 
     this.expanded = expanded;
     this.rebuild();
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'system';
   }
 
   toggleExpanded(): void {

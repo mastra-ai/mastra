@@ -150,10 +150,11 @@ describe('addUserMessage', () => {
       }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(2);
-    expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
+    const children = state.chatContainer.children.filter(c => !isChatBoundarySpacer(c));
+    expect(children).toHaveLength(2);
+    expect(children[0]).toBeInstanceOf(TemporalGapComponent);
+    expect(children[1]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('user-1')).toBe(children[1]);
   });
 
   it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {
