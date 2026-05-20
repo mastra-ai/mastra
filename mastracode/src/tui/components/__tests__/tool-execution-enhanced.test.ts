@@ -688,8 +688,24 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     expect(stripAnsi(output)).toContain(`$ ${command}`);
     expect(output).toContain(chalk.blue('if'));
-    expect(output).toContain(chalk.cyan('echo'));
+    expect(output).toContain(chalk.hex('#93c5fd')('echo'));
     expect(output).toContain(chalk.hex('#f6c177')('-f'));
+  });
+
+  it('keeps shell keywords inside quoted strings highlighted as strings', () => {
+    const command = 'echo "if then fi" && printf \'done\'';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(command);
+    expect(output).toContain(chalk.white('"if then fi"'));
+    expect(output).not.toContain(chalk.blue('then'));
+    expect(output).toContain(chalk.white("'done'"));
   });
 
   it('wraps long quiet shell commands in the footer instead of truncating them', () => {

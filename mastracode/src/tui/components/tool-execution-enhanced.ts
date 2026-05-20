@@ -495,12 +495,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private highlightQuietShellCommandLine(line: string): string {
-    const tokens = line.match(/\s+|&&|\|\||[|;()<>]|[^\s|;&()<>]+/g) ?? [''];
+    const tokens = line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;()<>]|[^\s|;&()<>]+/g) ?? [''];
     let expectsCommand = true;
 
     return tokens
       .map(token => {
         if (/^\s+$/.test(token)) return token;
+        if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+          expectsCommand = false;
+          return chalk.white(token);
+        }
         if (token === '&&' || token === '||' || token === '|' || token === ';') {
           expectsCommand = true;
           return theme.fg('muted', token);
@@ -518,7 +522,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         }
         if (expectsCommand || SHELL_BUILTINS.has(token)) {
           expectsCommand = false;
-          return chalk.cyan(token);
+          return chalk.hex('#93c5fd')(token);
         }
         expectsCommand = false;
         return theme.fg('toolArgs', token);
