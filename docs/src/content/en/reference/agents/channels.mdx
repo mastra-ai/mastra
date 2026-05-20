@@ -53,9 +53,9 @@ export const supportAgent = new Agent({
     name: 'inlineMedia',
     type: 'string[] | ((mimeType: string) => boolean)',
     isOptional: true,
-    defaultValue: "['image/*']",
+    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
     description:
-      'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function.',
+      'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function. The default matches the formats supported by major vision models.',
   },
   {
     name: 'inlineLinks',
@@ -189,7 +189,7 @@ const agent = new Agent({
 
 Override built-in event handlers. Each handler can be:
 
-- **Omitted**: uses the default Mastra handler (routes to `agent.stream` and posts the response)
+- **Omitted**: uses the default Mastra handler (routes the message through the agent and posts the response)
 - **`false`**: disables the handler entirely
 - **A function** `(thread, message, defaultHandler) => Promise<void>`: wraps or replaces the default
 
@@ -252,6 +252,8 @@ type ChannelHandler = (
 ## Inline media
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that do not match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+
+The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
 Supported glob patterns:
 

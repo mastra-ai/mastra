@@ -643,8 +643,8 @@ importers:
   channels/slack:
     dependencies:
       '@chat-adapter/slack':
-        specifier: ^4.26.0
-        version: 4.28.1(bufferutil@4.1.0)
+        specifier: ^4.29.0
+        version: 4.29.0(bufferutil@4.1.0)(zod@4.3.6)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -662,8 +662,8 @@ importers:
         specifier: ^3.1.1
         version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.15)(@vitest/ui@4.1.5(vitest@4.1.5))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0)
       zod:
-        specifier: ^3.23.0
-        version: 3.25.76
+        specifier: 'catalog:'
+        version: 4.3.6
 
   client-sdks/ai-sdk:
     devDependencies:
@@ -3092,6 +3092,9 @@ importers:
       strip-json-comments:
         specifier: ^5.0.3
         version: 5.0.3
+      tinyglobby:
+        specifier: ^0.2.16
+        version: 0.2.16
       yocto-spinner:
         specifier: ^1.1.0
         version: 1.2.0
@@ -3251,8 +3254,8 @@ importers:
         specifier: ^8.18.0
         version: 8.18.0
       chat:
-        specifier: ^4.24.0
-        version: 4.28.1
+        specifier: ^4.29.0
+        version: 4.29.0(zod@4.3.6)
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -3292,6 +3295,9 @@ importers:
       picomatch:
         specifier: ^4.0.3
         version: 4.0.3
+      posthog-node:
+        specifier: ^5.30.6
+        version: 5.33.4(rxjs@7.8.1)
       tokenx:
         specifier: ^1.3.0
         version: 1.3.0
@@ -3406,7 +3412,7 @@ importers:
         version: 0.4.6(zod@4.3.6)
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.3
-        version: '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.177(zod@4.3.6))(zod@4.3.6)'
+        version: '@openrouter/ai-sdk-provider@1.2.3(zod@4.3.6)'
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -9885,11 +9891,13 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
-  '@chat-adapter/shared@4.28.1':
-    resolution: {integrity: sha512-v7AcZMrvS2gxFlRiUO1o9Nta2iipnnmV54Gie8e3nQTQvnghENfSf7j7nimA5DOUWCgj+e4DV7LE0x1pakNtkA==}
+  '@chat-adapter/shared@4.29.0':
+    resolution: {integrity: sha512-ARqTDoHJHKN9rpytbFPJbNmqqx3fOg5xwsTZdlingQPAssOSeHDBdqrFJkgDhyCRGbmDtG09cuS0FkVzeoh2qg==}
+    engines: {node: '>=20'}
 
-  '@chat-adapter/slack@4.28.1':
-    resolution: {integrity: sha512-JxgV7+cRXXeKpj0MzS7nzG3JvpnfhIgnPo9r/sdEIzeWhIb8tUcT2PbLl/fpSu/cb+WkICS0bCENn1I0PS39Hg==}
+  '@chat-adapter/slack@4.29.0':
+    resolution: {integrity: sha512-s2DXAwkTpmiIKSATXgrO879s1pqFwS70Y0JPd+TRGRzDeh6nfqt5dnKt5Bug0P1zwkB6DoPurhnYS9nqhSmD/w==}
+    engines: {node: '>=20'}
 
   '@clack/core@1.3.0':
     resolution: {integrity: sha512-xJPHpAmEQUBrXSLx0gF+q5K/IyihXpsHZcha+jB+tyahsKRK3Dxo4D0coZDewHo12NhiuzC3dTtMPbm53GEAAA==}
@@ -19887,8 +19895,17 @@ packages:
   chardet@2.1.1:
     resolution: {integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==}
 
-  chat@4.28.1:
-    resolution: {integrity: sha512-oKBeLQ746rSmHWGoXmPgDOqMVdIe9cWFQBQ1G2pw0l2vV4sAsZgfEJmc1UYqSJR4kYy4PxKgRFy31pe4RJ644Q==}
+  chat@4.29.0:
+    resolution: {integrity: sha512-KdPfzaie5ivYytyRICTERg5xT+LeCbYefokvNAqTHe92eqkFaoTMXXkSitikxJVWhZIb2YoXF1b9UZHyzSzKzw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      ai: ^6.0.182
+      zod: ^3.0.0 || ^4.0.0
+    peerDependenciesMeta:
+      ai:
+        optional: true
+      zod:
+        optional: true
 
   check-error@2.1.1:
     resolution: {integrity: sha512-OAlb+T7V4Op9OwdkjmguYRqncdlx5JiofwOAUkmTF+jNdHwzTaTs4sRAGpzLF3oOz5xAyDGrPgeIDFQmDOTiJw==}
@@ -32070,7 +32087,7 @@ snapshots:
     dependencies:
       '@supercharge/promise-pool': 3.3.0
       undici: 7.25.0
-      zod: 4.3.6
+      zod: 4.4.3
 
   '@browserbasehq/sdk@2.10.0(encoding@0.1.13)':
     dependencies:
@@ -32329,23 +32346,27 @@ snapshots:
       human-id: 4.1.2
       prettier: 2.8.8
 
-  '@chat-adapter/shared@4.28.1':
+  '@chat-adapter/shared@4.29.0(zod@4.3.6)':
     dependencies:
-      chat: 4.28.1
+      chat: 4.29.0(zod@4.3.6)
     transitivePeerDependencies:
+      - ai
       - supports-color
+      - zod
 
-  '@chat-adapter/slack@4.28.1(bufferutil@4.1.0)':
+  '@chat-adapter/slack@4.29.0(bufferutil@4.1.0)(zod@4.3.6)':
     dependencies:
-      '@chat-adapter/shared': 4.28.1
+      '@chat-adapter/shared': 4.29.0(zod@4.3.6)
       '@slack/socket-mode': 2.0.7(bufferutil@4.1.0)
       '@slack/web-api': 7.15.2
-      chat: 4.28.1
+      chat: 4.29.0(zod@4.3.6)
     transitivePeerDependencies:
+      - ai
       - bufferutil
       - debug
       - supports-color
       - utf-8-validate
+      - zod
 
   '@clack/core@1.3.0':
     dependencies:
@@ -33196,7 +33217,7 @@ snapshots:
 
   '@daytonaio/api-client@0.143.0':
     dependencies:
-      axios: 1.13.5
+      axios: 1.16.0
     transitivePeerDependencies:
       - debug
 
@@ -33233,7 +33254,7 @@ snapshots:
 
   '@daytonaio/toolbox-api-client@0.143.0':
     dependencies:
-      axios: 1.13.5
+      axios: 1.16.0
     transitivePeerDependencies:
       - debug
 
@@ -36487,10 +36508,9 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.10(zod@4.3.6)
       zod: 4.3.6
 
-  '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.177(zod@4.3.6))(zod@4.3.6)':
+  '@openrouter/ai-sdk-provider@1.2.3(zod@4.3.6)':
     dependencies:
       '@openrouter/sdk': 0.1.27
-      ai: 6.0.177(zod@4.3.6)
       zod: 4.3.6
 
   '@openrouter/sdk@0.1.27':
@@ -44845,7 +44865,7 @@ snapshots:
 
   chardet@2.1.1: {}
 
-  chat@4.28.1:
+  chat@4.29.0(zod@4.3.6):
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
@@ -44854,6 +44874,8 @@ snapshots:
       remark-stringify: 11.0.0
       remend: 1.3.0
       unified: 11.0.5
+    optionalDependencies:
+      zod: 4.3.6
     transitivePeerDependencies:
       - supports-color
 
@@ -48100,7 +48122,7 @@ snapshots:
   http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11
+      follow-redirects: 1.16.0
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug

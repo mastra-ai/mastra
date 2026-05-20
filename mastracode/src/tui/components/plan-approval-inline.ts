@@ -75,7 +75,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     }
   }
 
-  constructor(options: PlanApprovalInlineOptions, _ui: TUI) {
+  constructor(
+    options: PlanApprovalInlineOptions,
+    private ui: TUI,
+  ) {
     super();
     this.planTitle = options.title;
     this.planContent = options.plan;
@@ -262,6 +265,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(
       new Text(theme.fg('dim', 'Enter to submit feedback  Esc to reject without feedback'), 0, 0),
     );
+    this.ui.requestRender(true);
   }
 
   private showResult(status: string, isApproved: boolean, feedback?: string): void {

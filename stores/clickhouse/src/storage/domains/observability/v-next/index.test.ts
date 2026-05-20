@@ -11,8 +11,10 @@
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
  */
 import { createClient } from '@clickhouse/client';
+import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_MIGRATIONS,
@@ -30,6 +32,70 @@ import { isReplacingMergeTreeEngine } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+// Reuse a single ClickHouse storage instance across the shared suite. init()
+// is expensive (DDL + MVs + migrations) and running it per-test triggers
+// container crashes under ARM emulation. dangerouslyClearAll() truncates the
+// signal tables between tests, giving the same isolation as a fresh instance.
+let sharedSuiteStorage: ObservabilityStorageClickhouseVNext | undefined;
+
+createObservabilityVNextTests({
+  capabilities: {
+    label: 'ClickHouse vNext',
+    preferredStrategy: 'insert-only',
+  },
+  getStorage: async () => {
+    if (!sharedSuiteStorage) {
+      sharedSuiteStorage = new ObservabilityStorageClickhouseVNext({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      await sharedSuiteStorage.init();
+    }
+    return sharedSuiteStorage as unknown as ObservabilityStorage;
+  },
+  cleanup: async storage => {
+    await storage.dangerouslyClearAll();
+  },
+  // ClickHouse vNext serves discovery from refreshable materialized views.
+  // In production they refresh on a schedule; in tests we need to trigger the
+  // refresh by hand so discovery reads see writes from the same test.
+  refreshDiscovery: async () => {
+    const { MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS } = await import('./ddl');
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}` });
+      await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
+      await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
+      await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+    } finally {
+      await client.close();
+    }
+  },
+  // ClickHouse vNext dedups signal-table inserts via ReplacingMergeTree
+  // background merges. In retry-idempotency tests we force the merge with
+  // OPTIMIZE ... FINAL so the read assertion sees the collapsed row.
+  flushPendingMerges: async () => {
+    const { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } = await import('./ddl');
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      for (const table of [TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+        await client.command({ query: `OPTIMIZE TABLE ${table} FINAL` });
+      }
+    } finally {
+      await client.close();
+    }
+  },
+});
 
 describe('ObservabilityStorageClickhouseVNext', () => {
   let storage: ObservabilityStorageClickhouseVNext;
@@ -1811,22 +1877,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
     });
 
-    it('getMetricAggregate returns avg', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(266.67, 0);
-    });
-
-    it('getMetricAggregate returns count', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
     it('getMetricBreakdown groups by entityName', async () => {
       const result = await storage.getMetricBreakdown({
         name: ['mastra_agent_duration_ms'],
@@ -2051,335 +2101,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.series).toHaveLength(2);
       const p50 = result.series.find(s => s.percentile === 0.5);
       expect(p50).toBeDefined();
-    });
-  });
-
-  // ==========================================================================
-  // Default ORDER BY
-  // ==========================================================================
-
-  describe('default ORDER BY', () => {
-    it('listLogs defaults to timestamp DESC', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            logId: 'log-test-1',
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            level: 'info',
-            message: 'first',
-            data: null,
-            metadata: null,
-          },
-          {
-            logId: 'log-test-2',
-            timestamp: new Date('2026-01-01T00:00:03Z'),
-            level: 'info',
-            message: 'third',
-            data: null,
-            metadata: null,
-          },
-          {
-            logId: 'log-test-3',
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            level: 'info',
-            message: 'second',
-            data: null,
-            metadata: null,
-          },
-        ],
-      });
-
-      const result = await storage.listLogs({});
-      expect(result.logs).toHaveLength(3);
-      // Default: timestamp DESC → third, second, first
-      expect(result.logs[0]!.message).toBe('third');
-      expect(result.logs[1]!.message).toBe('second');
-      expect(result.logs[2]!.message).toBe('first');
-    });
-
-    it('listMetrics defaults to timestamp DESC', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            metricId: 'metric-test-1',
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            name: 'order_test',
-            value: 1,
-            labels: {},
-          },
-          {
-            metricId: 'metric-test-2',
-            timestamp: new Date('2026-01-01T00:00:03Z'),
-            name: 'order_test',
-            value: 3,
-            labels: {},
-          },
-          {
-            metricId: 'metric-test-3',
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            name: 'order_test',
-            value: 2,
-            labels: {},
-          },
-        ],
-      });
-
-      const result = await storage.listMetrics({ filters: { name: ['order_test'] } });
-      expect(result.metrics).toHaveLength(3);
-      expect(result.metrics[0]!.value).toBe(3);
-      expect(result.metrics[1]!.value).toBe(2);
-      expect(result.metrics[2]!.value).toBe(1);
-    });
-
-    it('listScores defaults to timestamp DESC', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'ord-1',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.1,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-2',
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'ord-3',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.3,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-3',
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'ord-2',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.2,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(3);
-      expect(result.scores[0]!.traceId).toBe('ord-3');
-      expect(result.scores[1]!.traceId).toBe('ord-2');
-      expect(result.scores[2]!.traceId).toBe('ord-1');
-    });
-
-    it('gets a score by id', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-lookup-1',
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'lookup-trace-1',
-          spanId: null,
-          scorerId: 'quality',
-          score: 0.8,
-          reason: 'Good answer',
-          experimentId: null,
-          metadata: { entityType: 'agent' },
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-lookup-2',
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'lookup-trace-2',
-          spanId: 'lookup-span-2',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const score = await storage.getScoreById('score-lookup-1');
-      expect(score).toEqual(
-        expect.objectContaining({
-          scoreId: 'score-lookup-1',
-          traceId: 'lookup-trace-1',
-          scorerId: 'quality',
-          score: 0.8,
-        }),
-      );
-      expect(await storage.getScoreById('missing-score')).toBeNull();
-    });
-
-    it('listFeedback defaults to timestamp DESC', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'fb-ord-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-2',
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'fb-ord-3',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 3,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-3',
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'fb-ord-2',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 2,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(3);
-      expect(result.feedback[0]!.traceId).toBe('fb-ord-3');
-      expect(result.feedback[1]!.traceId).toBe('fb-ord-2');
-      expect(result.feedback[2]!.traceId).toBe('fb-ord-1');
-    });
-
-    it('listTraces defaults to startedAt DESC', async () => {
-      await storage.batchCreateSpans({
-        records: [
-          {
-            traceId: 'tr-ord-1',
-            spanId: 'root-1',
-            parentSpanId: null,
-            name: 'first',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: null,
-            entityId: null,
-            entityName: null,
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:01Z'),
-            endedAt: new Date('2026-01-01T00:00:02Z'),
-          },
-          {
-            traceId: 'tr-ord-3',
-            spanId: 'root-3',
-            parentSpanId: null,
-            name: 'third',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: null,
-            entityId: null,
-            entityName: null,
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:03Z'),
-            endedAt: new Date('2026-01-01T00:00:04Z'),
-          },
-          {
-            traceId: 'tr-ord-2',
-            spanId: 'root-2',
-            parentSpanId: null,
-            name: 'second',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: null,
-            entityId: null,
-            entityName: null,
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:02Z'),
-            endedAt: new Date('2026-01-01T00:00:03Z'),
-          },
-        ],
-      });
-
-      const result = await storage.listTraces({});
-      expect(result.spans).toHaveLength(3);
-      expect(result.spans[0]!.traceId).toBe('tr-ord-3');
-      expect(result.spans[1]!.traceId).toBe('tr-ord-2');
-      expect(result.spans[2]!.traceId).toBe('tr-ord-1');
     });
   });
 
