@@ -226,6 +226,53 @@ describe('handleGithubCommand', () => {
     expect(infoMessages[0]).toContain('Unsubscribed from GitHub PR #123');
   });
 
+  it('infers the repo from the active PR badge when unsubscribing by number', async () => {
+    const unsubscribeThread = vi.fn(async () => ({ repo: 'mastra-ai/mastra', prNumber: 123 }));
+    const { ctx, memory } = createCtx({ githubSignals: { unsubscribeThread } });
+    ctx.state.activeGithubPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 123 }];
+
+    await handleGithubCommand(ctx, ['unsubscribe', '123']);
+
+    expect(unsubscribeThread).toHaveBeenCalledWith({
+      memory,
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+    expect(ctx.state.activeGithubPrSubscriptions).toEqual([]);
+  });
+
+  it('infers the repo from the active PR badge when syncing by number', async () => {
+    const init = vi.fn(async () => {});
+    const syncThread = vi.fn(async () => ({ pendingDelivered: 0 }));
+    const { ctx } = createCtx({ githubSignals: { init, syncThread } });
+    ctx.state.activeGithubPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 123 }];
+
+    await handleGithubCommand(ctx, ['sync', '123']);
+
+    expect(syncThread).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+  });
+
+  it('requires an explicit repo when multiple active badges match the PR number', async () => {
+    const unsubscribeThread = vi.fn();
+    const { ctx, errorMessages } = createCtx({ githubSignals: { unsubscribeThread } });
+    ctx.state.activeGithubPrSubscriptions = [
+      { repo: 'mastra-ai/mastra', prNumber: 123 },
+      { repo: 'other/repo', prNumber: 123 },
+    ];
+
+    await handleGithubCommand(ctx, ['unsubscribe', '123']);
+
+    expect(unsubscribeThread).not.toHaveBeenCalled();
+    expect(errorMessages[0]).toContain('Pass the repo explicitly');
+  });
+
   it('syncs the current thread, animates the PR badge, and reports delivered pending notifications', async () => {
     let resolveSync: ((value: { pendingDelivered: number }) => void) | undefined;
     const init = vi.fn(async () => {});

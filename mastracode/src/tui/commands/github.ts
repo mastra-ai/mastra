@@ -100,6 +100,20 @@ function formatSubscribeSummary(pr: Record<string, unknown>): string {
   return lines.join('\n');
 }
 
+function resolveRepoFromActiveBadges(
+  badges: GithubPrSubscriptionBadge[],
+  prNumber: number | undefined,
+): { repo?: string; error?: string } {
+  if (!prNumber) return {};
+  const matchingBadges = badges.filter(badge => badge.prNumber === prNumber);
+  const repos = [...new Set(matchingBadges.map(badge => badge.repo).filter((repo): repo is string => !!repo))];
+  if (repos.length === 1) return { repo: repos[0] };
+  if (repos.length > 1) {
+    return { error: `Multiple active GitHub PR #${prNumber} subscriptions exist. Pass the repo explicitly.` };
+  }
+  return {};
+}
+
 function formatStatusCheckSummary(statusCheckRollup: unknown): string {
   if (!Array.isArray(statusCheckRollup) || statusCheckRollup.length === 0) return 'no checks reported';
   const counts = { failed: 0, pending: 0, passed: 0 };
@@ -187,6 +201,15 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
     }
     prNumber = discovered.prNumber;
     repo = discovered.repo;
+  }
+
+  if ((action === 'unsubscribe' || action === 'sync') && prNumber && !repo) {
+    const resolved = resolveRepoFromActiveBadges(ctx.state.activeGithubPrSubscriptions, prNumber);
+    if (resolved.error) {
+      ctx.showError(resolved.error);
+      return;
+    }
+    repo = resolved.repo;
   }
 
   const memory = await getGithubMemory(ctx);

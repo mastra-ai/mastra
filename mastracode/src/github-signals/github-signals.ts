@@ -1016,6 +1016,7 @@ export class GithubSignals {
 
   async markIdle(context: ActiveThreadContext) {
     this.#activeThreads.delete(activeThreadKey(context));
+    await this.deliverPendingNotifications(context);
     await this.poll(context);
   }
 
@@ -1508,23 +1509,45 @@ export class GithubSignals {
           bodyFingerprint: string;
         } => !!entry,
       );
+    const latestCommentTimestamp = getLatestTimestamp(snapshot.comments, comment => comment.createdAt);
+    const commentAcknowledgement = latestCommentTimestamp
+      ? {
+          ...subscription,
+          lastCommentTimestamp: latestCommentTimestamp,
+          lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
+          lastErrorFingerprint: undefined,
+          nextPollAt: undefined,
+          updatedAt: this.#options.now().toISOString(),
+        }
+      : undefined;
     const currentGithubLogin = changedComments.some(({ comment }) => comment.author)
       ? await this.#getCurrentGithubLogin()
       : undefined;
+    let queuedCommentDelivery = false;
+    let deliveredComment = false;
     for (const { comment, isUpdated } of changedComments) {
       if (isCurrentGithubUser(comment.author, currentGithubLogin)) continue;
       if (!(await this.#isAuthorizedAuthor(subscription, comment.author))) continue;
-      await this.#handleNotification(registeredAgent, subscription, {
-        kind: 'comment',
-        title: isUpdated ? `Updated GitHub comment` : `GitHub comment`,
-        details: isUpdated ? getUpdatedCommentDetails(comment.body) : summarizeText(comment.body, 'No comment body.'),
-        url: comment.url,
-        user: comment.author,
-      });
+      const delivery = await this.#handleNotification(
+        registeredAgent,
+        subscription,
+        {
+          kind: 'comment',
+          title: isUpdated ? `Updated GitHub comment` : `GitHub comment`,
+          details: isUpdated ? getUpdatedCommentDetails(comment.body) : summarizeText(comment.body, 'No comment body.'),
+          url: comment.url,
+          user: comment.author,
+        },
+        commentAcknowledgement ? { acknowledgeAfterDelivery: commentAcknowledgement } : {},
+      );
+      queuedCommentDelivery ||= delivery === 'queued';
+      deliveredComment ||= delivery === 'sent';
     }
-    const latestCommentTimestamp = getLatestTimestamp(snapshot.comments, comment => comment.createdAt);
-    if (latestCommentTimestamp) subscription.lastCommentTimestamp = latestCommentTimestamp;
-    subscription.lastCommentFingerprints = getSnapshotCommentState(snapshot.comments);
+    if (commentAcknowledgement && !queuedCommentDelivery && (changedComments.length > 0 || deliveredComment)) {
+      Object.assign(subscription, commentAcknowledgement);
+      this.#activeSubscriptions.set(subscription.key, commentAcknowledgement);
+      await subscription.persistence?.update(commentAcknowledgement);
+    }
 
     await this.#emitSnapshotReviewAndStateNotifications(registeredAgent, subscription, snapshot);
   }
@@ -1537,22 +1560,44 @@ export class GithubSignals {
     const newReviews = snapshot.reviews.filter(review =>
       isAfterTimestamp(review.submittedAt, subscription.lastReviewTimestamp ?? subscription.createdAt),
     );
+    const latestReviewTimestamp = getLatestTimestamp(newReviews, review => review.submittedAt);
+    const reviewAcknowledgement = latestReviewTimestamp
+      ? {
+          ...subscription,
+          lastReviewTimestamp: latestReviewTimestamp,
+          lastErrorFingerprint: undefined,
+          nextPollAt: undefined,
+          updatedAt: this.#options.now().toISOString(),
+        }
+      : undefined;
+    let queuedReviewDelivery = false;
+    let deliveredReview = false;
     for (const review of newReviews) {
       if (!(await this.#isAuthorizedAuthor(subscription, review.author))) continue;
-      await this.#handleNotification(registeredAgent, subscription, {
-        kind: 'review',
-        title: review.state?.toLowerCase() === 'approved' ? `GitHub PR approved` : `GitHub review`,
-        details: summarizeText(
-          review.body,
-          `${review.author ?? 'Someone'} ${formatReviewState(review.state)} this PR.`,
-        ),
-        url: review.url,
-        user: review.author,
-        reviewState: review.state,
-      });
+      const delivery = await this.#handleNotification(
+        registeredAgent,
+        subscription,
+        {
+          kind: 'review',
+          title: review.state?.toLowerCase() === 'approved' ? `GitHub PR approved` : `GitHub review`,
+          details: summarizeText(
+            review.body,
+            `${review.author ?? 'Someone'} ${formatReviewState(review.state)} this PR.`,
+          ),
+          url: review.url,
+          user: review.author,
+          reviewState: review.state,
+        },
+        reviewAcknowledgement ? { acknowledgeAfterDelivery: reviewAcknowledgement } : {},
+      );
+      queuedReviewDelivery ||= delivery === 'queued';
+      deliveredReview ||= delivery === 'sent';
     }
-    const latestReviewTimestamp = getLatestTimestamp(newReviews, review => review.submittedAt);
-    if (latestReviewTimestamp) subscription.lastReviewTimestamp = latestReviewTimestamp;
+    if (reviewAcknowledgement && !queuedReviewDelivery && (newReviews.length > 0 || deliveredReview)) {
+      Object.assign(subscription, reviewAcknowledgement);
+      this.#activeSubscriptions.set(subscription.key, reviewAcknowledgement);
+      await subscription.persistence?.update(reviewAcknowledgement);
+    }
 
     const prStateFingerprint = getSnapshotPrStateFingerprint(snapshot);
     const prStateTimestamp = getSnapshotPrStateTimestamp(snapshot);
@@ -1591,6 +1636,8 @@ export class GithubSignals {
       }
       Object.assign(subscription, acknowledgedSubscription);
     }
+
+    if (queuedReviewDelivery) return;
 
     subscription.lastErrorFingerprint = undefined;
     subscription.nextPollAt = undefined;
@@ -1722,6 +1769,18 @@ export class GithubSignals {
           options.acknowledgeAfterDelivery.lastCheckFingerprint ??
           existingAcknowledgement?.lastCheckFingerprint ??
           subscription.lastCheckFingerprint,
+        lastCommentTimestamp:
+          options.acknowledgeAfterDelivery.lastCommentTimestamp ??
+          existingAcknowledgement?.lastCommentTimestamp ??
+          subscription.lastCommentTimestamp,
+        lastCommentFingerprints:
+          options.acknowledgeAfterDelivery.lastCommentFingerprints ??
+          existingAcknowledgement?.lastCommentFingerprints ??
+          subscription.lastCommentFingerprints,
+        lastReviewTimestamp:
+          options.acknowledgeAfterDelivery.lastReviewTimestamp ??
+          existingAcknowledgement?.lastReviewTimestamp ??
+          subscription.lastReviewTimestamp,
         lastPrStateFingerprint:
           options.acknowledgeAfterDelivery.lastPrStateFingerprint ??
           existingAcknowledgement?.lastPrStateFingerprint ??
@@ -1781,7 +1840,7 @@ export class GithubSignals {
         resourceId: subscription.resourceId,
         threadId: subscription.threadId,
         ifIdle: { behavior: 'persist' },
-        ifActive: { behavior: 'deliver' },
+        ifActive: { behavior: 'persist' },
       },
     );
     await result.persisted;

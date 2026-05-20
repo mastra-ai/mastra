@@ -1,8 +1,11 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } from './source-hash';
+
+vi.unmock('node:fs/promises');
+vi.unmock('fs/promises');
 
 describe('source-hash', () => {
   let testDir: string;
