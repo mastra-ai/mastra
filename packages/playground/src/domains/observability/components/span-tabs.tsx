@@ -20,7 +20,6 @@ type SpanTabsProps = {
   isLoadingSpanScoresData?: boolean;
   spanInfo?: KeyValueListItemData[];
   defaultActiveTab?: string;
-  initialScoreId?: string;
   computeTraceLink: (traceId: string, spanId?: string) => string;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
@@ -34,7 +33,6 @@ export function SpanTabs({
   isLoadingSpanScoresData,
   spanInfo = [],
   defaultActiveTab = 'details',
-  initialScoreId,
   computeTraceLink,
   scorers,
   isLoadingScorers,
@@ -87,7 +85,6 @@ export function SpanTabs({
               scoresData={spanScoresData}
               onPageChange={onSpanScoresPageChange}
               isLoadingScoresData={isLoadingSpanScoresData}
-              initialScoreId={initialScoreId}
               traceId={trace?.traceId}
               spanId={span?.spanId}
               computeTraceLink={computeTraceLink}

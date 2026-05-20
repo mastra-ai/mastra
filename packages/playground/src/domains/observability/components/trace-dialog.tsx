@@ -49,7 +49,6 @@ type TraceDialogProps = {
   computeTraceLink: (traceId: string, spanId?: string, tab?: string) => string;
   initialSpanId?: string;
   initialSpanTab?: string;
-  initialScoreId?: string;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
 };
@@ -65,7 +64,6 @@ export function TraceDialog({
   computeTraceLink,
   initialSpanId,
   initialSpanTab,
-  initialScoreId,
   scorers,
   isLoadingScorers,
 }: TraceDialogProps) {
@@ -386,7 +384,6 @@ export function TraceDialog({
                     isLoadingSpanScoresData={isLoadingSpanScoresData}
                     spanInfo={selectedSpanInfo}
                     defaultActiveTab={spanDialogDefaultTab}
-                    initialScoreId={initialScoreId}
                     computeTraceLink={computeTraceLink}
                   />
                 </div>
@@ -420,7 +417,6 @@ export function TraceDialog({
           onViewToggle={() => setCombinedView(!combinedView)}
           spanInfo={selectedSpanInfo}
           defaultActiveTab={spanDialogDefaultTab}
-          initialScoreId={initialScoreId}
           computeTraceLink={computeTraceLink}
           scorers={scorers}
           isLoadingScorers={isLoadingScorers}
