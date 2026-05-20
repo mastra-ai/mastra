@@ -2736,28 +2736,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(match!.scoreSource).toBe('automated');
     });
 
-    it('supports nullable traceId for scores at the storage boundary', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date(),
-          traceId: null,
-          spanId: null,
-          scorerId: 'quality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          scoreSource: 'automated',
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(1);
-      expect(result.scores[0]!.traceId).toBeNull();
-      expect(result.scores[0]!.scoreSource).toBe('automated');
-    });
-
     it('filters scores by scoreSource', async () => {
       await storage.createScore({
         score: {
@@ -2888,30 +2866,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const match = result.feedback.find(f => f.traceId === 'trace-fbs');
       expect(match).toBeDefined();
       expect(match!.feedbackSource).toBe('manual');
-    });
-
-    it('supports nullable traceId for feedback at the storage boundary', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date(),
-          traceId: null,
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(1);
-      expect(result.feedback[0]!.traceId).toBeNull();
-      expect(result.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('deprecated feedback source alias still writes to feedbackSource column', async () => {
@@ -4156,102 +4110,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
     });
 
-    it('getScoreAggregate returns avg', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(0.7667, 2); // (0.8 + 0.6 + 0.9) / 3
-    });
-
-    it('getScoreAggregate returns sum', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'sum',
-      });
-      expect(result.value).toBeCloseTo(2.3); // 0.8 + 0.6 + 0.9
-    });
-
-    it('getScoreAggregate returns count', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
-    it('getScoreAggregate filters by scoreSource', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        scoreSource: 'automated',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-
-      const manualResult = await storage.getScoreAggregate({
-        scorerId: 'factuality',
-        scoreSource: 'manual',
-        aggregation: 'count',
-      });
-      expect(manualResult.value).toBe(1);
-    });
-
-    it('getScoreAggregate supports signal filters', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'count',
-        filters: { environment: 'production' },
-      });
-      expect(result.value).toBe(2);
-    });
-
-    it('getScoreBreakdown groups by entityName', async () => {
-      const result = await storage.getScoreBreakdown({
-        scorerId: 'quality',
-        groupBy: ['entityName'],
-        aggregation: 'avg',
-      });
-      expect(result.groups).toHaveLength(2);
-      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
-      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
-      expect(weather).toBeDefined();
-      expect(weather!.value).toBeCloseTo(0.7); // (0.8 + 0.6) / 2
-      expect(code).toBeDefined();
-      expect(code!.value).toBeCloseTo(0.9);
-    });
-
-    it('getScoreTimeSeries returns bucketed data', async () => {
-      const result = await storage.getScoreTimeSeries({
-        scorerId: 'quality',
-        interval: '1h',
-        aggregation: 'avg',
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(1);
-      expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('getScoreTimeSeries with groupBy returns multi-series', async () => {
-      const result = await storage.getScoreTimeSeries({
-        scorerId: 'quality',
-        interval: '1h',
-        aggregation: 'avg',
-        groupBy: ['entityName'],
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('getScorePercentiles returns percentile series', async () => {
-      const result = await storage.getScorePercentiles({
-        scorerId: 'quality',
-        percentiles: [0.5, 0.99],
-        interval: '1h',
-      });
-      expect(result.series).toHaveLength(2);
-      const p50 = result.series.find(s => s.percentile === 0.5);
-      expect(p50).toBeDefined();
-      expect(p50!.points.length).toBeGreaterThanOrEqual(1);
-    });
-
     it('getScorePercentiles rejects out-of-range values', async () => {
       await expect(
         storage.getScorePercentiles({
@@ -4339,48 +4197,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
     });
 
-    it('getFeedbackAggregate returns sum of numeric values', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'sum',
-      });
-      expect(result.value).toBe(2); // 1 + 0 + 1
-    });
-
-    it('getFeedbackAggregate returns count', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
-    it('getFeedbackAggregate returns avg', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(0.6667, 2); // (1 + 0 + 1) / 3
-    });
-
-    it('getFeedbackAggregate filters by feedbackSource', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'rating',
-        feedbackSource: 'reviewer',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(1);
-    });
-
-    it('getFeedbackAggregate supports signal filters', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'count',
-        filters: { environment: 'production' },
-      });
-      expect(result.value).toBe(2);
-    });
-
     it('getFeedbackAggregate excludes string-valued feedback from aggregation', async () => {
       // The 'flag' feedback with value 'needs-review' should not appear in numeric aggregation
       const result = await storage.getFeedbackAggregate({
@@ -4389,53 +4205,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
       // String-valued feedback has valueNumber = NULL, so it's excluded by the identity filter
       expect(result.value).toBe(0);
-    });
-
-    it('getFeedbackBreakdown groups by entityName', async () => {
-      const result = await storage.getFeedbackBreakdown({
-        feedbackType: 'thumbs',
-        groupBy: ['entityName'],
-        aggregation: 'avg',
-      });
-      expect(result.groups.length).toBeGreaterThanOrEqual(2);
-      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
-      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
-      expect(weather).toBeDefined();
-      expect(weather!.value).toBeCloseTo(0.5); // (1 + 0) / 2
-      expect(code).toBeDefined();
-      expect(code!.value).toBeCloseTo(1.0);
-    });
-
-    it('getFeedbackTimeSeries returns bucketed data', async () => {
-      const result = await storage.getFeedbackTimeSeries({
-        feedbackType: 'thumbs',
-        interval: '1h',
-        aggregation: 'sum',
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(1);
-      expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('getFeedbackTimeSeries with groupBy returns multi-series', async () => {
-      const result = await storage.getFeedbackTimeSeries({
-        feedbackType: 'thumbs',
-        interval: '1h',
-        aggregation: 'avg',
-        groupBy: ['entityName'],
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('getFeedbackPercentiles returns percentile series', async () => {
-      const result = await storage.getFeedbackPercentiles({
-        feedbackType: 'thumbs',
-        percentiles: [0.5, 0.99],
-        interval: '1h',
-      });
-      expect(result.series).toHaveLength(2);
-      const p50 = result.series.find(s => s.percentile === 0.5);
-      expect(p50).toBeDefined();
-      expect(p50!.points.length).toBeGreaterThanOrEqual(1);
     });
 
     it('getFeedbackPercentiles rejects out-of-range values', async () => {

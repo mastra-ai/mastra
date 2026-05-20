@@ -3114,6 +3114,384 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.feedback[0]!.feedbackId).toBe('feedback-retry-1');
       });
     });
+
+    // ========================================================================
+    // Scores — OLAP expansions
+    // ========================================================================
+
+    describe('scores OLAP (expansions)', () => {
+      beforeEach(async () => {
+        await storage.batchCreateScores({
+          scores: [
+            {
+              scoreId: 'score-olap-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'olap-s-1',
+              spanId: null,
+              scorerId: 'quality',
+              score: 0.8,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'automated',
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              scoreId: 'score-olap-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              traceId: 'olap-s-2',
+              spanId: null,
+              scorerId: 'quality',
+              score: 0.6,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'automated',
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              scoreId: 'score-olap-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              traceId: 'olap-s-3',
+              spanId: null,
+              scorerId: 'quality',
+              score: 0.9,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'automated',
+              entityType: EntityType.AGENT,
+              entityName: 'codeAgent',
+              environment: 'staging',
+              metadata: null,
+            },
+            {
+              scoreId: 'score-olap-4',
+              timestamp: new Date('2026-01-01T01:00:00Z'),
+              traceId: 'olap-s-4',
+              spanId: null,
+              scorerId: 'factuality',
+              score: 0.5,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'manual',
+              metadata: null,
+            },
+          ],
+        });
+      });
+
+      it('getScoreAggregate returns avg', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'avg',
+        });
+        expect(result.value).toBeCloseTo(0.7667, 2);
+      });
+
+      it('getScoreAggregate returns sum', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'sum',
+        });
+        expect(result.value).toBeCloseTo(2.3);
+      });
+
+      it('getScoreAggregate returns count', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+      });
+
+      it('getScoreAggregate filters by scoreSource', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          scoreSource: 'automated',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+
+        const manualResult = await storage.getScoreAggregate({
+          scorerId: 'factuality',
+          scoreSource: 'manual',
+          aggregation: 'count',
+        });
+        expect(manualResult.value).toBe(1);
+      });
+
+      it('getScoreAggregate supports signal filters', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'count',
+          filters: { environment: 'production' },
+        });
+        expect(result.value).toBe(2);
+      });
+
+      it('getScoreBreakdown groups by entityName', async () => {
+        const result = await storage.getScoreBreakdown({
+          scorerId: 'quality',
+          groupBy: ['entityName'],
+          aggregation: 'avg',
+        });
+        expect(result.groups).toHaveLength(2);
+        const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+        const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+        expect(weather).toBeDefined();
+        expect(weather!.value).toBeCloseTo(0.7);
+        expect(code).toBeDefined();
+        expect(code!.value).toBeCloseTo(0.9);
+      });
+
+      it('getScoreTimeSeries returns bucketed data', async () => {
+        const result = await storage.getScoreTimeSeries({
+          scorerId: 'quality',
+          interval: '1h',
+          aggregation: 'avg',
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(1);
+        expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('getScoreTimeSeries with groupBy returns multi-series', async () => {
+        const result = await storage.getScoreTimeSeries({
+          scorerId: 'quality',
+          interval: '1h',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(2);
+      });
+
+      it('getScorePercentiles returns percentile series', async () => {
+        const result = await storage.getScorePercentiles({
+          scorerId: 'quality',
+          percentiles: [0.5, 0.99],
+          interval: '1h',
+        });
+        expect(result.series).toHaveLength(2);
+        const p50 = result.series.find(s => s.percentile === 0.5);
+        expect(p50).toBeDefined();
+        expect(p50!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('supports nullable traceId for scores at the storage boundary', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-nullable-trace',
+            timestamp: new Date(),
+            traceId: null,
+            spanId: null,
+            scorerId: 'quality-null',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listScores({ filters: { scorerId: 'quality-null' } });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.traceId).toBeNull();
+        expect(result.scores[0]!.scoreSource).toBe('automated');
+      });
+    });
+
+    // ========================================================================
+    // Feedback — OLAP expansions
+    // ========================================================================
+
+    describe('feedback OLAP (expansions)', () => {
+      beforeEach(async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            {
+              feedbackId: 'feedback-olap-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'olap-f-1',
+              spanId: null,
+              feedbackType: 'thumbs',
+              feedbackSource: 'user',
+              value: 1,
+              comment: null,
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              traceId: 'olap-f-2',
+              spanId: null,
+              feedbackType: 'thumbs',
+              feedbackSource: 'user',
+              value: 0,
+              comment: null,
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              traceId: 'olap-f-3',
+              spanId: null,
+              feedbackType: 'thumbs',
+              feedbackSource: 'user',
+              value: 1,
+              comment: null,
+              entityType: EntityType.AGENT,
+              entityName: 'codeAgent',
+              environment: 'staging',
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-4',
+              timestamp: new Date('2026-01-01T01:00:00Z'),
+              traceId: 'olap-f-4',
+              spanId: null,
+              feedbackType: 'rating',
+              feedbackSource: 'reviewer',
+              value: 4,
+              comment: null,
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-5',
+              timestamp: new Date('2026-01-01T01:00:05Z'),
+              traceId: 'olap-f-5',
+              spanId: null,
+              feedbackType: 'flag',
+              feedbackSource: 'system',
+              value: 'needs-review',
+              comment: null,
+              metadata: null,
+            },
+          ],
+        });
+      });
+
+      it('getFeedbackAggregate returns sum of numeric values', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'sum',
+        });
+        expect(result.value).toBe(2);
+      });
+
+      it('getFeedbackAggregate returns count', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+      });
+
+      it('getFeedbackAggregate returns avg', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'avg',
+        });
+        expect(result.value).toBeCloseTo(0.6667, 2);
+      });
+
+      it('getFeedbackAggregate filters by feedbackSource', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'rating',
+          feedbackSource: 'reviewer',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(1);
+      });
+
+      it('getFeedbackAggregate supports signal filters', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'count',
+          filters: { environment: 'production' },
+        });
+        expect(result.value).toBe(2);
+      });
+
+      it('getFeedbackBreakdown groups by entityName', async () => {
+        const result = await storage.getFeedbackBreakdown({
+          feedbackType: 'thumbs',
+          groupBy: ['entityName'],
+          aggregation: 'avg',
+        });
+        expect(result.groups.length).toBeGreaterThanOrEqual(2);
+        const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+        const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+        expect(weather).toBeDefined();
+        expect(weather!.value).toBeCloseTo(0.5);
+        expect(code).toBeDefined();
+        expect(code!.value).toBeCloseTo(1.0);
+      });
+
+      it('getFeedbackTimeSeries returns bucketed data', async () => {
+        const result = await storage.getFeedbackTimeSeries({
+          feedbackType: 'thumbs',
+          interval: '1h',
+          aggregation: 'sum',
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(1);
+        expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('getFeedbackTimeSeries with groupBy returns multi-series', async () => {
+        const result = await storage.getFeedbackTimeSeries({
+          feedbackType: 'thumbs',
+          interval: '1h',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(2);
+      });
+
+      it('getFeedbackPercentiles returns percentile series', async () => {
+        const result = await storage.getFeedbackPercentiles({
+          feedbackType: 'thumbs',
+          percentiles: [0.5, 0.99],
+          interval: '1h',
+        });
+        expect(result.series).toHaveLength(2);
+        const p50 = result.series.find(s => s.percentile === 0.5);
+        expect(p50).toBeDefined();
+        expect(p50!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('supports nullable traceId for feedback at the storage boundary', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-nullable-trace',
+            timestamp: new Date(),
+            traceId: null,
+            spanId: null,
+            feedbackSource: 'manual',
+            feedbackType: 'nullable-rating',
+            value: 5,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listFeedback({ filters: { feedbackType: 'nullable-rating' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.traceId).toBeNull();
+        expect(result.feedback[0]!.feedbackSource).toBe('manual');
+      });
+    });
   });
 }
 
