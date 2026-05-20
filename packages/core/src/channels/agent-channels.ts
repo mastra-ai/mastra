@@ -610,9 +610,6 @@ export class AgentChannels {
           const approved = actionId.startsWith('tool_approve:');
           const toolCallId = actionId.split(':')[1];
 
-          // In Slack DMs, event.thread points to the approval card message rather
-          // than the top-level conversation, which can cause sub-threading.
-          // This is a known Slack adapter limitation.
           const sdkThread = event.thread as Thread | null;
           if (!sdkThread) {
             this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
@@ -624,10 +621,36 @@ export class AgentChannels {
           const adapterConfig = this.adapterConfigs[platform];
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
-          // Look up the Mastra thread to find the runId and tool metadata from pending approvals
-          // Note: In Slack DMs, sdkThread.id may point to the card message, not the conversation.
-          // We use sdkThread.channelId as the stable identifier for DMs.
-          const externalThreadId = sdkThread.isDM ? sdkThread.channelId : sdkThread.id;
+          // Look up the Mastra thread to find the runId and tool metadata from pending approvals.
+          // sdkThread.id encodes channel + threadTs, so it's stable per conversation:
+          // top-level DM, DM thread reply, channel mention, and channel thread reply each get
+          // their own mastra thread (matching "new convo per slack thread" UX).
+          //
+          // Slack-specific workaround: the slack adapter's handleBlockActions falls back to
+          // `messageTs` when the clicked card has no `thread_ts` (i.e. the card was posted at
+          // top level, not inside a thread). That makes the action's sdkThread.id point at a
+          // "thread keyed by the card itself" rather than the top-level conversation the user
+          // was actually in, so the pending approval lookup misses. Detect that case by
+          // checking whether the decoded threadTs equals the clicked message id, and if so,
+          // rewrite the externalThreadId to the top-level (empty threadTs) form.
+          let externalThreadId = sdkThread.id;
+          if (
+            platform === 'slack' &&
+            messageId &&
+            typeof (adapter as { decodeThreadId?: (id: string) => { channel: string; threadTs: string } })
+              .decodeThreadId === 'function' &&
+            typeof (adapter as { encodeThreadId?: (data: { channel: string; threadTs: string }) => string })
+              .encodeThreadId === 'function'
+          ) {
+            const slackAdapter = adapter as {
+              decodeThreadId: (id: string) => { channel: string; threadTs: string };
+              encodeThreadId: (data: { channel: string; threadTs: string }) => string;
+            };
+            const decoded = slackAdapter.decodeThreadId(sdkThread.id);
+            if (decoded.threadTs === messageId) {
+              externalThreadId = slackAdapter.encodeThreadId({ channel: decoded.channel, threadTs: '' });
+            }
+          }
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
             channelId: sdkThread.channelId,
@@ -1115,9 +1138,11 @@ export class AgentChannels {
   private async processChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
     const platform = sdkThread.adapter.name;
 
-    // Map to a Mastra thread for memory/history
-    // In Slack DMs, sdkThread.id can vary (points to message threads), so use channelId as stable ID.
-    const externalThreadId = sdkThread.isDM ? sdkThread.channelId : sdkThread.id;
+    // Map to a Mastra thread for memory/history.
+    // sdkThread.id encodes channel + threadTs, so it's stable per conversation:
+    // each Slack thread (including top-level DM, DM thread reply, channel mention, and
+    // channel thread reply) gets its own mastra thread.
+    const externalThreadId = sdkThread.id;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
       channelId: sdkThread.channelId,
