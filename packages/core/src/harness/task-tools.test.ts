@@ -5,7 +5,7 @@ import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 import { assignTaskIds, taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from './tools';
 import type { TaskItem, TaskItemSnapshot } from './tools';
 import type { HarnessEvent, HarnessRequestContext } from './types';
@@ -55,7 +55,7 @@ function createHarness() {
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness<Record<string, unknown>>({
+  return new HarnessLegacy<Record<string, unknown>>({
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -235,7 +235,7 @@ describe('task state transactions', () => {
     });
     let validationCount = 0;
 
-    const harness = new Harness<Record<string, unknown>>({
+    const harness = new HarnessLegacy<Record<string, unknown>>({
       id: 'test-harness',
       storage: new InMemoryStore(),
       stateSchema: z
@@ -285,7 +285,7 @@ describe('task state transactions', () => {
 
 describe('task tool permissions', () => {
   it('removes denied built-in and configured harness tools even when yolo is enabled', async () => {
-    const harness = new Harness<Record<string, unknown>>({
+    const harness = new HarnessLegacy<Record<string, unknown>>({
       id: 'test-harness',
       storage: new InMemoryStore(),
       initialState: {

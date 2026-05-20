@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 import type { HarnessEvent } from './types';
 
 function createHarness(storage = new InMemoryStore()) {
@@ -11,7 +11,7 @@ function createHarness(storage = new InMemoryStore()) {
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -46,7 +46,7 @@ async function* mockStream(usage: Record<string, unknown>) {
 }
 
 describe('step-finish token usage extraction', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();

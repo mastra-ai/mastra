@@ -1,4 +1,10 @@
-export { Harness } from './harness';
+export { HarnessLegacy } from './harness';
+/**
+ * @deprecated Compatibility alias for the legacy harness during the Harness v1 migration.
+ * New code that wants this implementation should import `HarnessLegacy` from `@mastra/core/harness`;
+ * the new Harness will be exported from `@mastra/core/harness/v1`.
+ */
+export { HarnessLegacy as Harness } from './harness';
 export {
   askUserTool,
   assignTaskIds,

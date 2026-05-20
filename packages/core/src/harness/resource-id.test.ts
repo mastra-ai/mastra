@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 function createAgent() {
   return new Agent({
@@ -13,7 +13,7 @@ function createAgent() {
 
 function createHarness(opts?: { resourceId?: string; storage?: InMemoryStore }) {
   const agent = createAgent();
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage: opts?.storage ?? new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -43,7 +43,7 @@ describe('Harness resource ID', () => {
 
   describe('getKnownResourceIds', () => {
     let storage: InMemoryStore;
-    let harness: Harness;
+    let harness: HarnessLegacy;
 
     beforeEach(() => {
       storage = new InMemoryStore();

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
   const agent = new Agent({
@@ -10,7 +10,7 @@ function createHarness(threadLock?: { acquire: (id: string) => void; release: (i
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -188,7 +188,7 @@ describe('Harness thread locking', () => {
         instructions: 'You are a test agent.',
         model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
       });
-      const freshHarness = new Harness({
+      const freshHarness = new HarnessLegacy({
         id: 'test-harness',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -202,7 +202,7 @@ describe('Harness thread locking', () => {
       release.mockClear();
 
       // Create another fresh harness with the same storage
-      const freshHarness2 = new Harness({
+      const freshHarness2 = new HarnessLegacy({
         id: 'test-harness',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -222,7 +222,7 @@ describe('Harness thread locking', () => {
         instructions: 'You are a test agent.',
         model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
       });
-      const freshHarness = new Harness({
+      const freshHarness = new HarnessLegacy({
         id: 'test-harness',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],
