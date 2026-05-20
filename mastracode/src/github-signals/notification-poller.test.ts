@@ -53,10 +53,44 @@ describe('GithubNotificationPoller', () => {
     await expect(client.store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
       { id: 'n1', title: 'New PR comment' },
     ]);
-    expect(commandRunner.mock.calls.filter(call => call[0].includes('/notifications'))).toHaveLength(1);
-    expect(commandRunner.mock.calls[0]?.[0]).toEqual(
-      expect.arrayContaining(['api', '--method', 'GET', '/notifications', '-F', 'participating=true']),
+    const notificationCalls = commandRunner.mock.calls.filter(call => call[0].includes('/notifications'));
+    expect(notificationCalls).toHaveLength(2);
+    expect(notificationCalls[0]?.[0]).toEqual(
+      expect.arrayContaining([
+        'api',
+        '--method',
+        'GET',
+        '/notifications',
+        '-F',
+        'participating=true',
+        '-F',
+        'all=false',
+      ]),
     );
+    expect(notificationCalls[1]?.[0]).toEqual(expect.arrayContaining(['-F', 'all=true']));
+  });
+
+  it('caches recent read notifications that were cleared outside MastraCode', async () => {
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args.includes('all=true')) return { stdout: ghResponse([notification('read-n1')]) };
+      if (args.includes('/notifications')) return { stdout: ghResponse([]) };
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({
+      store: createSharedStore(),
+      commandRunner,
+      accountKey: 'account-1',
+      now: () => new Date('2026-01-01T00:30:00.000Z'),
+    });
+
+    await expect(poller.poll()).resolves.toMatchObject({ updated: true });
+
+    await expect(poller.store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
+      { id: 'read-n1', title: 'New PR comment' },
+    ]);
+    const readNotificationCall = commandRunner.mock.calls.find(call => call[0].includes('all=true'))?.[0];
+    expect(readNotificationCall).toEqual(expect.arrayContaining(['-F', 'all=true']));
+    expect(readNotificationCall).toEqual(expect.arrayContaining(['-F', 'since=2026-01-01T00:15:00.000Z']));
   });
 
   it('enriches inbox notifications with latest comment bodies', async () => {

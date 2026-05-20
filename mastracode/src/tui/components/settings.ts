@@ -6,8 +6,17 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
+import {
+  Box,
+  Container,
+  SelectList,
+  Spacer,
+  Text,
+  getKeybindings,
+  matchesKey,
+  visibleWidth,
+} from '@mariozechner/pi-tui';
+import type { Component, Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
@@ -190,12 +199,121 @@ function storageLabel(config: SettingsConfig): string {
   return 'LibSQL (local file)';
 }
 
+interface SettingsSection {
+  title?: string;
+  items: SettingItem[];
+}
+
+interface SelectableSetting {
+  sectionIndex: number;
+  itemIndex: number;
+  item: SettingItem;
+}
+
+class SectionedSettingsList implements Component {
+  private selectedIndex = 0;
+  private submenuComponent: Component | null = null;
+  private readonly sections: SettingsSection[];
+  private readonly onCancel: () => void;
+
+  constructor(sections: SettingsSection[], onCancel: () => void) {
+    this.sections = sections;
+    this.onCancel = onCancel;
+  }
+
+  invalidate(): void {
+    this.submenuComponent?.invalidate();
+  }
+
+  render(width: number): string[] {
+    if (this.submenuComponent) {
+      return this.submenuComponent.render(width);
+    }
+
+    const selectableItems = this.getSelectableItems();
+    if (selectableItems.length === 0) {
+      return [theme.fg('muted', '  No settings available')];
+    }
+
+    const maxLabelWidth = Math.min(30, Math.max(...selectableItems.map(({ item }) => visibleWidth(item.label))));
+    const lines: string[] = [];
+    let selectableIndex = 0;
+
+    this.sections.forEach((section, sectionIndex) => {
+      if (sectionIndex > 0) {
+        lines.push('');
+      }
+      if (section.title) {
+        lines.push(theme.bold(theme.fg('accent', section.title)));
+      }
+
+      section.items.forEach(item => {
+        const isSelected = selectableIndex === this.selectedIndex;
+        const prefix = isSelected ? getSettingsListTheme().cursor : '  ';
+        const labelPadded = item.label + ' '.repeat(Math.max(0, maxLabelWidth - visibleWidth(item.label)));
+        const labelText = getSettingsListTheme().label(labelPadded, isSelected);
+        const valueText = getSettingsListTheme().value(item.currentValue, isSelected);
+        lines.push(`${prefix}${labelText}  ${valueText}`);
+        selectableIndex += 1;
+      });
+    });
+
+    const selectedItem = selectableItems[this.selectedIndex]?.item;
+    if (selectedItem?.description) {
+      lines.push('');
+      lines.push(getSettingsListTheme().description(`  ${selectedItem.description}`));
+    }
+
+    lines.push('');
+    lines.push(getSettingsListTheme().hint('  Enter/Space to change · Esc to cancel'));
+    return lines;
+  }
+
+  handleInput(data: string): void {
+    if (this.submenuComponent) {
+      this.submenuComponent.handleInput?.(data);
+      return;
+    }
+
+    const selectableItems = this.getSelectableItems();
+    if (selectableItems.length === 0) return;
+
+    const keybindings = getKeybindings();
+    if (keybindings.matches(data, 'tui.select.up')) {
+      this.selectedIndex = this.selectedIndex === 0 ? selectableItems.length - 1 : this.selectedIndex - 1;
+    } else if (keybindings.matches(data, 'tui.select.down')) {
+      this.selectedIndex = this.selectedIndex === selectableItems.length - 1 ? 0 : this.selectedIndex + 1;
+    } else if (keybindings.matches(data, 'tui.select.confirm') || data === ' ') {
+      this.activateItem(selectableItems[this.selectedIndex]?.item);
+    } else if (keybindings.matches(data, 'tui.select.cancel')) {
+      this.onCancel();
+    }
+  }
+
+  private activateItem(item: SettingItem | undefined): void {
+    if (!item?.submenu) return;
+
+    this.submenuComponent = item.submenu(item.currentValue, selectedValue => {
+      if (selectedValue !== undefined) {
+        item.currentValue = selectedValue;
+      }
+      this.submenuComponent = null;
+    });
+  }
+
+  private getSelectableItems(): SelectableSetting[] {
+    return this.sections.flatMap((section, sectionIndex) =>
+      section.items.map((item, itemIndex) => ({ sectionIndex, itemIndex, item })),
+    );
+  }
+}
+
 // =============================================================================
 // Settings Component
 // =============================================================================
 
 export class SettingsComponent extends Box implements Focusable {
-  private settingsList: SettingsList;
+  private settingsList: SectionedSettingsList;
   private _focused = false;
 
   get focused(): boolean {
@@ -390,34 +508,6 @@ export class SettingsComponent extends Box implements Focusable {
           ]
         : []),
       {
-        id: 'experimentalGithubPrNotifications',
-        label: 'Experimental GitHub PR notifications',
-        description: 'Opt into GitHub PR polling and /github subscription commands.',
-        currentValue: config.experimentalGithubPrNotifications ? 'On' : 'Off',
-        submenu: (_currentValue, done) =>
-          new SelectSubmenu(
-            [
-              {
-                value: 'on',
-                label: '  On',
-                description: 'Start GitHub PR polling and /github commands now',
-              },
-              {
-                value: 'off',
-                label: '  Off',
-                description: 'Disable GitHub PR notification polling',
-              },
-            ],
-            config.experimentalGithubPrNotifications ? 'on' : 'off',
-            value => {
-              config.experimentalGithubPrNotifications = value === 'on';
-              callbacks.onExperimentalGithubPrNotificationsChange(config.experimentalGithubPrNotifications);
-              done(config.experimentalGithubPrNotifications ? 'On' : 'Off');
-            },
-            () => done(),
-          ),
-      },
-      {
         id: 'storageBackend',
         label: 'Storage backend',
         description: 'Database backend for threads, memory, and agent data (restart required)',
@@ -456,13 +546,39 @@ export class SettingsComponent extends Box implements Focusable {
       });
     }
 
-    this.settingsList = new SettingsList(
-      items,
-      10,
-      getSettingsListTheme(),
-      (_id, _newValue) => {
-        // All changes handled via submenu callbacks
+    const experimentItems: SettingItem[] = [
+      {
+        id: 'experimentalGithubPrNotifications',
+        label: 'GitHub PR notifications',
+        description: 'Opt into GitHub PR polling and /github subscription commands.',
+        currentValue: config.experimentalGithubPrNotifications ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Start GitHub PR polling and /github commands now',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Disable GitHub PR notification polling',
+              },
+            ],
+            config.experimentalGithubPrNotifications ? 'on' : 'off',
+            value => {
+              config.experimentalGithubPrNotifications = value === 'on';
+              callbacks.onExperimentalGithubPrNotificationsChange(config.experimentalGithubPrNotifications);
+              done(config.experimentalGithubPrNotifications ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
       },
+    ];
+
+    this.settingsList = new SectionedSettingsList(
+      [{ items }, { title: 'Experiments', items: experimentItems }],
       callbacks.onClose,
     );
 

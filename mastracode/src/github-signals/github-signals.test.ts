@@ -47,15 +47,25 @@ function createHarness() {
 }
 
 function createSnapshot({
+  title = 'Test PR',
+  state = 'open',
+  merged = false,
+  closedAt,
+  mergedAt,
   failedChecks = [],
   comments = [],
   reviews = [],
 }: {
+  title?: string;
+  state?: string;
+  merged?: boolean;
+  closedAt?: string;
+  mergedAt?: string;
   failedChecks?: unknown[];
   comments?: unknown[];
   reviews?: unknown[];
 } = {}) {
-  return { failedChecks, comments, reviews };
+  return { title, state, merged, closedAt, mergedAt, failedChecks, comments, reviews };
 }
 
 type TestSnapshot = ReturnType<typeof createSnapshot>;
@@ -79,7 +89,17 @@ function createSnapshotCommandRunner(snapshots: TestSnapshot[], permissions: Rec
 
     if (/^repos\/[^/]+\/[^/]+\/pulls\/\d+$/.test(endpoint)) {
       currentSnapshot = snapshots[snapshotIndex++] ?? snapshots.at(-1) ?? createSnapshot();
-      return { stdout: JSON.stringify({ head: { sha: `sha-${snapshotIndex}` } }) };
+      return {
+        stdout: JSON.stringify({
+          title: currentSnapshot.title,
+          html_url: 'https://github.com/mastra-ai/mastra/pull/123',
+          state: currentSnapshot.state,
+          merged: currentSnapshot.merged,
+          closed_at: currentSnapshot.closedAt,
+          merged_at: currentSnapshot.mergedAt,
+          head: { sha: `sha-${snapshotIndex}` },
+        }),
+      };
     }
 
     if (/^repos\/[^/]+\/[^/]+\/issues\/\d+\/comments$/.test(endpoint)) {
@@ -501,6 +521,78 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('does not emit cached comment notifications authored by the current GitHub user', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-05-20T10:00:00.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const latestCommentUrl = 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/4500729873';
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[1] === 'user') return { stdout: 'TylerBarnes\n' };
+      if (args.includes('/notifications')) {
+        return {
+          stdout: `HTTP/2.0 200 OK\netag: \"etag-1\"\n\n${JSON.stringify([
+            {
+              ...historicalCodeRabbitCommentNotification,
+              id: 'self-comment-thread',
+              reason: 'comment',
+              updated_at: '2026-05-20T10:00:00.000Z',
+              repository: { full_name: 'mastra-ai/mastra' },
+              subject: {
+                ...historicalCodeRabbitCommentNotification.subject,
+                title: 'fix: goal judge maxSteps, retry, resume retrigger, and task auto-demote',
+                url: 'https://api.github.com/repos/mastra-ai/mastra/pulls/16843',
+                latest_comment_url: latestCommentUrl,
+              },
+            },
+          ])}`,
+        };
+      }
+      if (args[1] === latestCommentUrl) {
+        return {
+          stdout: JSON.stringify({
+            user: { login: 'TylerBarnes' },
+            body: 'Thanks for the quick follow-up. I pulled the latest branch and re-verified.',
+            html_url: 'https://github.com/mastra-ai/mastra/pull/16843#issuecomment-4500729873',
+          }),
+        };
+      }
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/16843') {
+        return { stdout: JSON.stringify({ head: { sha: 'sha-1' } }) };
+      }
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/sha-1/check-runs') {
+        return { stdout: JSON.stringify({ check_runs: [] }) };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: poller,
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 16843,
+      createdAt: '2026-05-20T09:00:00.000Z',
+      updatedAt: '2026-05-20T09:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 16843)).resolves.toMatchObject([
+      { id: 'self-comment-thread', commentAuthor: 'TylerBarnes' },
+    ]);
+    github.destroy();
+  });
+
   it('emits wanted historical comment notifications while filtering generic PR updates', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-05-14T21:14:00.000Z');
@@ -718,7 +810,7 @@ describe('GithubSignals', () => {
 
     await github.poll();
 
-    expect(commandRunner).not.toHaveBeenCalled();
+    expect(commandRunner).toHaveBeenCalledTimes(2);
     expect(sendSignal).toHaveBeenCalledTimes(2);
     const calls = sendSignal.mock.calls as any[];
     expect(calls[0][0]).toMatchObject({
@@ -803,7 +895,7 @@ describe('GithubSignals', () => {
     await github.poll();
     await github.poll();
 
-    expect(commandRunner).not.toHaveBeenCalled();
+    expect(commandRunner).toHaveBeenCalledTimes(2);
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const calls = sendSignal.mock.calls as any[];
     expect(calls[0][0]).toMatchObject({
@@ -863,7 +955,7 @@ describe('GithubSignals', () => {
 
     await github.poll();
 
-    expect(commandRunner).not.toHaveBeenCalled();
+    expect(commandRunner).toHaveBeenCalledTimes(1);
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         attributes: expect.objectContaining({ type: 'github-ci-failure', checkCount: 1 }),
@@ -1202,12 +1294,71 @@ describe('GithubSignals', () => {
 
     await github.poll();
 
-    expect(commandRunner.mock.calls.filter(call => call[0].includes('/notifications'))).toHaveLength(1);
+    expect(commandRunner.mock.calls.filter(call => call[0].includes('/notifications'))).toHaveLength(2);
     expect(sendSignal).toHaveBeenCalledTimes(2);
     expect((sendSignal.mock.calls as any[]).map(call => call[0].attributes.title)).toEqual([
       'PR 123 comment',
       'PR 456 comment',
     ]);
+    github.destroy();
+  });
+
+  it('emits approval and merge updates from snapshot fallback even without inbox notifications', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-03T00:00:00.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: ship it',
+        state: 'closed',
+        merged: true,
+        closedAt: '2026-01-02T00:02:00.000Z',
+        mergedAt: '2026-01-02T00:02:00.000Z',
+        reviews: [
+          {
+            id: 'review-1',
+            body: '',
+            submittedAt: '2026-01-02T00:01:00.000Z',
+            state: 'APPROVED',
+            user: { login: 'TylerBarnes' },
+            html_url: 'https://github.com/mastra-ai/mastra/pull/123#pullrequestreview-1',
+          },
+        ],
+      }),
+    ]);
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      lastReviewTimestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect((sendSignal.mock.calls as any[])[0][0]).toMatchObject({
+      attributes: { type: 'github-review', kind: 'review', reviewState: 'APPROVED', user: 'TylerBarnes' },
+      contents: 'TylerBarnes approved this PR.',
+    });
+    expect((sendSignal.mock.calls as any[])[1][0]).toMatchObject({
+      attributes: { type: 'github-pr-merged', kind: 'pr-merged' },
+      contents: 'PR #123 was merged: feat: ship it',
+    });
     github.destroy();
   });
 
@@ -1788,7 +1939,20 @@ describe('GithubSignals', () => {
     const github = new GithubSignals({
       pollIntervalMs: 1_000,
       repo: 'mastra-ai/mastra',
-      commandRunner: createSnapshotCommandRunner([createSnapshot()]),
+      commandRunner: createSnapshotCommandRunner([
+        createSnapshot({
+          title: 'feat: ship it',
+          reviews: [
+            {
+              id: 'review-1',
+              state: 'APPROVED',
+              submittedAt: '2026-01-02T00:01:00.000Z',
+              user: { login: 'TylerBarnes' },
+            },
+          ],
+          failedChecks: [{ name: 'lint', conclusion: 'failure' }],
+        }),
+      ]),
     });
     github.addAgent({ id: 'agent-1', sendSignal: createSendSignalMock() } as any);
     const sendSignal = vi.fn(async signal => signal);
@@ -1799,7 +1963,9 @@ describe('GithubSignals', () => {
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'system-reminder',
+        contents: expect.stringContaining('Latest review: APPROVED by TylerBarnes'),
         attributes: expect.objectContaining({ type: 'github-pr-subscribe' }),
+        metadata: expect.objectContaining({ summary: expect.stringContaining('CI: 1 failed: lint') }),
       }),
     );
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
@@ -2037,13 +2203,13 @@ describe('GithubSignals', () => {
           {
             id: 'comment-1',
             body: 'random comment',
-            createdAt: '2026-01-02T00:00:00.000Z',
+            createdAt: '2026-06-02T00:00:00.000Z',
             author: { login: 'random-user' },
           },
           {
             id: 'comment-2',
             body: 'bot comment',
-            createdAt: '2026-01-02T00:01:00.000Z',
+            createdAt: '2026-06-02T00:01:00.000Z',
             author: { login: 'coderabbitai[bot]' },
           },
         ],

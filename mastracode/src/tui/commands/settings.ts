@@ -5,6 +5,7 @@ import type { IToolExecutionComponent } from '../components/tool-execution-inter
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
 import { handleApiKeysCommand } from './api-keys.js';
+import { ensureGithubCliAuthenticated } from './github.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
@@ -79,32 +80,43 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         applyQuietModeToRenderedTools(ctx, ctx.state.quietMode, lines);
       },
       onExperimentalGithubPrNotificationsChange: enabled => {
-        const current = loadSettings();
-        current.signals.githubPrNotifications = enabled;
-        saveSettings(current);
-
         if (enabled) {
-          void ctx.state.options
-            .enableGithubSignals?.()
-            .then(githubSignals => {
-              if (githubSignals) {
-                ctx.state.options.githubSignals = githubSignals;
-                ctx.updateStatusLine();
-                ctx.showInfo('Experimental GitHub PR notifications enabled. /github commands are available now.');
-              } else {
+          void ensureGithubCliAuthenticated().then(preflightError => {
+            if (preflightError) {
+              ctx.showError(preflightError);
+              return;
+            }
+
+            const current = loadSettings();
+            current.signals.githubPrNotifications = true;
+            saveSettings(current);
+
+            void ctx.state.options
+              .enableGithubSignals?.()
+              .then(githubSignals => {
+                if (githubSignals) {
+                  ctx.state.options.githubSignals = githubSignals;
+                  ctx.updateStatusLine();
+                  ctx.showInfo('Experimental GitHub PR notifications enabled. /github commands are available now.');
+                } else {
+                  ctx.showError('Experimental GitHub PR notifications could not start for this session.');
+                }
+              })
+              .catch(() => {
                 ctx.showError('Experimental GitHub PR notifications could not start for this session.');
-              }
-            })
-            .catch(() => {
-              ctx.showError('Experimental GitHub PR notifications could not start for this session.');
-            });
-        } else {
-          ctx.state.options.disableGithubSignals?.();
-          ctx.state.options.githubSignals = undefined;
-          ctx.state.activeGithubPrSubscriptions = [];
-          ctx.updateStatusLine();
-          ctx.showInfo('Experimental GitHub PR notifications disabled. /github commands are unavailable.');
+              });
+          });
+          return;
         }
+
+        const current = loadSettings();
+        current.signals.githubPrNotifications = false;
+        saveSettings(current);
+        ctx.state.options.disableGithubSignals?.();
+        ctx.state.options.githubSignals = undefined;
+        ctx.state.activeGithubPrSubscriptions = [];
+        ctx.updateStatusLine();
+        ctx.showInfo('Experimental GitHub PR notifications disabled. /github commands are unavailable.');
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();

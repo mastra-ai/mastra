@@ -11,6 +11,8 @@ import type { GithubInboxNotification } from './notification-store.js';
 const MASTER_LEASE_MS = 45_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
 const MERGEABILITY_REFRESH_MS = 5 * 60_000;
+const RECENT_READ_NOTIFICATION_LOOKBACK_MS = 15 * 60_000;
+const READ_NOTIFICATION_OVERLAP_MS = 2 * 60_000;
 
 export interface GithubNotificationPollerOptions {
   store?: GithubNotificationStore;
@@ -62,29 +64,24 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       await this.store.heartbeatMasterLease(this.accountKey, MASTER_LEASE_MS);
       await this.store.clearInvalidAccountEtag(this.accountKey);
       const freshState = await this.store.getAccountState(this.accountKey);
-      const response = await this.#fetchNotifications(freshState.etag);
+      const response = await this.#fetchNotifications({ etag: freshState.etag, all: false });
+      const recentReadResponse = await this.#fetchNotifications({
+        all: true,
+        since: getRecentReadSince(freshState.checkedAt, this.#now),
+      });
       const checkedAt = this.#now().toISOString();
 
-      if (response.status === 304) {
-        const backfilledNotifications = await this.#backfillMissingEnrichment();
-        await this.store.updateAccountState(this.accountKey, {
-          checkedAt,
-          updatedAt: backfilledNotifications.length > 0 ? checkedAt : freshState.updatedAt,
-          etag: response.etag,
-        });
-        return { role: 'master', updated: backfilledNotifications.length > 0, notifications: backfilledNotifications };
-      }
-
-      const notifications = response.items
+      const notifications = [...(response.status === 304 ? [] : response.items), ...recentReadResponse.items]
         .map(normalizeGithubInboxNotification)
         .filter(Boolean) as GithubInboxNotification[];
-      await this.#enrichNotifications(notifications);
-      await this.store.upsertNotifications(this.accountKey, notifications);
+      const uniqueNotifications = dedupeNotifications(notifications);
+      await this.#enrichNotifications(uniqueNotifications);
+      if (uniqueNotifications.length > 0) await this.store.upsertNotifications(this.accountKey, uniqueNotifications);
       const backfilledNotifications = await this.#backfillMissingEnrichment();
-      const updatedNotifications = [...notifications, ...backfilledNotifications];
+      const updatedNotifications = [...uniqueNotifications, ...backfilledNotifications];
       await this.store.updateAccountState(this.accountKey, {
         checkedAt,
-        updatedAt: checkedAt,
+        updatedAt: updatedNotifications.length > 0 ? checkedAt : freshState.updatedAt,
         etag: response.etag,
         rateLimitedUntil: undefined,
       });
@@ -223,7 +220,11 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     );
   }
 
-  async #fetchNotifications(etag?: string): Promise<{ status: number; etag?: string; items: unknown[] }> {
+  async #fetchNotifications(options: {
+    etag?: string;
+    all?: boolean;
+    since?: string;
+  }): Promise<{ status: number; etag?: string; items: unknown[] }> {
     const args = [
       'api',
       '--method',
@@ -233,11 +234,12 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       '-F',
       'participating=true',
       '-F',
-      'all=false',
+      `all=${options.all === true}`,
       '-F',
       'per_page=100',
     ];
-    const conditionalEtag = normalizeEtag(etag);
+    if (options.since) args.push('-F', `since=${options.since}`);
+    const conditionalEtag = normalizeEtag(options.etag);
     if (conditionalEtag) args.push('-H', `If-None-Match: ${conditionalEtag}`);
     try {
       const { stdout } = await this.#commandRunner(args);
@@ -247,6 +249,20 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       throw error;
     }
   }
+}
+
+function getRecentReadSince(checkedAt: string | undefined, now: () => Date): string {
+  const checkedAtTime = checkedAt ? Date.parse(checkedAt) : Number.NaN;
+  const sinceTime = Number.isFinite(checkedAtTime)
+    ? checkedAtTime - READ_NOTIFICATION_OVERLAP_MS
+    : now().getTime() - RECENT_READ_NOTIFICATION_LOOKBACK_MS;
+  return new Date(sinceTime).toISOString();
+}
+
+function dedupeNotifications(notifications: GithubInboxNotification[]): GithubInboxNotification[] {
+  const byId = new Map<string, GithubInboxNotification>();
+  for (const notification of notifications) byId.set(notification.id, notification);
+  return [...byId.values()];
 }
 
 function getEnrichmentFingerprint(notification: GithubInboxNotification): string {
