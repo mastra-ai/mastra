@@ -10,6 +10,6 @@ const DEFAULT_CACHE_MAX_SIZE = 1000;
  * Cache key format: `${indexName}:${contentHash}`
  * Cache value: embedding vector (number[])
  */
-export const globalEmbeddingCache = new LRUCache<string, number[]>({
+export const globalEmbeddingCache = new LRUCache<string, ReadonlyArray<number>>({
   max: DEFAULT_CACHE_MAX_SIZE,
 });

@@ -1855,6 +1855,34 @@ describe('SemanticRecall', () => {
       // Should still be 1 call (cached)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
+
+    it('should return defensive copies from cached embeddings', async () => {
+      const mockEmbeddings = [[0.1, 0.2, 0.3]];
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: mockEmbeddings,
+      });
+
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+      });
+
+      const first = await (processor as any).embedMessageContent('hello world', 'test-index');
+
+      // Mutate returned embedding
+      first.embeddings[0]![0] = 999;
+
+      // Fetch again from cache
+      const second = await (processor as any).embedMessageContent('hello world', 'test-index');
+
+      // Cached value should remain unchanged
+      expect(second.embeddings[0]![0]).toBe(0.1);
+
+      // Embedder should only run once
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Embedder Options', () => {

@@ -450,7 +450,7 @@ export class SemanticRecall implements Processor {
 
     if (cachedEmbedding) {
       return {
-        embeddings: [cachedEmbedding],
+        embeddings: [[...cachedEmbedding]],
         dimension: cachedEmbedding.length,
       };
     }
@@ -466,7 +466,7 @@ export class SemanticRecall implements Processor {
 
     // Cache the first embedding in global cache
     if (result.embeddings[0]) {
-      globalEmbeddingCache.set(contentHash, result.embeddings[0]);
+      globalEmbeddingCache.set(contentHash, Object.freeze([...result.embeddings[0]]));
     }
 
     return {
