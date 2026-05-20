@@ -235,8 +235,8 @@ describe('extractBranchSpans (helper)', () => {
       { spanId: 'A', parentSpanId: null, startedAt: new Date('2026-01-02T12:00:00.000Z') },
       { spanId: 'B', parentSpanId: 'A', startedAt: new Date('2026-01-02T12:00:01.000Z') },
       { spanId: 'C', parentSpanId: 'B', startedAt: new Date('2026-01-02T12:00:02.000Z') },
-      // Reintroduces B as a child of C
-      { spanId: 'B-dup', parentSpanId: 'C', startedAt: new Date('2026-01-02T12:00:03.000Z') },
+      // Reintroduces B as a child of C (A → B → C → B cycle)
+      { spanId: 'B', parentSpanId: 'C', startedAt: new Date('2026-01-02T12:00:03.000Z') },
     ];
     // Even more pathological: C lists itself as its own parent.
     spans.push({ spanId: 'C', parentSpanId: 'C', startedAt: new Date('2026-01-02T12:00:04.000Z') });

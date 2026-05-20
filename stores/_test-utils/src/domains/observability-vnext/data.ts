@@ -14,13 +14,14 @@ export function makeSpan(
   overrides: Partial<CreateSpanRecord> & Pick<CreateSpanRecord, 'traceId' | 'spanId'>,
 ): CreateSpanRecord {
   const startedAt = overrides.startedAt ?? VNEXT_BASE_DATE;
+  const endedAt = 'endedAt' in overrides ? overrides.endedAt : new Date(startedAt.getTime() + 1000);
   return {
     parentSpanId: null,
     name: overrides.name ?? overrides.spanId,
     spanType: overrides.spanType ?? SpanType.AGENT_RUN,
     isEvent: false,
     startedAt,
-    endedAt: overrides.endedAt ?? new Date(startedAt.getTime() + 1000),
+    endedAt,
     ...overrides,
   } as CreateSpanRecord;
 }

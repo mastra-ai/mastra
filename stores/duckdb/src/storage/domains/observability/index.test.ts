@@ -9,15 +9,22 @@ import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
 
+let sharedSuiteStore: DuckDBStore | undefined;
+
 createObservabilityVNextTests({
   capabilities: {
     label: 'DuckDB',
     preferredStrategy: 'event-sourced',
   },
   getStorage: async () => {
-    const store = new DuckDBStore({ path: ':memory:' });
-    await store.init();
-    return (await store.getStore('observability')) as ObservabilityStorage;
+    sharedSuiteStore = new DuckDBStore({ path: ':memory:' });
+    await sharedSuiteStore.init();
+    return (await sharedSuiteStore.getStore('observability')) as ObservabilityStorage;
+  },
+  cleanup: async storage => {
+    await storage.dangerouslyClearAll();
+    await sharedSuiteStore?.db.close();
+    sharedSuiteStore = undefined;
   },
 });
 
