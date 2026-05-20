@@ -138,38 +138,17 @@ describe('AgentBuilderAgentView MSW integration', () => {
     await waitFor(() => expect(sendRequestCount).toBe(0));
   });
 
-  it('shows the Publish to channel button for the owner', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
-      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
-      http.get(`${BASE_URL}/api/channels/platforms`, () =>
-        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
-      ),
-      http.get(`${BASE_URL}/api/channels/:platform/installations`, () => HttpResponse.json([])),
-    );
-
-    renderPage();
-
-    const publish = (await screen.findByTestId('agent-builder-publish-channel')) as HTMLButtonElement;
-    expect(publish.disabled).toBe(false);
-  });
-
-  it('hides the Edit and Publish to channel buttons for non-owners', async () => {
+  it('hides the Edit button for non-owners', async () => {
     const otherAgent = { ...storedAgent, authorId: 'someone-else' };
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(otherAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
-      http.get(`${BASE_URL}/api/channels/platforms`, () =>
-        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
-      ),
-      http.get(`${BASE_URL}/api/channels/:platform/installations`, () => HttpResponse.json([])),
     );
 
     renderPage();
 
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
     expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-publish-channel')).toBeNull();
     expect(screen.queryByTestId('agent-builder-visibility-add')).toBeNull();
     expect(screen.queryByTestId('agent-builder-visibility-remove')).toBeNull();
   });

@@ -120,15 +120,6 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
   }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-edit/publish-to-channel-button', () => ({
-  PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
-    agentId ? (
-      <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
-        Publish to…
-      </button>
-    ) : null,
-}));
-
 vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu', () => ({
   AgentBuilderMobileMenu: () => null,
 }));
@@ -173,23 +164,10 @@ describe('AgentBuilderAgentView', () => {
     expect(button.getAttribute('aria-label')).toBe('Switch to Edit mode');
   });
 
-  it('shows the Publish to channel button for the owner', () => {
-    const { getByTestId } = renderAt();
-    const button = getByTestId('agent-builder-publish-channel') as HTMLButtonElement;
-    expect(button.disabled).toBe(false);
-  });
-
-  it('hides the mode-toggle and Publish to channel buttons for non-owners', () => {
+  it('hides the mode-toggle button for non-owners', () => {
     storedAgent = { ...storedAgent, authorId: 'someone-else' };
     const { queryByTestId } = renderAt();
     expect(queryByTestId('agent-builder-mode-toggle')).toBeNull();
-    expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
-  });
-
-  it('hides the Publish to channel button when the agent is private', () => {
-    storedAgent = { ...storedAgent, visibility: 'private' };
-    const { queryByTestId } = renderAt();
-    expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
   });
 
   it('shows the Remove from library button when the agent is public', () => {

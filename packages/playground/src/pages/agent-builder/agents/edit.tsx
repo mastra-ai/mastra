@@ -16,7 +16,6 @@ import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-edit
 import { ConversationPanelChat } from '@/domains/agent-builder/components/agent-edit/conversation-panel';
 import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-edit/delete-agent-action';
 import { EditTopBar } from '@/domains/agent-builder/components/agent-edit/edit-top-bar';
-import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
@@ -103,7 +102,7 @@ const EditPageBody = () => {
 };
 
 const EditTopBarSlot = () => {
-  const { autosave, onModeToggle, canPublishToChannel, agentId } = useEditPage();
+  const { autosave, onModeToggle } = useEditPage();
   const isRunning = useStreamRunning();
 
   return (
@@ -115,20 +114,13 @@ const EditTopBarSlot = () => {
       rightAside={
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
       }
-      modeAction={
-        canPublishToChannel ? (
-          <div className="hidden lg:flex items-center gap-2">
-            <PublishToChannelButton agentId={agentId} />
-          </div>
-        ) : null
-      }
       mobileExtra={<MobileMenuSlot />}
     />
   );
 };
 
 const MobileMenuSlot = () => {
-  const { agentId, canPublishToChannel } = useEditPage();
+  const { agentId } = useEditPage();
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
@@ -138,7 +130,6 @@ const MobileMenuSlot = () => {
     <AgentBuilderMobileMenu
       agentId={agentId}
       showSetVisibility={!!capabilities?.enabled}
-      showPublishToChannel={canPublishToChannel}
       showDelete
       agentName={name}
       disabled={isRunning}
