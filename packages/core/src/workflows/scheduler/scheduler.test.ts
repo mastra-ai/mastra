@@ -272,34 +272,24 @@ describe('WorkflowScheduler', () => {
     expect(scheduler.isRunning).toBe(false);
   });
 
-  it('auto-suspends the tick loop when no active schedules remain', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({
-      schedulesStore: store,
-      pubsub,
-      config: { tickIntervalMs: 60_000 },
-    });
-
-    // Start with zero schedules — the immediate tick should auto-suspend.
-    await scheduler.start();
-    expect(scheduler.isRunning).toBe(false);
-  });
-
-  it('auto-suspends after the last active schedule is fired and none remain', async () => {
+  it('skips firing when the target workflow is not registered', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
     const scheduler = new WorkflowScheduler({
       schedulesStore: store,
       pubsub,
-      config: { tickIntervalMs: 60_000 },
+      config: {
+        tickIntervalMs: 60_000,
+        isWorkflowRegistered: () => false,
+        missesBeforeDelete: 3,
+      },
     });
 
     const past = Date.now() - 5_000;
     await store.createSchedule({
-      id: 'sched-only',
-      target: { type: 'workflow', workflowId: 'wf-test' },
+      id: 'sched-ghost',
+      target: { type: 'workflow', workflowId: 'wf-missing' },
       cron: '0 0 1 1 *',
       status: 'active',
       nextFireAt: past,
@@ -307,20 +297,96 @@ describe('WorkflowScheduler', () => {
       updatedAt: past,
     });
 
-    // First tick fires the schedule and advances nextFireAt to the future.
     await scheduler.start();
-    expect(scheduler.isRunning).toBe(true);
-    expect(events).toHaveLength(1);
+    // No publish, row still present, nextFireAt not advanced.
+    expect(events).toHaveLength(0);
+    const row = await store.getSchedule('sched-ghost');
+    expect(row?.nextFireAt).toBe(past);
 
-    // Delete the schedule so the table is empty.
-    await store.deleteSchedule('sched-only');
+    await scheduler.stop();
+  });
 
-    // Next tick finds nothing due and no active schedules → auto-suspend.
+  it('deletes a schedule whose target workflow is missing for too many consecutive ticks', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: {
+        tickIntervalMs: 60_000,
+        isWorkflowRegistered: () => false,
+        missesBeforeDelete: 3,
+      },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-ghost',
+      target: { type: 'workflow', workflowId: 'wf-missing' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    // Three ticks total — first two skip, third deletes the row.
+    await scheduler.start();
+    expect(await store.getSchedule('sched-ghost')).not.toBeNull();
     await scheduler.tick();
-    expect(scheduler.isRunning).toBe(false);
+    expect(await store.getSchedule('sched-ghost')).not.toBeNull();
+    await scheduler.tick();
+    expect(await store.getSchedule('sched-ghost')).toBeNull();
+    expect(events).toHaveLength(0);
+
+    await scheduler.stop();
   });
 
-  it('can be restarted after auto-suspend', async () => {
+  it('resets the miss counter when the target workflow appears within the grace window', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    let registered = false;
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: {
+        tickIntervalMs: 60_000,
+        isWorkflowRegistered: () => registered,
+        missesBeforeDelete: 3,
+      },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-late',
+      target: { type: 'workflow', workflowId: 'wf-late' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    // Two misses while the workflow hasn't registered yet.
+    await scheduler.start();
+    await scheduler.tick();
+    expect(await store.getSchedule('sched-late')).not.toBeNull();
+    expect(events).toHaveLength(0);
+
+    // Workflow finishes registering before the grace window expires.
+    registered = true;
+    await scheduler.tick();
+    expect(events).toHaveLength(1);
+    const row = await store.getSchedule('sched-late');
+    expect(row).not.toBeNull();
+    expect(row?.nextFireAt).toBeGreaterThan(past);
+
+    await scheduler.stop();
+  });
+
+  it('does not interfere with firing when no predicate is configured', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
@@ -330,14 +396,9 @@ describe('WorkflowScheduler', () => {
       config: { tickIntervalMs: 60_000 },
     });
 
-    // Start with no schedules — auto-suspends immediately.
-    await scheduler.start();
-    expect(scheduler.isRunning).toBe(false);
-
-    // Register a due schedule and restart.
     const past = Date.now() - 5_000;
     await store.createSchedule({
-      id: 'sched-restart',
+      id: 'sched-no-predicate',
       target: { type: 'workflow', workflowId: 'wf-test' },
       cron: '0 0 1 1 *',
       status: 'active',
@@ -347,51 +408,7 @@ describe('WorkflowScheduler', () => {
     });
 
     await scheduler.start();
-    expect(scheduler.isRunning).toBe(true);
     expect(events).toHaveLength(1);
-
-    await scheduler.stop();
-  });
-
-  it('does not auto-suspend when config.enabled is true (imperative mode)', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({
-      schedulesStore: store,
-      pubsub,
-      config: { tickIntervalMs: 60_000, enabled: true },
-    });
-
-    // Zero schedules, but enabled:true keeps the loop alive for imperative use.
-    await scheduler.start();
-    expect(scheduler.isRunning).toBe(true);
-
-    await scheduler.stop();
-  });
-
-  it('does not auto-suspend when active schedules exist but none are due yet', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({
-      schedulesStore: store,
-      pubsub,
-      config: { tickIntervalMs: 60_000 },
-    });
-
-    const future = Date.now() + 60_000;
-    await store.createSchedule({
-      id: 'sched-future',
-      target: { type: 'workflow', workflowId: 'wf-test' },
-      cron: '0 0 1 1 *',
-      status: 'active',
-      nextFireAt: future,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    await scheduler.start();
-    // Active schedule exists, just not due yet — should keep running.
-    expect(scheduler.isRunning).toBe(true);
 
     await scheduler.stop();
   });

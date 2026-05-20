@@ -39,10 +39,26 @@ export class SchedulerWorker extends MastraWorker {
       return;
     }
 
+    // Bind a workflow-existence predicate so the scheduler can reclaim
+    // schedule rows whose target workflow is no longer registered with
+    // Mastra (e.g. workflow renamed or deleted in code). `getWorkflowById`
+    // throws on miss; we adapt that into a boolean.
+    const mastra = this.mastra;
+    const isWorkflowRegistered = mastra
+      ? (workflowId: string) => {
+          try {
+            mastra.getWorkflowById(workflowId);
+            return true;
+          } catch {
+            return false;
+          }
+        }
+      : undefined;
+
     this.#scheduler = new WorkflowScheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: this.#config,
+      config: { ...this.#config, isWorkflowRegistered },
     });
     this.#scheduler.__setLogger(deps.logger as IMastraLogger);
 
