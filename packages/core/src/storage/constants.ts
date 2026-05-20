@@ -45,6 +45,9 @@ export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 
+// Tool provider connections
+export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -79,7 +82,8 @@ export type TABLE_NAMES =
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
-  | typeof TABLE_CHANNEL_CONFIG;
+  | typeof TABLE_CHANNEL_CONFIG
+  | typeof TABLE_TOOL_PROVIDER_CONNECTIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -336,6 +340,25 @@ export const FAVORITES_SCHEMA: Record<string, StorageColumn> = {
   entityType: { type: 'text', nullable: false }, // 'agent' | 'skill'
   entityId: { type: 'text', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Per-author registry of authorized tool provider connections. Stores a stable
+ * user-supplied label across agents. Composite primary key on
+ * (authorId, providerId, connectionId). `scope` buckets identity:
+ * 'per-author' (default), 'shared' (visible to all callers), or
+ * 'caller-supplied' (authorId is a host-app end-user id forwarded via request
+ * context).
+ */
+export const TOOL_PROVIDER_CONNECTIONS_SCHEMA: Record<string, StorageColumn> = {
+  authorId: { type: 'text', nullable: false },
+  providerId: { type: 'text', nullable: false },
+  connectionId: { type: 'text', nullable: false },
+  toolkit: { type: 'text', nullable: false },
+  label: { type: 'text', nullable: true },
+  scope: { type: 'text', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
@@ -636,6 +659,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     data: { type: 'jsonb', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
 };
 
 /**
@@ -645,6 +669,10 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
   [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
+  [TABLE_TOOL_PROVIDER_CONNECTIONS]: {
+    columns: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
+    compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
+  },
 };
 
 /**

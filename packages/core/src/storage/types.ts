@@ -2681,3 +2681,72 @@ export type StorageDeleteFavoritesForEntityInput = {
   entityType: StorageFavoriteEntityType;
   entityId: string;
 };
+
+/** Identity bucketing for a persisted tool provider connection row. */
+export type StorageToolProviderConnectionScope = 'shared' | 'per-author' | 'caller-supplied';
+
+/**
+ * A persisted tool provider connection row. Stores a per-author, provider-agnostic
+ * label so the UI can surface a stable name (e.g. "Work Gmail") for the same
+ * `connectionId` across agents. Unique on `(authorId, providerId, connectionId)`.
+ */
+export interface StorageToolProviderConnection {
+  /**
+   * Author/owner the connection belongs to. `'default'` when auth is disabled.
+   * Set to the shared bucket id when `scope === 'shared'`. When
+   * `scope === 'caller-supplied'`, this is a host-app end-user identifier
+   * forwarded via request context.
+   */
+  authorId: string;
+  /** Tool provider id, e.g. `'composio'`. */
+  providerId: string;
+  /** Toolkit slug, e.g. `'gmail'`. */
+  toolkit: string;
+  /** Adapter-native connection identifier (e.g. Composio `ca_...`). */
+  connectionId: string;
+  /** User-supplied display label. `null` when the user hasn't named it yet. */
+  label: string | null;
+  /**
+   * Identity bucketing. `'per-author'` is the default; `'shared'` makes the
+   * row visible to all callers regardless of resolved authorId; `'caller-supplied'`
+   * means `authorId` is a host-app end-user identifier forwarded via request context.
+   */
+  scope: StorageToolProviderConnectionScope;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input to upsert a tool provider connection row. Idempotent on `(authorId, providerId, connectionId)`. */
+export type StorageUpsertToolProviderConnectionInput = {
+  authorId: string;
+  providerId: string;
+  toolkit: string;
+  connectionId: string;
+  label: string | null;
+  /** Defaults to `'per-author'` when omitted. */
+  scope?: StorageToolProviderConnectionScope;
+};
+
+/** Lookup key for a single tool provider connection row. */
+export type StorageToolProviderConnectionKey = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};
+
+/** Input for listing tool provider connections, optionally scoped by author/provider/toolkit. */
+export type StorageListToolProviderConnectionsInput = {
+  /** Omit to list across all authors (admin cross-author listing). */
+  authorId?: string;
+  providerId?: string;
+  toolkit?: string;
+  /** Optional scope filter. Omit to list rows of any scope. */
+  scope?: StorageToolProviderConnectionScope;
+};
+
+/** Input for deleting a single tool provider connection row. */
+export type StorageDeleteToolProviderConnectionInput = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};
