@@ -37,6 +37,9 @@ export const buttonVariants = cva(
           'bg-transparent border border-transparent hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10 text-neutral4',
         outline:
           'bg-transparent border border-border1 hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral5',
+        link: 'inline-flex justify-start rounded-none h-auto px-0 bg-transparent text-neutral3 hover:text-neutral4 gap-1 [&>svg]:mx-0 w-auto [&>svg]:opacity-70',
+        destructive:
+          'bg-surface3 border border-border1 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400 active:bg-red-500/15 text-red-500',
       },
       size: {
         sm: cn(`${formElementSizes.sm} text-ui-sm px-[.9em]`, TEXT_MODE_ADORNMENTS),

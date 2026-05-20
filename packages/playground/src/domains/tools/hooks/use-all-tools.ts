@@ -2,12 +2,13 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useTools = () => {
+export const useTools = (options?: { enabled?: boolean }) => {
   const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
   return useQuery({
     queryKey: ['tools'],
     queryFn: () => client.listTools(requestContext),
+    enabled: options?.enabled ?? true,
   });
 };
 

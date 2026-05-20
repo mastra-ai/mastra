@@ -1,0 +1,238 @@
+// @vitest-environment jsdom
+import { TooltipProvider } from '@mastra/playground-ui';
+import { cleanup, fireEvent, render } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import type * as ReactRouter from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const navigateMock = vi.fn();
+type StoredAgentMock = {
+  id: string;
+  name: string;
+  instructions: string;
+  tools: Record<string, unknown> | unknown[];
+  agents: Record<string, unknown> | unknown[];
+  workflows: Record<string, unknown> | unknown[];
+  visibility: string;
+  authorId?: string;
+};
+let storedAgent: StoredAgentMock = {
+  id: 'agent-123',
+  name: 'My Agent',
+  instructions: 'Do things',
+  tools: [],
+  agents: [],
+  workflows: [],
+  visibility: 'public',
+  authorId: 'current-user',
+};
+
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual<typeof ReactRouter>('react-router');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
+vi.mock('@/domains/agent-builder', () => ({
+  useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false, skills: false }),
+}));
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
+  useBuilderAgentFeatures: () => ({
+    tools: false,
+    memory: false,
+    workflows: false,
+    agents: false,
+    skills: false,
+    browser: false,
+  }),
+}));
+
+vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
+  useStoredSkills: () => ({ data: { skills: [] }, isPending: false }),
+}));
+
+const useAvailableAgentToolsMock = vi.fn((..._args: unknown[]) => [] as unknown[]);
+vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
+  useAvailableAgentTools: (...args: unknown[]) => useAvailableAgentToolsMock(...args),
+}));
+
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+}));
+
+const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({
+  data: storedAgent,
+  isLoading: false,
+}));
+vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
+  useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
+  useStoredAgentMutations: () => ({
+    createStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    updateStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    deleteStoredAgent: { mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false },
+  }),
+}));
+
+vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
+  useTools: () => ({ data: {}, isPending: false }),
+}));
+
+vi.mock('@/domains/agents/hooks/use-agents', () => ({
+  useAgents: () => ({ data: {}, isPending: false }),
+}));
+
+vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
+  useWorkflows: () => ({ data: {}, isPending: false }),
+}));
+
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'current-user' } }),
+}));
+
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-chat-panel', () => ({
+  AgentChatPanel: () => <div data-testid="stub-chat-panel" />,
+  AgentChatPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AgentChatPanelChat: () => <div data-testid="stub-chat-panel" />,
+}));
+vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
+  StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
+  useStreamRunning: () => false,
+  useStreamMessages: () => [],
+  useStreamSend: () => () => {},
+}));
+vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
+  useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
+}));
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
+  }),
+}));
+
+vi.mock('@/domains/agent-builder/components/agent-edit/publish-to-channel-button', () => ({
+  PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
+    agentId ? (
+      <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
+        Publish to…
+      </button>
+    ) : null,
+}));
+
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu', () => ({
+  AgentBuilderMobileMenu: () => null,
+}));
+
+import AgentBuilderAgentView from '../view';
+
+const renderAt = (path = '/agent-builder/agents/agent-123/view') =>
+  render(
+    <TooltipProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/agent-builder/agents/:id/view" element={<AgentBuilderAgentView />} />
+        </Routes>
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+
+describe('AgentBuilderAgentView', () => {
+  beforeEach(() => {
+    navigateMock.mockReset();
+    useStoredAgentMock.mockClear();
+    useAvailableAgentToolsMock.mockClear();
+    storedAgent = {
+      id: 'agent-123',
+      name: 'My Agent',
+      instructions: 'Do things',
+      tools: [],
+      agents: [],
+      workflows: [],
+      visibility: 'public',
+      authorId: 'current-user',
+    };
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders a mode-toggle button for the owner that switches to Edit mode', () => {
+    const { getByTestId } = renderAt();
+    const button = getByTestId('agent-builder-mode-toggle');
+    expect(button.getAttribute('aria-label')).toBe('Switch to Edit mode');
+  });
+
+  it('shows the Publish to channel button for the owner', () => {
+    const { getByTestId } = renderAt();
+    const button = getByTestId('agent-builder-publish-channel') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+  });
+
+  it('hides the mode-toggle and Publish to channel buttons for non-owners', () => {
+    storedAgent = { ...storedAgent, authorId: 'someone-else' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-mode-toggle')).toBeNull();
+    expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
+  });
+
+  it('hides the Publish to channel button when the agent is private', () => {
+    storedAgent = { ...storedAgent, visibility: 'private' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
+  });
+
+  it('shows the Remove from library button when the agent is public', () => {
+    const { getByTestId } = renderAt();
+    const button = getByTestId('agent-builder-visibility-remove');
+    expect(button.textContent).toContain('Remove from library');
+  });
+
+  it('navigates to the edit page when the mode-toggle is clicked', () => {
+    const { getByTestId } = renderAt();
+    fireEvent.click(getByTestId('agent-builder-mode-toggle'));
+    expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/edit', { viewTransition: true });
+  });
+
+  it('reads the latest draft so freshly saved edits appear', () => {
+    renderAt();
+    expect(useStoredAgentMock).toHaveBeenCalledWith('agent-123', expect.objectContaining({ status: 'draft' }));
+  });
+
+  it('never renders the configure panel or its tab strip in view mode, even for the owner', () => {
+    const { queryByTestId, queryByLabelText } = renderAt();
+    expect(queryByTestId('agent-builder-panel-configure')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
+    expect(queryByLabelText('Show configuration')).toBeNull();
+    expect(queryByLabelText('Hide configuration')).toBeNull();
+  });
+
+  it('does not render the configure panel or tabs for non-owners either', () => {
+    storedAgent = { ...storedAgent, authorId: 'someone-else' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-panel-configure')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
+  });
+
+  it('renders the view top bar above the chat panel within the view layout', () => {
+    const { getByTestId } = renderAt();
+    const topBar = getByTestId('agent-builder-view-top-bar');
+    const chatPanel = getByTestId('agent-builder-panel-chat');
+    expect(topBar).not.toBeNull();
+    expect(chatPanel).not.toBeNull();
+    const position = topBar.compareDocumentPosition(chatPanel);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
