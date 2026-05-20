@@ -128,7 +128,19 @@ export class ComposioToolProvider extends BaseToolProvider {
             : { toolkits: [] as string[], limit }
     ) as ComposioToolListParams;
 
-    const rawTools: ComposioTool[] = await composio.tools.getRawComposioTools(query);
+    // Composio's SDK validates every tool's input/output schema against an
+    // internal zod shape and throws on the first malformed tool — so one bad
+    // toolkit can poison a multi-toolkit query. Treat validation errors as a
+    // soft failure and return an empty page rather than a 500.
+    let rawTools: ComposioTool[] = [];
+    try {
+      rawTools = await composio.tools.getRawComposioTools(query);
+    } catch (err) {
+      console.warn(
+        `[ComposioToolProvider] listAllTools failed for query ${JSON.stringify(query)} — returning empty page`,
+        err,
+      );
+    }
 
     const data = rawTools.map(tool => ({
       slug: tool.slug,

@@ -296,6 +296,36 @@ export interface StorageMCPClientToolsConfig {
 }
 
 /**
+ * One pinned connection on a tool provider config (per-agent snapshot).
+ * Adapter-native `connectionId` is the join key into the
+ * `mastra_tool_provider_connections` storage table.
+ */
+export interface StorageToolProviderConfigConnection {
+  connectionId: string;
+  toolkit: string;
+  label?: string;
+  scope?: 'per-author' | 'shared' | 'caller-supplied';
+}
+
+/**
+ * Per-tool metadata (toolkit + optional description override) for a tool
+ * provider's selected tools.
+ */
+export interface StorageToolProviderToolMeta {
+  toolkit?: string;
+  description?: string;
+}
+
+/**
+ * Stored shape for one tool provider's configuration on one agent.
+ * Keyed by tool slug for `tools` and by toolkit slug for `connections`.
+ */
+export interface StorageToolProviderConfig {
+  tools: Record<string, StorageToolProviderToolMeta>;
+  connections: Record<string, StorageToolProviderConfigConnection[]>;
+}
+
+/**
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
@@ -413,6 +443,12 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
+  /**
+   * Tool provider configs keyed by provider id (e.g. `'composio'`).
+   * Each config selects tool slugs and pins per-toolkit connections.
+   * Static or conditional on request context.
+   */
+  toolProviders?: StorageConditionalField<Record<string, StorageToolProviderConfig>>;
   /** Processor graph for input processing — static or conditional on request context */
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */
