@@ -111,7 +111,7 @@ describe('task tool rendering', () => {
 
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('The specified text was not found.');
-    expect(output).toContain('╰── edit ... ✗');
+    expect(output).toContain('▐edit▌ ✗');
   });
 
   it('regroups quiet tools as streamed args arrive', () => {
@@ -131,7 +131,7 @@ describe('task tool rendering', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(120).join('\n'));
     expect(output).toContain('view');
     expect(output).toContain('src/example.ts:80-169');
-    expect(output).toContain('╰─────/example.ts:1-25');
+    expect(output).toContain('●───── /example.ts:1-25▌');
   });
 
   it('streams submit_plan args into a plan box instead of rendering a generic tool', () => {
