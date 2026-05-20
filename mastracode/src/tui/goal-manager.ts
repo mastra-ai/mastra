@@ -251,6 +251,7 @@ export class GoalManager {
       if (this.goal.turnsUsed >= this.goal.maxTurns) {
         this.stopActiveTimer();
         this.goal.status = 'paused';
+        this.goal.lastPauseWasJudgeFailure = false;
         await this.saveToThread(state);
         return { continuation: null, judgeResult: null };
       }
@@ -300,6 +301,7 @@ export class GoalManager {
     if (this.goal.turnsUsed >= this.goal.maxTurns) {
       this.stopActiveTimer();
       this.goal.status = 'paused';
+      this.goal.lastPauseWasJudgeFailure = false;
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
