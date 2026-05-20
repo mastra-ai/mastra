@@ -312,7 +312,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         //   state.yolo, state.thinkingLevel, state.smartEditing
         // Observational memory settings:
         //   state.omScope, state.observerModelId, state.reflectorModelId,
-        //   state.observationThreshold, state.reflectionThreshold
+        //   state.observationThreshold, state.reflectionThreshold,
+        //   state.subconsciousEnabled
         requestContextKeys: [
           // Session identifiers
           'harness.threadId',
@@ -335,6 +336,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.reflectorModelId',
           'harness.state.observationThreshold',
           'harness.state.reflectionThreshold',
+          'harness.state.subconsciousEnabled',
         ],
         exporters: [
           new MastraStorageExporter({ strategy: 'event-sourced' }),
@@ -481,6 +483,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
+  const effectiveSubconsciousEnabled = globalSettings.models.omSubconsciousEnabled ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -532,6 +535,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   if (effectiveObserveAttachments !== undefined) {
     globalInitialState.observeAttachments = effectiveObserveAttachments;
+  }
+  if (effectiveSubconsciousEnabled !== undefined) {
+    globalInitialState.subconsciousEnabled = effectiveSubconsciousEnabled;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

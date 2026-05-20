@@ -11,6 +11,7 @@ import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { getSubconsciousWorkspacePath } from './subconscious-workspace.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -142,7 +143,13 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const skillPaths = buildSkillPaths(projectPath, configDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const subconsciousPath = getSubconsciousWorkspacePath(ctx?.resourceId ?? 'default');
+  const allowedPaths = [
+    ...skillPaths,
+    ...DEFAULT_ALLOWED_PATHS,
+    subconsciousPath,
+    ...sandboxPaths.map((p: string) => path.resolve(p)),
+  ];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {

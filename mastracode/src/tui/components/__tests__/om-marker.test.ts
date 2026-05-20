@@ -103,4 +103,26 @@ describe('OMMarkerComponent activation rendering', () => {
     expect(activationText).not.toContain('msg tokens');
     expect(activationText).not.toContain('TTL');
   });
+
+  it('renders extraction success and failure markers', () => {
+    const extractionMarker = new OMMarkerComponent({
+      type: 'om_extraction_end',
+      operationType: 'observation',
+      extractedValues: {
+        'active-topic': { topic: 'Subconscious' },
+        subconscious: { signal: 'learned' },
+      },
+    });
+    const failedMarker = new OMMarkerComponent({
+      type: 'om_extraction_failed',
+      operationType: 'reflection',
+      error: 'Schema mismatch',
+    });
+
+    const extractionText = stripAnsi(extractionMarker.render(120).join('\n'));
+    const failedText = stripAnsi(failedMarker.render(120).join('\n'));
+
+    expect(extractionText).toContain('✓ Extracted observation values: active-topic, subconscious');
+    expect(failedText).toContain('✗ Extracting reflection values failed: Schema mismatch');
+  });
 });

@@ -29,6 +29,13 @@ function formatDuration(ms: number): string {
   const minutes = totalMinutes % 60;
   return minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
 }
+
+function formatExtractedValues(values: Record<string, unknown>): string {
+  const keys = Object.keys(values);
+  if (keys.length === 0) return 'no values';
+  if (keys.length <= 3) return keys.join(', ');
+  return `${keys.slice(0, 3).join(', ')} +${keys.length - 3} more`;
+}
 export type OMMarkerData =
   | {
       type: 'om_observation_start';
@@ -47,6 +54,16 @@ export type OMMarkerData =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
+    }
+  | {
+      type: 'om_extraction_end';
+      operationType?: 'observation' | 'reflection';
+      extractedValues: Record<string, unknown>;
+    }
+  | {
+      type: 'om_extraction_failed';
+      operationType?: 'observation' | 'reflection';
+      error: string;
     }
   | {
       type: 'om_buffering_start';
@@ -128,6 +145,12 @@ function formatMarker(data: OMMarkerData): string {
     case 'om_observation_failed': {
       const tokens = data.tokensAttempted ? ` (${formatTokens(data.tokensAttempted)} tokens)` : '';
       return theme.fg('error', `  ✗ ${label} failed${tokens}: ${data.error}`);
+    }
+    case 'om_extraction_end': {
+      return theme.fg('success', `  ✓ Extracted ${label.toLowerCase()} values: ${formatExtractedValues(data.extractedValues)}`);
+    }
+    case 'om_extraction_failed': {
+      return theme.fg('error', `  ✗ Extracting ${label.toLowerCase()} values failed: ${data.error}`);
     }
     case 'om_buffering_start': {
       const tokens = data.tokensToBuffer > 0 ? ` ~${formatTokens(data.tokensToBuffer)} tokens` : '';

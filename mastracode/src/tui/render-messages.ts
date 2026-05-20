@@ -781,7 +781,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         } else if (
           content.type === 'om_observation_start' ||
           content.type === 'om_observation_end' ||
-          content.type === 'om_observation_failed'
+          content.type === 'om_observation_failed' ||
+          content.type === 'om_extraction_end' ||
+          content.type === 'om_extraction_failed'
         ) {
           // Skip start markers in history — only show completed/failed results
           if (content.type === 'om_observation_start') continue;
@@ -816,7 +818,6 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             });
             state.chatContainer.addChild(outputComponent);
           } else {
-            // Failed marker
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
         } else if (content.type === 'om_thread_title_updated') {

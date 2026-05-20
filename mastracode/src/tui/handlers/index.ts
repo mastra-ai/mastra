@@ -7,6 +7,8 @@ export {
   handleOMReflectionStart,
   handleOMReflectionEnd,
   handleOMFailed,
+  handleOMExtractionEnd,
+  handleOMExtractionFailed,
   handleOMBufferingStart,
   handleOMBufferingEnd,
   handleOMBufferingFailed,

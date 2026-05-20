@@ -3,6 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { stateSchema } from './schema.js';
 
 describe('stateSchema', () => {
+  it('defaults Subconscious off', () => {
+    const parsed = stateSchema.parse({});
+
+    expect(parsed.subconsciousEnabled).toBe(false);
+  });
+
   it('preserves task ids in harness state', () => {
     const parsed = stateSchema.parse({
       tasks: [

@@ -2,12 +2,16 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
+import { Subconscious } from '@mastra/memory/processors';
+import type { z } from 'zod';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
 import type { MastraCodeState } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
+import { getSubconsciousWorkspacePath } from './subconscious-workspace';
 
 let cachedMemory: Memory | null = null;
 let cachedMemoryKey: string | null = null;
@@ -78,16 +82,20 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
  */
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const state = getHarnessState(requestContext);
+    const harness = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+    const state = harness?.getState?.();
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
+    const resourceId = harness?.resourceId ?? 'default';
+    const subconsciousWorkspacePath = getSubconsciousWorkspacePath(resourceId);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
     const caveman = state?.cavemanObservations ?? false;
+    const subconsciousEnabled = state?.subconsciousEnabled ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const observeAttachments = state?.observeAttachments;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
+    const observeAttachments = state?.observeAttachments ?? 'auto';
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${subconsciousEnabled ? 1 : 0}:${subconsciousWorkspacePath}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -99,6 +107,20 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
+    const subconscious = subconsciousEnabled
+      ? new Subconscious({
+          model: 'default',
+          workspace: new Workspace({
+            id: 'mastracode-subconscious',
+            name: 'MastraCode Subconscious',
+            filesystem: new LocalFilesystem({ basePath: subconsciousWorkspacePath }),
+          }),
+          signal: {
+            ifActive: { behavior: 'deliver' },
+            ifIdle: { behavior: 'persist' },
+          },
+        })
+      : undefined;
 
     cachedMemory = new Memory({
       storage,
@@ -110,6 +132,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
           scope: omScope,
+          ...(subconscious ? { subconscious } : {}),
           activateAfterIdle: 'auto',
           activateOnProviderChange: true,
           observation: {
@@ -122,6 +145,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             threadTitle: true,
             instruction: observerInstruction,
             observeAttachments,
+            ...(subconscious ? { psyches: ['learner', 'modeler'] as const } : {}),
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,
@@ -129,6 +153,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             model: getReflectorModel,
             observationTokens: refThreshold,
             instruction: reflectionInstruction,
+            ...(subconscious ? { psyches: ['integrator', 'learner', 'dreamer', 'modeler'] as const } : {}),
           },
         },
       },

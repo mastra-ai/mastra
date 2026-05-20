@@ -78,6 +78,12 @@ export function persistOmObserveAttachments(value: 'auto' | boolean): void {
   saveSettings(settings);
 }
 
+function persistOmSubconsciousEnabled(enabled: boolean): void {
+  const settings = loadSettings();
+  settings.models.omSubconsciousEnabled = enabled;
+  saveSettings(settings);
+}
+
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.harness.listAvailableModels();
 
@@ -91,6 +97,8 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
     observeAttachments:
       ((ctx.state.harness.getState() as Record<string, unknown>).observeAttachments as 'auto' | boolean | undefined) ??
       'auto',
+    subconsciousEnabled:
+      ((ctx.state.harness.getState() as Record<string, unknown>).subconsciousEnabled as boolean | undefined) ?? false,
   };
 
   return new Promise<void>(resolve => {
@@ -133,6 +141,12 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
           persistOmObserveAttachments(value);
           const label = value === 'auto' ? 'auto' : value ? 'on' : 'off';
           ctx.showInfo(`Observe attachments → ${label}`);
+        },
+        onSubconsciousEnabledChange: async enabled => {
+          await ctx.state.harness.setState({ subconsciousEnabled: enabled } as any);
+          await ctx.state.harness.setThreadSetting({ key: 'subconsciousEnabled', value: enabled });
+          persistOmSubconsciousEnabled(enabled);
+          ctx.showInfo(`Subconscious (experimental) → ${enabled ? 'on' : 'off'}`);
         },
         onClose: () => {
           ctx.state.ui.hideOverlay();

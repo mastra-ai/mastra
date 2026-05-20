@@ -80,6 +80,8 @@ export const stateSchema = z.object({
   // 'auto' (default) checks the provider capabilities registry to decide.
   // true/false forces the setting regardless of model capabilities.
   observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
+  // Experimental Subconscious background psyches for Observational Memory.
+  subconsciousEnabled: z.boolean().default(false),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort

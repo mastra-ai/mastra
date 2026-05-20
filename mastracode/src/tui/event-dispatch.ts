@@ -17,6 +17,8 @@ import {
   handleOMReflectionStart,
   handleOMReflectionEnd,
   handleOMFailed,
+  handleOMExtractionEnd,
+  handleOMExtractionFailed,
   handleOMBufferingStart,
   handleOMBufferingEnd,
   handleOMBufferingFailed,
@@ -237,6 +239,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'om_reflection_failed':
       handleOMFailed(ectx, event.cycleId, event.error, 'reflection');
+      break;
+
+    case 'om_extraction_end':
+      handleOMExtractionEnd(ectx, event.operationType, event.extractedValues);
+      break;
+
+    case 'om_extraction_failed':
+      handleOMExtractionFailed(ectx, event.operationType, event.error);
       break;
 
     case 'om_buffering_start':

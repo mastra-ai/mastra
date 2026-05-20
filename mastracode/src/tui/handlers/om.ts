@@ -167,6 +167,40 @@ export function handleOMFailed(
   state.ui.requestRender();
 }
 
+export function handleOMExtractionEnd(
+  ctx: EventHandlerContext,
+  operationType: 'observation' | 'reflection',
+  extractedValues: Record<string, unknown>,
+): void {
+  const { state } = ctx;
+  addChildBeforeStreaming(
+    ctx,
+    new OMMarkerComponent({
+      type: 'om_extraction_end',
+      operationType,
+      extractedValues,
+    }),
+  );
+  state.ui.requestRender();
+}
+
+export function handleOMExtractionFailed(
+  ctx: EventHandlerContext,
+  operationType: 'observation' | 'reflection',
+  error: string,
+): void {
+  const { state } = ctx;
+  addChildBeforeStreaming(
+    ctx,
+    new OMMarkerComponent({
+      type: 'om_extraction_failed',
+      operationType,
+      error,
+    }),
+  );
+  state.ui.requestRender();
+}
+
 export function handleOMBufferingStart(
   ctx: EventHandlerContext,
   operationType: 'observation' | 'reflection',

@@ -173,6 +173,12 @@ export interface GlobalSettings {
      * model capabilities; true/false forces the setting.
      */
     omObserveAttachments: 'auto' | boolean | null;
+    /**
+     * Experimental Subconscious opt-in for Observational Memory background psyches.
+     * `null` means inherit the built-in default (currently `false`). Used as the
+     * default for new threads unless overridden per-thread.
+     */
+    omSubconsciousEnabled: boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
@@ -261,6 +267,7 @@ const DEFAULTS: GlobalSettings = {
     omReflectionThreshold: null,
     omCavemanObservations: null,
     omObserveAttachments: null,
+    omSubconsciousEnabled: null,
     subagentModels: {},
     goalJudgeModel: null,
     goalMaxTurns: null,
