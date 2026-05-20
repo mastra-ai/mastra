@@ -115,7 +115,7 @@ function EditLayoutWrapper() {
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
     agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
@@ -196,7 +196,7 @@ function EditLayoutWrapper() {
         <RouteHeaderActions owner="cms-agent-edit">
           <div className="flex items-center gap-2">
             {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-            <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
+            <Button onClick={() => void handleSaveDraft()} disabled={!isDirty || isSavingDraft || isSubmitting}>
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -211,7 +211,7 @@ function EditLayoutWrapper() {
             </Button>
             <Button
               variant="primary"
-              onClick={handlePublishVersion}
+              onClick={() => void handlePublishVersion()}
               disabled={
                 isViewingPreviousVersion
                   ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft

@@ -9,6 +9,11 @@ import {
   MainContentLayout,
   MainHeader,
   PermissionDenied,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SessionExpired,
   TextAndIcon,
   is401UnauthorizedError,
@@ -20,7 +25,6 @@ import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { SelectField } from '@/lib/form/components/select-field';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
 import { cn } from '@/lib/utils';
@@ -184,15 +188,18 @@ function CompareItemColumn({
   return (
     <Column>
       <Column.Toolbar className="flex gap-4">
-        <SelectField
-          label="Item"
-          name={`compare-item-${idx}`}
-          value={itemId}
-          onValueChange={onItemChange}
-          options={options}
-          placeholder="Select item"
-          labelIsHidden={true}
-        />
+        <Select name={`compare-item-${idx}`} value={itemId} onValueChange={onItemChange}>
+          <SelectTrigger aria-label="Item">
+            <SelectValue placeholder="Select item" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(option => (
+              <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
           <History />
           Versions
