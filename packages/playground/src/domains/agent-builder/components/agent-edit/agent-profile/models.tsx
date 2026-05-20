@@ -64,21 +64,21 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const visibleEntries = filterProvidersModel(policyAllowedModels, provider, search);
 
   return (
-    <div className="h-full pb-4">
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-3" data-testid="model-card-picker">
-        <div data-testid="model-card-picker-search" className="shrink-0">
+    <div className="h-full pb-6 pt-2">
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6" data-testid="model-card-picker">
+        <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
           <Searchbar
             onSearch={setSearch}
             label="Search models"
             placeholder="Search models or providers..."
-            size="sm"
+            size="lg"
             debounceMs={0}
           />
         </div>
 
         {visibleEntries.length === 0 ? (
           <div className="flex min-h-0 items-center justify-center">
-            <Txt variant="ui-sm" className="text-neutral3">
+            <Txt variant="ui-md" className="text-neutral3">
               {search.trim() ? `No models match "${search.trim()}"` : 'No models available'}
             </Txt>
           </div>
@@ -108,7 +108,7 @@ interface ModelListProps {
 
 const ModelList = ({ visibleEntries, selectedProvider, selectedModel, disabled, onChange }: ModelListProps) => {
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-1.5 lg:gap-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid min-h-0 grid-cols-1 gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
       {visibleEntries.map(entry => {
         const cleanedProvider = cleanProviderId(entry.provider);
         const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -156,7 +156,7 @@ const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntr
       data-testid={`model-card-${entry.provider}-${entry.model}`}
       style={containerStyle}
       className={cn(
-        'flex items-center gap-3 rounded-md border bg-surface3 px-3 py-2.5 text-left transition-colors',
+        'flex items-center gap-3 rounded-lg border bg-surface3 p-4 text-left transition-colors cursor-pointer active:opacity-90',
         hasAgentColor
           ? 'focus-visible:!border-[var(--agent-color-bg)] focus-visible:outline-none'
           : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
@@ -169,12 +169,12 @@ const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntr
         disabled && 'cursor-not-allowed opacity-60',
       )}
     >
-      <ProviderLogo providerId={entry.provider} size={20} />
+      <ProviderLogo providerId={entry.provider} size={32} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Txt variant="ui-sm" className="truncate font-medium text-neutral6">
+        <Txt variant="ui-md" className="truncate font-medium text-neutral6">
           {entry.model}
         </Txt>
-        <Txt variant="ui-xs" className="truncate text-neutral3">
+        <Txt variant="ui-sm" className="truncate text-neutral3">
           {entry.providerName}
         </Txt>
       </div>

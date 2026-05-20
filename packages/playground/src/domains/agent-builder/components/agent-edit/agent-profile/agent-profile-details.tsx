@@ -22,7 +22,7 @@ export const AgentProfileDetails = ({ disabled = false, className }: AgentProfil
   };
 
   return (
-    <div className={cn('flex w-full flex-col items-start gap-0.5', className)}>
+    <div className={cn('flex w-full flex-col items-start gap-0.5 max-w-[60ch]', className)}>
       <input
         type="text"
         value={draftName}
