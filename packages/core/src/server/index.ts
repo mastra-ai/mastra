@@ -29,9 +29,6 @@ type ParamsFromPath<P extends string> = {
   [K in P extends `${string}:${infer Param}/${string}` | `${string}:${infer Param}` ? Param : never]: string;
 };
 
-type RegisterApiRoutePathError = `Param 'path' must not start with '/api', it is reserved for internal API routes.`;
-type ValidatePath<P extends string, T> = P extends `/api/${string}` ? RegisterApiRoutePathError : T;
-
 /**
  * Variables available in the Hono context for custom API route handlers.
  * These are set by the server middleware and available via c.get().
@@ -81,7 +78,7 @@ type RegisterApiRouteOptions<P extends string> = {
 
 function validateOptions<P extends string>(
   path: P,
-  options: RegisterApiRoutePathError | RegisterApiRouteOptions<P>,
+  options: RegisterApiRouteOptions<P>,
 ): asserts options is RegisterApiRouteOptions<P> {
   const opts = options as RegisterApiRouteOptions<P>;
 
@@ -115,17 +112,8 @@ function validateOptions<P extends string>(
 
 export function registerApiRoute<P extends string>(
   path: P,
-  options: ValidatePath<P, RegisterApiRouteOptions<P>>,
-): ValidatePath<P, ApiRoute> {
-  if (path.startsWith('/api/')) {
-    throw new MastraError({
-      id: 'MASTRA_SERVER_API_PATH_RESERVED',
-      text: 'Path must not start with "/api", it\'s reserved for internal API routes',
-      domain: ErrorDomain.MASTRA_SERVER,
-      category: ErrorCategory.USER,
-    });
-  }
-
+  options: RegisterApiRouteOptions<P>,
+): ApiRoute {
   validateOptions(path, options);
 
   return {
@@ -139,7 +127,7 @@ export function registerApiRoute<P extends string>(
     requiresAuth: options.requiresAuth,
     requiresPermission: options.requiresPermission,
     fga: options.fga,
-  } as unknown as ValidatePath<P, ApiRoute>;
+  } as unknown as ApiRoute;
 }
 
 export function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser> {
