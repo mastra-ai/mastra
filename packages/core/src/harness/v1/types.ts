@@ -25,6 +25,22 @@ export type {
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
+export interface AvailableModel {
+  id: string;
+  provider: string;
+  modelName: string;
+  hasApiKey: boolean;
+  apiKeyEnvVar?: string;
+  useCount: number;
+}
+
+export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
+
+export type ModelAuthChecker = (provider: string) => boolean | undefined | Promise<boolean | undefined>;
+export type ModelUseCountProvider = () => Record<string, number>;
+export type ModelUseCountTracker = (modelId: string) => void | Promise<void>;
+export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
+
 export interface ModelInfo {
   id: string;
   providerId: string;
@@ -50,7 +66,7 @@ export interface UseSkillOptions {
   modelOverride?: string;
 }
 
-export type SessionLifecycleState = 'active' | 'closed' | 'evicted';
+export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
 
 export interface HarnessLease {
   ownerId: string;

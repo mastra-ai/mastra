@@ -15,6 +15,7 @@ export {
   sessionCreatedPayload,
   suspensionRequiredFor,
 } from './events';
+export { nonDurableProvider } from './workspace-provider';
 
 export type {
   HarnessMessage,
@@ -34,6 +35,7 @@ export type {
   HarnessWorkspaceConfig,
   WorkspaceProvider,
   WorkspaceProviderContext,
+  WorkspaceOwnershipKind,
 } from './config';
 export type { HarnessRequestContext, RegisterPlanApprovalParams, RegisterQuestionParams, SetStateFn } from './context';
 export type {
@@ -42,6 +44,9 @@ export type {
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
+  AvailableModel,
+  CustomAvailableModel,
+  CustomModelCatalogProvider,
   EffectiveHarnessMode,
   GoalJudgeDecision,
   GoalOptions,
@@ -58,7 +63,10 @@ export type {
   MessageOptionsStructured,
   MessageOverrides,
   ModelAuthStatus,
+  ModelAuthChecker,
   ModelInfo,
+  ModelUseCountProvider,
+  ModelUseCountTracker,
   PendingApproval,
   PendingBase,
   PendingPlanApproval,

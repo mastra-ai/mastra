@@ -32,7 +32,7 @@ export interface SessionClosedEvent extends HarnessEventBase {
 
 export interface SessionEvictedEvent extends HarnessEventBase {
   type: 'session_evicted';
-  reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown';
+  reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown' | 'lease_lost';
 }
 
 export interface ModeChangedEvent extends HarnessEventBase {
