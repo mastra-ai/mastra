@@ -1,5 +1,21 @@
 # mastracode
 
+## 0.20.0-alpha.12
+
+### Patch Changes
+
+- Fixed goal judge evaluations so they complete more reliably and retry when no structured decision is returned. Fixed `/goal resume` to retrigger judge evaluation after judge-related pauses instead of sending a normal continuation. ([#16843](https://github.com/mastra-ai/mastra/pull/16843))
+
+- Improved quiet mode readability: use WCAG contrast-adapted 'muted' color for task counters and pending text, de-emphasize completed tasks, use visibleWidth for accurate task alignment, and adapt compact tool connector glyphs on non-black terminal backgrounds ([#16839](https://github.com/mastra-ai/mastra/pull/16839))
+
+- Fixed terminal rendering so command output, task lists, and plan feedback input stay aligned while redrawing. ([#16849](https://github.com/mastra-ai/mastra/pull/16849))
+
+- Updated dependencies [[`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`46cbb7e`](https://github.com/mastra-ai/mastra/commit/46cbb7e84a0fadcf8c26ddfad38278732c22143e), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb)]:
+  - @mastra/core@1.36.0-alpha.10
+  - @mastra/mcp@1.8.0-alpha.2
+  - @mastra/libsql@1.11.1-alpha.0
+  - @mastra/pg@1.11.1-alpha.0
+
 ## 0.20.0-alpha.11
 
 ### Patch Changes
