@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed terminal rendering so command output and task lists stay aligned with wide characters.
+Fixed terminal rendering so command output, task lists, and plan feedback input stay aligned while redrawing.
