@@ -147,6 +147,44 @@ describe('InMemorySkillsStorage', () => {
       const versionCount = await storage.countVersions('update-skill');
       expect(versionCount).toBe(1);
     });
+
+    it('should not create version for reordered metadata, reordered tree entries, or undefined license', async () => {
+      await storage.create({
+        skill: {
+          id: 'stable-snapshot-skill',
+          name: 'Stable Snapshot',
+          description: 'Original description',
+          instructions: 'Original instructions',
+          metadata: {
+            alpha: { enabled: true, count: 1 },
+            beta: ['one', 'two'],
+          },
+          tree: {
+            entries: {
+              'SKILL.md': { blobHash: 'hash-1', size: 100, mimeType: 'text/markdown' },
+              'scripts/setup.sh': { blobHash: 'hash-2', size: 50 },
+            },
+          },
+        },
+      });
+
+      await storage.update({
+        id: 'stable-snapshot-skill',
+        license: undefined,
+        metadata: {
+          beta: ['one', 'two'],
+          alpha: { count: 1, enabled: true },
+        },
+        tree: {
+          entries: {
+            'scripts/setup.sh': { size: 50, blobHash: 'hash-2' },
+            'SKILL.md': { mimeType: 'text/markdown', size: 100, blobHash: 'hash-1' },
+          },
+        },
+      });
+
+      expect(await storage.countVersions('stable-snapshot-skill')).toBe(1);
+    });
   });
 
   describe('getByIdResolved', () => {

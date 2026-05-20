@@ -23,6 +23,7 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
@@ -278,8 +279,10 @@ export class SkillsPG extends SkillsStorage {
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !skillSnapshotFieldValuesEqual(
+              configFields[field as keyof typeof configFields],
+              latestConfig[field as keyof typeof latestConfig],
+            ),
         );
 
         if (changedFields.length > 0) {
