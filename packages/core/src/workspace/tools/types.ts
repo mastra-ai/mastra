@@ -7,6 +7,7 @@
  * and do not import any Node.js dependencies.
  */
 
+import type { MastraUnion } from '../../action';
 import type { WorkspaceToolName, WORKSPACE_TOOLS } from '../constants';
 
 // =============================================================================
@@ -114,6 +115,18 @@ export interface WorkspaceToolConfig {
 export interface BackgroundProcessMeta {
   pid: string;
   toolCallId?: string;
+  /**
+   * The Mastra instance, when the tool was invoked from an agent run.
+   * Use with `agentId` to resolve the invoking agent (e.g. to call
+   * `mastra.getAgentById(agentId).sendSignal(...)`).
+   */
+  mastra?: MastraUnion;
+  /** Agent that invoked the tool, when invoked from an agent run. */
+  agentId?: string;
+  /** Thread the invoking agent run is bound to, when available. */
+  threadId?: string;
+  /** Resource (user) the invoking agent run is bound to, when available. */
+  resourceId?: string;
 }
 
 /** Metadata passed to the onExit callback. */
@@ -251,7 +264,22 @@ export interface ReadFileToolConfig extends WorkspaceToolConfig {
  *       requireApproval: true,
  *       backgroundProcesses: {
  *         onStdout: (data, { pid }) => console.log(`[PID ${pid}]`, data),
- *         onExit: ({ pid, exitCode }) => console.log(`Process ${pid} exited: ${exitCode}`),
+ *         // Wake the agent with a system-reminder when a long-running
+ *         // background process exits. `agentId`, `threadId`, `resourceId`,
+ *         // and `mastra` are present when the tool was invoked from an
+ *         // agent run; null-check them so the callback also handles
+ *         // workflow/CLI invocations safely.
+ *         onExit: ({ pid, exitCode, stdout, stderr, mastra, agentId, threadId, resourceId }) => {
+ *           if (!mastra || !agentId || !threadId || !resourceId) return;
+ *           mastra.getAgentById(agentId).sendSignal(
+ *             {
+ *               type: 'system-reminder',
+ *               contents: `Background process ${pid} exited with code ${exitCode}.\n\nstdout:\n${stdout}\n\nstderr:\n${stderr}`,
+ *               attributes: { pid, exitCode },
+ *             },
+ *             { resourceId, threadId }, // default ifIdle: 'wake'
+ *           );
+ *         },
  *       },
  *     },
  *   },

@@ -311,6 +311,66 @@ describe('execute_command tool', () => {
         }),
       );
     });
+
+    it('forwards agent context (mastra, agentId, threadId, resourceId) to background callbacks', async () => {
+      const onStdout = vi.fn();
+      const onStderr = vi.fn();
+      const onExit = vi.fn();
+      const handle = createMockHandle({ pid: '99' });
+      // Simulate streamed chunks so onStdout/onStderr are exercised too.
+      // Real spawn resolves before any data events fire (Node event loop
+      // guarantee — see comment in execute-command.ts). Match that here by
+      // deferring the emits via queueMicrotask, otherwise the handle closure
+      // inside the production wrapper is still undefined.
+      const spawn = vi.fn().mockImplementation(async (_cmd: string, opts: any) => {
+        setTimeout(() => {
+          opts.onStdout?.('hello stdout');
+          opts.onStderr?.('hello stderr');
+        }, 0);
+        return handle;
+      });
+      const sandbox = createMockSandbox({ processes: { spawn } });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onStdout, onStderr, onExit },
+          },
+        },
+      });
+
+      const mastraSentinel = { __marker: 'mastra' } as any;
+      await executeCommandWithBackgroundTool.execute(
+        { command: 'sleep 1', background: true },
+        {
+          workspace,
+          mastra: mastraSentinel,
+          agent: { agentId: 'a1', toolCallId: 'tc1', threadId: 't1', resourceId: 'r1' },
+        },
+      );
+      await vi.waitFor(() => {
+        expect(onStdout).toHaveBeenCalled();
+        expect(onStderr).toHaveBeenCalled();
+        expect(onExit).toHaveBeenCalled();
+      });
+
+      const expectedAgentMeta = {
+        mastra: mastraSentinel,
+        agentId: 'a1',
+        threadId: 't1',
+        resourceId: 'r1',
+      };
+
+      expect(onStdout).toHaveBeenCalledWith('hello stdout', expect.objectContaining(expectedAgentMeta));
+      expect(onStderr).toHaveBeenCalledWith('hello stderr', expect.objectContaining(expectedAgentMeta));
+      expect(onExit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pid: '99',
+          toolCallId: 'tc1',
+          ...expectedAgentMeta,
+        }),
+      );
+    });
   });
 });
 

@@ -159,6 +159,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const bgAbortSignal =
       bgConfig?.abortSignal === undefined ? context?.abortSignal : bgConfig.abortSignal || undefined;
 
+    // Forwarded into every background callback so consumers can resolve the
+    // invoking agent (e.g. `mastra.getAgentById(agentId).sendSignal(...)`) when
+    // the process exits. All fields are optional — they're populated only when
+    // the tool runs inside an agent execution context.
+    const agentMeta = {
+      mastra: context?.mastra,
+      agentId: context?.agent?.agentId,
+      threadId: context?.agent?.threadId,
+      resourceId: context?.agent?.resourceId,
+    };
+
     // Use `let` so callbacks can reference handle.pid via closure.
     // spawn() resolves before any data events fire (Node event loop guarantees this).
     let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
@@ -167,10 +178,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
       timeout: timeout ?? undefined,
       abortSignal: bgAbortSignal,
       onStdout: bgConfig?.onStdout
-        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId })
+        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId, ...agentMeta })
         : undefined,
       onStderr: bgConfig?.onStderr
-        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId })
+        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId, ...agentMeta })
         : undefined,
     });
 
@@ -187,6 +198,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
           stdoutDroppedBytes: result.stdoutDroppedBytes,
           stderrDroppedBytes: result.stderrDroppedBytes,
           toolCallId,
+          ...agentMeta,
         });
       });
     }
