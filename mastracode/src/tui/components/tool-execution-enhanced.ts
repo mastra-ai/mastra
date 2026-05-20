@@ -555,37 +555,45 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       return chunk;
     };
 
-    for (const token of this.tokenizeQuietShellCommand(command)) {
-      let remaining = token.text;
+    const wrapSourceLine = (sourceLine: string) => {
+      for (const token of this.tokenizeQuietShellCommand(sourceLine)) {
+        let remaining = token.text;
 
-      while (remaining.length > 0) {
-        if (currentWidth === 0 && /^\s+$/.test(remaining)) break;
+        while (remaining.length > 0) {
+          if (currentWidth === 0 && /^\s+$/.test(remaining)) break;
 
-        const available = width - currentWidth;
-        if (available <= 0) {
+          const available = width - currentWidth;
+          if (available <= 0) {
+            pushCurrent();
+            continue;
+          }
+
+          const remainingWidth = visibleWidth(remaining);
+          if (remainingWidth <= available) {
+            current += token.color(remaining);
+            currentWidth += remainingWidth;
+            break;
+          }
+
+          if (currentWidth > 0 && !/^\s+$/.test(remaining)) {
+            pushCurrent();
+            continue;
+          }
+
+          const chunk = takeVisiblePrefix(remaining, available);
+          current += token.color(chunk);
+          currentWidth += visibleWidth(chunk);
+          remaining = remaining.slice(chunk.length);
           pushCurrent();
-          continue;
         }
-
-        const remainingWidth = visibleWidth(remaining);
-        if (remainingWidth <= available) {
-          current += token.color(remaining);
-          currentWidth += remainingWidth;
-          break;
-        }
-
-        if (currentWidth > 0 && !/^\s+$/.test(remaining)) {
-          pushCurrent();
-          continue;
-        }
-
-        const chunk = takeVisiblePrefix(remaining, available);
-        current += token.color(chunk);
-        currentWidth += visibleWidth(chunk);
-        remaining = remaining.slice(chunk.length);
-        pushCurrent();
       }
-    }
+    };
+
+    const sourceLines = command.split('\n');
+    sourceLines.forEach((sourceLine, index) => {
+      wrapSourceLine(sourceLine);
+      if (index < sourceLines.length - 1) pushCurrent();
+    });
 
     if (current) lines.push(current);
     return lines.length ? lines : [''];
@@ -1405,7 +1413,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text(displayOutput, 0, 0));
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
-      const footerWrapWidth = Math.max(1, contentWidth - 2);
+      const footerWrapWidth = Math.max(1, contentWidth - 4);
       const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
       const footerSuffixWidth = visibleWidth(footerSuffix);
       footerLines.forEach((footerLine, index) => {
