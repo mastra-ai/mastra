@@ -93,11 +93,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/processors',
+          label: 'Processors',
+        },
+        {
+          type: 'doc',
+          id: 'agents/guardrails',
+          label: 'Guardrails',
+        },
+        {
+          type: 'doc',
+          id: 'agents/agent-approval',
+          label: 'Agent Approval',
+        },
+        {
+          type: 'doc',
           id: 'agents/supervisor-agents',
           label: 'Supervisor Agents',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -109,31 +121,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/processors',
-          label: 'Processors',
-        },
-        {
-          type: 'doc',
-          id: 'agents/guardrails',
-          label: 'Guardrails',
-        },
-        {
-          type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response caching',
-        },
-        {
-          type: 'doc',
-          id: 'agents/agent-approval',
-          label: 'Agent Approval',
-        },
-        {
-          type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
-        },
-        {
-          type: 'doc',
           id: 'agents/channels',
           label: 'Channels',
           customProps: {
@@ -142,10 +129,39 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/a2a',
+          label: 'A2A',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/acp',
+          label: 'ACP',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/adding-voice',
+          label: 'Voice',
+        },
+        {
+          type: 'doc',
           id: 'agents/signals',
           label: 'Signals',
           customProps: {
-            tags: ['experimental'],
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/response-caching',
+          label: 'Response Caching',
+          customProps: {
+            tags: ['alpha'],
           },
         },
         {
@@ -182,9 +198,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/observational-memory',
           label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -200,6 +213,11 @@ const sidebars = {
           type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
+        },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
         },
       ],
     },
@@ -262,9 +280,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Editor',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -331,6 +346,9 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },
@@ -600,7 +618,7 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/mastra-platform',
-                  label: 'Mastra Platform',
+                  label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
@@ -705,6 +723,11 @@ const sidebars = {
           label: 'Running in CI',
         },
         {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
+        },
+        {
           type: 'category',
           label: 'Datasets',
           items: [
@@ -724,7 +747,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       customProps: {
         tags: ['new'],
       },
@@ -733,6 +756,21 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
         },
         {
           type: 'doc',

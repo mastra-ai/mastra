@@ -7,6 +7,7 @@ export interface DatasetItemVersion {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -26,19 +27,22 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
     queryFn: async () => {
       const res = await client.getItemHistory(datasetId, itemId);
 
-      return (res?.history ?? []).map((v, index) => ({
-        id: v.id,
-        datasetId: v.datasetId,
-        datasetVersion: v.datasetVersion,
-        input: v.input,
-        groundTruth: v.groundTruth,
-        metadata: v.metadata,
-        validTo: v.validTo,
-        isDeleted: v.isDeleted,
-        createdAt: v.createdAt,
-        updatedAt: v.updatedAt,
-        isLatest: index === 0,
-      })) as DatasetItemVersion[];
+      return (res?.history ?? []).map(
+        (version, index): DatasetItemVersion => ({
+          id: version.id,
+          datasetId: version.datasetId,
+          datasetVersion: version.datasetVersion,
+          input: version.input,
+          groundTruth: version.groundTruth,
+          expectedTrajectory: version.expectedTrajectory,
+          metadata: version.metadata,
+          validTo: version.validTo,
+          isDeleted: version.isDeleted,
+          createdAt: version.createdAt,
+          updatedAt: version.updatedAt,
+          isLatest: index === 0,
+        }),
+      );
     },
     enabled: Boolean(datasetId) && Boolean(itemId),
   });
@@ -66,6 +70,7 @@ export const useDatasetItemVersion = (
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
+        expectedTrajectory: v.expectedTrajectory,
         metadata: v.metadata,
         validTo: v.validTo ?? null,
         isDeleted: v.isDeleted ?? false,

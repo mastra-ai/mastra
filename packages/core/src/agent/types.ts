@@ -50,9 +50,10 @@ import type { Workflow } from '../workflows';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions, SubAgent } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { CreatedAgentSignal } from './signals';
+import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -62,7 +63,6 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
-export type { SubAgent } from './agent.types';
 export type { MastraBrowser } from '../browser/browser';
 // Screencast types now on MastraBrowser directly
 export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
@@ -253,6 +253,11 @@ export interface AgentConfig<
    */
   description?: string;
   /**
+   * Metadata for classifying or filtering the agent in clients. Can be a static
+   * record or a function that resolves the metadata from the request context.
+   */
+  metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
+  /**
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
    */
@@ -395,9 +400,14 @@ export interface AgentConfig<
    */
   mastra?: Mastra;
   /**
+   * Pub/sub system for coordinating runtime services such as thread signals.
+   * When omitted, the agent uses its Mastra instance pubsub or the default in-memory pubsub.
+   */
+  pubsub?: PubSub;
+  /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
-  agents?: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
+  agents?: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */

@@ -1,7 +1,6 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -9,12 +8,15 @@ import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 import { useMastraClient } from '@/mastra-client-context';
+
+type ToolsInput = any;
 
 export interface MastraChatProps {
   agentId: string;
@@ -26,6 +28,12 @@ export interface MastraChatProps {
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
+  /**
+   * Opt into the agent-signals streaming path (sendSignal + subscribeToThread).
+   * Defaults to `false` so consumers stay on the legacy `streamUntilIdle` route
+   * unless they explicitly enable the signals path.
+   */
+  enableThreadSignals?: boolean;
 }
 
 interface SharedArgs {
@@ -44,10 +52,14 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
   | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
-export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
+export type GenerateArgs = SharedArgs & {
+  onFinish?: (messages: UIMessage[]) => Promise<void>;
+  clientTools?: ToolsInput;
+};
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
+  clientTools?: ToolsInput;
   signalId?: string;
 };
 
@@ -74,7 +86,9 @@ export const useChat = ({
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
+  enableThreadSignals = false,
 }: MastraChatProps) => {
+  const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
@@ -111,14 +125,46 @@ export const useChat = ({
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
 
-  type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
+  type SignalContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'file'; data: string; mediaType: string; filename?: string };
+  type UserMessageSignalContents = string | SignalContentPart[];
+
+  const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
+    if (data instanceof URL) return data.toString();
+    return convertSignalDataToBase64String(data);
+  };
 
   const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
-    if (coreUserMessages.length === 1) {
-      return coreUserMessages[0] as UserMessageSignalContents;
-    }
+    const parts = coreUserMessages.reduce<SignalContentPart[]>((allParts, message) => {
+      if (typeof message.content === 'string') {
+        allParts.push({ type: 'text', text: message.content });
+        return allParts;
+      }
 
-    return coreUserMessages as UserMessageSignalContents;
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          allParts.push({ type: 'text', text: part.text });
+        } else if (part.type === 'file') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.data),
+            mediaType: part.mimeType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          });
+        } else if (part.type === 'image') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.image),
+            mediaType: part.mimeType ?? 'image/png',
+          });
+        }
+      }
+
+      return allParts;
+    }, []);
+
+    return parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
   };
 
   const markThreadSignalsUnsupported = useCallback(() => {
@@ -246,14 +292,17 @@ export const useChat = ({
   }, [agentId, resourceId, threadId, closeThreadSubscription]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!threadId || threadSignalsDisabled) {
+      closeThreadSubscription();
+      return;
+    }
 
     void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
       if ((error as { name?: string }).name !== 'AbortError') {
         console.error('[useChat] Thread subscription failed', error);
       }
     });
-  }, [agentId, ensureThreadSubscription, resourceId, threadId]);
+  }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
   const generate = async ({
     coreUserMessages,
@@ -263,6 +312,7 @@ export const useChat = ({
     signal,
     onFinish,
     tracingOptions,
+    clientTools,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -311,6 +361,7 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       tracingOptions,
       requireToolApproval,
+      clientTools,
     });
 
     // Check if suspended for tool approval
@@ -365,6 +416,7 @@ export const useChat = ({
     modelSettings,
     signal,
     tracingOptions,
+    clientTools,
     signalId,
   }: StreamArgs) => {
     const {
@@ -421,6 +473,7 @@ export const useChat = ({
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
+        clientTools,
       });
 
       _onChunk.current = onChunk;
@@ -436,7 +489,7 @@ export const useChat = ({
       setIsRunning(false);
     };
 
-    if (!threadId || _threadSignalsUnsupportedRef.current) {
+    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
       await streamWithLegacyRoute();
       return;
     }
@@ -775,7 +828,9 @@ export const useChat = ({
 
     const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
     const signalId =
-      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current ? uiMessages[0]?.id : undefined;
+      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
+        ? uiMessages[0]?.id
+        : undefined;
     if (!signalId) {
       setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
     }

@@ -160,8 +160,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
   },
@@ -188,6 +188,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 12
+  },
+  {
+    "model": "opencode/gemini-3.5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.5,
+    "outputCost": 9
   },
   {
     "model": "opencode/glm-5",
@@ -454,18 +466,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "opencode/minimax-m2.5-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode/minimax-m2.7",
     "imageInput": false,
     "audioInput": false,
@@ -514,14 +514,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "opencode/ring-2.6-1t-free",
-    "imageInput": false,
+    "model": "opencode/qwen3.6-plus-free",
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 66000,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
   }
@@ -556,7 +556,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "opencode/ring-2.6-1t-free"
+      ? "opencode/qwen3.6-plus-free"
       : "opencode/big-pickle";
   }
 });

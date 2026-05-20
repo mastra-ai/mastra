@@ -8,8 +8,13 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from './chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
+import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
@@ -26,9 +31,27 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+function getCurrentModeColor(state: TUIState): string | undefined {
+  return state.harness.getCurrentMode?.()?.color;
+}
+
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
+
+class TaskHistoryComponent extends Container {
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'task';
+  }
+}
+
+function insertTaskHistoryComponent(state: TUIState, component: Component, insertIndex: number): void {
+  insertChatComponentWithBoundarySpacing(
+    state.chatContainer,
+    component,
+    insertIndex >= 0 ? insertIndex : state.chatContainer.children.length,
+  );
+}
 
 /**
  * Render a completed task list inline in the chat history.
@@ -42,7 +65,7 @@ export function renderCompletedTasksInline(
   const headerText =
     theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   container.addChild(new Text(headerText, BOX_INDENT, 0));
   const MAX_VISIBLE = 4;
   const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
@@ -65,19 +88,14 @@ export function renderCompletedTasksInline(
   }
   container.addChild(new Spacer(1));
 
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 /**
  * Render inline display when tasks are cleared.
  */
 export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
   container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
@@ -87,12 +105,7 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   container.addChild(new Spacer(1));
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 function renderTaskTransitionFromHistory(
@@ -154,13 +167,12 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
     const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
     const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-      state.chatContainer.invalidate();
+      insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
       return;
     }
   }
 
-  state.chatContainer.addChild(child);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, child);
 }
 
 export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
@@ -169,8 +181,7 @@ export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Compone
     if (anchor) {
       const idx = state.chatContainer.children.indexOf(anchor as never);
       if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
         return;
       }
     }
@@ -191,11 +202,13 @@ export function addPendingUserMessage(
   const existing = state.pendingSignalMessageComponentsById.get(messageId);
   if (existing) {
     state.chatContainer.removeChild(existing.component as never);
+    reconcileChatBoundarySpacers(state.chatContainer);
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
   state.pendingSignalMessageComponentsById.set(messageId, { component, text });
   state.chatContainer.addChild(component);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -215,11 +228,11 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const confirmed = new UserMessageComponent(text);
+  const confirmed = new UserMessageComponent(text, getMarkdownTheme());
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
-    state.chatContainer.invalidate();
+    reconcileChatBoundarySpacers(state.chatContainer);
   } else {
     addChildBeforeFollowUps(state, confirmed);
   }
@@ -249,11 +262,11 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
-    const confirmed = new UserMessageComponent(text);
+    const confirmed = new UserMessageComponent(text, getMarkdownTheme());
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
-      state.chatContainer.invalidate();
+      reconcileChatBoundarySpacers(state.chatContainer);
     } else {
       addChildBeforeFollowUps(state, confirmed);
     }
@@ -263,6 +276,10 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
     return true;
   }
   return false;
+}
+
+function unescapeSkillBoundary(text: string): string {
+  return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
@@ -291,7 +308,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
       if (idx >= 0) {
         (state.chatContainer.children as unknown[]).splice(idx, 0, reminderComponent);
-        state.chatContainer.invalidate();
+        reconcileChatBoundarySpacers(state.chatContainer);
         state.ui.requestRender();
         return;
       }
@@ -365,15 +382,37 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     return;
   }
 
+  // Check for persisted skill activation tags.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
+    state.ui.requestRender();
+    return;
+  }
+
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText);
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme());
 
     state.messageComponentsById.set(message.id, userComponent);
 
     if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
+      reconcileChatBoundarySpacers(state.chatContainer);
       return;
     }
 
@@ -454,45 +493,29 @@ function applyTaskToolResult(
   return tasks;
 }
 
-function replayTaskState(messages: HarnessMessage[]): TaskItemSnapshot[] {
-  let tasks: TaskItemSnapshot[] = [];
-
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
-
-    for (const content of message.content) {
-      if (content.type !== 'tool_call') continue;
-      if (
-        content.name !== 'task_write' &&
-        content.name !== 'task_update' &&
-        content.name !== 'task_complete' &&
-        content.name !== 'task_check'
-      ) {
-        continue;
-      }
-
-      const toolResult = message.content.find(c => c.type === 'tool_result' && c.id === content.id);
-      if (toolResult?.type !== 'tool_result') continue;
-
-      tasks = applyTaskToolResult(tasks, content.name, content.args, toolResult.result, toolResult.isError);
-    }
-  }
-
-  return tasks;
-}
-
 // =============================================================================
 // renderExistingMessages
 // =============================================================================
+
+const STARTUP_MESSAGE_WINDOW_SIZE = 40;
+
+function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
+  let latest: number | undefined;
+  for (const message of messages) {
+    const time = new Date(message.createdAt).getTime();
+    if (Number.isNaN(time)) continue;
+    latest = latest === undefined ? time : Math.max(latest, time);
+  }
+  return latest;
+}
 
 /**
  * Re-render all existing messages from the harness thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const allMessages = await state.harness.listMessages();
-  const messages = allMessages.slice(-40);
-  const messagesBeforeVisibleWindow = allMessages.slice(0, Math.max(0, allMessages.length - messages.length));
+  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();
   state.pendingTools.clear();
@@ -505,9 +528,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during visible history reconstruction.
-  // Seed it from the full prior history so long threads keep task state even when
-  // the original task_write is outside the rendered message window.
-  let previousTasksAcc = replayTaskState(messagesBeforeVisibleWindow);
+  // Startup only replays task state from the bounded message window. If no task
+  // snapshot exists in that window, keep the existing display-state snapshot.
+  let previousTasksAcc: TaskItemSnapshot[] = [];
+  let hasReplayedTaskState = false;
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -567,7 +591,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: state.quietMode, forked: subArgs?.forked },
+              { collapseOnComplete: false, expandOnComplete: state.quietMode, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -578,7 +602,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             }
             // Mark as finished with result
             subComponent.finish(isErr ?? false, durationMs, resultText);
-            state.chatContainer.addChild(subComponent);
+            insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
           }
@@ -633,6 +657,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           // not as regular tool result boxes.
           let replacedWithInline = false;
           if (isTaskMutationTool(content.name) && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            hasReplayedTaskState = true;
             const nextTasks = applyTaskToolResult(
               previousTasksAcc,
               content.name,
@@ -646,13 +671,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-            previousTasksAcc = applyTaskToolResult(
-              previousTasksAcc,
-              content.name,
-              content.args,
-              toolResult.result,
-              toolResult.isError,
-            );
+            const resultTasks = getTaskResultTasks(toolResult.result);
+            if (resultTasks) {
+              hasReplayedTaskState = true;
+              previousTasksAcc = assignTaskIds(resultTasks, previousTasksAcc);
+            }
           }
 
           // If this was submit_plan, show the plan with approval status
@@ -691,8 +714,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (!replacedWithInline) {
+            if (state.quietMode) {
+              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
+              toolComponent.setQuietModeDisplay('quiet');
+              toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+            }
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
+          } else {
           }
         } else if (
           content.type === 'om_observation_start' ||
@@ -736,6 +765,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
         } else if (content.type === 'om_thread_title_updated') {
+          if (state.quietMode) continue;
           // Render thread title update marker in history
           state.chatContainer.addChild(
             new OMMarkerComponent({
@@ -760,27 +790,32 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     }
   }
 
-  // Restore or clear the pinned task list from history replay.
-  if (state.taskProgress) {
-    state.taskProgress.updateTasks(previousTasksAcc);
-  }
-  const currentTasks =
-    typeof state.harness.getState === 'function'
-      ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
-      : undefined;
-  if (!areTasksEqual(currentTasks, previousTasksAcc)) {
-    try {
-      await state.harness.setState({ tasks: previousTasksAcc });
-    } catch {
-      // Custom harness state schemas may not accept TUI replayed task state.
-      // Keep the reconstructed task list local to display state in that case.
+  // Restore or clear the pinned task list from history replay when the bounded
+  // window contains a task snapshot. Otherwise, keep the existing display-state
+  // snapshot instead of clobbering older tasks that are outside the render window.
+  if (hasReplayedTaskState) {
+    if (state.taskProgress) {
+      state.taskProgress.updateTasks(previousTasksAcc);
     }
+    const currentTasks =
+      typeof state.harness.getState === 'function'
+        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
+        : undefined;
+    if (!areTasksEqual(currentTasks, previousTasksAcc)) {
+      try {
+        await state.harness.setState({ tasks: previousTasksAcc });
+      } catch {
+        // Custom harness state schemas may not accept TUI replayed task state.
+        // Keep the reconstructed task list local to display state in that case.
+      }
+    }
+    const harnessWithReplayTasks = state.harness as typeof state.harness & {
+      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
+    };
+    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
   }
-  const harnessWithReplayTasks = state.harness as typeof state.harness & {
-    restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
-  };
-  harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
 
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 

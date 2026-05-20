@@ -214,9 +214,9 @@ Returns `{ accepted: true, runId: string }`.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    type: "{ type: 'user-message' | 'system-reminder' | string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      '`user-message` signals are treated as user input. Other signal types are converted to contextual XML before the next model call.',
+      '`user-message` signals without attributes are treated as plain user input. All other signals \u2014 including `user-message` with `attributes`, `system-reminder`, and custom types \u2014 are wrapped in an XML element named after the signal type with `attributes` rendered as XML attributes (e.g. `<user name="Devin" from="slack">message</user>`). The model sees the XML; the UI sees the raw contents and can read `attributes` for custom rendering. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
   },
   {
     name: 'runId',

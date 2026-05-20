@@ -52,6 +52,7 @@ function createMockSettings() {
       omObservationThreshold: null,
       omReflectionThreshold: null,
       omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
     },
     preferences: {
@@ -290,12 +291,19 @@ describe('createMastraCode', () => {
     expect(gatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
   }, 10_000);
 
-  it('forces a gateway sync after loading stored API keys', async () => {
+  it('starts gateway sync in the background after loading stored API keys', async () => {
+    let resolveSync: (() => void) | undefined;
+    gatewayRegistrySyncGateways.mockReturnValue(
+      new Promise<void>(resolve => {
+        resolveSync = resolve;
+      }),
+    );
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode();
+    await expect(createMastraCode()).resolves.toBeTruthy();
 
     expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+    resolveSync?.();
   });
 
   it('always configures dynamic local memory at startup', async () => {
@@ -306,6 +314,40 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('rejects cross-process PubSub mode without a PubSub instance', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode({ crossProcessPubSub: true })).rejects.toThrow(
+      'crossProcessPubSub requires a pubsub instance',
+    );
+  });
+
+  it('keeps thread locks enabled for configured PubSub unless cross-process mode is explicit', async () => {
+    const pubsub = {} as any;
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub, unixSocketPubSub: true });
+
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
+    expect(harnessConfig?.pubsub).toBe(pubsub);
+    expect(harnessConfig?.threadLock).toBeDefined();
+  });
+
+  it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
+    const pubsub = {} as any;
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub, crossProcessPubSub: true });
+
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
+    expect(harnessConfig?.pubsub).toBe(pubsub);
+    expect(harnessConfig?.threadLock).toBeUndefined();
   });
 
   it('restores the current thread caveman observation setting at startup', async () => {
@@ -331,6 +373,31 @@ describe('createMastraCode', () => {
     expect(harnessSubscribeMock).toHaveBeenCalled();
     expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
     expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
+  });
+
+  it('seeds observeAttachments from persisted global setting at startup', async () => {
+    const settings = createMockSettings();
+    (settings.models as { omObserveAttachments: boolean | null }).omObserveAttachments = false;
+    loadSettingsMock.mockReturnValue(settings);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessCall?.initialState?.observeAttachments).toBe(false);
+  });
+
+  it('omits observeAttachments from initial state when global setting is null', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessCall?.initialState).not.toHaveProperty('observeAttachments');
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

@@ -11,7 +11,7 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import { getToken } from '../auth/credentials.js';
+import { getToken, loadCredentials } from '../auth/credentials.js';
 import {
   cursorGlobalMCPConfigPath,
   windsurfGlobalMCPConfigPath,
@@ -32,21 +32,63 @@ export interface ObservabilityPromptResult {
   token?: string;
 }
 
-export async function promptForObservability(): Promise<ObservabilityPromptResult> {
-  const choice = await p.select({
-    message: 'Enable Mastra Observability? (will open auth flow)',
-    options: [
-      { value: 'yes', label: 'Yes' },
-      { value: 'no', label: 'No' },
-    ],
-    initialValue: 'yes',
-  });
+interface ObservabilitySelectionEvent {
+  command?: 'create' | 'init';
+  enabled: boolean;
+  answer: 'yes' | 'no';
+  selection_method: 'interactive';
+}
 
-  if (p.isCancel(choice)) return {};
-  if (choice !== 'yes') return { enabled: false };
+export async function promptForObservability(
+  command?: 'create' | 'init',
+  onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void,
+): Promise<ObservabilityPromptResult> {
+  // Loop so that if the browser-based auth flow fails (user closed the browser
+  // tab, timed out, network error, …) we re-ask the same question instead of
+  // leaving the user stuck. Picking "No" is always a clean escape hatch.
+  while (true) {
+    const choice = await p.select({
+      message: 'Enable Mastra Observability? (will open auth flow)',
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ],
+      initialValue: 'yes',
+    });
 
-  const token = await getToken();
-  return { enabled: true, token };
+    if (p.isCancel(choice)) return {};
+
+    const answer = choice === 'yes' ? 'yes' : 'no';
+    const enabled = answer === 'yes';
+    onObservabilitySelected?.({
+      command,
+      enabled,
+      answer,
+      selection_method: 'interactive',
+    });
+
+    if (!enabled) return { enabled: false };
+
+    // Only surface the logged-in user when creds already existed before getToken().
+    // If they didn't, getToken() ran the browser login() flow which prints its own
+    // "Logged in as <email>" message — printing again here would duplicate it.
+    // Re-read creds after getToken() so the email reflects the actual logged-in
+    // account, even when stale creds forced a browser re-login as a different user.
+    const hadCachedCreds = (await loadCredentials()) !== null;
+    try {
+      const token = await getToken();
+      if (hadCachedCreds) {
+        const creds = await loadCredentials();
+        if (creds) p.log.info(`Logged in as ${creds.user.email}`);
+      }
+      return { enabled: true, token };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      p.log.warn(`Could not sign in to Mastra: ${message}`);
+      // Fall through and re-prompt the same question so the user can retry
+      // or pick "No" to continue without observability.
+    }
+  }
 }
 
 /**
@@ -711,7 +753,9 @@ export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }
 
 interface InteractivePromptArgs {
   options?: {
+    command?: 'create' | 'init';
     showBanner?: boolean;
+    onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void;
   };
   skip?: {
     directory?: boolean;
@@ -725,7 +769,7 @@ interface InteractivePromptArgs {
 }
 
 export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
-  const { skip = {}, options: { showBanner = true } = {} } = args;
+  const { skip = {}, options: { command, showBanner = true, onObservabilitySelected } = {} } = args;
 
   if (showBanner) {
     p.intro(color.inverse(' Mastra Init '));
@@ -774,7 +818,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
       },
       observability: async () => {
         if (skip?.observability) return undefined;
-        return promptForObservability();
+        return promptForObservability(command, onObservabilitySelected);
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
@@ -1045,7 +1089,7 @@ This is a **Mastra** project written in TypeScript. Mastra is a framework for bu
 
 \`\`\`bash
 npm run dev # Start Mastra Studio at localhost:4111 (long-running, use a separate terminal)
-npm run build # Build a production-ready server
+npm run build # Build a production-ready server (use a separate terminal)
 \`\`\`
 
 ## Project Structure

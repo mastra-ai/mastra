@@ -1,15 +1,13 @@
-import type { DatePreset, PropertyFilterToken } from '@mastra/playground-ui';
+import type { DatePreset, DateRange, PropertyFilterToken } from '@mastra/playground-ui';
 import {
   Notice,
   Button,
-  ButtonWithTooltip,
   DateRangeSelector,
   EmptyState,
   ErrorState,
   MetricsFlexGrid,
   MetricsProvider,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   PropertyFilterCreator,
@@ -32,7 +30,7 @@ import {
   useServiceNames,
   useTags,
 } from '@mastra/playground-ui';
-import { BarChart3Icon, BookIcon, CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
@@ -57,12 +55,30 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
 ]);
 
 const PERIOD_PARAM = 'period';
+const DATE_FROM_PARAM = 'dateFrom';
+const DATE_TO_PARAM = 'dateTo';
 
 export default function Metrics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const preset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
+
+  // Concrete from/to bounds only apply to the 'custom' preset; relative presets
+  // derive their window from the preset alone.
+  const customRange = useMemo<DateRange | undefined>(() => {
+    if (preset !== 'custom') return undefined;
+    const parseBound = (raw: string | null) => {
+      if (!raw) return undefined;
+      const date = new Date(raw);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    };
+    const from = parseBound(searchParams.get(DATE_FROM_PARAM));
+    const to = parseBound(searchParams.get(DATE_TO_PARAM));
+    if (!from && !to) return undefined;
+    return { from, to };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, searchParams.toString()]);
 
   // Derive tokens straight from the URL. Memoized on a stable digest so the
   // array identity only changes when the URL actually changes — this prevents
@@ -83,6 +99,33 @@ export default function Metrics() {
             params.delete(PERIOD_PARAM);
           } else {
             params.set(PERIOD_PARAM, next);
+          }
+          if (next !== 'custom') {
+            params.delete(DATE_FROM_PARAM);
+            params.delete(DATE_TO_PARAM);
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleCustomRangeChange = useCallback(
+    (range: DateRange | undefined) => {
+      setSearchParams(
+        prev => {
+          const params = new URLSearchParams(prev);
+          if (range?.from) {
+            params.set(DATE_FROM_PARAM, range.from.toISOString());
+          } else {
+            params.delete(DATE_FROM_PARAM);
+          }
+          if (range?.to) {
+            params.set(DATE_TO_PARAM, range.to.toISOString());
+          } else {
+            params.delete(DATE_TO_PARAM);
           }
           return params;
         },
@@ -133,6 +176,8 @@ export default function Metrics() {
       filterTokens={filterTokens}
       onPresetChange={handlePresetChange}
       onFilterTokensChange={handleFilterTokensChange}
+      customRange={customRange}
+      onCustomRangeChange={handleCustomRangeChange}
     >
       <MetricsContent />
     </MetricsProvider>
@@ -215,7 +260,7 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -223,7 +268,7 @@ function MetricsContent() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="metrics" />
       </NoDataPageLayout>
     );
@@ -231,7 +276,7 @@ function MetricsContent() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load metrics" message={error.message} />
       </NoDataPageLayout>
     );
@@ -241,14 +286,7 @@ function MetricsContent() {
     <PageLayout width="wide" height="full">
       <PageLayout.TopArea>
         <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title>
-                <BarChart3Icon /> Metrics
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end items-center gap-2">
+          <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
             <DateRangeSelector />
             <PropertyFilterCreator
               fields={filterFields}
@@ -257,15 +295,6 @@ function MetricsContent() {
               disabled={isMetricsLoading}
               onStartTextFilter={setAutoFocusFilterFieldId}
             />
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/observability/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Metrics documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
           </PageLayout.Column>
         </PageLayout.Row>
 

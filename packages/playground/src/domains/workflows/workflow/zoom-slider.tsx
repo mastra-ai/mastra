@@ -2,7 +2,7 @@ import { Button, Slider, cn } from '@mastra/playground-ui';
 import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 
 export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }) => {
   const { zoom } = useViewport();
