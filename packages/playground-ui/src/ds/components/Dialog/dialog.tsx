@@ -32,17 +32,15 @@ type DialogCloseProps = DialogPrimitive.Close.Props & {
   asChild?: boolean;
 };
 
-const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
-  ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
+const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(({ asChild, children, ...props }, ref) => {
+  const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
 
-    return (
-      <DialogPrimitive.Close ref={ref} {...renderProps} {...props}>
-        {asChild ? undefined : children}
-      </DialogPrimitive.Close>
-    );
-  },
-);
+  return (
+    <DialogPrimitive.Close ref={ref} {...renderProps} {...props}>
+      {asChild ? undefined : children}
+    </DialogPrimitive.Close>
+  );
+});
 DialogClose.displayName = 'DialogClose';
 
 type DialogOverlayProps = Omit<DialogPrimitive.Backdrop.Props, 'className'> & {
@@ -62,35 +60,33 @@ type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
 };
 
-const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, ...props }, ref) => (
-    <DialogPortal>
-      <DialogOverlay />
-      <DialogPrimitive.Popup
-        ref={ref}
-        data-slot="dialog-content"
-        className={cn(
-          'dialog-content-anim',
-          'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
-          'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-          'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
-          'focus-visible:outline-hidden',
-          className,
-        )}
-        {...props}
-      >
-        {children}
-        <DialogPrimitive.Close
-          render={
-            <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
-              <X />
-            </Button>
-          }
-        />
-      </DialogPrimitive.Popup>
-    </DialogPortal>
-  ),
-);
+const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Popup
+      ref={ref}
+      data-slot="dialog-content"
+      className={cn(
+        'dialog-content-anim',
+        'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
+        'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
+        'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
+        'focus-visible:outline-hidden',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <DialogPrimitive.Close
+        render={
+          <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
+            <X />
+          </Button>
+        }
+      />
+    </DialogPrimitive.Popup>
+  </DialogPortal>
+));
 DialogContent.displayName = 'DialogContent';
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
