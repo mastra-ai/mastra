@@ -49,7 +49,7 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
+import { OrchestrationWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
@@ -985,12 +985,11 @@ export class Mastra<
       if (pubsubModes.includes('pull')) {
         defaultWorkers.push(new OrchestrationWorker());
       }
-      // Scheduler needs storage to read schedules from. Without it the worker
-      // would crash on startup (`deps.storage.getStore` on undefined). Match the
-      // pre-worker scheduler behavior: silently skip when storage isn't configured.
-      if (config?.storage) {
-        defaultWorkers.push(new SchedulerWorker(config?.scheduler));
-      }
+      // The scheduler is driven by #ensureScheduler() — a single code path
+      // that checks #shouldEnableScheduler() before starting. SchedulerWorker
+      // is NOT added to default workers because it would create a second,
+      // unguarded polling loop.  Users who need a standalone scheduler worker
+      // can include it explicitly in the `workers` array.
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
