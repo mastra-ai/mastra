@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.20.0-alpha.11
+
+### Patch Changes
+
+- Improved MastraCode rendering responsiveness during large streamed tool previews by upgrading the terminal UI renderer. ([#16835](https://github.com/mastra-ai/mastra/pull/16835))
+
+- Updated dependencies [[`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/core@1.36.0-alpha.9
+
 ## 0.20.0-alpha.10
 
 ### Patch Changes

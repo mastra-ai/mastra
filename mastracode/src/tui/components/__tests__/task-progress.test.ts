@@ -1,3 +1,4 @@
+import { visibleWidth } from '@mariozechner/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -98,6 +99,22 @@ describe('TaskProgressComponent', () => {
     expect(lines[1]).toContain('1/3  ✓ Inspect task progress');
     expect(lines[2]).toBe('       ▶ Implementing item aware quiet task summary wrapping');
     expect(lines[3]).toBe('       ○ Verify quiet task wrapping');
+  });
+
+  it('wraps quiet summaries using terminal display width for wide characters', () => {
+    const component = new TaskProgressComponent();
+    component.setQuietMode(true);
+
+    component.updateTasks([
+      { id: 'one', content: '界'.repeat(35), activeForm: 'Doing wide work', status: 'pending' },
+      { id: 'two', content: 'Done', activeForm: 'Doing', status: 'pending' },
+    ]);
+
+    const lines = component.render(80).map(line => stripAnsi(line).trimEnd());
+
+    expect(lines).toHaveLength(3);
+    expect(visibleWidth(lines[1]!)).toBeLessThanOrEqual(80);
+    expect(lines[2]).toBe('       ○ Done');
   });
 
   it('updates between expanded and quiet task rendering', () => {
