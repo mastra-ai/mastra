@@ -454,4 +454,86 @@ describe('Mastra — workflow scheduler integration', () => {
       await second.shutdown();
     });
   });
+
+  describe('ghost-workflow cleanup (end-to-end)', () => {
+    it('deletes a due schedule after N ticks when its target workflow is not registered', async () => {
+      const storage = new MockStore();
+
+      // Boot Mastra with scheduler enabled (no workflows). Declarative
+      // reconciliation runs on boot and won't touch schedules we insert
+      // afterwards — this exercises the tick-based ghost-workflow cleanup
+      // wired end-to-end through SchedulerWorker → isWorkflowRegistered
+      // → mastra.getWorkflowById.
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 2 },
+      });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      // Insert a ghost schedule AFTER boot so declarative reconciliation
+      // doesn't clean it up — only the tick loop's existence check can.
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const past = Date.now() - 5_000;
+      await schedulesStore.createSchedule({
+        id: 'ghost-sched',
+        target: { type: 'workflow', workflowId: 'does-not-exist' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+
+      // Tick 1: schedule is due, workflow missing → miss count = 1.
+      await mastra.scheduler!.tick();
+      const afterTick1 = await schedulesStore.getSchedule('ghost-sched');
+      expect(afterTick1).not.toBeNull(); // Still alive — within grace window.
+
+      // Tick 2: miss count reaches limit (2) → schedule deleted.
+      await mastra.scheduler!.tick();
+      const afterTick2 = await schedulesStore.getSchedule('ghost-sched');
+      expect(afterTick2).toBeNull();
+
+      await mastra.shutdown();
+    });
+
+    it('does not delete a ghost schedule that is not yet due', async () => {
+      const storage = new MockStore();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 1 },
+      });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      // Insert a ghost schedule with nextFireAt far in the future.
+      // The tick loop should never pick it up (not due) so the miss
+      // counter never fires.
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const future = Date.now() + 3_600_000;
+      await schedulesStore.createSchedule({
+        id: 'future-ghost',
+        target: { type: 'workflow', workflowId: 'does-not-exist' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      // Multiple ticks — schedule is never due, so it stays untouched.
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+
+      const afterTicks = await schedulesStore.getSchedule('future-ghost');
+      expect(afterTicks).not.toBeNull();
+
+      await mastra.shutdown();
+    });
+  });
 });
