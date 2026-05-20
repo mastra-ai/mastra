@@ -325,6 +325,7 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   #pubsub?: PubSub;
+  #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
@@ -560,7 +561,7 @@ export class Agent<
   }
 
   getPubSub() {
-    return this.#pubsub ?? this.#mastra?.pubsub;
+    return this.#pubsub ?? this.#inheritedPubSub ?? this.#mastra?.pubsub;
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptionsBase<any>['memory']; requestContext?: RequestContext }) {
@@ -2592,6 +2593,9 @@ export class Agent<
     if (this.#pubsub) {
       fork.#pubsub = this.#pubsub;
     }
+    if (this.#inheritedPubSub) {
+      fork.#inheritedPubSub = this.#inheritedPubSub;
+    }
 
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
@@ -2797,7 +2801,7 @@ export class Agent<
   }
 
   public __setPubSub(pubsub: PubSub) {
-    this.#pubsub = pubsub;
+    this.#inheritedPubSub = pubsub;
   }
 
   public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>) {
@@ -3854,6 +3858,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     delegation,
+    pubsub,
     backgroundTaskEnabled,
     ...rest
   }: {
@@ -3864,6 +3869,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    pubsub?: PubSub;
     backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4234,6 +4240,7 @@ export class Agent<
                 const generateResult = resumeData
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4251,6 +4258,7 @@ export class Agent<
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4352,6 +4360,7 @@ export class Agent<
                 const streamResult = resumeData
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4371,6 +4380,7 @@ export class Agent<
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -5038,6 +5048,7 @@ export class Agent<
       ...options,
       requestContext,
       methodType: 'stream',
+      pubsub: this.getPubSub() ?? defaultAgentThreadPubSub,
     });
   }
 
@@ -5057,6 +5068,7 @@ export class Agent<
     memoryConfig,
     autoResumeSuspendedTools,
     delegation,
+    pubsub,
     backgroundTaskEnabled,
     inputProcessors,
     ...rest
@@ -5072,6 +5084,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    pubsub?: PubSub;
     backgroundTaskEnabled?: boolean;
     inputProcessors?: InputProcessorOrWorkflow[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
@@ -5140,6 +5153,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
+      pubsub,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -5878,7 +5892,7 @@ export class Agent<
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
-      options: { ...options, methodType } as any,
+      options: { ...options, methodType, _pubsub: pubsub } as any,
       threadFromArgs,
       resourceId,
       runId,

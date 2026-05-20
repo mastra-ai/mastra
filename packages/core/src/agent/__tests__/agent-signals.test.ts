@@ -661,6 +661,121 @@ describe('Agent signals', () => {
     await nextRunPromise;
   });
 
+  it('passes parent PubSub to child agent execution without mutating shared child agents', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const childCalls: Array<{ _pubsub?: PubSub }> = [];
+    const createDelegatingModel = () => {
+      let callCount = 0;
+      return new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'agent-child',
+                  input: JSON.stringify({ prompt: 'ask child' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            text: 'parent response',
+            content: [{ type: 'text' as const, text: 'parent response' }],
+            warnings: [],
+          };
+        },
+      });
+    };
+
+    class CapturingChildAgent extends Agent {
+      override async generate(_messages: any, options?: any) {
+        childCalls.push(options ?? {});
+        return {
+          text: 'child response',
+          finishReason: 'stop',
+          runId: 'child-run',
+          response: { dbMessages: [] },
+        } as any;
+      }
+
+      override async stream(_messages: any, options?: any) {
+        childCalls.push(options ?? {});
+        const output = buildFakeOutput({
+          runId: options?.runId ?? 'child-stream-run',
+          fullOutput: {
+            text: 'child response',
+            finishReason: 'stop',
+            response: { dbMessages: [] },
+          },
+        }) as any;
+        return {
+          ...output,
+          messageList: {
+            get: {
+              response: {
+                db: () => [],
+              },
+            },
+          },
+          toolResults: Promise.resolve([]),
+        } as any;
+      }
+    }
+
+    const child = new CapturingChildAgent({
+      id: 'standalone-child-agent',
+      name: 'Standalone Child Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('child response'),
+    });
+    const parent = new Agent({
+      id: 'standalone-parent-agent',
+      name: 'Standalone Parent Agent',
+      instructions: 'Test',
+      model: createDelegatingModel(),
+      pubsub,
+      agents: { child },
+    });
+
+    await parent.generate('delegate to child', {
+      runId: 'parent-run',
+      maxSteps: 3,
+    });
+
+    expect(childCalls.at(-1)?._pubsub).toBe(pubsub);
+    expect(child.getPubSub()).toBeUndefined();
+
+    const secondPubSub = new EventEmitterPubSub();
+    const secondParent = new Agent({
+      id: 'second-standalone-parent-agent',
+      name: 'Second Standalone Parent Agent',
+      instructions: 'Test',
+      model: createDelegatingModel(),
+      pubsub: secondPubSub,
+      agents: { child },
+    });
+
+    await secondParent.generate('delegate to child again', {
+      runId: 'second-parent-run',
+      maxSteps: 3,
+    });
+
+    expect(childCalls.at(-1)?._pubsub).toBe(secondPubSub);
+    expect(child.getPubSub()).toBeUndefined();
+    expect(child.hasOwnPubSub()).toBe(false);
+  });
+
   it('preserves an injected PubSub when forking an agent', () => {
     const pubsub = new AsyncFanoutPubSub();
     const agent = new Agent({
@@ -674,7 +789,7 @@ describe('Agent signals', () => {
     const fork = agent.__fork();
 
     expect(fork.getPubSub()).toBe(pubsub);
-    expect(fork.hasOwnPubSub()).toBe(true);
+    expect(fork.hasOwnPubSub()).toBe(false);
   });
 
   it('keeps one PubSub for a stream run when the agent gets a PubSub during execution setup', async () => {
