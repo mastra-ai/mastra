@@ -100,6 +100,8 @@ async function tuiMain(pipedInput?: string | null) {
     authStorage,
     mcpManager,
     initGithubSignals: result.initGithubSignals,
+    enableGithubSignals: result.enableGithubSignals,
+    disableGithubSignals: result.disableGithubSignals,
     githubSignals: result.githubSignals,
     appName: 'Mastra Code',
     version: getCurrentVersion(),

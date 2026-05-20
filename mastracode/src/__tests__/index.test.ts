@@ -28,6 +28,7 @@ vi.mock('@mastra/core/agent', () => ({
 const agentConstructorMock = vi.fn();
 const githubSignalsAddAgentMock = vi.fn();
 const githubSignalsInitMock = vi.fn();
+const githubSignalsDestroyMock = vi.fn();
 const githubNotificationPollerConstructorMock = vi.fn();
 
 vi.mock('../github-signals/notification-poller.js', () => ({
@@ -49,6 +50,10 @@ vi.mock('../github-signals/index.js', () => ({
 
     init(options: unknown) {
       return githubSignalsInitMock(options);
+    }
+
+    destroy() {
+      githubSignalsDestroyMock();
     }
   },
 }));
@@ -108,6 +113,7 @@ function createMockSettings() {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    signals: { unixSocketPubSub: false, githubPrNotifications: false },
     observability: { resources: {}, localTracing: false },
   };
 }
@@ -316,6 +322,7 @@ describe('createMastraCode', () => {
     githubSignalsAddAgentMock.mockReset();
     githubSignalsInitMock.mockReset();
     githubSignalsInitMock.mockResolvedValue([]);
+    githubSignalsDestroyMock.mockReset();
     harnessConstructorMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
@@ -459,13 +466,18 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
+      | { inputProcessors?: unknown; errorProcessors?: Array<{ id?: string }> }
       | undefined;
-    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    await expect(getProcessorIds(agentConfig?.inputProcessors)).resolves.toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
-  it('wires GithubSignals into the code agent and exposes deferred startup rehydration', async () => {
+  async function getProcessorIds(processors: unknown): Promise<string[]> {
+    const resolved = typeof processors === 'function' ? await processors({}) : processors;
+    return Array.isArray(resolved) ? resolved.map((processor: { id?: string }) => processor.id ?? '') : [];
+  }
+
+  it('keeps GithubSignals inactive by default until the experimental setting is enabled', async () => {
     harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
     const { createMastraCode } = await import('../index.js');
 
@@ -473,18 +485,69 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; outputProcessors?: Array<{ id?: string }> }
+      | { inputProcessors?: unknown; outputProcessors?: unknown }
       | undefined;
-    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
-    expect(agentConfig?.outputProcessors?.map(processor => processor.id)).toContain('github-signals');
+    await expect(getProcessorIds(agentConfig?.inputProcessors)).resolves.not.toContain('github-signals');
+    await expect(getProcessorIds(agentConfig?.outputProcessors)).resolves.not.toContain('github-signals');
+    expect(githubSignalsAddAgentMock).not.toHaveBeenCalled();
+    expect(githubSignalsInitMock).not.toHaveBeenCalled();
+    expect(result.githubSignals).toBeUndefined();
+
+    await result.initGithubSignals();
+
+    expect(githubSignalsInitMock).not.toHaveBeenCalled();
+  });
+
+  it('wires GithubSignals at startup when the experimental setting is enabled', async () => {
+    const settings = createMockSettings();
+    settings.signals.githubPrNotifications = true;
+    loadSettingsMock.mockReturnValue(settings);
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    const { createMastraCode } = await import('../index.js');
+
+    const result = await createMastraCode();
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: unknown; outputProcessors?: unknown }
+      | undefined;
+    await expect(getProcessorIds(agentConfig?.inputProcessors)).resolves.toContain('github-signals');
+    await expect(getProcessorIds(agentConfig?.outputProcessors)).resolves.toContain('github-signals');
     expect(githubSignalsAddAgentMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'code-agent' }),
       expect.objectContaining({ getStreamOptions: expect.any(Function) }),
     );
     expect(githubSignalsInitMock).not.toHaveBeenCalled();
+    expect(result.githubSignals).toBeDefined();
 
     await result.initGithubSignals();
 
+    expect(githubSignalsInitMock).toHaveBeenCalledWith({
+      memory: expect.objectContaining({ listThreads: expect.any(Function) }),
+      resourceId: expect.any(String),
+      threadId: 'thread-1',
+    });
+  });
+
+  it('enables GithubSignals at runtime without restarting', async () => {
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    const { createMastraCode } = await import('../index.js');
+
+    const result = await createMastraCode();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: unknown; outputProcessors?: unknown }
+      | undefined;
+
+    await expect(getProcessorIds(agentConfig?.inputProcessors)).resolves.not.toContain('github-signals');
+
+    const githubSignals = await result.enableGithubSignals();
+
+    expect(githubSignals).toBeDefined();
+    await expect(getProcessorIds(agentConfig?.inputProcessors)).resolves.toContain('github-signals');
+    await expect(getProcessorIds(agentConfig?.outputProcessors)).resolves.toContain('github-signals');
+    expect(githubSignalsAddAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'code-agent' }),
+      expect.objectContaining({ getStreamOptions: expect.any(Function) }),
+    );
     expect(githubSignalsInitMock).toHaveBeenCalledWith({
       memory: expect.objectContaining({ listThreads: expect.any(Function) }),
       resourceId: expect.any(String),

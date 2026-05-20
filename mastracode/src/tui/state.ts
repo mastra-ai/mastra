@@ -110,6 +110,12 @@ export interface MastraTUIOptions {
   /** Start GitHub PR signal polling after the TUI has subscribed to the active thread. */
   initGithubSignals?: () => Promise<void>;
 
+  /** Enable GitHub PR signals in the current session after the experimental setting is toggled on. */
+  enableGithubSignals?: () => Promise<GithubSignals | undefined>;
+
+  /** Disable GitHub PR signals in the current session after the experimental setting is toggled off. */
+  disableGithubSignals?: () => void;
+
   /** GitHub PR signal subscription manager for slash commands. */
   githubSignals?: GithubSignals;
 

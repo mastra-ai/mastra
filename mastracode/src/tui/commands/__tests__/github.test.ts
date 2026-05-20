@@ -50,7 +50,7 @@ describe('handleGithubCommand', () => {
 
     await handleGithubCommand(ctx, ['subscribe', '123', 'mastra-ai/mastra']);
 
-    expect(errorMessages[0]).toContain('not available');
+    expect(errorMessages[0]).toContain('Enable Experimental GitHub PR notifications in /settings');
   });
 
   it('requires a current thread', async () => {

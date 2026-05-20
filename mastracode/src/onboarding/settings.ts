@@ -216,6 +216,8 @@ export interface GlobalSettings {
 export interface SignalSettings {
   /** Opt into local Unix socket PubSub for cross-process signal routing. */
   unixSocketPubSub: boolean;
+  /** Opt into experimental GitHub PR notification polling and slash commands. */
+  githubPrNotifications: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -286,7 +288,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
-  signals: { unixSocketPubSub: false },
+  signals: { unixSocketPubSub: false, githubPrNotifications: false },
   observability: { resources: {}, localTracing: false },
 };
 
@@ -303,6 +305,19 @@ function parseQuietModeMaxToolPreviewLines(value: unknown): number {
   const rawValue =
     typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
   return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
+}
+
+function parseSignalSettings(rawSignals: unknown): SignalSettings {
+  const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
+
+  return {
+    unixSocketPubSub:
+      typeof raw.unixSocketPubSub === 'boolean' ? raw.unixSocketPubSub : DEFAULTS.signals.unixSocketPubSub,
+    githubPrNotifications:
+      typeof raw.githubPrNotifications === 'boolean'
+        ? raw.githubPrNotifications
+        : DEFAULTS.signals.githubPrNotifications,
+  };
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -521,12 +536,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
-        signals: {
-          unixSocketPubSub:
-            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-              ? raw.signals.unixSocketPubSub
-              : DEFAULTS.signals.unixSocketPubSub,
-        },
+        signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -647,12 +657,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
-      signals: {
-        unixSocketPubSub:
-          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-            ? raw.signals.unixSocketPubSub
-            : DEFAULTS.signals.unixSocketPubSub,
-      },
+      signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
     };
 

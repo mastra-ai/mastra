@@ -2,4 +2,4 @@
 'mastracode': minor
 ---
 
-Added slash commands for subscribing, unsubscribing, and syncing GitHub PR notifications from MastraCode.
+Added experimental `/github subscribe`, `/github unsubscribe`, and `/github sync` commands for managing GitHub PR notifications from MastraCode. GitHub PR notifications are off by default and can be enabled from `/settings`.

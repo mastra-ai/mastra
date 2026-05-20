@@ -36,6 +36,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
     quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
+    experimentalGithubPrNotifications: globalSettings.signals.githubPrNotifications,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
@@ -76,6 +77,34 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.state.quietModeMaxToolPreviewLines = lines;
         applyQuietModeToRenderedTools(ctx, ctx.state.quietMode, lines);
+      },
+      onExperimentalGithubPrNotificationsChange: enabled => {
+        const current = loadSettings();
+        current.signals.githubPrNotifications = enabled;
+        saveSettings(current);
+
+        if (enabled) {
+          void ctx.state.options
+            .enableGithubSignals?.()
+            .then(githubSignals => {
+              if (githubSignals) {
+                ctx.state.options.githubSignals = githubSignals;
+                ctx.updateStatusLine();
+                ctx.showInfo('Experimental GitHub PR notifications enabled. /github commands are available now.');
+              } else {
+                ctx.showError('Experimental GitHub PR notifications could not start for this session.');
+              }
+            })
+            .catch(() => {
+              ctx.showError('Experimental GitHub PR notifications could not start for this session.');
+            });
+        } else {
+          ctx.state.options.disableGithubSignals?.();
+          ctx.state.options.githubSignals = undefined;
+          ctx.state.activeGithubPrSubscriptions = [];
+          ctx.updateStatusLine();
+          ctx.showInfo('Experimental GitHub PR notifications disabled. /github commands are unavailable.');
+        }
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();

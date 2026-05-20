@@ -65,6 +65,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    signals: { unixSocketPubSub: false, githubPrNotifications: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -109,6 +110,27 @@ describe('customProviders parsing/persistence', () => {
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
       expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(settings.signals.githubPrNotifications).toBe(false);
+    });
+  });
+
+  it('parses GitHub PR notification opt-in settings', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { unixSocketPubSub: true, githubPrNotifications: true },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.signals).toEqual({ unixSocketPubSub: true, githubPrNotifications: true });
     });
   });
 

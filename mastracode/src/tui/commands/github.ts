@@ -31,7 +31,7 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
   }
 
   if (!ctx.githubSignals) {
-    ctx.showError('GitHub PR notifications are not available in this session.');
+    ctx.showError('GitHub PR notifications are disabled. Enable Experimental GitHub PR notifications in /settings.');
     return;
   }
 

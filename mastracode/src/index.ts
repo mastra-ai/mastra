@@ -359,6 +359,26 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     notificationPoller: githubNotificationPoller,
     commandRunner: defaultGithubCommandRunner,
   });
+  let githubSignalsEnabled = globalSettings.signals.githubPrNotifications;
+  let githubAgentRegistered = false;
+  const agentsMdInjector = new AgentsMDInjector({
+    getIgnoredInstructionPaths: ({ requestContext }) => {
+      const harnessContext = requestContext?.get('harness') as
+        | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
+        | undefined;
+      const projectPath =
+        harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
+      return getStaticallyLoadedInstructionPaths(projectPath);
+    },
+  });
+  const providerHistoryCompat = new ProviderHistoryCompat();
+  const getInputProcessors = () => [
+    agentsMdInjector,
+    ...(githubSignalsEnabled ? [githubSignals.processor] : []),
+    providerHistoryCompat,
+  ];
+  const getOutputProcessors = () => (githubSignalsEnabled ? [githubSignals.processor] : []);
+
   const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
@@ -375,21 +395,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         sampling: { type: 'ratio', rate: 0.3 },
       },
     },
-    inputProcessors: [
-      new AgentsMDInjector({
-        getIgnoredInstructionPaths: ({ requestContext }) => {
-          const harnessContext = requestContext?.get('harness') as
-            | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
-            | undefined;
-          const projectPath =
-            harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
-          return getStaticallyLoadedInstructionPaths(projectPath);
-        },
-      }),
-      githubSignals.processor,
-      new ProviderHistoryCompat(),
-    ],
-    outputProcessors: [githubSignals.processor],
+    inputProcessors: getInputProcessors,
+    outputProcessors: getOutputProcessors,
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
@@ -667,10 +674,19 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
   });
 
-  githubSignals.addAgent(codeAgent, {
-    getStreamOptions: ({ resourceId, threadId }) => harness.buildSignalStreamOptions({ resourceId, threadId }),
-  });
+  const registerGithubAgent = () => {
+    if (githubAgentRegistered) return;
+    githubSignals.addAgent(codeAgent, {
+      getStreamOptions: ({ resourceId, threadId }) => harness.buildSignalStreamOptions({ resourceId, threadId }),
+    });
+    githubAgentRegistered = true;
+  };
+  if (githubSignalsEnabled) {
+    registerGithubAgent();
+  }
   const initGithubSignals = async () => {
+    if (!githubSignalsEnabled) return;
+    registerGithubAgent();
     const threadId = harness.getCurrentThreadId();
     if (!threadId) return;
 
@@ -678,6 +694,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     if (memoryStore) {
       await githubSignals.init({ memory: memoryStore, resourceId: project.resourceId, threadId });
     }
+  };
+  const enableGithubSignals = async () => {
+    githubSignalsEnabled = true;
+    await initGithubSignals();
+    return githubSignals;
+  };
+  const disableGithubSignals = () => {
+    githubSignalsEnabled = false;
+    githubSignals.destroy();
+    githubAgentRegistered = false;
   };
 
   // Sync hookManager session ID on thread changes
@@ -712,6 +738,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinOmPacks,
     effectiveDefaults,
     initGithubSignals,
-    githubSignals,
+    enableGithubSignals,
+    disableGithubSignals,
+    githubSignals: githubSignalsEnabled ? githubSignals : undefined,
   };
 }

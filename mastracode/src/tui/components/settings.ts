@@ -25,6 +25,7 @@ export interface SettingsConfig {
   escapeAsCancel: boolean;
   quietMode: boolean;
   quietModeMaxToolPreviewLines: number;
+  experimentalGithubPrNotifications: boolean;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -37,6 +38,7 @@ export interface SettingsCallbacks {
   onEscapeAsCancelChange: (enabled: boolean) => void;
   onQuietModeChange: (enabled: boolean) => void;
   onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
+  onExperimentalGithubPrNotificationsChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onApiKeys?: () => void;
   onClose: () => void;
@@ -387,6 +389,34 @@ export class SettingsComponent extends Box implements Focusable {
             },
           ]
         : []),
+      {
+        id: 'experimentalGithubPrNotifications',
+        label: 'Experimental GitHub PR notifications',
+        description: 'Opt into GitHub PR polling and /github subscription commands.',
+        currentValue: config.experimentalGithubPrNotifications ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Start GitHub PR polling and /github commands now',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Disable GitHub PR notification polling',
+              },
+            ],
+            config.experimentalGithubPrNotifications ? 'on' : 'off',
+            value => {
+              config.experimentalGithubPrNotifications = value === 'on';
+              callbacks.onExperimentalGithubPrNotificationsChange(config.experimentalGithubPrNotifications);
+              done(config.experimentalGithubPrNotifications ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
       {
         id: 'storageBackend',
         label: 'Storage backend',
