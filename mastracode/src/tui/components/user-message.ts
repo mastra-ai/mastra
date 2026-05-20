@@ -2,10 +2,11 @@
  * Component that renders a user message with a thin border that fits the content.
  */
 
-import { Container, Markdown, Spacer, visibleWidth } from '@mariozechner/pi-tui';
+import { Container, Markdown, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Strip ANSI escape sequences from a string.
@@ -19,9 +20,16 @@ function stripAnsi(s: string): string {
  */
 class BorderedBox {
   private child: { render(width: number): string[]; invalidate?(): void };
+  private pending: boolean;
+  private borderColor?: string;
 
-  constructor(child: { render(width: number): string[]; invalidate?(): void }) {
+  constructor(
+    child: { render(width: number): string[]; invalidate?(): void },
+    options: { pending?: boolean; borderColor?: string } = {},
+  ) {
     this.child = child;
+    this.pending = options.pending ?? false;
+    this.borderColor = options.borderColor;
   }
 
   invalidate() {
@@ -29,7 +37,12 @@ class BorderedBox {
   }
 
   render(width: number): string[] {
-    const borderColor = (s: string) => chalk.hex(tintHex(mastra.green, 1))(s);
+    const borderColor = (s: string) =>
+      this.borderColor
+        ? chalk.hex(this.borderColor)(s)
+        : this.pending
+          ? chalk.hex(theme.getTheme().dim)(s)
+          : chalk.hex(tintHex(mastra.green, 1))(s);
 
     // Border uses 4 chars: "│ " (2) on left + " │" (2) on right
     // Plus 2 for the "› " prompt prefix on the first line
@@ -54,7 +67,7 @@ class BorderedBox {
     }
 
     // Box inner width = content width + prompt prefix (the "│ " and " │" add the padding)
-    const boxInner = Math.min(maxInnerWidth, maxContentWidth + 2);
+    const boxInner = maxContentWidth + 2;
     // Total box width: "│" + " " + content + " " + "│" = boxInner + 4
     const boxWidth = boxInner + 4;
 
@@ -87,15 +100,37 @@ class BorderedBox {
 }
 
 export class UserMessageComponent extends Container {
-  constructor(text: string, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
+  constructor(
+    text: string,
+    markdownTheme: MarkdownTheme = getMarkdownTheme(),
+    options: { pending?: boolean; borderColor?: string } = {},
+  ) {
     super();
 
     const md = new Markdown(text, 0, 0, markdownTheme, {
-      color: (text: string) => theme.fg('text', text),
+      color: (text: string) => (options.pending ? theme.fg('dim', text) : theme.fg('text', text)),
       italic: false,
     });
 
-    this.addChild(new BorderedBox(md));
+    this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor }));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'user-message';
+  }
+}
+
+export class PendingUserMessageComponent extends Container {
+  constructor(text: string, imageCount = 0) {
+    super();
+
+    const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+    const displayText = `${prefix}${text.replace(/\[image\]\s*/g, '').trim()}`.trim();
+    this.addChild(new Text(theme.fg('dim', `↳ ${displayText || 'Message'} pending…`), BOX_INDENT_STR.length, 0));
     this.addChild(new Spacer(1));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'user-message';
   }
 }

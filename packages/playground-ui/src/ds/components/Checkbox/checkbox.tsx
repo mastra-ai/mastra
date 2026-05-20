@@ -31,7 +31,7 @@ const Checkbox = React.forwardRef<
         'data-[state=checked]:animate-in data-[state=checked]:zoom-in-50 data-[state=checked]:duration-150',
       )}
     >
-      <Check className="h-3.5 w-3.5 stroke-[3]" />
+      <Check className="h-3.5 w-3.5 stroke-3" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ));

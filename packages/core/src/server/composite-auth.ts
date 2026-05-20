@@ -10,17 +10,33 @@ import type {
 } from '../auth';
 import { MastraAuthProvider } from './auth';
 
+type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | undefined;
+
 // Type guards for interface detection
 function isSSOProvider(p: unknown): p is ISSOProvider {
-  return p !== null && typeof p === 'object' && 'getLoginUrl' in p && 'handleCallback' in p;
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).getLoginUrl === 'function' &&
+    typeof (p as any).handleCallback === 'function'
+  );
 }
 
 function isSessionProvider(p: unknown): p is ISessionProvider {
-  return p !== null && typeof p === 'object' && 'validateSession' in p && 'createSession' in p;
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).validateSession === 'function' &&
+    typeof (p as any).createSession === 'function'
+  );
 }
 
 function isUserProvider(p: unknown): p is IUserProvider {
-  return p !== null && typeof p === 'object' && 'getCurrentUser' in p;
+  return p !== null && typeof p === 'object' && typeof (p as any).getCurrentUser === 'function';
+}
+
+function isObjectLike(value: unknown): value is object {
+  return (typeof value === 'object' && value !== null) || typeof value === 'function';
 }
 
 export class CompositeAuth
@@ -28,6 +44,8 @@ export class CompositeAuth
   implements ISSOProvider<User>, ISessionProvider<Session>, IUserProvider<User>
 {
   private providers: MastraAuthProvider[];
+  private authenticatedProviderByObject = new WeakMap<object, MastraAuthProvider>();
+  private authenticatedProviderByPrimitive = new Map<PrimitiveAuthUser, MastraAuthProvider>();
 
   constructor(providers: MastraAuthProvider[]) {
     const combinedPublic = providers.flatMap(provider => provider.public ?? []);
@@ -39,11 +57,60 @@ export class CompositeAuth
     });
 
     this.providers = providers;
+    if (providers.some(provider => typeof provider.mapUserToResourceId === 'function')) {
+      this.mapUserToResourceId = user => this.mapAuthenticatedUserToResourceId(user);
+    }
+
+    // Null out interface methods when no inner provider supports them.
+    // This ensures duck-typing checks (typeof auth.method === 'function')
+    // accurately reflect the composite's actual capabilities — preventing
+    // Studio from showing login options that no provider can handle.
+    if (!providers.some(isSSOProvider)) {
+      this.getLoginUrl = undefined as any;
+      this.handleCallback = undefined as any;
+      this.getLoginButtonConfig = undefined as any;
+    }
+    if (!providers.some(isSessionProvider)) {
+      this.createSession = undefined as any;
+      this.validateSession = undefined as any;
+      this.getSessionIdFromRequest = undefined as any;
+    }
+    if (!providers.some(isUserProvider)) {
+      this.getCurrentUser = undefined as any;
+      this.getUser = undefined as any;
+    }
   }
 
   // Find first provider implementing an interface
   private findProvider<T>(check: (p: unknown) => p is T): T | undefined {
     return this.providers.find(check) as T | undefined;
+  }
+
+  private rememberAuthenticatedProvider(user: unknown, provider: MastraAuthProvider): void {
+    if (isObjectLike(user)) {
+      this.authenticatedProviderByObject.set(user, provider);
+      return;
+    }
+
+    this.authenticatedProviderByPrimitive.set(user as PrimitiveAuthUser, provider);
+  }
+
+  private takeAuthenticatedProvider(user: unknown): MastraAuthProvider | undefined {
+    if (isObjectLike(user)) {
+      const provider = this.authenticatedProviderByObject.get(user);
+      this.authenticatedProviderByObject.delete(user);
+      return provider;
+    }
+
+    const primitiveUser = user as PrimitiveAuthUser;
+    const provider = this.authenticatedProviderByPrimitive.get(primitiveUser);
+    this.authenticatedProviderByPrimitive.delete(primitiveUser);
+    return provider;
+  }
+
+  private mapAuthenticatedUserToResourceId(user: unknown): string | undefined | null {
+    const provider = this.takeAuthenticatedProvider(user);
+    return provider?.mapUserToResourceId?.(user);
   }
 
   // ============================================================================
@@ -76,6 +143,7 @@ export class CompositeAuth
       try {
         const user = await provider.authenticateToken(token, request);
         if (user) {
+          this.rememberAuthenticatedProvider(user, provider);
           return user;
         }
       } catch {

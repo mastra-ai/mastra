@@ -24,6 +24,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
         suppressFeedback?: boolean;
       };
+      runningBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -38,8 +39,24 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
+      /**
+       * Per-tool-call background-task metadata keyed by `toolCallId`. A single
+       * assistant message can carry multiple concurrent background-dispatched
+       * tool calls, so timing/ID is stored per call rather than as one value
+       * on the message.
+       */
+      backgroundTasks?: Record<
+        string,
+        {
+          startedAt: Date;
+          completedAt?: Date;
+          suspendedAt?: Date;
+          taskId: string;
+        }
+      >;
     }
   | {
       mode: 'stream';
@@ -47,6 +64,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
         suppressFeedback?: boolean;
       };
+      runningBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -61,8 +79,24 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
+      /**
+       * Per-tool-call background-task metadata keyed by `toolCallId`. A single
+       * assistant message can carry multiple concurrent background-dispatched
+       * tool calls, so timing/ID is stored per call rather than as one value
+       * on the message.
+       */
+      backgroundTasks?: Record<
+        string,
+        {
+          startedAt: Date;
+          completedAt?: Date;
+          suspendedAt?: Date;
+          taskId: string;
+        }
+      >;
     }
   | {
       mode: 'network';
@@ -88,6 +122,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
     }

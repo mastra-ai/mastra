@@ -22,7 +22,8 @@
         },
         "metadata": {
           "runId": "<runId-1>",
-          "source": "call"
+          "source": "call",
+          "environment": "test"
         },
         "input": "Hello",
         "output": {
@@ -48,21 +49,26 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
-                "outputTokens": 25
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 15
+                },
+                "outputDetails": {
+                  "text": 25
+                }
               }
             },
             "metadata": {
               "runId": "<runId-1>",
-              "source": "call"
+              "source": "call",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -107,10 +113,17 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
-                  "finishReason": "stop"
+                  "finishReason": "stop",
+                  "warnings": []
                 },
                 "metadata": {
                   "runId": "<runId-1>",
@@ -119,7 +132,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -146,7 +160,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "source": "call"
+                      "source": "call",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Mock V2 generate response"

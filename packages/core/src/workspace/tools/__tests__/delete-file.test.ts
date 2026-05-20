@@ -22,7 +22,7 @@ describe('workspace_delete', () => {
   it('should delete file', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: 'test.txt' }, { workspace });
 
@@ -39,7 +39,7 @@ describe('workspace_delete', () => {
   it('should delete empty directory', async () => {
     await fs.mkdir(path.join(tempDir, 'emptydir'));
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: 'emptydir' }, { workspace });
 
@@ -57,7 +57,7 @@ describe('workspace_delete', () => {
     await fs.mkdir(path.join(tempDir, 'dirwithfiles'));
     await fs.writeFile(path.join(tempDir, 'dirwithfiles', 'file.txt'), 'content');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute(
       {

@@ -1,0 +1,34 @@
+import type { AutoFormFieldProps } from '@autoform/react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+import React from 'react';
+
+export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, error, id, value }) => {
+  const { key, ...props } = inputProps;
+
+  return (
+    <Select
+      {...props}
+      value={value}
+      onValueChange={value => {
+        const syntheticEvent = {
+          target: {
+            value,
+            name: inputProps.name,
+          },
+        } as React.ChangeEvent<HTMLInputElement>;
+        props.onChange(syntheticEvent);
+      }}
+    >
+      <SelectTrigger id={id} className={error ? 'border-accent2' : ''}>
+        <SelectValue placeholder="Select an option" />
+      </SelectTrigger>
+      <SelectContent>
+        {(field.options || []).map(([key, label]) => (
+          <SelectItem key={key} value={key}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};

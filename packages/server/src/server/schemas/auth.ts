@@ -8,6 +8,7 @@ export const ssoConfigSchema = z.object({
   provider: z.string(),
   text: z.string(),
   icon: z.string().optional(),
+  description: z.string().optional(),
   url: z.string(),
 });
 
@@ -16,6 +17,7 @@ export const loginConfigSchema = z
     type: z.enum(['sso', 'credentials', 'both']),
     sso: ssoConfigSchema.optional(),
     signUpEnabled: z.boolean().optional(),
+    description: z.string().optional(),
   })
   .nullable();
 
@@ -86,6 +88,14 @@ export const ssoCallbackResponseSchema = z.object({
 export const logoutResponseSchema = z.object({
   success: z.boolean(),
   redirectTo: z.string().optional(),
+});
+
+// ============================================================================
+// Refresh Schema
+// ============================================================================
+
+export const refreshResponseSchema = z.object({
+  success: z.boolean(),
 });
 
 // ============================================================================

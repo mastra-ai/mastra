@@ -203,7 +203,7 @@ const COMPONENTS: Components = {
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -211,7 +211,7 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-neutral6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}

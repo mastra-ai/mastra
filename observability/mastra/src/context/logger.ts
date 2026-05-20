@@ -1,23 +1,24 @@
 /**
  * LoggerContextImpl - Structured logging with automatic trace correlation.
  *
- * Emits LogEvent to the ObservabilityBus. All context (traceId, spanId,
- * tags, metadata) is snapshotted at construction time.
+ * Emits LogEvent to the ObservabilityBus. All context (correlationContext,
+ * metadata) is snapshotted at construction time.
  */
 
-import type { LogLevel, LoggerContext, ExportedLog, LogEvent } from '@mastra/core/observability';
+import { generateSignalId } from '@mastra/core/observability';
+import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext } from '@mastra/core/observability';
 
 import type { ObservabilityBus } from '../bus';
 
 export interface LoggerContextConfig {
-  /** Trace ID for log correlation */
+  /** Top-level trace identity for emitted log events */
   traceId?: string;
 
-  /** Span ID for log correlation */
+  /** Top-level span identity for emitted log events */
   spanId?: string;
 
-  /** Tags for filtering/categorization */
-  tags?: string[];
+  /** Canonical correlation context for log correlation */
+  correlationContext?: CorrelationContext;
 
   /** Metadata (entity context, runId, environment, serviceName, etc.) */
   metadata?: Record<string, unknown>;
@@ -42,13 +43,17 @@ export class LoggerContextImpl implements LoggerContext {
   private config: LoggerContextConfig;
 
   /**
-   * Create a logger context. Tags and metadata are defensively copied so
+   * Create a logger context. Context and metadata are defensively copied so
    * mutations after construction do not affect emitted logs.
    */
   constructor(config: LoggerContextConfig) {
+    const correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
+
     this.config = {
       ...config,
-      tags: config.tags ? [...config.tags] : undefined,
+      traceId: config.traceId ?? correlationContext?.traceId,
+      spanId: config.spanId ?? correlationContext?.spanId,
+      correlationContext,
       metadata: config.metadata ? structuredClone(config.metadata) : undefined,
     };
   }
@@ -82,19 +87,20 @@ export class LoggerContextImpl implements LoggerContext {
    * Build an ExportedLog, check against the minimum level, and emit it through the bus.
    */
   private log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
-    const minLevel = this.config.minLevel ?? 'debug';
+    const minLevel = this.config.minLevel ?? 'warn';
     if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[minLevel]) {
       return;
     }
 
     const exportedLog: ExportedLog = {
+      logId: generateSignalId(),
       timestamp: new Date(),
       level,
       message,
       data,
       traceId: this.config.traceId,
       spanId: this.config.spanId,
-      tags: this.config.tags,
+      correlationContext: this.config.correlationContext,
       metadata: this.config.metadata,
     };
 

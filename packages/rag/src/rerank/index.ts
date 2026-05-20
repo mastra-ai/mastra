@@ -1,4 +1,6 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
 import { Big } from 'big.js';
@@ -44,6 +46,8 @@ export interface RerankerFunctionOptions {
   weights?: WeightConfig;
   queryEmbedding?: number[];
   topK?: number;
+  /** Observability context for tracing the rerank operation */
+  observabilityContext?: ObservabilityContext;
 }
 
 export interface RerankConfig {
@@ -94,7 +98,18 @@ async function executeRerank({
   scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
 }) {
-  const { queryEmbedding, topK = 3 } = options;
+  const { queryEmbedding, topK = 3, observabilityContext } = options;
+  const rerankSpan = observabilityContext?.tracingContext?.currentSpan?.createChildSpan({
+    type: SpanType.RAG_ACTION,
+    name: `rag rerank`,
+    input: { query, candidateCount: results.length },
+    attributes: {
+      action: 'rerank',
+      candidateCount: results.length,
+      topN: topK,
+      scorer: (scorer as any)?.constructor?.name,
+    },
+  });
   const weights = {
     ...DEFAULT_WEIGHTS,
     ...options.weights,
@@ -103,7 +118,9 @@ async function executeRerank({
   //weights must add up to 1
   const sum = Object.values(weights).reduce((acc: Big, w: number) => acc.plus(w.toString()), new Big(0));
   if (!sum.eq(1)) {
-    throw new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+    const err = new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+    rerankSpan?.error({ error: err, endSpan: true });
+    throw err;
   }
 
   const resultLength = results.length;
@@ -152,7 +169,9 @@ async function executeRerank({
   );
 
   // Sort by score and take top K
-  return scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
+  const final = scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
+  rerankSpan?.end({ output: { returned: final.length } });
+  return final;
 }
 
 export async function rerankWithScorer({

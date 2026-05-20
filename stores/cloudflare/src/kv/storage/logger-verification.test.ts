@@ -9,6 +9,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage';
 import { Miniflare } from 'miniflare';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +31,7 @@ describe('Logger Verification - No PII Leakage', () => {
         TABLE_WORKFLOW_SNAPSHOT,
         TABLE_TRACES,
         TABLE_SCORERS,
+        TABLE_BACKGROUND_TASKS,
       ],
     });
 
@@ -40,6 +42,7 @@ describe('Logger Verification - No PII Leakage', () => {
       [TABLE_WORKFLOW_SNAPSHOT]: (await mf.getKVNamespace(TABLE_WORKFLOW_SNAPSHOT)) as KVNamespace,
       [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
       [TABLE_SCORERS]: (await mf.getKVNamespace(TABLE_SCORERS)) as KVNamespace,
+      [TABLE_BACKGROUND_TASKS]: (await mf.getKVNamespace(TABLE_BACKGROUND_TASKS)) as KVNamespace,
     };
 
     const config: CloudflareWorkersConfig = {

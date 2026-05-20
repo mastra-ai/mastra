@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MainHeader } from './main-header';
 import { BotIcon, Edit2Icon } from 'lucide-react';
 import { Button } from '../Button';
-import { TextAndIcon } from '../Text';
 import { CopyButton } from '../CopyButton';
+import { TextAndIcon } from '../Text';
 import { TooltipProvider } from '../Tooltip';
+import { MainHeader } from './main-header';
 
 const meta: Meta<typeof MainHeader> = {
   title: 'Layout/MainHeader',
@@ -12,7 +12,6 @@ const meta: Meta<typeof MainHeader> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

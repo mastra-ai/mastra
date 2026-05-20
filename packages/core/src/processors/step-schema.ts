@@ -78,7 +78,7 @@ type CoreMessageType = {
 
 export type ProcessorMessageType = {
   id: string;
-  role: 'user' | 'assistant' | 'system' | 'tool';
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
@@ -166,6 +166,7 @@ export type ProcessorOutputStepPhaseType = {
   finishReason?: string;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
+  usage?: Record<string, unknown>;
   systemMessages?: CoreMessageType[];
   retryCount?: number;
 };
@@ -190,6 +191,7 @@ export type ProcessorStepOutputType = {
   finishReason?: string;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
+  usage?: Record<string, unknown>;
   retryCount?: number;
   model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
@@ -386,7 +388,7 @@ export const ProcessorMessageSchema: z.ZodType<ProcessorMessageType> = z
     /** Unique message identifier */
     id: z.string(),
     /** Message role */
-    role: z.enum(['user', 'assistant', 'system', 'tool']),
+    role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
     /** When the message was created */
     createdAt: z.coerce.date(),
     /** Thread identifier for conversation grouping */
@@ -593,6 +595,10 @@ export const ProcessorOutputStepPhaseSchema = z.object({
   finishReason: z.string().optional().describe('The finish reason from the LLM (stop, tool-use, length, etc.)'),
   toolCalls: z.array(toolCallSchema).optional().describe('Tool calls made in this step (if any)'),
   text: z.string().optional().describe('Generated text from this step'),
+  usage: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Token usage for the current step (inputTokens, outputTokens, totalTokens, etc.)'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
 });
@@ -651,6 +657,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   finishReason: z.string().optional(),
   toolCalls: z.array(toolCallSchema).optional(),
   text: z.string().optional(),
+  usage: z.record(z.string(), z.unknown()).optional(),
 
   // Retry count
   retryCount: z.number().optional(),

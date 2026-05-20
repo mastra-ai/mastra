@@ -1,26 +1,67 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
-import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
+import { useMaybeSidebar } from './main-sidebar-context';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
-export type MainSidebarNavHeaderProps = {
+export type MainSidebarNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'children'> & {
   children?: React.ReactNode;
-  className?: string;
   state?: SidebarState;
+  href?: string;
+  isActive?: boolean;
+  /** Override the Provider-level LinkComponent. Defaults to `<a>` when neither is set. */
+  LinkComponent?: LinkComponent;
 };
-export function MainSidebarNavHeader({ children, className, state = 'default' }: MainSidebarNavHeaderProps) {
-  const isDefaultState = state === 'default';
+export function MainSidebarNavHeader({
+  children,
+  className,
+  state: stateProp,
+  href,
+  isActive,
+  LinkComponent: LinkProp,
+  ...props
+}: MainSidebarNavHeaderProps) {
+  const ctx = useMaybeSidebar();
+  const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
+  const isMobile = ctx?.isMobile ?? false;
+  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
+  const showTitle = state === 'default' && !isMobile;
 
   return (
-    <div className={cn('grid grid-cols-[auto_1fr] items-center min-h-11', className)}>
-      <header
-        className={cn('text-ui-xs uppercase text-neutral3/75 tracking-widest', {
-          'pl-3': isDefaultState,
-        })}
-      >
-        {isDefaultState ? children : <VisuallyHidden>{children}</VisuallyHidden>}
-      </header>
-      <MainSidebarNavSeparator />
+    <div className={cn('min-w-0 min-h-8 flex items-center mt-2 mb-0.5', className)}>
+      {showTitle ? (
+        <header
+          {...props}
+          className={cn('min-w-0 max-w-full truncate text-ui-sm font-medium pl-3', {
+            'text-neutral5': isActive,
+            'text-neutral3/70': !isActive,
+          })}
+        >
+          {href ? (
+            <Link
+              href={href}
+              className={cn('block min-w-0 truncate transition-colors duration-normal', {
+                'hover:text-neutral5': !isActive,
+                'text-neutral5': isActive,
+              })}
+            >
+              {children}
+            </Link>
+          ) : (
+            children
+          )}
+        </header>
+      ) : (
+        <>
+          {/* Keep header in DOM (visually hidden) so consumers' `id` still resolves
+              for `MainSidebarSections`' `aria-labelledby`. */}
+          <VisuallyHidden asChild>
+            <header {...props}>{children}</header>
+          </VisuallyHidden>
+          <div aria-hidden="true" className="mx-3 h-px flex-1 bg-border1" />
+        </>
+      )}
     </div>
   );
 }

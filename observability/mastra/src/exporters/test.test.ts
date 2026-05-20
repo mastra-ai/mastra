@@ -516,7 +516,9 @@ function createMockLogEvent(overrides: Partial<ExportedLog> = {}): LogEvent {
   return {
     type: 'log',
     log: {
+      logId: 'log-test-fixture',
       timestamp: new Date(),
+      traceId: 'trace-123',
       level: 'info',
       message: 'test log message',
       ...overrides,
@@ -528,6 +530,7 @@ function createMockMetricEvent(overrides: Partial<ExportedMetric> = {}): MetricE
   return {
     type: 'metric',
     metric: {
+      metricId: 'metric-test-fixture',
       timestamp: new Date(),
       name: 'mastra_test_metric',
       value: 1,
@@ -541,6 +544,7 @@ function createMockScoreEvent(overrides: Partial<ExportedScore> = {}): ScoreEven
   return {
     type: 'score',
     score: {
+      scoreId: 'score-test-fixture',
       timestamp: new Date(),
       traceId: 'trace-123',
       scorerId: 'relevance',
@@ -554,6 +558,7 @@ function createMockFeedbackEvent(overrides: Partial<ExportedFeedback> = {}): Fee
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: 'feedback-test-fixture',
       timestamp: new Date(),
       traceId: 'trace-123',
       source: 'user',

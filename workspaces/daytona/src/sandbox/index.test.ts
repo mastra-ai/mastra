@@ -52,21 +52,17 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFou
   const mockDaytona = {
     create: vi.fn().mockResolvedValue(mockSandbox),
     get: vi.fn().mockRejectedValue(new Error('No sandbox found')),
-    findOne: vi.fn().mockRejectedValue(new Error('No sandbox found')),
     delete: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     start: vi.fn().mockResolvedValue(undefined),
-    list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   };
 
   const resetMockDefaults = () => {
     mockDaytona.create.mockResolvedValue(mockSandbox);
     mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
-    mockDaytona.findOne.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
     mockDaytona.delete.mockResolvedValue(undefined);
     mockDaytona.stop.mockResolvedValue(undefined);
     mockDaytona.start.mockResolvedValue(undefined);
-    mockDaytona.list.mockResolvedValue({ items: [], total: 0 });
     mockSandbox.process.executeCommand.mockResolvedValue({ exitCode: 0, result: '' });
     mockSandbox.process.createSession.mockResolvedValue(undefined);
     mockSandbox.process.executeSessionCommand.mockResolvedValue({ cmdId: 'cmd-123' });
@@ -456,59 +452,78 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Start - Reconnection', () => {
-    it('reconnects to an existing started sandbox without calling create', async () => {
+    it('reconnects to existing sandbox via stored Daytona ID on stop→start cycle', async () => {
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+      await sandbox._stop();
+
       mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started' });
+      await sandbox._start();
+
+      expect(mockDaytona.get).toHaveBeenCalledWith('mock-sandbox-id');
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1); // only on initial start
+    });
+
+    it('creates a fresh sandbox when no existing sandbox is found by name', async () => {
+      // get() throws DaytonaNotFoundError → no existing sandbox → create fresh
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
 
-      expect(mockDaytona.get).toHaveBeenCalledWith('my-id');
-      expect(mockDaytona.create).not.toHaveBeenCalled();
-      expect(mockDaytona.start).not.toHaveBeenCalled();
+      expect(mockDaytona.get).toHaveBeenCalledWith('my-id'); // falls back to sandboxName
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to findOne when get() fails', async () => {
-      mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started' });
+    it('propagates non-404 get() errors instead of creating a duplicate sandbox', async () => {
+      const serverError = new DaytonaError('Internal Server Error');
+      (serverError as any).statusCode = 500;
+      mockDaytona.get.mockRejectedValue(serverError);
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await expect(sandbox._start()).rejects.toThrow('Internal Server Error');
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+    });
+
+    it('restarts a stopped sandbox on stop→start cycle without calling create', async () => {
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
+      await sandbox._stop();
 
-      expect(mockDaytona.get).toHaveBeenCalled();
-      expect(mockDaytona.findOne).toHaveBeenCalledWith({ labels: { 'mastra-sandbox-id': 'my-id' } });
-      expect(mockDaytona.create).not.toHaveBeenCalled();
-    });
-
-    it('restarts a stopped sandbox and reconnects without calling create', async () => {
-      mockDaytona.get.mockResolvedValue({ ...mockSandbox, id: 'my-id', state: 'stopped' });
-      const sandbox = new DaytonaSandbox({ id: 'my-id' });
-
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'stopped' });
       await sandbox._start();
 
       expect(mockDaytona.start).toHaveBeenCalledTimes(1);
-      expect(mockDaytona.create).not.toHaveBeenCalled();
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1); // only on initial start
     });
 
-    it('restarts an archived sandbox and reconnects without calling create', async () => {
-      mockDaytona.get.mockResolvedValue({ ...mockSandbox, id: 'my-id', state: 'archived' });
+    it('restarts an archived sandbox on stop→start cycle without calling create', async () => {
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
+      await sandbox._stop();
+
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'archived' });
+      await sandbox._start();
 
       expect(mockDaytona.start).toHaveBeenCalledTimes(1);
-      expect(mockDaytona.create).not.toHaveBeenCalled();
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1); // only on initial start
     });
 
-    it('creates fresh sandbox when existing sandbox is in a dead state', async () => {
+    it('creates fresh sandbox when get() finds a dead sandbox on stop→start cycle', async () => {
       for (const state of ['destroyed', 'destroying', 'error', 'build_failed']) {
         vi.clearAllMocks();
         resetMockDefaults();
-        mockDaytona.get.mockResolvedValue({ ...mockSandbox, state });
         const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
         await sandbox._start();
+        await sandbox._stop();
 
-        expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+        mockDaytona.get.mockResolvedValue({ ...mockSandbox, state });
+        await sandbox._start();
+
+        expect(mockDaytona.create).toHaveBeenCalledTimes(2); // initial + after dead
       }
     });
 
@@ -522,9 +537,12 @@ describe('DaytonaSandbox', () => {
 
     it('uses createdAt from existing sandbox on reconnect', async () => {
       const createdAt = '2024-01-15T10:00:00.000Z';
-      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
+      await sandbox._start();
+      await sandbox._stop();
+
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
       await sandbox._start();
       const info = await sandbox.getInfo();
 
@@ -573,6 +591,341 @@ describe('DaytonaSandbox', () => {
       const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
       expect(cmd).toContain('export KEEP=yes');
       expect(cmd).not.toContain('REMOVE');
+    });
+  });
+
+  describe('Mount Configuration', () => {
+    it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.includes('mountpoint -q') && command.includes('echo "mounted"')) {
+          return { exitCode: 0, result: 'not mounted' };
+        }
+        if (command.includes('echo "non-empty" || echo "ok"')) {
+          return { exitCode: 0, result: 'ok' };
+        }
+        if (command.includes('sudo mkdir -p')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('which s3fs')) {
+          return { exitCode: 0, result: '/usr/bin/s3fs' };
+        }
+        if (command.includes('id -u && id -g')) {
+          return { exitCode: 0, result: '1000\n1000' };
+        }
+        if (command.includes('chmod a+rw /dev/fuse')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('s3fs') && command.includes('/data/s3-prefix')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('mkdir -p /tmp/.mastra-mounts')) {
+          return { exitCode: 0, result: '' };
+        }
+        return { exitCode: 0, result: '' };
+      });
+
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-s3-prefix',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+          prefix: 'workspace/data/',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/s3-prefix');
+
+      const mountCall = mockSandbox.process.executeCommand.mock.calls.find((call: any[]) => {
+        const command = call[0] || '';
+        return command.includes('s3fs') && command.includes('/data/s3-prefix') && !command.includes('which s3fs');
+      });
+
+      expect(mountCall).toBeDefined();
+      if (mountCall) {
+        expect(mountCall[0]).toContain('test-bucket:/workspace/data');
+        expect(mountCall[0]).not.toContain('test-bucket:/workspace/data/');
+      }
+    });
+  });
+
+  describe('Azure Blob Mount Configuration', () => {
+    const setupAzureMocks = () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.includes('which blobfuse2')) {
+          return { exitCode: 0, result: '/usr/bin/blobfuse2' };
+        }
+        if (command.includes('id -u && id -g')) {
+          return { exitCode: 0, result: '1000\n1000' };
+        }
+        if (command.includes('curl') && command.includes('blob.core.windows.net')) {
+          return { exitCode: 0, result: '' };
+        }
+        return { exitCode: 0, result: '' };
+      });
+    };
+
+    const findBlobfuseMountCall = (target: string) =>
+      mockSandbox.process.executeCommand.mock.calls.find((call: any[]) => {
+        const command = call[0] || '';
+        return command.includes('blobfuse2 mount') && command.includes(target) && !command.includes('which blobfuse2');
+      });
+
+    const findWrittenConfig = (): string | undefined => {
+      const upload = mockSandbox.fs.uploadFile.mock.calls.find((call: any[]) =>
+        String(call[1]).includes('.blobfuse2-config'),
+      );
+      return upload ? Buffer.from(upload[0]).toString('utf-8') : undefined;
+    };
+
+    it('account-key auth writes mode: key with account-name, account-key, container', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-key',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'test-container',
+          accountName: 'mystorage',
+          accountKey: 'a-secret-key',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-key');
+
+      const mountCall = findBlobfuseMountCall('/data/azure-key');
+      expect(mountCall).toBeDefined();
+      expect(mountCall![0]).toContain('--config-file=');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: key');
+      expect(yaml).toContain('account-name: "mystorage"');
+      expect(yaml).toContain('account-key: "a-secret-key"');
+      expect(yaml).toContain('container: "test-container"');
+      expect(yaml).toContain('read-only: false');
+      expect(yaml).not.toContain('  type: block');
+    });
+
+    it('SAS token auth writes mode: sas with sas field (no account-key)', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-sas',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'sas-container',
+          accountName: 'mystorage',
+          sasToken: 'sv=2022-11-02&ss=b&srt=co&sp=rl&se=2030-01-01T00:00:00Z&sig=xyz',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-sas');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: sas');
+      expect(yaml).toContain('sas: ');
+      expect(yaml).not.toContain('account-key:');
+    });
+
+    it('useDefaultCredential writes mode: msi (no key, no sas)', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-msi',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'msi-container',
+          accountName: 'mystorage',
+          useDefaultCredential: true,
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-msi');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: msi');
+      expect(yaml).not.toContain('account-key:');
+      expect(yaml).not.toContain('sas:');
+    });
+
+    it('connection string is parsed for AccountName, AccountKey, BlobEndpoint', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-cs',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'cs-container',
+          connectionString:
+            'DefaultEndpointsProtocol=https;AccountName=fromstring;AccountKey=keyvalue;BlobEndpoint=https://fromstring.blob.core.windows.net/;EndpointSuffix=core.windows.net',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-cs');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: key');
+      expect(yaml).toContain('account-name: "fromstring"');
+      expect(yaml).toContain('account-key: "keyvalue"');
+      expect(yaml).toContain('endpoint: "https://fromstring.blob.core.windows.net"');
+    });
+
+    it('connection string synthesizes endpoint from EndpointSuffix when BlobEndpoint is omitted', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-cs-suffix',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'cs-container',
+          connectionString:
+            'DefaultEndpointsProtocol=https;AccountName=fromstring;AccountKey=keyvalue;EndpointSuffix=core.usgovcloudapi.net',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-cs-suffix');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('endpoint: "https://fromstring.blob.core.usgovcloudapi.net"');
+    });
+
+    it('readOnly writes read-only: true in config', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-ro',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'ro-container',
+          accountName: 'mystorage',
+          accountKey: 'k',
+          readOnly: true,
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-ro');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('read-only: true');
+    });
+
+    it('prefix mount uses blobfuse2 subdirectory flag', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-prefix',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'prefix-container',
+          accountName: 'mystorage',
+          accountKey: 'k',
+          prefix: '/workspace/data/',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-prefix');
+
+      const mountCall = findBlobfuseMountCall('/data/azure-prefix');
+      expect(mountCall).toBeDefined();
+      expect(mountCall![0]).toContain('--virtual-directory=true');
+      expect(mountCall![0]).toContain('--subdirectory=workspace/data');
+    });
+
+    it('missing credentials produces a clear error', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-nocreds',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'no-creds',
+          accountName: 'mystorage',
+        }),
+      } as any;
+
+      const result = await sandbox.mount(mockFilesystem, '/data/azure-nocreds');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credentials/i);
+    });
+
+    it('invalid container name is rejected before any mount command', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-bad-name',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'Bad_Name',
+          accountName: 'mystorage',
+          accountKey: 'k',
+        }),
+      } as any;
+
+      const result = await sandbox.mount(mockFilesystem, '/data/azure-bad');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Invalid Azure container name/i);
+      expect(findBlobfuseMountCall('/data/azure-bad')).toBeUndefined();
     });
   });
 

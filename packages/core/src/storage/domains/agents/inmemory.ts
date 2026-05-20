@@ -38,26 +38,28 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageAgentType | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getById called for ${id}`);
     const agent = this.db.agents.get(id);
     return agent ? this.deepCopyAgent(agent) : null;
   }
 
   async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     const { agent } = input;
-    this.logger.debug(`InMemoryAgentsStorage: create called for ${agent.id}`);
 
     if (this.db.agents.has(agent.id)) {
       throw new Error(`Agent with id ${agent.id} already exists`);
     }
 
     const now = new Date();
+    // Default visibility to 'private' when an authorId is set; leave undefined for legacy unowned rows.
+    const visibility = agent.visibility ?? (agent.authorId ? 'private' : undefined);
     const newAgent: StorageAgentType = {
       id: agent.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: agent.authorId,
+      visibility,
       metadata: agent.metadata,
+      favoriteCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -65,7 +67,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     this.db.agents.set(agent.id, newAgent);
 
     // Extract config fields from the flat input (everything except agent-record fields)
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
     // Create version 1 from the config
     const versionId = crypto.randomUUID();
@@ -84,18 +86,18 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
   async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemoryAgentsStorage: update called for ${id}`);
 
     const existingAgent = this.db.agents.get(id);
     if (!existingAgent) {
       throw new Error(`Agent with id ${id} not found`);
     }
 
-    const { authorId, activeVersionId, metadata, status } = updates;
+    const { authorId, visibility, activeVersionId, metadata, status } = updates;
 
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...metadata },
@@ -109,7 +111,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: delete called for ${id}`);
     // Idempotent delete - no-op if agent doesn't exist
     this.db.agents.delete(id);
     // Also delete all versions for this agent
@@ -117,10 +118,19 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      visibility,
+      metadata,
+      status,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryAgentsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -138,6 +148,22 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
 
+    // Restrict to a set of IDs (used by ?favoritedOnly=true).
+    // An empty array means "no candidates" -> empty result.
+    if (entityIds !== undefined) {
+      if (entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageInput === false ? false : perPage,
+          hasMore: false,
+        };
+      }
+      const idSet = new Set(entityIds);
+      agents = agents.filter(agent => idSet.has(agent.id));
+    }
+
     // Filter by status
     if (status) {
       agents = agents.filter(agent => agent.status === status);
@@ -148,6 +174,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       agents = agents.filter(agent => agent.authorId === authorId);
     }
 
+    // Filter by visibility if provided
+    if (visibility !== undefined) {
+      agents = agents.filter(agent => agent.visibility === visibility);
+    }
+
     // Filter by metadata if provided (AND logic - all key-value pairs must match)
     if (metadata && Object.keys(metadata).length > 0) {
       agents = agents.filter(agent => {
@@ -156,8 +187,18 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       });
     }
 
-    // Sort filtered agents
-    const sortedAgents = this.sortAgents(agents, field, direction);
+    // Optional favorited-first ordering / favorites-only filter.
+    const favoritedIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
+    if (favoritedOnly) {
+      if (favoritedIds) {
+        agents = agents.filter(agent => favoritedIds.has(agent.id));
+      } else {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        agents = [];
+      }
+    }
+
+    const sortedAgents = this.sortAgents(agents, field, direction, favoritedIds);
 
     // Deep clone agents to avoid mutation
     const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
@@ -178,8 +219,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
-    this.logger.debug(`InMemoryAgentsStorage: createVersion called for agent ${input.agentId}`);
-
     // Check if version with this ID already exists (versions are immutable)
     if (this.db.agentVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -203,14 +242,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async getVersion(id: string): Promise<AgentVersion | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getVersion called for ${id}`);
     const version = this.db.agentVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getVersionByNumber called for agent ${agentId}, v${versionNumber}`);
-
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -220,8 +256,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getLatestVersion called for agent ${agentId}`);
-
     let latest: AgentVersion | null = null;
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId) {
@@ -236,8 +270,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
     const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryAgentsStorage: listVersions called for agent ${agentId}`);
 
     // Normalize perPage for query (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -275,14 +307,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteVersion called for ${id}`);
     // Idempotent delete - no-op if version doesn't exist
     this.db.agentVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByParentId called for agent ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.agentVersions.entries()) {
       if (version.agentId === entityId) {
@@ -296,8 +325,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async countVersions(agentId: string): Promise<number> {
-    this.logger.debug(`InMemoryAgentsStorage: countVersions called for agent ${agentId}`);
-
     let count = 0;
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId) {
@@ -332,13 +359,39 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     agents: StorageAgentType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
+    favoritedIds?: Set<string>,
   ): StorageAgentType[] {
     return agents.sort((a, b) => {
+      // Compound sort: favorited first, then existing orderBy, then id ASC for stable pagination.
+      if (favoritedIds) {
+        const aFav = favoritedIds.has(a.id) ? 1 : 0;
+        const bFav = favoritedIds.has(b.id) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
+      }
+
       const aValue = new Date(a[field]).getTime();
       const bValue = new Date(b[field]).getTime();
+      if (aValue !== bValue) {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
 
-      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      // Stable tie-break for same `createdAt`/`updatedAt`.
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
+  }
+
+  /**
+   * Collect the set of agent IDs favorited by the given user. Returns an empty
+   * Set when the favorites domain is not wired or the user has no favorites.
+   */
+  private collectFavoritedIdsFor(userId: string): Set<string> {
+    const favorited = new Set<string>();
+    for (const row of this.db.favorites.values()) {
+      if (row.userId === userId && row.entityType === 'agent') {
+        favorited.add(row.entityId);
+      }
+    }
+    return favorited;
   }
 
   private sortVersions(

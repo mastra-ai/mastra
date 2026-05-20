@@ -698,15 +698,21 @@ export class LibSQLDB extends MastraBase {
 
     try {
       // Add any columns from current schema that don't exist in the database
+      const existingColumnsRaw = await this.getTableColumns(TABLE_SPANS);
+      const existingColumns = new Set([...existingColumnsRaw].map(column => column.toLowerCase()));
+      let addedColumns = false;
       for (const [columnName, columnDef] of Object.entries(schema)) {
-        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
-        if (!columnExists) {
+        if (!existingColumns.has(columnName.toLowerCase())) {
           const sqlType = this.getSqlType(columnDef.type);
           // For new columns, use nullable (no default needed) since existing rows will have NULL
           const alterSql = `ALTER TABLE "${TABLE_SPANS}" ADD COLUMN "${columnName}" ${sqlType}`;
           await this.client.execute(alterSql);
+          addedColumns = true;
           this.logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_SPANS}`);
         }
+      }
+      if (addedColumns) {
+        this.tableColumnsCache.delete(TABLE_SPANS);
       }
 
       // Check if unique index already exists - if so, skip migration

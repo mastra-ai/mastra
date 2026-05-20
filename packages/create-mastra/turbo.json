@@ -10,7 +10,8 @@
         "@mastra/observability#build",
         "@mastra/memory#build",
         "@mastra/loggers#build",
-        "@mastra/evals#build"
+        "@mastra/evals#build",
+        "@mastra/duckdb#build"
       ],
       "inputs": [
         "src/**",

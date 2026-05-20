@@ -41,6 +41,10 @@ export function getPerformanceTests(memoryFactory: () => Memory) {
   });
 
   afterAll(async () => {
+    if (!memory) {
+      return;
+    }
+
     // Final cleanup
     const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
@@ -49,6 +53,10 @@ export function getPerformanceTests(memoryFactory: () => Memory) {
   });
 
   beforeEach(async () => {
+    if (!memory) {
+      return;
+    }
+
     // Reset message counter
     messageCounter = 0;
     // Clean up before each test

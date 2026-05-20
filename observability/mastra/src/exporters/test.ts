@@ -385,7 +385,8 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const log = event.log;
-      const logMessage = `[TestExporter] log.${log.level}: "${log.message}"${log.traceId ? ` (trace: ${log.traceId.slice(-8)})` : ''}`;
+      const traceId = log.traceId;
+      const logMessage = `[TestExporter] log.${log.level}: "${log.message}"${traceId ? ` (trace: ${traceId.slice(-8)})` : ''}`;
       this.#debugLogs.push(logMessage);
     }
 
@@ -418,7 +419,8 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const score = event.score;
-      const logMessage = `[TestExporter] score: ${score.scorerId}=${score.score} (trace: ${score.traceId.slice(-8)}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
+      const traceLabel = score.traceId ? score.traceId.slice(-8) : 'unanchored';
+      const logMessage = `[TestExporter] score: ${score.scorerId}=${score.score} (trace: ${traceLabel}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
       this.#debugLogs.push(logMessage);
     }
 
@@ -433,7 +435,9 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const fb = event.feedback;
-      const logMessage = `[TestExporter] feedback: ${fb.feedbackType} from ${fb.source}=${fb.value} (trace: ${fb.traceId.slice(-8)}${fb.spanId ? `, span: ${fb.spanId.slice(-8)}` : ''})`;
+      const traceLabel = fb.traceId ? fb.traceId.slice(-8) : 'unanchored';
+      const feedbackSource = fb.feedbackSource ?? fb.source;
+      const logMessage = `[TestExporter] feedback: ${fb.feedbackType} from ${feedbackSource}=${fb.value} (trace: ${traceLabel}${fb.spanId ? `, span: ${fb.spanId.slice(-8)}` : ''})`;
       this.#debugLogs.push(logMessage);
     }
 
@@ -621,10 +625,14 @@ export class TestExporter extends BaseExporter {
       if (event.log.traceId) traceIds.add(event.log.traceId);
     }
     for (const event of this.#scoreEvents) {
-      traceIds.add(event.score.traceId);
+      if (event.score.traceId) {
+        traceIds.add(event.score.traceId);
+      }
     }
     for (const event of this.#feedbackEvents) {
-      traceIds.add(event.feedback.traceId);
+      if (event.feedback.traceId) {
+        traceIds.add(event.feedback.traceId);
+      }
     }
     return Array.from(traceIds);
   }
@@ -994,6 +1002,9 @@ export class TestExporter extends BaseExporter {
       if (value instanceof Date) {
         return '<date>';
       }
+      if (key === 'createdAt' && typeof value === 'number') {
+        return '<date>';
+      }
       if (typeof value === 'string') {
         // Special handling for traceId - use the shared traceIdMap (handles both UUID and 32-char hex formats)
         if (key === 'traceId' && (uuidRegex.test(value) || hexId32Regex.test(value))) {
@@ -1027,9 +1038,27 @@ export class TestExporter extends BaseExporter {
       if (value && typeof value === 'object') {
         const normalized: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(value)) {
-          // Pass the key name when normalizing the value
-          normalized[k] = normalizeValue(v, k);
+          if (key === 'providerOptions' && k === 'mastra' && v && typeof v === 'object') {
+            const mastraOptions = v as Record<string, unknown>;
+            const remainingMastraOptions = Object.fromEntries(
+              Object.entries(mastraOptions).filter(([mastraKey]) => mastraKey !== 'createdAt'),
+            );
+            if (Object.keys(remainingMastraOptions).length > 0) {
+              normalized[k] = normalizeValue(remainingMastraOptions, k);
+            }
+            continue;
+          }
+
+          const normalizedValue = normalizeValue(v, k);
+          if (normalizedValue !== undefined) {
+            normalized[k] = normalizedValue;
+          }
         }
+
+        if (key === 'providerOptions' && Object.keys(normalized).length === 0) {
+          return undefined;
+        }
+
         return normalized;
       }
       return value;

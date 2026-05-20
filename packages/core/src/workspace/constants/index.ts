@@ -34,6 +34,9 @@ export const WORKSPACE_TOOLS = {
     SEARCH: `${WORKSPACE_TOOLS_PREFIX}_search` as const,
     INDEX: `${WORKSPACE_TOOLS_PREFIX}_index` as const,
   },
+  LSP: {
+    LSP_INSPECT: `${WORKSPACE_TOOLS_PREFIX}_lsp_inspect` as const,
+  },
 } as const;
 
 /**
@@ -42,4 +45,5 @@ export const WORKSPACE_TOOLS = {
 export type WorkspaceToolName =
   | (typeof WORKSPACE_TOOLS.FILESYSTEM)[keyof typeof WORKSPACE_TOOLS.FILESYSTEM]
   | (typeof WORKSPACE_TOOLS.SEARCH)[keyof typeof WORKSPACE_TOOLS.SEARCH]
-  | (typeof WORKSPACE_TOOLS.SANDBOX)[keyof typeof WORKSPACE_TOOLS.SANDBOX];
+  | (typeof WORKSPACE_TOOLS.SANDBOX)[keyof typeof WORKSPACE_TOOLS.SANDBOX]
+  | (typeof WORKSPACE_TOOLS.LSP)[keyof typeof WORKSPACE_TOOLS.LSP];

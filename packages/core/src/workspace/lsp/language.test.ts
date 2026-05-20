@@ -99,4 +99,31 @@ describe('getLanguageId', () => {
     expect(getLanguageId('/src/app.test.ts')).toBe('typescript');
     expect(getLanguageId('/src/utils.spec.js')).toBe('javascript');
   });
+
+  describe('with customExtensions', () => {
+    const customExtensions = { '.php': 'php', '.rb': 'ruby' };
+
+    it('returns custom language ID for registered extension', () => {
+      expect(getLanguageId('/src/App.php', customExtensions)).toBe('php');
+      expect(getLanguageId('/src/app.rb', customExtensions)).toBe('ruby');
+    });
+
+    it('falls back to built-in extensions when custom map has no match', () => {
+      expect(getLanguageId('/src/app.ts', customExtensions)).toBe('typescript');
+      expect(getLanguageId('/src/main.py', customExtensions)).toBe('python');
+    });
+
+    it('custom extensions override built-in extensions', () => {
+      const overrides = { '.ts': 'custom-typescript' };
+      expect(getLanguageId('/src/app.ts', overrides)).toBe('custom-typescript');
+    });
+
+    it('returns undefined for unknown extension even with custom map', () => {
+      expect(getLanguageId('/src/data.xyz', customExtensions)).toBeUndefined();
+    });
+
+    it('works with empty custom extensions', () => {
+      expect(getLanguageId('/src/app.ts', {})).toBe('typescript');
+    });
+  });
 });

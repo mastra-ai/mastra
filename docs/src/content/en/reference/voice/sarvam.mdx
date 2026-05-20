@@ -20,25 +20,23 @@ const voice = new SarvamVoice()
 // Or initialize with specific configuration
 const voiceWithConfig = new SarvamVoice({
   speechModel: {
-    model: 'bulbul:v1',
+    model: 'bulbul:v3',
     apiKey: process.env.SARVAM_API_KEY!,
     language: 'en-IN',
     properties: {
-      pitch: 0,
-      pace: 1.65,
-      loudness: 1.5,
-      speech_sample_rate: 8000,
-      enable_preprocessing: false,
-      eng_interpolation_wt: 123,
+      pace: 1.0,
+      temperature: 0.6,
+      speech_sample_rate: 24000,
+      output_audio_codec: 'wav',
     },
   },
   listeningModel: {
-    model: 'saarika:v2',
+    model: 'saarika:v2.5',
     apiKey: process.env.SARVAM_API_KEY!,
     languageCode: 'en-IN',
     filetype: 'wav',
   },
-  speaker: 'meera', // Default voice
+  speaker: 'shubh', // Default voice for bulbul:v3
 })
 
 // Convert text to speech
@@ -52,7 +50,7 @@ const text = await voice.listen(audioStream, {
 
 ### Sarvam API Docs -
 
-[https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech](https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech)
+[https://docs.sarvam.ai/api-reference-docs/text-to-speech/convert](https://docs.sarvam.ai/api-reference-docs/text-to-speech/convert)
 
 ## Configuration
 
@@ -65,7 +63,7 @@ const text = await voice.listen(audioStream, {
     type: 'SarvamVoiceConfig',
     description: 'Configuration for text-to-speech synthesis.',
     isOptional: true,
-    defaultValue: "{ model: 'bulbul:v1', language: 'en-IN' }",
+    defaultValue: "{ model: 'bulbul:v3', language: 'en-IN' }",
     properties: [
       {
         type: 'SarvamVoiceConfig',
@@ -79,9 +77,10 @@ const text = await voice.listen(audioStream, {
           {
             name: 'model',
             type: 'SarvamTTSModel',
-            description: 'Specifies the model to use for text-to-speech conversion.',
+            description:
+              'Specifies the model to use for text-to-speech conversion. Available options: bulbul:v2, bulbul:v3, bulbul:v3-beta. bulbul:v3-beta is a beta variant of bulbul:v3 that shares the same speaker catalog. Note: bulbul:v1 has been deprecated by Sarvam and is no longer supported.',
             isOptional: true,
-            defaultValue: "'bulbul:v1'",
+            defaultValue: "'bulbul:v3'",
           },
           {
             name: 'language',
@@ -98,43 +97,55 @@ const text = await voice.listen(audioStream, {
             isOptional: true,
           },
           {
-            name: 'properties.pitch',
-            type: 'number',
-            description:
-              'Controls the pitch of the audio. Lower values result in a deeper voice, while higher values make it sharper. The suitable range is between -0.75 and 0.75.',
-            isOptional: true,
-          },
-          {
             name: 'properties.pace',
             type: 'number',
             description:
-              'Controls the speed of the audio. Lower values result in slower speech, while higher values make it faster. The suitable range is between 0.5 and 2.0. Default is 1.0. Required range: 0.3 <= x <= 3',
+              'Controls the speed of the audio. Supported by both bulbul:v2 (range 0.3–3.0) and bulbul:v3 (range 0.5–2.0).',
+            isOptional: true,
+          },
+          {
+            name: 'properties.temperature',
+            type: 'number',
+            description:
+              'Sampling temperature that controls the randomness of the generated voice. bulbul:v3 only. Range: 0.01–2.0. Default: 0.6.',
+            isOptional: true,
+          },
+          {
+            name: 'properties.dict_id',
+            type: 'string',
+            description: 'Pronunciation dictionary ID. bulbul:v3 only.',
+            isOptional: true,
+          },
+          {
+            name: 'properties.pitch',
+            type: 'number',
+            description:
+              'Controls the pitch of the audio. Lower values result in a deeper voice, while higher values make it sharper. bulbul:v2 only. Range: -0.75 to 0.75.',
             isOptional: true,
           },
           {
             name: 'properties.loudness',
             type: 'number',
-            description:
-              'Controls the loudness of the audio. Lower values result in quieter audio, while higher values make it louder. The suitable range is between 0.3 and 3.0. Required range: 0 <= x <= 3',
-            isOptional: true,
-          },
-          {
-            name: 'properties.speech_sample_rate',
-            type: '8000 | 16000 | 22050',
-            description: 'Audio sample rate in Hz.',
+            description: 'Controls the loudness of the audio. bulbul:v2 only. Range: 0.3 to 3.0.',
             isOptional: true,
           },
           {
             name: 'properties.enable_preprocessing',
             type: 'boolean',
             description:
-              'Controls whether normalization of English words and numeric entities (e.g., numbers, dates) is performed. Set to true for better handling of mixed-language text. Default is false.',
+              'Enables normalization of English words and numeric entities (numbers, dates, etc.). bulbul:v2 only. Default is false.',
             isOptional: true,
           },
           {
-            name: 'properties.eng_interpolation_wt',
-            type: 'number',
-            description: 'Weight for interpolating with English speaker at encoder.',
+            name: 'properties.speech_sample_rate',
+            type: '8000 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000',
+            description: 'Audio sample rate in Hz.',
+            isOptional: true,
+          },
+          {
+            name: 'properties.output_audio_codec',
+            type: "'mp3' | 'wav' | 'linear16' | 'mulaw' | 'alaw' | 'opus' | 'flac' | 'aac'",
+            description: 'Output audio codec.',
             isOptional: true,
           },
         ],
@@ -145,16 +156,16 @@ const text = await voice.listen(audioStream, {
     name: 'speaker',
     type: 'SarvamVoiceId',
     description:
-      'The speaker to be used for the output audio. If not provided, Meera will be used as default. AvailableOptions - meera, pavithra, maitreyi, arvind, amol, amartya, diya, neel, misha, vian, arjun, maya',
+      "The speaker to be used for the output audio. Defaults to 'shubh'. bulbul:v3 supports 39 voices (shubh, aditya, ritu, priya, neha, rahul, pooja, rohan, simran, kavya, amit, dev, ishita, shreya, ratan, varun, manan, sumit, roopa, kabir, aayan, ashutosh, advait, amelia, sophia, anand, tanya, tarun, sunny, mani, gokul, vijay, shruti, suhani, mohit, kavitha, rehan, soham, rupali). bulbul:v2 supports 7 voices (anushka, manisha, vidya, arya, abhilash, karun, hitesh). Speakers are not interchangeable between model versions.",
     isOptional: true,
-    defaultValue: "'meera'",
+    defaultValue: "'shubh'",
   },
   {
     name: 'listeningModel',
     type: 'SarvamListenOptions',
     description: 'Configuration for speech-to-text recognition.',
     isOptional: true,
-    defaultValue: "{ model: 'saarika:v2', language_code: 'unknown' }",
+    defaultValue: "{ model: 'saarika:v2.5', languageCode: 'unknown' }",
     properties: [
       {
         type: 'SarvamListenOptions',
@@ -169,15 +180,15 @@ const text = await voice.listen(audioStream, {
             name: 'model',
             type: 'SarvamSTTModel',
             description:
-              'Specifies the model to use for speech-to-text conversion. Note:- Default model is saarika:v2 . Available options: saarika:v1, saarika:v2, saarika:flash',
+              'Specifies the model to use for speech-to-text conversion. Available options: saarika:v2.5 (transcription), saaras:v3 (multi-mode: transcribe/translate/verbatim/translit/codemix). Note: saarika:v1, saarika:v2, and saarika:flash have been deprecated by Sarvam.',
             isOptional: true,
-            defaultValue: "'saarika:v2'",
+            defaultValue: "'saarika:v2.5'",
           },
           {
             name: 'languageCode',
             type: 'SarvamSTTLanguage',
             description:
-              'Specifies the language of the input audio. This parameter is required to ensure accurate transcription. For the saarika:v1 model, this parameter is mandatory. For the saarika:v2 model, it is optional. unknown: Use this when the language is not known; the API will detect it automatically. Note:- that the saarika:v1 model does not support unknown language code. Available options: unknown, hi-IN, bn-IN, kn-IN, ml-IN, mr-IN, od-IN, pa-IN, ta-IN, te-IN, en-IN, gu-IN',
+              "BCP-47 language code of the input audio. Optional for saarika:v2.5 and saaras:v3 (the API will detect the language automatically when 'unknown' is passed). Available options: unknown, hi-IN, bn-IN, kn-IN, ml-IN, mr-IN, od-IN, pa-IN, ta-IN, te-IN, en-IN, gu-IN.",
             isOptional: true,
             defaultValue: "'unknown'",
           },
@@ -185,6 +196,13 @@ const text = await voice.listen(audioStream, {
             name: 'filetype',
             type: "'mp3' | 'wav'",
             description: 'Audio format of the input stream.',
+            isOptional: true,
+          },
+          {
+            name: 'mode',
+            type: 'SarvamSTTMode',
+            description:
+              "Operation mode. Only valid when using the saaras:v3 model; ignored by saarika:v2.5. Available options: 'transcribe', 'translate', 'verbatim', 'translit', 'codemix'.",
             isOptional: true,
           },
         ],
@@ -269,3 +287,5 @@ Returns: `Promise<Array<{voiceId: SarvamVoiceId}>>`
 - The service communicates with the Sarvam AI API at `https://api.sarvam.ai`
 - Audio is returned as a stream containing binary audio data
 - Speech recognition supports mp3 and wav audio formats
+- `bulbul:v1`, `saarika:v1`, `saarika:v2`, and `saarika:flash` have been deprecated by Sarvam and are no longer supported. Use `bulbul:v3` (or `bulbul:v2`) for TTS and `saarika:v2.5` (or `saaras:v3`) for STT.
+- Speaker names are not interchangeable between `bulbul:v2` and `bulbul:v3` — each model version has its own speaker catalog.

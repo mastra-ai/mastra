@@ -1,0 +1,781 @@
+{
+  "meta": {
+    "name": "core-src-tools-provider-tools-ordering.e2e",
+    "testFile": "src/tools/provider-tools-ordering.e2e.test.ts",
+    "model": "claude-sonnet-4-20250514",
+    "createdAt": "2026-03-24T19:00:59.714Z",
+    "updatedAt": "2026-03-24T19:14:53.879Z"
+  },
+  "recordings": [
+    {
+      "hash": "f8741f3f199e49c5",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-20250514",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a coding assistant. When asked, use both find_files and web_search in parallel. Always call find_files FIRST, then web_search."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Find TypeScript files in src/ AND search the web for \"TypeScript 5.8 release\". Use both tools at the same time."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "web_search_20250305",
+              "name": "web_search"
+            },
+            {
+              "name": "find_files",
+              "description": "Find files in the workspace matching a pattern.",
+              "input_schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Directory to search"
+                  },
+                  "pattern": {
+                    "description": "Glob pattern to filter",
+                    "type": "string"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1774379668731
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "b9328467-aaa3-4c9e-ac02-81cff94547d0",
+          "anthropic-ratelimit-input-tokens-limit": "450000",
+          "anthropic-ratelimit-input-tokens-remaining": "449000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-24T19:14:29Z",
+          "anthropic-ratelimit-output-tokens-limit": "90000",
+          "anthropic-ratelimit-output-tokens-remaining": "90000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-24T19:14:28Z",
+          "anthropic-ratelimit-requests-limit": "1000",
+          "anthropic-ratelimit-requests-remaining": "999",
+          "anthropic-ratelimit-requests-reset": "2026-03-24T19:14:29Z",
+          "anthropic-ratelimit-tokens-limit": "540000",
+          "anthropic-ratelimit-tokens-remaining": "539000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-24T19:14:28Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e17ffc26a16d8fc-YVR",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 24 Mar 2026 19:14:29 GMT",
+          "request-id": "req_011CZNSRLmMHkwHamvLAK5ne",
+          "server": "cloudflare",
+          "server-timing": "x-originResponse;dur=1033",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "1032",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-20250514\",\"id\":\"msg_019ZeaXWrRSM5rrTjGcXLYW4\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":2206,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":3,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}             }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}         }\n\n",
+          "event: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"I'll search\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" for TypeScript files in the src/ directory and look up information about TypeScript 5.8 release simultaneously.\"}  }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0         }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01SEQTBpVHAjbAnx9PpyUGgC\",\"name\":\"find_files\",\"input\":{},\"caller\":{\"type\":\"direct\"}}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"pa\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"th\\\": \\\"s\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"rc/\\\"\"}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\", \\\"p\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"att\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ern\\\": \"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"*.\"}     }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ts\\\"}\"}      }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1           }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"server_tool_use\",\"id\":\"srvtoolu_01U4be7a5Xff4LT7Db7XEGvW\",\"name\":\"web_search\",\"input\":{},\"caller\":{\"type\":\"direct\"}}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"query\\\": \"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"TypeScr\"}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ipt 5.8 rel\"}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ease\\\"}\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2   }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":2206,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":143}        }\n\n",
+          "event: message_stop\ndata: {\"type\":\"message_stop\"    }\n\n"
+        ],
+        "chunkTimings": [0, 1, 0, 542, 1, 613, 2, 0, 1, 0, 1, 0, 165, 0, 1, 0, 3, 11, 2],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "57255295a6877dcf",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-20250514",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a coding assistant. When asked, use both find_files and web_search in parallel. Always call find_files FIRST, then web_search."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Find TypeScript files in src/ AND search the web for \"TypeScript 5.8 release\". Use both tools at the same time."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I'll search for TypeScript files in the src/ directory and look up information about TypeScript 5.8 release simultaneously."
+                },
+                {
+                  "type": "tool_use",
+                  "id": "toolu_01SEQTBpVHAjbAnx9PpyUGgC",
+                  "name": "find_files",
+                  "input": {
+                    "path": "src/",
+                    "pattern": "*.ts"
+                  }
+                },
+                {
+                  "type": "server_tool_use",
+                  "id": "srvtoolu_01U4be7a5Xff4LT7Db7XEGvW",
+                  "name": "web_search",
+                  "input": {
+                    "query": "TypeScript 5.8 release"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_01SEQTBpVHAjbAnx9PpyUGgC",
+                  "content": "{\"files\":[\"src//index.ts\",\"src//utils.ts\"]}"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "web_search_20250305",
+              "name": "web_search"
+            },
+            {
+              "name": "find_files",
+              "description": "Find files in the workspace matching a pattern.",
+              "input_schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Directory to search"
+                  },
+                  "pattern": {
+                    "description": "Glob pattern to filter",
+                    "type": "string"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1774379671287
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "b9328467-aaa3-4c9e-ac02-81cff94547d0",
+          "anthropic-ratelimit-input-tokens-limit": "450000",
+          "anthropic-ratelimit-input-tokens-remaining": "449000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-24T19:14:31Z",
+          "anthropic-ratelimit-output-tokens-limit": "90000",
+          "anthropic-ratelimit-output-tokens-remaining": "90000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-24T19:14:31Z",
+          "anthropic-ratelimit-requests-limit": "1000",
+          "anthropic-ratelimit-requests-remaining": "999",
+          "anthropic-ratelimit-requests-reset": "2026-03-24T19:14:31Z",
+          "anthropic-ratelimit-tokens-limit": "540000",
+          "anthropic-ratelimit-tokens-remaining": "539000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-24T19:14:31Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e17ffd22abfd8fc-YVR",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 24 Mar 2026 19:14:32 GMT",
+          "request-id": "req_011CZNSRXXFS6f49erXvMjHf",
+          "server": "cloudflare",
+          "server-timing": "x-originResponse;dur=1254",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "1250",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-20250514\",\"id\":\"msg_01EsTB8drEDwi9XW3kyUjSkY\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":13099,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}         }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"web_search_tool_result\",\"tool_use_id\":\"srvtoolu_01U4be7a5Xff4LT7Db7XEGvW\",\"content\":[{\"type\":\"web_search_result\",\"title\":\"TypeScript: Documentation - TypeScript 5.8\",\"url\":\"https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html\",\"encrypted_content\":\"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\",\"page_age\":null},{\"type\":\"web_search_result\",\"title\":\"What’s new in TypeScript 5.8\",\"url\":\"https://medium.com/@onix_react/whats-new-in-typescript-5-8-32d0c7696103\",\"encrypted_content\":\"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\",\"page_age\":\"January 31, 2025\"},{\"type\":\"web_search_result\",\"title\":\"Announcing TypeScript 5.8 Beta - TypeScript\",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8-beta/\",\"encrypted_content\":\"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\",\"page_age\":\"January 29, 2025\"},{\"type\":\"web_search_result\",\"title\":\"TypeScript 5.8 Iteration Plan · Issue #61023 · microsoft/TypeScript\",\"url\":\"https://github.com/microsoft/TypeScript/issues/61023\",\"encrypted_content\":\"EqUJCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDD5oI82J0H+Hqdo8choM7FjYW3V1RKJkNPrwIjCHnzmQxx6sG13HH5Fmn967S6w0OIfj7OJEZnbI8omh2Ma627Xp4qSobAN4dwRWdt0qqAjrmiz6mzD5FSRXf17pIR/UIfDifrGj2S/Hw5HiN5NVvAHpc0Ga2Wv+3cIu6lvNaDdudk/sTppPFZhP+oMZOBcWq3J2chDz5m2qdu/odZ+tFWskO/jyRzQVXMXIapCfHE8mTznidQXScECO+ZGuWVkLTSGTwH7mVXtR9y9odv2RyT2j4iWfo2bskVpEOyPjGrwzway3DdYwysi1GaTzVrCoYxeP/gG03ueLNeCKimDp0rt73xC9dwnbaQlkqk2kzE5/OpMoVbjqXSO4ZC33y+uGySUYWUz9DIHfo0NT0QQHnF9YXn47T6GUlk0ItygszAg+ziolDvsF7G5ThsV2G3GO76EbcGnc2jsKWk6W9PvdmgT4szUk5UWhn3t8hGw1v9X2YvLMBQtSd8K7JVksPt+cEed2HtnpUaiVVv1O0lGShWTR2SJqxuE+HhhljpCM5FvYVB5Y0nOkxgtwCEd93V/K6aQzr7lRdjmQ/MQSkdjQcnRrhCYtZ4vQdGZQc4CeqIhYPPc9mDaTbFTGuiUTPlVcgsMZaqLcUDP1eVlQNYGPkQIuM4Gm6ya3IPmnmP0j1Qbga/IoQk3Sr/W9UZ1PRA4yWtMl6/UOs/OGr7lhkOjJPW5PjDdS6Xsh6m8AFj+rpCbUjYrgFysuni6BB95A5SHEWbrz7ErzkhftSZk5NljSzfckWFMVm3M9MajUm8b/TGs52jj88U93oKP6hV+HurS939lJcyI7SJuKt/MOpWHs+Kqc9JFvR6pyvnF6J9jFV5W5COw1/5YAq4GcShYOWYb4x98DvrhN43JfG3uVA/jZd+pe76/In8W+M3nKz/cWOqnmdGIOcg9E2zRHhf8zSQIZEuwbFnQYax/Pg5VK/b",
+          "QOu1gcDArGKHb0lFkgfhULwLnZp89N/WNLUWgwByk974drVz3k3C+R6wwJ5s9mXtCnK3gZddPmaAensEt3S+uJORJGSxcZC6ucgboavE77ObdSLlIZYCDFhWjN+anofwpm7RkvDd1BvA/jzXIcBSwNYxFpOc3qN+SKK",
+          "yFa3XLGcPCpQ3fKmohwtGtx1tAqtLZ/TQ2zztlsSQmBzEtxt0HAI0cU29eUHW9IOtte1t1X0jkZyXc2OvkfVmgikYKFfnAHDaoAU8XzNdU4wndRYAHj5Rr6G4nKMkUzRGxt63LNDstgX0VIP5igpceifzhI4dIbOck9FpcvNXWcQMgOQGCkIOMqQHLGuCt6JN6i9CxJPngT4f1eo01RXqUUgRpTRjBPDV5MlN9OAFDqQgKcskgGrGO+H1XV2YXzZOU77GcTlUU4AKCHfPbeQvl36VSnRFmGzchggfKYPPl4Rm/ZI1KydDDQtVbQI5fg4whxlLASuv3uVxk6z7F7wpq2Uh+k8XLHq3kouFL14KN17+5G/1YT+HasR43wM/cDXhgD\",\"page_age\":\"January 22, 2025\"},{\"type\":\"web_search_result\",\"title\":\"Microsoft introduces TypeScript 5.8: Explore the latest features and enhancements - Neowin\",\"url\":\"https://www.neowin.net/news/microsoft-introduces-typescript-58-explore-the-latest-features-and-enhancements/\",\"encrypted_content\":\"EokLCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDFjVN9D6z6RvN7voeBoMvr0jQdYbfq2GvWC7IjCsckl0eud2C+XP7qDwZepuI0N352mUHMmnKkIM7vI7SWgJLJdfa9d6YNAr/NsticUqjArK3UZ7MR6J5l2QZGrG9Hmuq8vnvSAveCX4OQHWrSBjZyO0uqGEI8ETUETqY27ovT4w/8F3rhTEbUlo4/zda6sXohLX2Co9kog07MNcCROOmrDXnKqSDWqcgP7Jizy1dAr+4SyJqg6SY119JuNkbrsuC8w28zSSSoR03Kw45Pn/hLrdBzbm1IaHitEAWOEe83ewb+lUJFsIH2QJ/yjOWsJxZud2YV5L3CvfBmRvwtBfp4CIbFIMspXV/en1WFAV7DObPtiJIzN4v17i1iscARiga+SqntUQC5ak6ngwoCZFa+oT6K2odzdZxZbF2sCvWXACpw1ZLjbm1xaGSknL9OQX/ziL70agtz+hC2BZjr/W9l5TBOuVnLzpeDGvYs/15OHMLh+8aPhPEyFFNnMMxHwqtvyocxEIZhjZR2sPrmIYa3z7w314Nqr3qCu2uEcVv0DAP9xHZzANcGYb1Sjj+Xq1NaXm+j8NWRZv80BHnkhXPkO7B5JF2Ay6VA4Oqp9BIa2Tp3FB2pSg4Awij9jVhoUGBcCHOHfTLcOpNmENxnM7IQT7RINjlVFD7koXIawJP0lBrBMvRuChqObHwcVpxNONVxO3D0bsOFkS06ExqEM32WmvoYRHTpTXbyYsAdxqYX+ERe8HEeJMeFXLnZcxVC4KDZ3eOugjHtLNGkbAAHE/hOzTLpXfAfHpYAucyU1VsMXiCaVC+eFhU4i9HElAvXjoLIVV/hlgmQJAhxkCsnWkaVtVEC63qhq0MnlT0aqd2A7KkUZYHbOF64sYPcZ6fVrgrj217dCZ1pp/1C6MGBdW5XgsQM44eFYN1GJHUOzP1Y1acj08AyAVso4HGbaLWhTKEfT8ZYtO5out3teCXFUkVihqFvs94Kr4FH/NIgOu6nFDqstUmBrI2KIiZiN/pbvRln1Gu7VZjuH+CR1gZNNid2qLoVozrShS0QkhqH8YxR1L1YteIgEiFfNPjK4sVxal0UYr4RpTB1F2mb47c3PFFqEe2cN93LAXLbW5xY9zOBDhOLcNmA2M5MkkfLHtadQJHFPc06ubfcFwqlu181o1Odz6ILvEPe0lXSIwpUt4W5lm2OAokUjBso",
+          "JBVkfh+rH6Cq38bgLbi2WjNL7rDe7uuuoiArpUyN5BDOlwdjS7S0iTtdhZH0LmBofxH4Bl8PGqHanXJrFmcUiZxKXTUgvu3Bfk/yCHD1WjioDxBrQhn2o211GY2EEWlIUn1tZm6XwdlgC1TkxbOBid9ur0E8ZeadqLSk0BX+kP7wFeS5YGzvGIBJ8R69jQ8ta7WQykq5Hlk3n4NLcZbhucpOwNx3mut7WCCRQ+JhB1csS1fN1BQCeEiessFEh6MengngkuK2aCV1xn9azE/aoDHD43Z7R54E3nvd2D0jS8tw/itOwAdMlmDg9UtjleAK4UDN9MnEAtlenk6zJsjRiJbcgx6Kj03XLkq1teuXMrJ+GBwKHSEmkL+ui7rhwW6UEl1726M61fvXeYRYKrCN8TkJPsB0EXqWho1LxVAVwQh92XUH38yscIy93DXgM1uPekK5iAt49hrcsXWLF8sgSCJsDXmeuQ/KFdB3fuWcWRSTU2Ld6stiaau7K0xFe30g1T8H9AO5ERSHNg8OwfJq7VKYqr1ByR/in5FqFgiNtvLaCs3UJFyLKpFiWskkTGkN+xAql3+J3SlVrqshRhJpX/VxoeJq/hxMWbeI6uhgpmcN72aRgD\",\"page_age\":\"March 1, 2025\"},{\"type\":\"web_search_result\",\"title\":\"TypeScript 5.8.0 · Milestone #212\",\"url\":\"https://github.com/microsoft/TypeScript/milestone/212\",\"encrypted_content\":\"EocKCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDJCImJ/imxjh+CX9txoMxKxNM6JpuEr+8UITIjCjtXrfJyRC+lRg6yd/wqdwQp+lRmCLIl5xjQ3vJwFMTX41XnGo/XwE2CL+JuyBQh4qigl/wc/66i1Puzrq34kcQz7KHytDvvskxal31andfmpIEcr2DOtKMbi5ZwrzvP3aW8Ry3e9yIbi14T16yv+wTdlH1/34QDk1GQFZmAOlLbtM232TthMOTWGHKCZAVcj/vHnhqQlAcd5gEb7K4eqtsEDfv1lVptZ9Ilfa5MnpsbJ6P0w/aX2283qTr3vhf5sPEnn01qOdYH3hzVnzwNxLePFW9vpwaXGsQg5ExO/Ny3fxnq8q9wTJPl9/nqsgQHM4PYFAuaXmjOB1BbNPuRYY9dgfcTr8ys+/e5SHM+YepEH9t2WZ6z+1Jf4vz2CICdKq5qotV6dhcMtQdNuaFoDw7RUfT10ptgaFTvfOmyRvsSR/CC1cu6wJQO/Y6UQYMaCnYyZTVnKPGD1gV+he3wi5wvE3ozNYq0koKBGkH/eoMp8lZanW3LTYHd+g83lEqnMOwMe6aRpxUoXPkTQga6HyCE4dLxKEEoN8D6vIRebm6tokFAIoyV2wRmxeSJlW41wbpFNuatenNWMMXh7ZRUNMpkKyI0TVEFAobm/bWEMhZZgXhF3ZLIyASGTMycyBR5Rg5LtM0i4PMsJmB+5ldB5VAxR6cqK77ej6Z94qi/rQHmKU1SKIb4Iznj8eOUgQF24bRw5fR0LPWYybxWm6MEPKxgyI5ZOuz88cgAdbEr6+tZhtBkJYNCsiO6vuLJecsetjsiVMiBbUD4dP9dSZA6KHV7eC7T6zqHF90PinZ0LKMG9N1hTEbG0/Dw/3A508IqPfrBJ4n3//m0OuMZDGv+LnD9blPwUsbtASEpYiaKfyuVPqDt3qUKZt7aGACZcOGKs87Z7mA9RpK/qvx5i3xQE4R0LpTFlUgwa60TlsI3XlWg+NXrAQ4+U8LnV81lxkIm+UPZoUz1bHSLj78c5zpiV3lqnIASAxquNYN2wpW+0frnYQofXbTpoXKVsQ",
+          "wzU/9F1wOKYBWGl84H72eg1Ng0IOp7Z5E+UGTAi8k6SbLVn0az2hRftpub50dPNz1k0BDKatO5LdW0GKRcGh8iKSvcQpglLBDjkNXj+ModsTStc5LnWwVh5abIbO1ob51e5/dpANS4+Gp/0pYAcwh8kJuWm9NFxImY+0Vy7/uv/67YAsi/BAcaSsQa1TnuWmWubqpRf17KPdCMqEVFwjQmylCBEuHMIT/dY0b5f8HnzclfMGe/LNi/dYh6mwoV5G40vARkVTMjnCRIsnjxCyFbkjZdNPfkVwtGrqyMfGgagPK7EQCH/B07gR0U/3ESxa6snkxoWtpBToioHEsj0uh7mNpTTqJBbDi0DwmERmNUGafOqp701fq1K0F1x++m666FJ4KnpiDjtzJRc/2pu6ecf0ZTxC3Lio9t8ukyoeIKI8KakWBbcmmKfxe8y5V0g8sdXSLGwyXT/+1p5IORAWDxDwAYlMqEiAyP5347n4fjJi2wDEnwrDNLeRmg/D5dSkf0I0r0/a+D69I4Ml6RdQ9htnPQmQ1q9u/0lItoAg+E9zXEw3VUSMliguV9ZzHtwoCPCsAA3FHguahj3IhRjgL+YXGAM=\",\"page_age\":null},{\"type\":\"web_search_result\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"encrypted_content\":\"EuMcCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDLquInF/EbKILnA6yxoMm7M1EQBwyAEZ/Sj+IjBBjmwUdA/Bq4R/UxE34ofUPnIqTKXayUgb5ExuPWj1bGzzmixEWC7waa+SexbQiX4q5htNk0gJU8sIynbvr6/XLOexAyTSvLGDKfNF7rEiBtDmqrYZT3Nq/3PS3AD1KMFESf1ZzNl+bkWkq21Wph5c1afj6PtXWEg9wInR9Bp0MtKSsHM370KNXloOVgLgZ4cepYRSLsS6wWO8dFyO5D7p9k54pPu2Z1QMwffCgQ2wtH7/1JE5g9O7gBAlgKlxCPCOspCxokesmPb2rC2n7i0g6LyOG1ssWbcygj8BCfJkiFksYH7xERlAnxzJ1Jcxn60tP7D8kDmuCt4JSXsdvUu0ZKYvUwJOrh3EIZC8yHYicY7O2MrnbpTS44z6ablfVTfxAwrd9uFOiy4q+CZg15PSMs6kSH49QYZAnepvVF982vZFrkZDX48wJ9ho/ozbJuZ7m0BH55TnmU5shYYxES5m/6Taq9qnYLce9k+h7Qs9zL+NjZ+7QpS/KxQyqnIjsACjxP1D+w0QNI5MEDJRv7mtS6Aj2wHQ6ty3NGJdhsAaLIcE96XzPgCEzQmgQNg1705FmkgWCpf/fI7i5xKo33F3XYGAxls6DFMIitQCu8M3oIbIq9cBunXIO159NPoQP3NMn1Ncbsq5oi6GYtDFTITngDGQf+1qEklzdJ5BvkKe78ayKGue6iIivbVBlgNZ9IjBe2JUsMGMq7GVd2z251soF9dr7+rFOczHDdrvt6AwdhNpDC/ohRX8vhhvwPL+4Ot+LDH8DDE1/dnq2pY5GvPRcxtpDYZe//HcxyuNPA2/9jcpH1Z3zUxaTvKucLhUgBj5dFAHSlbGU9fZ/lr2dEBrVRI1WyF2aLe9597sA/5GkSOfPAxW+gIa3xL+25DVEOsBgZakXTbQitOcwhNW4eFa4xg38AhHvEWKBGALJNa4v2uCMkFMwu5VLUwRpch945h2ybACMCUQs+OR7GCuqcSGvDfr0uO3js7CFs6FzDcAHPlrhdL/cQZFxz+YorUwvx1VFox/VxNvV7wCROB1KMNRtMgEIVIFdIUcFdKQ",
+          "IiS49OKAFCjoLyYN/8ubpjLVoapSoxL0QvIpgCZlm3N5aVBAm6PgBydIBTLO5I+VGDGCR2BXT6U/yIcPJvF5qi5aI/m3USna6GBHT2g5vOV48/Rr25EZWokEwqOFXuQ8np0h08pl+UlHiDpuOGkbrLHEXbCn2MkKZrDvCluLg1glyyD9rWJ0ZRW11P26typuLzuzQzzsGQFPuebcNDtvEmE/Po2Jc3mPbmjXEQKmq0O5NywgMbMNfkv4OUBWwz1XJm8p7csGLqh2DL1qXDQ/yIhQ2inHOcB4xooQCW6L3jsIs6NuhdXlNe1mImDu4gPQCXG0O+vSkLFq/U09MUMVJjDidR2BCnOBhzGplJsiH6PVO4t8Gk61XhgnoF69MjTrVCLRLjoHsMgRuBn4sIoZYlhJSBEUd8EgyiSj9CO4osvomwKS9MjXuB+Q8S6byglSijv50rRzPS2bFyasm8x4IC0r7JHbSRmr/zIgg3vrW+SS0d1+b+LqhpWIzNW96k1XlmXLRhDAWjZ3c8jwib4tu0OY7eQ6Zqn1MrtzKEZBX6+zBcSsQkGuTuj+AFIgCF8Js03c2rGaGfjEZDddh8ZiKflkbu+/v3AkVZFbPHznsRa+wpQhPSygKiU3eJDrkSlLj9Osxpnv1YJvDrouxvClHMN/E+JN59l0M9CND2GKshfAhkCE/RJoU8U1kcsDG7Yk7CnsOxLSsVzqlA0E0Xhuh/mFXioG1AYnCywEnMCYhz/ud0yzsWtlHYt1pLs6jzC/PQBLDfqY8V6ziVWD+XJh1NswMfcSaD1CwhriSzAkD7YkLaN8DAxtueEUO/jKIWHRjprOl/X2KCnE9pFp2EMZLQRDM51r533U45ZQxNCO9YjMM1V/RRBYhzDjpGJbPcJpndUdqclJqVVA+DHx3Jsmw54SX/OnULlsjw4AWdHGsTEqYl/hEUKVqkRpS7aDRrcDz9HjPL0WAOt9efkHVtX06rUIFR6nofzYOp9+NQV4R+ZUR0t4bC6XKmDlMp3zdoAU19bAwHsQMkwAwUnjrYQH4Cfs5JaXyeOjE/7vZIQZpxpd8Jz0+zOfVwnxx1Zy6XWJVAURJ5HuMNlnSRxZg4EXebGz9OR50EF2HvbINoNcqQ6YNylFJmQIfYb/KMmV6ZOjAkhc7csZYoiNrBUGLGmbLWq/CX4t+LREijFg0pyWwzGryvtx+eMp+EPgqa/TR0pKtpShM7c7zLBaQ5y/zXGV2GbmFwctI+IxnKTquPX2RXqk9zO80gmsSe/O5jiHX9VecA2FPCBCMARO+Dh9LeBfjceZg7mqfO3InCCwxuNgCmCruyh5/nehcGaddenNk/IPefoCi+09miX6yXsarSwCC3hB00S2+XCw3wOlS5x3u2aWm45OhCIIr52ooziU71Hm2puKdy/J1tTwQiOR802gkGBYLqK7vEhxLEEKzGFqgvg/QU89Ex5yJBx45rkjWc54wXB9b0eg7QoKM5CFJuY3OZDSf3iAUdRlSHt822Uv2Dq+CF0zbgGEuYxkvu8d/kV0emei7GWkJlvcyHeOilHzue3I0E7ONtiYZkTmlp4EOdid7ybOHyZtIt+M0vfFCUyAFVaCj9auPuoQNl+852yrAoNMka/nyzaoPEJ/RrtiN15qV9Tq11G3P8b5QENKZQ1CqJW+JuzHBFQDlRB5gXY5A3I15p3ni6TiQgIKhAa9EfVQvx2F0++MhO/QwDL3KZwEqF4G9+uQFIwLTgmUcJOrEnMv7wFvKsf8kOqPfyC9o1PH2LJ7bhWuQnKVZD2zUsSv",
+          "ynRcKgYks+3f0xZSXLt94R7YVZu9ATRslK1rqMyGB3frcq8A7mKccuC0i7dE6jo6PehwIOVlkoWK4gLG2SKilrtvzmusCJUav1f6vtyYXtADFg0oGn8p3VT4fio2/A7N2SU2EKNDfkt9vln6doiHLkRWYFb+QcilZY/2EIOniTeYUhVMOikjw/nAuqzV4bQp0Q3g3Hb/YmFCKHbLDz44n4pyfdQSoh7bQs9kmNwJZnsRfJ2vq1AYy7wTokaLgrrRSRMdOSsZkz3CLHs0v4eGeXmOCtEFQLxL1abGCGD4mWN6tx7T5rpBRGg5r4WpeBp07UuGNbnG/Q0FlEjnB8com78p/c4wwMMqFNrZ2v0B9OcrD5BRfWx5gWo+1CSYEV/sa6XVjyT84Ejv8Ruw8MfyAHsNwtiBH/CtN0Ers2TSvhlNYjz284y7L2KF/umeixTlyuXPUMCFcfIE915yNpd6wPoWl4lStaiFaSlWtupMCl8/UBrPqOYB5F7B+YKWAp0i7bTSfwejRKOU9kVrVhu6i3KDpu+AuDQoNPIi5SDoctJPqladGF/h8F1C3qU+VuoW116gjEsncy8EOlrQnuTGAsOjaTr5j3QTaw6jP+VWeXpYy0WAxzMoU9Vbj7sreaAVgnje+HUdMgYZj/IjeJ61tSZ1km9DUqA4wUQf9Rc9Uim0BxVvXl5xEssumzDkY+zL5jCu+eBQAY7EsX+Bjpr/bZuH9tbv0LwPKTmX49r4I+KjAap2aBQkHRFVVisVVGyys7EaujtyfcQXfxLDncA78q2v88x7BXGhI9sjrw/uCQRfdbJuJmcTNNZ5+AwqoUekgN3T1MXGgw7M4Ken6uRsKIr+u8WcCC5dpIu5XgbCJperVt8f+j7HeEnJnMVDC1Tb5qPeSQ0mzIFS/iwMq5VRxfYswiXGuDF+cNOdGgxC1HpDo5P+lx284G11pcPgvOfq0x0dCT3AmDd2lzsBkJHvXgCC2ULgA2jtlDz21NZ2YQUgsl9x5tcxdTmI4bYqSosQgp1W6hcMKdiSvlOUv5aKNrzw0y8tPcTFDO60flxMnPojfAyjpNmlWen4KPbIPoeHi+pPa5Op7y9ZyzNzMRvxrLKXcZ5fK2U3FLukXH84CWQIJhlUoVPwJArnGgwmk2CeHLWpTHVx4RoF5zoAcdrJ96uPnBSK87U0n26MCuoMKh5lc6BuAxwhN1kTM4bU8xQOaZzRZsTa6+PCeIudeafXJOeIOyVzBwPAi81fyyBD0V3g6ROD7HzJUuLhz7DewN4USysGCSAJJLZdVo5br9Ng0ZqulGNbnD6yDNmx8JiFpU1mahZue7imjh6H3J4INzTtfbRfuHf6n9lVUeTB4UF38VQJqWazt3jV9It8lFbSb/aw0ZE3vhwP4Iz5JM/z7ZlP3b2xojNQpZ9AesFN2q1lcikeURKK6pOv0xYc7ItSzj2aqt30HnftlUXRsI08RyfK5ufByhV1OqgeMp5mS1WgfDGwdWhlQei4QeNUg1bN7SdYvkQkPfLp/oudDIs9OVycIsV9YAJkJ29codWgC2WgNGxEbOFh0U/JW/esqdykIn+OL+WZ/3P6qlTZOxMKDAOKky6keGlooFj5NZCMmMyHrjIRTaPGfyNtAGcR0Gu550PDA1EKeIz6UpLG7Z84N29A/riJvK1KCRfDgMS39iVG6KgdG7ljB0hHl7tyVKE61UIrhuZQvck53TtiuUR8BsGIrgLz9p8dD6VgB6yswoR33mwUfkQHgt5RyFfVP44R5yUzxvAgLnw2PvEpV0gn9",
+          "jg28QHOGXeQA39WcCMD/+h+TprAifhVyfbtp31oI2Zy9eEcSuReTHz1Q9HS4ysztFwlGn44psqZqG9JWqe04BoL42wIMIk04YAL3JXs+cAiNkqa1CLGV67hhq14Ic45hqhBnMC6oxjx7TTuf+3u2X/V42Qs+d/idtLIo3HSD4MYAw==\",\"page_age\":\"February 28, 2025\"},{\"type\":\"web_search_result\",\"title\":\"TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online\",\"url\":\"https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html\",\"encrypted_content\":\"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\",\"page_age\":\"March 3, 2025\"},{\"type\":\"web_search_result\",\"title\":\"TypeScript 5.8 Released with Improved Inference and ...\",\"url\":\"https://www.infoq.com/news/2025/03/typescript-58-released/\",\"encrypted_content\":\"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\",\"page_age\":\"March 8, 2025\"},{\"type\":\"web_search_result\",\"title\":\"Typescript 5.7 & 5.8 - New Features & Direct Execution\",\"url\":\"https://javascript-conference.com/blog/typescript-5-7-5-8-features-ecmascript-direct-execution/\",\"encrypted_content\":\"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\",\"page_age\":\"November 24, 2025\"}],\"caller\":{\"type\":\"direct\"}}         }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0       }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"##\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" File Search Results\\n\\nI found **2 TypeScript files** in the `src/\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"` directory:\\n- `src/index.ts`\\n- `src/utils.ts`\\n\\n## TypeScript 5.8 Release Information\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n\"}}\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1            }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Today we’re excited to announce the release of TypeScript 5.8! \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDAwMRIjMPjGZk7MIYxoMSsKsV6Fv4ToJkn9qIjCT8V/9u9Ox/DAhMSLZQM6bhFPuHCsX6FUt/g94x8w5rzXkxypm+NCAZQwj5cgJ7yYqEwxAkQsLTQD/fMKiYAAsWmNZRXUYBA==\"}}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Today we’re excited to announce the release of TypeScript 5.8! \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDIHAZdWcrhOTs+qzChoMyR6+GGBDz7/kDSopIjDvQl0NeYQx6qYsOfg0Yxc7i4Bk0yy9YCYNPvahQ9c1QEQjdJ0eoiWBB3ZLI7UA1OsqEyIuPCQwVxvTOzmtDOCQ3vXOJpkYBA==\"}}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"text_delta\",\"text\":\"TypeScript 5.8 has been officially released\"}           }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2       }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":3,\"content_block\":{\"type\":\"text\",\"text\":\"\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"text_delta\",\"text\":\" bringing several significant improvements and new features:\\n\\n### Key Features\\n\\n**Gran\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"text_delta\",\"text\":\"ular Checks for Return Expressions**: \"}          }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":3               }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":4,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"However, as part of this work, we added more granular checks for branches within return expressions. This enhancement was not documented in the beta p...\",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpMBCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDPpz6jKkO25BLH4acBoMvpXMzFvjD0TyCq33IjBlaKN+m3J4ACZHyeeEb7euvTSyn6Njx+vZoaMyHHvwsmkrHVFPl3rP3wSWS+uAtgUqF+kMMaCD/fXgYfrwaQqzM/a8WhuzV+8IGAQ=\"}}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"text_delta\",\"text\":\"TypeScript 5.8 added more\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"text_delta\",\"text\":\" granular checks for branches within return expressions\"}   }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":4    }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":5,\"content_block\":{\"type\":\"text\",\"text\":\"\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":5,\"delta\":{\"type\":\"text_delta\",\"text\":\". \"}              }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":5      }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":6,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}            }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":6,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"This now changes with version 5.8, which checks each branch of the conditional expression against the declared return type of the contained functions,...\",\"url\":\"https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html\",\"title\":\"TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDGy0bE/FJQ/kc2NGzxoMDGL2vwZCS6uSiYKYIjBwR/dDc52jTsxbslPELp3rzNPQaBIUd1evW13Btco9JjgoyiHTlC8YOlH/emTERGkqFAbKw2aY8MJh/tb3TZYqSCAR2dKAGAQ=\"}} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":6,\"delta\":{\"type\":\"text_delta\",\"text\":\"The new version checks each branch of the conditional expression against the declared return type of the contained\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":6,\"delta\":{\"type\":\"text_delta\",\"text\":\" functions, if present\"}        }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":6           }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":7,\"content_block\":{\"type\":\"text\",\"text\":\"\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":7,\"delta\":{\"type\":\"text_delta\",\"text\":\".\\n\\n**Improved Module Interoperability**: \"}        }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":7    }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":8,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":8,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"The new version of the programming language brings improved interoperability of CommonJS modules with the newer ECMAScript modules, which should simpl...\",\"url\":\"https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html\",\"title\":\"TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDAIPHrBKwsYuKcjZnhoMqR/9BeecFDMs4X1+IjCNaykatcPxY3WYCA8VrWl/9KzN311PXbWMyfi5KO5kTR8N+m9xeFGFL+GVO1qDo90qE8hYj4NMUpWrReS9G0D+6vFINVEYBA==\"}}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":8,\"delta\":{\"type\":\"text_delta\",\"text\":\"The new version brings improved interoperability of CommonJS modules with the newer ECMAScript modules,\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":8,\"delta\":{\"type\":\"text_delta\",\"text\":\" which should simplify the work of library developers\"}            }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":8               }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":9,\"content_block\":{\"type\":\"text\",\"text\":\"\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":9,\"delta\":{\"type\":\"text_delta\",\"text\":\". \"}              }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":9   }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":10,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":10,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"// Previously, this would ",
+          "fail in TypeScript const { readFile } = require(\\\"fs\\\"); const data = readFile(\\\"file.txt\\\", \\\"utf-8\\\"); // Now it works seamlessl...\",\"url\":\"https://www.infoq.com/news/2025/03/typescript-58-released/\",\"title\":\"TypeScript 5.8 Released with Improved Inference and ...\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDE2JAgP/PnbPr67ZaxoMbJKoDdJXAy3uM39MIjBl3ccXdu2irL8efy8nTGDRch+DdN0SYvNnzw8DZ4tW306cSuCICIETj3GiAE4JeTIqFC34bbOWbtloNSp9I2OSMMpzg+HeGAQ=\"}}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":10,\"delta\":{\"type\":\"text_delta\",\"text\":\"Previously failing CommonJS require\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":10,\"delta\":{\"type\":\"text_delta\",\"text\":\" statements now work seamlessly under --module nodenext\"}               }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":10     }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":11,\"content_block\":{\"type\":\"text\",\"text\":\"\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":11,\"delta\":{\"type\":\"text_delta\",\"text\":\".\\n\\n**Direct TypeScript Execution**: \"}            }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":11         }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":12,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":12,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Since Node.js 23.6 and with the new --erasableSyntaxOnly flag, TypeScript can now run directly in Node.js without transpilation, as long as the syntax...\",\"url\":\"https://www.infoq.com/news/2025/03/typescript-58-released/\",\"title\":\"TypeScript 5.8 Released with Improved Inference and ...\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDFxaJXi7XCQIIO/qERoMAihTF+qdsNNphkyYIjDz3Cq2LqRnLapF/KYeJgmUu31Q30PrQ35ysJVpJvYyhiO8wESBkz8TJmd9v9gpWAQqFIhzNM9E9G319Pa3J7nULP2OKW2kGAQ=\"}}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":12,\"delta\":{\"type\":\"text_delta\",\"text\":\"Since Node.js 23.6 \"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":12,\"delta\":{\"type\":\"text_delta\",\"text\":\"and with the new --erasableSyntaxOnly flag, TypeScript can now run directly in Node.js without transpilation, as long as the syntax is erasable\"}             }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":12      }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":13,\"content_block\":{\"type\":\"text\",\"text\":\"\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":13,\"delta\":{\"type\":\"text_delta\",\"text\":\". \"} }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":13     }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":14,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":14,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"To better support this use case, the new compiler option “–erasableSyntaxOnly” has been added in 5.8. This option prohibits TypeScript-only features s...\",\"url\":\"https://javascript-conference.com/blog/typescript-5-7-5-8-features-ecmascript-direct-execution/\",\"title\":\"Typescript 5.7 & 5.8 - New Features & Direct Execution\",\"encrypted_index\":\"EpQBCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDEs2NTFf1CD9r154bRoMROx4fk3lul/SQ2vlIjCp5V4bb9aZc3mPjFZXQ7lMhPF8RTGmz8CIB/wtDgVLZbJIZuu8CyxJY8ftu+N86AoqGHuKIjwDD6tHEBHKAgBEOY8dKj1TV2NMARgE\"}}              }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":14,\"delta\":{\"type\":\"text_delta\",\"text\":\"The new compiler option \\\"--erasableSyntaxOnly\\\" has been added in 5.8, which prohibits TypeScript-only features such\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":14,\"delta\":{\"type\":\"text_delta\",\"text\":\" as enums, namespaces, parameter properties, and special import forms\"}            }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":14   }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":15,\"content_block\":{\"type\":\"text\",\"text\":\"\"}     }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":15,\"delta\":{\"type\":\"text_delta\",\"text\":\".\\n\\n### Performance Improvements\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":15,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n\"}      }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":15               }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":16,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}              }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"TypeScript 5.8 introduces a number of optimizations that can both improve the time to build up a program, and also to update a program based on a file...\",\"url\":\"https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html\",\"title\":\"TypeScript: Documentation - TypeScript 5.8\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDKV88B7/3NBXA95VmBoM/y+zjvXHVuNGEBOkIjDu/y0lKlvRmp09wR+oE/yoTkR2a1jcyCDyTjLt899SLdEEImsyAQomZ2b4vyCVv+QqEywStxyDFjmGOp83KT2YlaF5iMMYBA==\"}}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"TypeScript 5.8 introduces a number of optimizations that can both improve the time to build up a program, and also to update a program based on a file...\",\"url\":\"https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html\",\"title\":\"TypeScript: Documentation - TypeScript 5.8\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDIMx5JkIYbQ+Fs9nIBoMgoRvfax2HSb01MXjIjAQaYqtEY6O40sPfU6YuM9x2b4AcoUiqqbkw2r6Bci5CRTKTXTtWAQ5rjmhKVOYML0qFI4sWlTjhPFwtJowffWqmoMmQFPnGAQ=\"}}     }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"text_delta\",\"text\":\"TypeScript 5.8 introduces a number of optimizations that can both\"}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"text_delta\",\"text\":\" improve the time to build up a program, and also\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"text_delta\",\"text\":\" to update a program based on a file change in\"}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"text_delta\",\"text\":\" either --watch mode or editor scenarios\"}        }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":16      }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":17,\"content_block\":{\"type\":\"text\",\"text\":\"\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":17,\"delta\":{\"type\":\"text_delta\",\"text\":\". \"} }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":17         }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":18,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"First, TypeScript now avoids array allocations that would be involved while normalizing paths. \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDDvqucj7XNtKQbPXBRoMJ2dP1owio3sWDriGIjAgacjOKBo6Zp3qeKiAK//zfeDPnt+OFyZmK1QwFx9WHBWaLk2KA3uiB1ezUKvdHGYqFHFkfMyIsVqFNKlGwqS0e8dnRZAOGAQ=\"}}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"TypeScript now avoids allocating an array, and operates more directly on indexes of the original path. \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDOYFxmqN++yAJbMqHhoMu23bRvv24zMWrV2bIjB2OrcEIGs081Vf2UiY2XAOp4M/3phtXa3Y7+y86I8EdhMesXoRJEQZ+7zhlzxTaCQqFOHimJNBeCPMwFAWilWqBOEzmtllGAQ=\"}}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"text_delta\",\"text\":\"TypeScript now avoids array allocations that\"}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"text_delta\",\"text\":\" would be involved while normalizing paths and operates\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"text_delta\",\"text\":\" more directly on indexes of the original path\"}         }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":18     }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":19,\"content_block\":{\"type\":\"text\",\"text\":\"\"}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":19,\"delta\":{\"type\":\"text_delta\",\"text\":\".\\n\\n### Installation\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":19,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n\"}      }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":19              }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":20,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":20,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"To get started using TypeScript, you can install it through npm with the following command: ... Let’s take a look at what’s new in TypeScript 5.8! \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDH6lquMwV1DV3stfgRoME0Lpbjq0V5qH5FLXIjDJ45X3HpkuT3zsRO2r+f+n9AT7iwdFCwymoj+O6iavcE7QhTWz0jOD2wuNAAp/8vQqE1L/jWUpCEvlFD3Vk1cYf/QhN0oYBA==\"}}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":20,\"delta\":{\"type\":\"text_delta\",\"text\":\"To get started using TypeScript 5.8, you\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":20,\"delta\":{\"type\":\"text_delta\",\"text\":\" can install it through npm\"}     }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":20    }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":21,\"content_block\":{\"type\":\"text\",\"text\":\"\"}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":21,\"delta\":{\"type\":\"text_delta\",\"text\":\" with the standard command, or \"}       }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":21             }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":22,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":22,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"The new version is straightforward to install, you can get it from NuGet or if you prefer npm, just use the following command: ... \",\"url\":\"https://www.neowin.net/news/microsoft-introduces-typescript-58-explore-the-latest-features-and-enhancements/\",\"title\":\"Microsoft introduces TypeScript 5.8: Explore the latest features and enhancements - Neowin\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDONC2uV2B9ty4UVYfRoMnnpxhuw7LflkYOFrIjCGUfHCzR7iKOHaPMEBLbJP77VZekN9NUpioof/zweX/IYm523LNEj0msghsKOjwe4qE1LsFiEHQ2UZZtJNKNdGtZ0sum0YBA==\"}}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":22,\"delta\":{\"type\":\"text_delta\",\"text\":\"you can get it from NuGet or if\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":22,\"delta\":{\"type\":\"text_delta\",\"text\":\" you prefer npm\"}   }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":22          }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":23,\"content_block\":{\"type\":\"text\",\"text\":\"\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":23,\"delta\":{\"type\":\"text_delta\",\"text\":\".\\n\\n### Notable Changes from Beta\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":23,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n\"}           }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":23     }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":24,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":24,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Since our beta release, we have had to pull back some work on how functions with conditional return types are checked.\",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDC/0IdWhsFZqtB2VCBoMzbP7c+HV+5M6HlUhIjC6wkbnXPASNwPW1Ot0goBIJcRG0Q9EyEfKl792B02WWq9HIuJ6Rbu8C3eXtq2U5AQqFIo1lFOPdeTtkTa0p182628Pseh5GAQ=\"}}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":24,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Based on some of the limitations and changes we wanted to make, we decided to iterate on the feature with the goal of shipping it in TypeScript 5.9. \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDBoLZ++1amjn704f1hoMFi8ZTdqlU9EL7raMIjB1Cm/0eQbzXwxXcybgaBdzgSZ7YdRRPxRAzQqzaqZJ3YoknTMgiHJBJOrKmcLI4SAqFCqGBfWtkopFMDe2+eibAIFLXFlsGAQ=\"}}            }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":24,\"delta\":{\"type\":\"text_delta\",\"text\":\"Since the beta release, some work\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":24,\"delta\":{\"type\":\"text_delta\",\"text\":\" on how functions with conditional return types are checked was pulled\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":24,\"delta\":{\"type\":\"text_delta\",\"text\":\" back and will be shipped in TypeScript 5.9\"}  }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":24           }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":25,\"content_block\":{\"type\":\"text\",\"text\":\"\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":25,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":25,\"delta\":{\"type\":\"text_delta\",\"text\":\" though the granular return expression checks mentioned above were retained.\"}              }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":25   }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":13099,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":678,\"server_tool_use\":{\"web_search_requests\":1,\"web_fetch_requests\":0}}              }\n\n",
+          "event: message_stop\ndata: {\"type\":\"message_stop\"       }\n\n"
+        ],
+        "chunkTimings": [
+          2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 504, 512, 622, 28, 13, 7, 4, 13, 10, 10, 4,
+          313, 393, 0, 0, 1, 0, 632, 0, 0, 0, 0, 1, 0, 369, 1, 2, 0, 1, 0, 545, 2, 0, 0, 0, 513, 0, 0, 0, 0, 0, 0, 0,
+          407, 0, 0, 0, 512, 0, 0, 0, 410, 0, 0, 0, 614, 2, 0, 0, 0, 0, 286, 531, 517, 0, 0, 0, 404, 2, 0, 0, 0, 511,
+          410, 614, 1, 1, 0, 0, 0, 0, 0, 510, 0, 0, 21, 388, 0, 0, 0, 443, 2, 3, 576, 1, 0, 5, 28, 35, 443, 512, 2, 0,
+          0, 306, 10, 40, 2
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "896e74f4cbf86c02",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-20250514",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a coding assistant. When asked, use both find_files and web_search in parallel. Always call find_files FIRST, then web_search."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Find TypeScript files in src/ AND search the web for \"TypeScript 5.8 release\". Use both tools at the same time."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I'll search for TypeScript files in the src/ directory and look up information about TypeScript 5.8 release simultaneously."
+                },
+                {
+                  "type": "tool_use",
+                  "id": "toolu_01SEQTBpVHAjbAnx9PpyUGgC",
+                  "name": "find_files",
+                  "input": {
+                    "path": "src/",
+                    "pattern": "*.ts"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_01SEQTBpVHAjbAnx9PpyUGgC",
+                  "content": "{\"files\":[\"src//index.ts\",\"src//utils.ts\"]}"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "server_tool_use",
+                  "id": "srvtoolu_01U4be7a5Xff4LT7Db7XEGvW",
+                  "name": "web_search",
+                  "input": {
+                    "query": "TypeScript 5.8 release"
+                  }
+                },
+                {
+                  "type": "web_search_tool_result",
+                  "tool_use_id": "srvtoolu_01U4be7a5Xff4LT7Db7XEGvW",
+                  "content": [
+                    {
+                      "url": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html",
+                      "title": "TypeScript: Documentation - TypeScript 5.8",
+                      "page_age": null,
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://medium.com/@onix_react/whats-new-in-typescript-5-8-32d0c7696103",
+                      "title": "What’s new in TypeScript 5.8",
+                      "page_age": "January 31, 2025",
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://devblogs.microsoft.com/typescript/announcing-typescript-5-8-beta/",
+                      "title": "Announcing TypeScript 5.8 Beta - TypeScript",
+                      "page_age": "January 29, 2025",
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://github.com/microsoft/TypeScript/issues/61023",
+                      "title": "TypeScript 5.8 Iteration Plan · Issue #61023 · microsoft/TypeScript",
+                      "page_age": "January 22, 2025",
+                      "encrypted_content": "EqUJCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDD5oI82J0H+Hqdo8choM7FjYW3V1RKJkNPrwIjCHnzmQxx6sG13HH5Fmn967S6w0OIfj7OJEZnbI8omh2Ma627Xp4qSobAN4dwRWdt0qqAjrmiz6mzD5FSRXf17pIR/UIfDifrGj2S/Hw5HiN5NVvAHpc0Ga2Wv+3cIu6lvNaDdudk/sTppPFZhP+oMZOBcWq3J2chDz5m2qdu/odZ+tFWskO/jyRzQVXMXIapCfHE8mTznidQXScECO+ZGuWVkLTSGTwH7mVXtR9y9odv2RyT2j4iWfo2bskVpEOyPjGrwzway3DdYwysi1GaTzVrCoYxeP/gG03ueLNeCKimDp0rt73xC9dwnbaQlkqk2kzE5/OpMoVbjqXSO4ZC33y+uGySUYWUz9DIHfo0NT0QQHnF9YXn47T6GUlk0ItygszAg+ziolDvsF7G5ThsV2G3GO76EbcGnc2jsKWk6W9PvdmgT4szUk5UWhn3t8hGw1v9X2YvLMBQtSd8K7JVksPt+cEed2HtnpUaiVVv1O0lGShWTR2SJqxuE+HhhljpCM5FvYVB5Y0nOkxgtwCEd93V/K6aQzr7lRdjmQ/MQSkdjQcnRrhCYtZ4vQdGZQc4CeqIhYPPc9mDaTbFTGuiUTPlVcgsMZaqLcUDP1eVlQNYGPkQIuM4Gm6ya3IPmnmP0j1Qbga/IoQk3Sr/W9UZ1PRA4yWtMl6/UOs/OGr7lhkOjJPW5PjDdS6Xsh6m8AFj+rpCbUjYrgFysuni6BB95A5SHEWbrz7ErzkhftSZk5NljSzfckWFMVm3M9MajUm8b/TGs52jj88U93oKP6hV+HurS939lJcyI7SJuKt/MOpWHs+Kqc9JFvR6pyvnF6J9jFV5W5COw1/5YAq4GcShYOWYb4x98DvrhN43JfG3uVA/jZd+pe76/In8W+M3nKz/cWOqnmdGIOcg9E2zRHhf8zSQIZEuwbFnQYax/Pg5VK/bQOu1gcDArGKHb0lFkgfhULwLnZp89N/WNLUWgwByk974drVz3k3C+R6wwJ5s9mXtCnK3gZddPmaAensEt3S+uJORJGSxcZC6ucgboavE77ObdSLlIZYCDFhWjN+anofwpm7RkvDd1BvA/jzXIcBSwNYxFpOc3qN+SKKyFa3XLGcPCpQ3fKmohwtGtx1tAqtLZ/TQ2zztlsSQmBzEtxt0HAI0cU29eUHW9IOtte1t1X0jkZyXc2OvkfVmgikYKFfnAHDaoAU8XzNdU4wndRYAHj5Rr6G4nKMkUzRGxt63LNDstgX0VIP5igpceifzhI4dIbOck9FpcvNXWcQMgOQGCkIOMqQHLGuCt6JN6i9CxJPngT4f1eo01RXqUUgRpTRjBPDV5MlN9OAFDqQgKcskgGrGO+H1XV2YXzZOU77GcTlUU4AKCHfPbeQvl36VSnRFmGzchggfKYPPl4Rm/ZI1KydDDQtVbQI5fg4whxlLASuv3uVxk6z7F7wpq2Uh+k8XLHq3kouFL14KN17+5G/1YT+HasR43wM/cDXhgD",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://www.neowin.net/news/microsoft-introduces-typescript-58-explore-the-latest-features-and-enhancements/",
+                      "title": "Microsoft introduces TypeScript 5.8: Explore the latest features and enhancements - Neowin",
+                      "page_age": "March 1, 2025",
+                      "encrypted_content": "EokLCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDFjVN9D6z6RvN7voeBoMvr0jQdYbfq2GvWC7IjCsckl0eud2C+XP7qDwZepuI0N352mUHMmnKkIM7vI7SWgJLJdfa9d6YNAr/NsticUqjArK3UZ7MR6J5l2QZGrG9Hmuq8vnvSAveCX4OQHWrSBjZyO0uqGEI8ETUETqY27ovT4w/8F3rhTEbUlo4/zda6sXohLX2Co9kog07MNcCROOmrDXnKqSDWqcgP7Jizy1dAr+4SyJqg6SY119JuNkbrsuC8w28zSSSoR03Kw45Pn/hLrdBzbm1IaHitEAWOEe83ewb+lUJFsIH2QJ/yjOWsJxZud2YV5L3CvfBmRvwtBfp4CIbFIMspXV/en1WFAV7DObPtiJIzN4v17i1iscARiga+SqntUQC5ak6ngwoCZFa+oT6K2odzdZxZbF2sCvWXACpw1ZLjbm1xaGSknL9OQX/ziL70agtz+hC2BZjr/W9l5TBOuVnLzpeDGvYs/15OHMLh+8aPhPEyFFNnMMxHwqtvyocxEIZhjZR2sPrmIYa3z7w314Nqr3qCu2uEcVv0DAP9xHZzANcGYb1Sjj+Xq1NaXm+j8NWRZv80BHnkhXPkO7B5JF2Ay6VA4Oqp9BIa2Tp3FB2pSg4Awij9jVhoUGBcCHOHfTLcOpNmENxnM7IQT7RINjlVFD7koXIawJP0lBrBMvRuChqObHwcVpxNONVxO3D0bsOFkS06ExqEM32WmvoYRHTpTXbyYsAdxqYX+ERe8HEeJMeFXLnZcxVC4KDZ3eOugjHtLNGkbAAHE/hOzTLpXfAfHpYAucyU1VsMXiCaVC+eFhU4i9HElAvXjoLIVV/hlgmQJAhxkCsnWkaVtVEC63qhq0MnlT0aqd2A7KkUZYHbOF64sYPcZ6fVrgrj217dCZ1pp/1C6MGBdW5XgsQM44eFYN1GJHUOzP1Y1acj08AyAVso4HGbaLWhTKEfT8ZYtO5out3teCXFUkVihqFvs94Kr4FH/NIgOu6nFDqstUmBrI2KIiZiN/pbvRln1Gu7VZjuH+CR1gZNNid2qLoVozrShS0QkhqH8YxR1L1YteIgEiFfNPjK4sVxal0UYr4RpTB1F2mb47c3PFFqEe2cN93LAXLbW5xY9zOBDhOLcNmA2M5MkkfLHtadQJHFPc06ubfcFwqlu181o1Odz6ILvEPe0lXSIwpUt4W5lm2OAokUjBsoJBVkfh+rH6Cq38bgLbi2WjNL7rDe7uuuoiArpUyN5BDOlwdjS7S0iTtdhZH0LmBofxH4Bl8PGqHanXJrFmcUiZxKXTUgvu3Bfk/yCHD1WjioDxBrQhn2o211GY2EEWlIUn1tZm6XwdlgC1TkxbOBid9ur0E8ZeadqLSk0BX+kP7wFeS5YGzvGIBJ8R69jQ8ta7WQykq5Hlk3n4NLcZbhucpOwNx3mut7WCCRQ+JhB1csS1fN1BQCeEiessFEh6MengngkuK2aCV1xn9azE/aoDHD43Z7R54E3nvd2D0jS8tw/itOwAdMlmDg9UtjleAK4UDN9MnEAtlenk6zJsjRiJbcgx6Kj03XLkq1teuXMrJ+GBwKHSEmkL+ui7rhwW6UEl1726M61fvXeYRYKrCN8TkJPsB0EXqWho1LxVAVwQh92XUH38yscIy93DXgM1uPekK5iAt49hrcsXWLF8sgSCJsDXmeuQ/KFdB3fuWcWRSTU2Ld6stiaau7K0xFe30g1T8H9AO5ERSHNg8OwfJq7VKYqr1ByR/in5FqFgiNtvLaCs3UJFyLKpFiWskkTGkN+xAql3+J3SlVrqshRhJpX/VxoeJq/hxMWbeI6uhgpmcN72aRgD",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://github.com/microsoft/TypeScript/milestone/212",
+                      "title": "TypeScript 5.8.0 · Milestone #212",
+                      "page_age": null,
+                      "encrypted_content": "EocKCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDJCImJ/imxjh+CX9txoMxKxNM6JpuEr+8UITIjCjtXrfJyRC+lRg6yd/wqdwQp+lRmCLIl5xjQ3vJwFMTX41XnGo/XwE2CL+JuyBQh4qigl/wc/66i1Puzrq34kcQz7KHytDvvskxal31andfmpIEcr2DOtKMbi5ZwrzvP3aW8Ry3e9yIbi14T16yv+wTdlH1/34QDk1GQFZmAOlLbtM232TthMOTWGHKCZAVcj/vHnhqQlAcd5gEb7K4eqtsEDfv1lVptZ9Ilfa5MnpsbJ6P0w/aX2283qTr3vhf5sPEnn01qOdYH3hzVnzwNxLePFW9vpwaXGsQg5ExO/Ny3fxnq8q9wTJPl9/nqsgQHM4PYFAuaXmjOB1BbNPuRYY9dgfcTr8ys+/e5SHM+YepEH9t2WZ6z+1Jf4vz2CICdKq5qotV6dhcMtQdNuaFoDw7RUfT10ptgaFTvfOmyRvsSR/CC1cu6wJQO/Y6UQYMaCnYyZTVnKPGD1gV+he3wi5wvE3ozNYq0koKBGkH/eoMp8lZanW3LTYHd+g83lEqnMOwMe6aRpxUoXPkTQga6HyCE4dLxKEEoN8D6vIRebm6tokFAIoyV2wRmxeSJlW41wbpFNuatenNWMMXh7ZRUNMpkKyI0TVEFAobm/bWEMhZZgXhF3ZLIyASGTMycyBR5Rg5LtM0i4PMsJmB+5ldB5VAxR6cqK77ej6Z94qi/rQHmKU1SKIb4Iznj8eOUgQF24bRw5fR0LPWYybxWm6MEPKxgyI5ZOuz88cgAdbEr6+tZhtBkJYNCsiO6vuLJecsetjsiVMiBbUD4dP9dSZA6KHV7eC7T6zqHF90PinZ0LKMG9N1hTEbG0/Dw/3A508IqPfrBJ4n3//m0OuMZDGv+LnD9blPwUsbtASEpYiaKfyuVPqDt3qUKZt7aGACZcOGKs87Z7mA9RpK/qvx5i3xQE4R0LpTFlUgwa60TlsI3XlWg+NXrAQ4+U8LnV81lxkIm+UPZoUz1bHSLj78c5zpiV3lqnIASAxquNYN2wpW+0frnYQofXbTpoXKVsQwzU/9F1wOKYBWGl84H72eg1Ng0IOp7Z5E+UGTAi8k6SbLVn0az2hRftpub50dPNz1k0BDKatO5LdW0GKRcGh8iKSvcQpglLBDjkNXj+ModsTStc5LnWwVh5abIbO1ob51e5/dpANS4+Gp/0pYAcwh8kJuWm9NFxImY+0Vy7/uv/67YAsi/BAcaSsQa1TnuWmWubqpRf17KPdCMqEVFwjQmylCBEuHMIT/dY0b5f8HnzclfMGe/LNi/dYh6mwoV5G40vARkVTMjnCRIsnjxCyFbkjZdNPfkVwtGrqyMfGgagPK7EQCH/B07gR0U/3ESxa6snkxoWtpBToioHEsj0uh7mNpTTqJBbDi0DwmERmNUGafOqp701fq1K0F1x++m666FJ4KnpiDjtzJRc/2pu6ecf0ZTxC3Lio9t8ukyoeIKI8KakWBbcmmKfxe8y5V0g8sdXSLGwyXT/+1p5IORAWDxDwAYlMqEiAyP5347n4fjJi2wDEnwrDNLeRmg/D5dSkf0I0r0/a+D69I4Ml6RdQ9htnPQmQ1q9u/0lItoAg+E9zXEw3VUSMliguV9ZzHtwoCPCsAA3FHguahj3IhRjgL+YXGAM=",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/",
+                      "title": "Announcing TypeScript 5.8 - TypeScript",
+                      "page_age": "February 28, 2025",
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html",
+                      "title": "TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online",
+                      "page_age": "March 3, 2025",
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://www.infoq.com/news/2025/03/typescript-58-released/",
+                      "title": "TypeScript 5.8 Released with Improved Inference and ...",
+                      "page_age": "March 8, 2025",
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    },
+                    {
+                      "url": "https://javascript-conference.com/blog/typescript-5-7-5-8-features-ecmascript-direct-execution/",
+                      "title": "Typescript 5.7 & 5.8 - New Features & Direct Execution",
+                      "page_age": "November 24, 2025",
+                      "encrypted_content": "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",
+                      "type": "web_search_result"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "## File Search Results\n\nI found **2 TypeScript files** in the `src/` directory:\n- `src/index.ts`\n- `src/utils.ts`\n\n## TypeScript 5.8 Release Information"
+                },
+                {
+                  "type": "text",
+                  "text": "TypeScript 5.8 has been officially released"
+                },
+                {
+                  "type": "text",
+                  "text": ", bringing several significant improvements and new features:\n\n### Key Features\n\n**Granular Checks for Return Expressions**:"
+                },
+                {
+                  "type": "text",
+                  "text": "TypeScript 5.8 added more granular checks for branches within return expressions"
+                },
+                {
+                  "type": "text",
+                  "text": "."
+                },
+                {
+                  "type": "text",
+                  "text": "The new version checks each branch of the conditional expression against the declared return type of the contained functions, if present"
+                },
+                {
+                  "type": "text",
+                  "text": ".\n\n**Improved Module Interoperability**:"
+                },
+                {
+                  "type": "text",
+                  "text": "The new version brings improved interoperability of CommonJS modules with the newer ECMAScript modules, which should simplify the work of library developers"
+                },
+                {
+                  "type": "text",
+                  "text": "Previously failing CommonJS require statements now work seamlessly under --module nodenext"
+                },
+                {
+                  "type": "text",
+                  "text": ".\n\n**Direct TypeScript Execution**:"
+                },
+                {
+                  "type": "text",
+                  "text": "Since Node.js 23.6 and with the new --erasableSyntaxOnly flag, TypeScript can now run directly in Node.js without transpilation, as long as the syntax is erasable"
+                },
+                {
+                  "type": "text",
+                  "text": "The new compiler option \"--erasableSyntaxOnly\" has been added in 5.8, which prohibits TypeScript-only features such as enums, namespaces, parameter properties, and special import forms"
+                },
+                {
+                  "type": "text",
+                  "text": ".\n\n### Performance Improvements"
+                },
+                {
+                  "type": "text",
+                  "text": "TypeScript 5.8 introduces a number of optimizations that can both improve the time to build up a program, and also to update a program based on a file change in either --watch mode or editor scenarios"
+                },
+                {
+                  "type": "text",
+                  "text": "TypeScript now avoids array allocations that would be involved while normalizing paths and operates more directly on indexes of the original path"
+                },
+                {
+                  "type": "text",
+                  "text": ".\n\n### Installation"
+                },
+                {
+                  "type": "text",
+                  "text": "To get started using TypeScript 5.8, you can install it through npm"
+                },
+                {
+                  "type": "text",
+                  "text": "with the standard command, or"
+                },
+                {
+                  "type": "text",
+                  "text": "you can get it from NuGet or if you prefer npm"
+                },
+                {
+                  "type": "text",
+                  "text": ".\n\n### Notable Changes from Beta"
+                },
+                {
+                  "type": "text",
+                  "text": "Since the beta release, some work on how functions with conditional return types are checked was pulled back and will be shipped in TypeScript 5.9"
+                },
+                {
+                  "type": "text",
+                  "text": ", though the granular return expression checks mentioned above were retained."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Thanks! Can you summarize what you found?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "web_search_20250305",
+              "name": "web_search"
+            },
+            {
+              "name": "find_files",
+              "description": "Find files in the workspace matching a pattern.",
+              "input_schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Directory to search"
+                  },
+                  "pattern": {
+                    "description": "Glob pattern to filter",
+                    "type": "string"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1774379685808
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "b9328467-aaa3-4c9e-ac02-81cff94547d0",
+          "anthropic-ratelimit-input-tokens-limit": "450000",
+          "anthropic-ratelimit-input-tokens-remaining": "448000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-24T19:14:46Z",
+          "anthropic-ratelimit-output-tokens-limit": "90000",
+          "anthropic-ratelimit-output-tokens-remaining": "90000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-24T19:14:46Z",
+          "anthropic-ratelimit-requests-limit": "1000",
+          "anthropic-ratelimit-requests-remaining": "999",
+          "anthropic-ratelimit-requests-reset": "2026-03-24T19:14:46Z",
+          "anthropic-ratelimit-tokens-limit": "540000",
+          "anthropic-ratelimit-tokens-remaining": "538000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-24T19:14:46Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e18002ceb09d8fc-YVR",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 24 Mar 2026 19:14:47 GMT",
+          "request-id": "req_011CZNSSbeKuFxCdESXjFouZ",
+          "server": "cloudflare",
+          "server-timing": "x-originResponse;dur=1257",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "1255",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-20250514\",\"id\":\"msg_01RepX3gb5vHTbQEcu9oarKc\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":13559,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}} }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}       }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"##\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" Summary\\n\\n### TypeScript Files Found\\nI discovered **2 TypeScript files** in your\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" `src/` directory:\\n- `src/index.ts`\\n- `src/utils.ts`\\n\\n### TypeScript 5.8 Release Summary\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\"}               }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0               }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Today we’re excited to announce the release of TypeScript 5.8! \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDF3N6/9M1HmZbRDUohoMZ8c5QSOH2MPjCouKIjAgvpOrByyqmcz48dDUIkazwX+vaq3tBjc7NibsmH5imupkFNHsaYc71yD5YiA+75QqEylkw746v5k2e1Oz4ZgHIiXyvQYYBA==\"}}     }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Today we’re excited to announce the release of TypeScript 5.8! \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDMDaa8U8c/AR9N2spBoMGVxdDaiVabLhlqA0IjAnCPcTPG5NSETpvoo6YQ95LmmkQTK+R9iOjmwNMDEyjt6UooCFL9jGvGRBFdFmRmQqE7tsys+krd5Iu+MJ0P+ctoyFAgIYBA==\"}}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"TypeScript 5.8 has been officially released\"}   }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1  }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"text_delta\",\"text\":\" with several major improvements:\\n\\n**🔍 Enhanced\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"text_delta\",\"text\":\" Type Safety**\\n- \"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2             }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":3,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"However, this work resulted in granular checks for branches within return expressions, which have made it into the current 5.8 release. \",\"url\":\"https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html\",\"title\":\"TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDGQjCZX9/b5ST6OxBRoMaKKmmVx8BPOhtSPVIjA270X/MEDlmvgh9yy+Q9NxQ01Gx6jYISjSW/sUSw4fEKGa9YCxKpyOq6mz/LVHCswqE1XG4/5z+PtY3sPI5OlS03qGs0sYBA==\"}}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"text_delta\",\"text\":\"Granular checks for branches within return expressions\"}      }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":3              }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":4,\"content_block\":{\"type\":\"text\",\"text\":\"\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"text_delta\",\"text\":\" that\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"text_delta\",\"text\":\" can catch bugs where conditional returns don't match the declared return type\\n- \"}  }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":4        }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":5,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":5,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"This now changes with version 5.8, which checks each branch of the conditional expression against the declared return type of the contained functions,...\",\"url\":\"https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html\",\"title\":\"TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDLJfWOl2o0QN5x5fhRoMmI0Q9xJ8rGARPTRZIjDzwz025kyOsvChSJ/uHwm9LSEcG6ZuH8bl/LO/9+IFaWyC95z4udPNl2q7lkC5kTcqFCCq9Sl87rmjf3SpJNmrj7UtoHOGGAQ=\"}}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":5,\"delta\":{\"type\":\"text_delta\",\"text\":\"Each\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":5,\"delta\":{\"type\":\"text_delta\",\"text\":\" branch of the conditional expression is checked against the declared return type of the contained functions\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":5}\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":6,\"content_block\":{\"type\":\"text\",\"text\":\"\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":6,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n**🔗 Better Module Interoperability**\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":6,\"delta\":{\"type\":\"text_delta\",\"text\":\" \\n- \"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":6        }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":7,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":7,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"The new version of the programming language brings improved interoperability of CommonJS modules with the newer ECMAScript modules, which should simpl...\",\"url\":\"https://www.heise.de/en/news/TypeScript-5-8-improves-interoperability-between-CommonJS-and-ECMAScript-10301871.html\",\"title\":\"TypeScript 5.8 improves interoperability between CommonJS and ECMAScript | heise online\",\"encrypted_index\":\"Eo8BCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDC97fmZjQg7enka4WxoM93DPAvDb0wXRk3dlIjAyHTvsuJlVraMjCyNsi50X3UO9N6dnT+uE92GkkeXoKU6QH1x44sw+gumobab3mvcqE7DG2msk+KmmCO8cESI69S1wYQYYBA==\"}}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":7,\"delta\":{\"type\":\"text_delta\",\"text\":\"Improved interoperability of CommonJS modules with the newer ECMAScript modules, which should simplify the work of library developers\"} }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":7    }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":8,\"content_block\":{\"type\":\"text\",\"text\":\"\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":8,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n- \"}      }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":8 }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":9,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":9,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"// Previously, this would fail in TypeScript const { readFile } = require(\\\"fs\\\"); const data = readFile(\\\"file.txt\\\", \\\"utf-8\\\"); // Now it works seamlessl...\",\"url\":\"https://www.infoq.com/news/2025/03/typescript-58-released/\",\"title\":\"TypeScript 5.8 Released with Improved Inference and ...\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDFRCpRT4SWGmCEbEJBoMjo4It5U57sYWDL+6IjCFMioVxP4a0jzWLMFGgS9PZasYYeGhWwBXC8l5A6awH9txkbiD1SmFG1nO7OB0dMEqFDC3L4ipsFbZgXUvVcqr0+mU1SteGAQ=\"}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":9,\"delta\":{\"type\":\"text_delta\",\"text\":\"CommonJS require statements now work seamlessly under --module nodenext\"}     }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":9              }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":10,\"content_block\":{\"type\":\"text\",\"text\":\"\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":10,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n**⚡ Direct Execution**\\n- \"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":10       }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":11,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":11,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"Since Node.js 23.6 and with the new --erasableSyntaxOnly flag, TypeScript can now run directly in Node.js without transpilation, as long as the syntax...\",\"url\":\"https://www.infoq.com/news/2025/03/typescript-58-released/\",\"title\":\"TypeScript 5.8 Released with Improved Inference and ...\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDM3vp7y5Mco6GdPSFxoMy8OrEo7EIh6S/yS+IjB6EdyPPtQ8bFdGRk6t6/fAA89qFfSXP2NqhapmIsy8spxXaEURpbswFVaP7yqMUjAqFPN7HLWbZNbgo1y9bFmVsfgi/l6cGAQ=\"}}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":11,\"delta\":{\"type\":\"text_delta\",\"text\":\"Since Node.js 23.6 and with the new --erasableSyntaxOnly flag, TypeScript can now run directly in Node.js without transpilation\"}  }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":11        }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":12,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":12,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n- \"}     }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":12             }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":13,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":13,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"To better support this use case, the new compiler option “–erasableSyntaxOnly” has been added in 5.8. This option prohibits TypeScript-only features s...\",\"url\":\"https://javascript-conference.com/blog/typescript-5-7-5-8-features-ecmascript-direct-execution/\",\"title\":\"Typescript 5.7 & 5.8 - New Features & Direct Execution\",\"encrypted_index\":\"EpQBCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDMuqAKES7KLKtUGfbhoMNLCg6DUgRZ1hwBIJIjBNcvHwee16NT5gpH3O2Quj4oSSJ6Z3Bvs9zYyPWFAb8nREpWNE1G1Oko++Pj4GcZkqGGkIHZeClQoXdDS6P1a2YS1I/ms5XpK7CxgE\"}}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":13,\"delta\":{\"type\":\"text_delta\",\"text\":\"The new compiler option \\\"--erasableSyntaxOnly\\\" prohibits TypeScript-only features such as enums, namespaces, parameter properties, and special import forms\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":13      }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":14,\"content_block\":{\"type\":\"text\",\"text\":\"\"}           }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":14,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\n**🚀 Performance Improvements**\\n- \"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":14             }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":15,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":15,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"TypeScript 5.8 introduces a number of optimizations that can both improve the time to build up a program, and also to update a program based on a file...\",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDNuCylkYBkzQH6xJ8BoMvzEvFVIMm8skRIj8IjC4SGScUNk4kQqV39e7mnvKSQ+Z0FlmMCcuVPTwzTt0LRVSFXl1QiEzCYZ0RjPj6s8qFBRnqCTyOhTtivmHHzwrd2tKVgj5GAQ=\"}}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":15,\"delta\":{\"type\":\"text_delta\",\"text\":\"Optimizations that can both improve the time to build up a program, and also to update a program based on a file change\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":15,\"delta\":{\"type\":\"text_delta\",\"text\":\" in either --watch mode or editor scenarios\"}  }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":15        }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":16,\"content_block\":{\"type\":\"text\",\"text\":\"\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":16,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n- \"}            }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":16       }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":17,\"content_block\":{\"citations\":[],\"type\":\"text\",\"text\":\"\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":17,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"First, TypeScript now avoids array allocations that would be involved while normalizing paths. \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDBlNb/BiaNHxe1kUdhoMzJ2+ioW6BvMZwobYIjDDFQQ829t4hqhBX67aPMxC+3O4ijZw1o0uHzrBdihcY9DekxcmIJRQcTup9hKBIREqFOBfVfR9cmDWpGiA32TsR5WEyV5kGAQ=\"}}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":17,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"cited_text\":\"TypeScript now avoids allocating an array, and operates more directly on indexes of the original path. \",\"url\":\"https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/\",\"title\":\"Announcing TypeScript 5.8 - TypeScript\",\"encrypted_index\":\"EpABCioIDhgCIiRiOTMyODQ2Ny1hYWEzLTRjOWUtYWMwMi04MWNmZjk0NTQ3ZDASDJF/d/7/AA2xrRrIchoMN9EJJ67jeChZmHFCIjBZ7S5Fxoevwcs+bUI7yprQ+isBM0Rt2XG1pcOQSNIOoSUvCM5eCHm/cV1t7cHSL50qFBjO/wteIiKCCHVbhp4QcbZLLEzkGAQ=\"}}              }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":17,\"delta\":{\"type\":\"text_delta\",\"text\":\"TypeScript now avoids array allocations while normalizing paths and ope",
+          "rates more directly on\"}     }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":17,\"delta\":{\"type\":\"text_delta\",\"text\":\" indexes of the original path\"}               }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":17       }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":18,\"content_block\":{\"type\":\"text\",\"text\":\"\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\nThe release focuses on making TypeScript more efficient, safer, and better integrated with the\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":18,\"delta\":{\"type\":\"text_delta\",\"text\":\" broader JavaScript ecosystem.\"}        }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":18            }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":13559,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":528}   }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"            }\n\n"
+        ],
+        "chunkTimings": [
+          0, 0, 584, 573, 553, 0, 1, 0, 0, 0, 412, 0, 1, 0, 0, 0, 0, 445, 0, 1, 1, 0, 574, 0, 1, 510, 0, 1, 0, 0, 0, 0,
+          515, 0, 0, 0, 0, 508, 10, 3, 2, 4, 0, 2, 388, 1, 0, 0, 424, 1, 0, 1, 0, 2, 495, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+          509, 0, 0, 0, 108, 30
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

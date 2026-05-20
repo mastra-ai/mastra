@@ -12,8 +12,9 @@ Install the packages:
 npm install
 ```
 
-> The examples have a separate `package.json` file and are not part of the Mastra workspace so please do not use
-> `pnpm` or `yarn` to run the examples.
+> The examples have a separate `package.json` file and are not part of the Mastra workspace.
+> Most examples can use `npm install`.
+> If an example links local workspace packages, use `pnpm install --ignore-workspace` from that example directory instead.
 
 Run the appropriate CLI command in your terminal (may vary by example). For example for the `ai-sdk-v5` example:
 

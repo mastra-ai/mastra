@@ -102,6 +102,20 @@ function toFileUri(fsPath: string): string {
 }
 
 // =============================================================================
+// Timeout Helper
+// =============================================================================
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(errorMessage)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer!));
+}
+
+// =============================================================================
 // LSP Client
 // =============================================================================
 
@@ -127,6 +141,11 @@ export class LSPClient {
   /** Whether the underlying server process is still running. */
   get isAlive(): boolean {
     return this.handle !== null && this.handle.exitCode === undefined;
+  }
+
+  /** Name of the LSP server. */
+  get serverName(): string {
+    return this.serverDef.name;
   }
 
   /**
@@ -335,6 +354,72 @@ export class LSPClient {
     this.connection.sendNotification('textDocument/didClose', {
       textDocument: { uri },
     });
+  }
+
+  /**
+   * Query hover information at a position.
+   */
+  async queryHover(uri: string, position: { line: number; character: number }, timeoutMs: number = 5000): Promise<any> {
+    if (!this.connection) return null;
+    return withTimeout(
+      this.connection.sendRequest('textDocument/hover', { textDocument: { uri }, position }),
+      timeoutMs,
+      'Hover request timed out',
+    );
+  }
+
+  /**
+   * Query definition(s) at a position.
+   */
+  async queryDefinition(
+    uri: string,
+    position: { line: number; character: number },
+    timeoutMs: number = 5000,
+  ): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/definition', { textDocument: { uri }, position }),
+      timeoutMs,
+      'Definition request timed out',
+    );
+    if (!result) return [];
+    return Array.isArray(result) ? result : (result as any).uri ? [result] : [];
+  }
+
+  /**
+   * Query type definition(s) at a position.
+   */
+  async queryTypeDefinition(
+    uri: string,
+    position: { line: number; character: number },
+    timeoutMs: number = 5000,
+  ): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/typeDefinition', { textDocument: { uri }, position }),
+      timeoutMs,
+      'Type definition request timed out',
+    );
+    if (!result) return [];
+    return Array.isArray(result) ? result : (result as any).uri ? [result] : [];
+  }
+
+  /**
+   * Query implementation(s) at a position.
+   */
+  async queryImplementation(
+    uri: string,
+    position: { line: number; character: number },
+    timeoutMs: number = 5000,
+  ): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/implementation', { textDocument: { uri }, position }),
+      timeoutMs,
+      'Implementation request timed out',
+    );
+    if (!result) return [];
+    return Array.isArray(result) ? result : (result as any).uri ? [result] : [];
   }
 
   /**

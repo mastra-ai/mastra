@@ -1,6 +1,6 @@
 import type { TestProject } from 'vitest/node';
 import { prepareMonorepo } from '../_local-registry-setup/prepare.js';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
@@ -34,6 +34,7 @@ export default async function setup(project: TestProject) {
       '--filter="create-mastra"',
       '--filter="...^mastra"',
       '--filter="@mastra/libsql"',
+      '--filter="@mastra/duckdb"',
       '--filter="@mastra/memory"',
       '--filter="@mastra/loggers"',
       '--filter="@mastra/evals"',

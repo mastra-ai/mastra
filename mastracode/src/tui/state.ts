@@ -5,9 +5,10 @@
  * MastraTUI class.
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
-import type { Workspace } from '@mastra/core/workspace';
+import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
+import type { MastraCodeAnalytics } from '../analytics.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -18,17 +19,28 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
-
+import type { IdleCounterComponent } from './components/idle-counter.js';
+import type { JudgeDisplayComponent } from './components/judge-display.js';
 import type { GradientAnimator } from './components/obi-loader.js';
-import type { OMMarkerComponent } from './components/om-marker.js';
+import type { OMMarkerComponent, OMMarkerData } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
+import type { ShellStreamComponent } from './components/shell-output.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
+import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { TaskProgressComponent } from './components/task-progress.js';
+import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
-import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
+
+import { GoalManager } from './goal-manager.js';
+import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+
+export interface PendingSignalMessage {
+  component: Component;
+  text: string;
+}
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -39,6 +51,9 @@ export interface MastraTUIOptions {
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
+
+  /** Analytics client for product telemetry */
+  analytics?: MastraCodeAnalytics;
 
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
@@ -78,6 +93,7 @@ export interface TUIState {
   harness: Harness<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
+  analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   mcpManager?: McpManager;
   workspace?: Workspace;
@@ -86,6 +102,9 @@ export interface TUIState {
   ui: TUI;
   chatContainer: Container;
   editorContainer: Container;
+  idleCounter?: IdleCounterComponent;
+  idleStartedAt?: number;
+  lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
   terminal: ProcessTerminal;
@@ -96,21 +115,34 @@ export interface TUIState {
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: HarnessMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
-  /** Position hint for task_write inline rendering when streaming */
-  taskWriteInsertIndex: number;
+  /** Task tools are hidden on success but promoted to normal tool boxes on errors */
+  pendingTaskToolIds: Set<string>;
+  /** Position hint for inline task-tool rendering when streaming */
+  taskToolInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
   seenToolCallIds: Set<string>;
   /** Track subagent tool call IDs to skip in trailing content logic */
   subagentToolCallIds: Set<string>;
+  /** Track streamed system reminders for the active assistant run */
+  currentRunSystemReminderKeys: Set<string>;
   /** Track all tools for expand/collapse */
   allToolComponents: IToolExecutionComponent[];
   /** Track slash command boxes for expand/collapse */
   allSlashCommandComponents: SlashCommandComponent[];
+  /** Track inline system reminders for expand/collapse */
+  allSystemReminderComponents: Array<SystemReminderComponent | TemporalGapComponent>;
+  /** Track rendered message components by message id for anchored inserts */
+  messageComponentsById: Map<string, Component>;
+  /** Track shell passthrough components for expand/collapse */
+  allShellComponents: ShellStreamComponent[];
   /** Track active subagent tasks */
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
   quietMode: boolean;
+  quietModeMaxToolPreviewLines: number;
+  /** Active goal judge status-line override while evaluating the last turn. */
+  activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -134,13 +166,16 @@ export interface TUIState {
   pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
-  lastSubmitPlanComponent?: IToolExecutionComponent;
+  lastSubmitPlanComponent?: Component;
+  pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
   pendingQueuedActions: Array<'message' | 'slash'>;
   /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
+  /** Pending signal messages waiting for the stream echo */
+  pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
@@ -157,13 +192,23 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationData?: OMMarkerData;
+  activeActivationTTLMarker?: OMMarkerComponent;
+  activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
 
+  // ── Goal loop ─────────────────────────────────────────────────────────
+  goalManager: GoalManager;
+  /** Track a goal started from plan approval — return to plan mode when it completes */
+  planStartedGoalId?: string;
+
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  skillCommands: SkillMetadata[];
+  goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
@@ -199,12 +244,12 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
-  editor.getModeColor = () => options.harness.getCurrentMode()?.color;
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
     options,
     hookManager: options.hookManager,
+    analytics: options.analytics,
     authStorage: options.authStorage,
     mcpManager: options.mcpManager,
     workspace: options.workspace,
@@ -220,15 +265,21 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Agent / streaming
     isInitialized: false,
     pendingTools: new Map(),
-    taskWriteInsertIndex: -1,
+    pendingTaskToolIds: new Set(),
+    taskToolInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
+    currentRunSystemReminderKeys: new Set(),
     allToolComponents: [],
     allSlashCommandComponents: [],
+    allSystemReminderComponents: [],
+    messageComponentsById: new Map(),
+    allShellComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,
@@ -239,10 +290,12 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Inline interaction
     lastClearedText: '',
     pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     followUpComponents: [],
+    pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
 
@@ -250,13 +303,25 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
 
+    // Goal loop
+    goalManager: new GoalManager(),
+    planStartedGoalId: undefined,
+
     // Input
     customSlashCommands: [],
+    skillCommands: [],
+    goalSkillCommands: [],
     pendingImages: [],
 
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
+  };
+  editor.getModeColor = () => {
+    if (result.activeGoalJudge) {
+      return mastra.blue;
+    }
+    return options.harness.getCurrentMode()?.color;
   };
   return result;
 }

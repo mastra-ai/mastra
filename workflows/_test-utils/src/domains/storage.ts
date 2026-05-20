@@ -214,6 +214,39 @@ export function createStorageWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should preserve resourceId through loop (dountil) execution
+  {
+    const loopStepAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      const value = (inputData?.value ?? 0) + 1;
+      return { value };
+    });
+
+    const loopStep = createStep({
+      id: 'loopStep',
+      execute: loopStepAction,
+      inputSchema: z.object({ value: z.number().optional() }),
+      outputSchema: z.object({ value: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'storage-resourceid-loop-workflow',
+      inputSchema: z.object({ value: z.number().optional() }),
+      outputSchema: z.object({ value: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow
+      .dountil(loopStep, async ({ inputData }) => {
+        return (inputData?.value ?? 0) >= 3;
+      })
+      .commit();
+
+    workflows['storage-resourceid-loop-workflow'] = {
+      workflow,
+      mocks: { loopStepAction },
+    };
+  }
+
   // Test: should use shouldPersistSnapshot option
   {
     const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
@@ -369,6 +402,30 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
         const { runs } = await (workflow as any).listWorkflowRuns({ resourceId });
         expect(runs).toHaveLength(1);
         expect(runs[0]?.resourceId).toBe(resourceId);
+      },
+    );
+
+    it.skipIf(skipTests.storageResourceIdLoop)(
+      'should pass resourceId in every persistWorkflowSnapshot call during loop execution',
+      async () => {
+        const { workflow } = registry!['storage-resourceid-loop-workflow']!;
+
+        const runId = `storage-resourceid-loop-test-${Date.now()}`;
+        const resourceId = 'user-loop-456';
+
+        const storage = ctx.getStorage?.();
+        const workflowsStore = storage ? await (storage as any).getStore('workflows') : undefined;
+        const persistSpy = workflowsStore ? vi.spyOn(workflowsStore, 'persistWorkflowSnapshot') : undefined;
+
+        await execute(workflow, { value: 0 }, { runId, resourceId });
+
+        expect(persistSpy).toBeDefined();
+        const calls = persistSpy!.mock.calls;
+        expect(calls.length).toBeGreaterThan(0);
+        for (const [args] of calls) {
+          expect(args.resourceId).toBe(resourceId);
+        }
+        persistSpy!.mockRestore();
       },
     );
 

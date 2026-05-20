@@ -1,0 +1,146 @@
+---
+title: "Prompts | Editor"
+description: Build reusable, versioned instruction templates with template variables and display conditions.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Prompts
+
+Prompt blocks are reusable instruction templates that you compose into an agent's system prompt. Each block can contain plain text, template variables, and display conditions. Non-technical team members can edit prompt content, test different phrasings, and publish changes. Every edit is versioned, so you can compare prompt variations, roll back, and track what changed over time. You can create and manage prompt blocks through the Studio UI or programmatically through the server API, then reference them across multiple agents.
+
+## Quickstart
+
+1. Go to the **Prompts** tab in Studio.
+1. Select **Create prompt** and enter a name and your instruction text.
+1. Save the prompt block and publish it.
+1. Open an agent's **Instructions** section and select **Add block**.
+1. Pick the saved prompt block from the block picker dialog.
+
+The block appears as a reference in the agent's instruction list. Changes to the original prompt block update every agent that references it.
+
+## Block types
+
+An agent's instructions are made up of an ordered list of blocks. Each block is one of three types:
+
+| Type | Description |
+| - | - |
+| Inline text | Free-form text written directly in the agent's instruction list. Lives only on that agent. |
+| Prompt block | A standalone block with its own content, stored in the agent snapshot. You can save an inline block as a prompt block to reuse it. |
+| Prompt block reference | A pointer to a saved prompt block. The content is resolved at runtime from the referenced block. |
+
+To turn an inline block into a reusable prompt block, open the block's menu and select **Save as prompt block**. To reference an existing prompt block, select **Add block** and pick one from the dialog.
+
+## Template variables
+
+Prompt blocks support `{{variable}}` syntax for dynamic content. Variables are resolved at runtime from the agent's variables and request context.
+
+```text
+You are helping {{userName}} with their {{task || 'request'}}.
+```
+
+| Syntax | Behavior |
+| - | - |
+| `{{variableName}}` | Replaced with the variable value. Left as-is if not found. |
+| `{{nested.path.value}}` | Resolves dot-notation paths in the context object. |
+| `{{variable \|\| 'default'}}` | Uses the fallback value when the variable is missing. Single or double quotes are accepted. |
+
+Variables are passed through the agent's `variables` configuration or through [request context](/docs/server/request-context).
+
+## Display conditions
+
+Each block can have a **display condition**. A rule group that controls whether the block is included in the final prompt. Conditions are evaluated at runtime against the agent's variables and request context.
+
+A rule group uses **AND** or **OR** logic with one or more conditions. Each condition checks a context field against a value using an operator:
+
+| Operator | Description |
+| - | - |
+| `equals` / `not_equals` | Exact match comparison. |
+| `contains` / `not_contains` | String inclusion or array membership. |
+| `greater_than` / `less_than` | Numeric comparison. |
+| `greater_than_or_equal` / `less_than_or_equal` | Numeric comparison with equality. |
+| `in` / `not_in` | Checks if a value is in an array. |
+| `exists` / `not_exists` | Checks if the field is present. |
+
+Rule groups can be nested, so you can combine AND and OR conditions for complex logic.
+
+In the Studio, open a block's **Display conditions** panel to set up rules visually. You can also configure conditions programmatically through the API. Blocks without conditions are always included.
+
+## Programmatic control
+
+Prompt blocks can be managed from code through [`mastra.getEditor().prompt`](/reference/editor/mastra-editor#namespaces). This is useful for seeding a set of starter prompts, syncing blocks between environments, or generating prompt variants from a script.
+
+Create a new prompt block with `editor.prompt.create()`:
+
+```typescript title="src/scripts/seed-prompts.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.prompt.create({
+  id: 'brand-voice',
+  name: 'Brand voice',
+  description: 'Acme Inc. tone and style guidelines',
+  content:
+    'You write in a friendly, concise tone. Always address the user as {{userName || "there"}}.',
+})
+```
+
+Update an existing block with `editor.prompt.update()`. Each update creates a new draft version:
+
+```typescript title="src/scripts/update-prompt.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.prompt.update({
+  id: 'brand-voice',
+  content: 'You write in a friendly, concise tone. Always greet the user by name when available.',
+})
+```
+
+Use `editor.prompt.list()` to paginate through stored blocks or `editor.prompt.getById()` to fetch a specific block. To preview an agent's full instructions with a set of prompt blocks applied, call `editor.prompt.preview()` with the draft content.
+
+The same operations are available over HTTP through the Mastra server:
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/stored/prompt-blocks` | List all stored prompt blocks. |
+| `POST` | `/stored/prompt-blocks` | Create a stored prompt block. |
+| `GET` | `/stored/prompt-blocks/:storedPromptBlockId` | Get a stored prompt block by ID. |
+| `PATCH` | `/stored/prompt-blocks/:storedPromptBlockId` | Update a stored prompt block. |
+| `DELETE` | `/stored/prompt-blocks/:storedPromptBlockId` | Delete a stored prompt block. |
+
+Once a prompt block is created, reference it from an agent's `instructions` field as a `prompt_block_ref`:
+
+```typescript title="src/scripts/attach-prompt.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: [
+    { type: 'prompt_block_ref', id: 'brand-voice' },
+    { type: 'text', content: 'Answer only questions about Acme products.' },
+  ],
+})
+```
+
+:::note
+
+See the [MastraEditor reference](/reference/editor/mastra-editor#namespaces) for the full `editor.prompt` API.
+
+:::
+
+## Versioning
+
+Prompt blocks follow the same [versioning lifecycle](/docs/editor/overview#versioning) as agents. Each prompt block has a draft that you can edit and publish as a versioned snapshot. This means prompt content can be versioned and rolled back independently from the agent that uses it.
+
+When an agent references a prompt block, the resolved content comes from the block's active published version by default. During editing, draft content is used for previews. This separation makes it safe for non-technical team members to experiment with prompt wording. The published version stays stable until they explicitly activate a new one.
+
+## Related
+
+- [Editor overview](/docs/editor/overview): Setup and versioning.
+- [MastraEditor reference](/reference/editor/mastra-editor): Full configuration options for the editor.

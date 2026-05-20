@@ -1,0 +1,181 @@
+---
+title: "Reference: SkillSearchProcessor | Processors"
+description: "Documentation for the SkillSearchProcessor in Mastra, which enables on-demand skill discovery and loading for agents with many skills."
+packages:
+  - "@mastra/core"
+---
+
+# SkillSearchProcessor
+
+The `SkillSearchProcessor` is an **input processor** that enables on-demand skill discovery and loading. Instead of injecting all skill metadata into the system prompt upfront (like `SkillsProcessor`), it gives the agent two meta-tools (`search_skills` and `load_skill`) that let it find and load skills on demand. This reduces context token usage when workspaces have many skills.
+
+By default, when you attach only `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
+
+- The default eager `SkillsProcessor` is not auto-added.
+- `search_skills` and `load_skill` are exposed for discovery and instruction loading.
+- Overlapping `skill` and `skill_search` tools are hidden.
+- `skill_read` remains available so the agent can read supporting skill files such as references, scripts, and assets.
+
+If you explicitly configure `SkillsProcessor` alongside `SkillSearchProcessor`, the agent preserves the eager `skill` and `skill_search` tools as an opt-in path.
+
+## Usage example
+
+```typescript
+import { SkillSearchProcessor } from '@mastra/core/processors'
+
+const skillSearch = new SkillSearchProcessor({
+  workspace,
+  search: {
+    topK: 5,
+    minScore: 0.1,
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'SkillSearchProcessorOptions',
+    description: 'Configuration options for the skill search processor',
+    isOptional: false,
+    properties: [
+      {
+        type: 'SkillSearchProcessorOptions',
+        parameters: [
+          {
+            name: 'workspace',
+            type: 'Workspace',
+            description: 'Workspace instance containing skills. Skills are accessed via workspace.skills.',
+            isOptional: false,
+          },
+          {
+            name: 'search',
+            type: '{ topK?: number; minScore?: number }',
+            description: 'Configuration for the search behavior.',
+            isOptional: true,
+          },
+          {
+            name: 'search.topK',
+            type: 'number',
+            description: 'Maximum number of skills to return in search results.',
+            isOptional: true,
+            default: '5',
+          },
+          {
+            name: 'search.minScore',
+            type: 'number',
+            description: 'Minimum relevance score for including a skill in search results.',
+            isOptional: true,
+            default: '0',
+          },
+          {
+            name: 'ttl',
+            type: 'number',
+            description:
+              'Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.',
+            isOptional: true,
+            default: '3600000',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'skill-search'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'Skill Search Processor'",
+    isOptional: false,
+  },
+  {
+    name: 'providesSkillDiscovery',
+    type: "'on-demand'",
+    description: 'Signals to the agent that this processor owns skill discovery and instruction loading.',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+    description:
+      'Processes each step to inject search/load meta-tools and any previously loaded skill instructions as system messages.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/skill-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { SkillSearchProcessor } from '@mastra/core/processors'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './project' }),
+  skills: ['skills'],
+  bm25: true,
+})
+
+const skillSearch = new SkillSearchProcessor({
+  workspace,
+  search: {
+    topK: 5,
+    minScore: 0.1,
+  },
+})
+
+const agent = new Agent({
+  name: 'skill-agent',
+  instructions:
+    'You are a helpful assistant. Use search_skills to find relevant skills, then load_skill to load their instructions.',
+  model: 'openai/gpt-4o',
+  workspace,
+  inputProcessors: [skillSearch],
+})
+```
+
+The agent workflow is:
+
+1. Agent receives a user message
+1. Agent calls `search_skills` with keywords (e.g., "api design")
+1. Agent reviews results and calls `load_skill` with the skill name
+1. The skill's instructions appear as system messages on the next turn
+1. Agent follows the loaded skill's instructions
+
+## Workspace file tools
+
+`SkillSearchProcessor` loads skill instructions into the conversation. It does not block workspace file tools from reading files.
+
+Use `skill_read` for supporting files that belong to a loaded skill, such as files under `references/`, `scripts/`, or `assets/`.
+
+Reserve workspace file tools such as `mastra_workspace_read_file` for explicit file inspection or editing workflows. During normal task execution, the agent does not need to read the same `SKILL.md` file after `load_skill` succeeds.
+
+## Compared to SkillsProcessor
+
+| | SkillsProcessor | SkillSearchProcessor |
+| - | - | - |
+| Scaling | Injects all skills upfront | On-demand discovery |
+| Context usage | Grows with skill count | Constant (only loaded skills) |
+| Agent workflow | Skills always visible | Agent searches and loads as needed |
+| Best for | Few skills (\< 10) | Many skills (10+) |
+
+## Related
+
+- [ToolSearchProcessor](/reference/processors/tool-search-processor)
+- [Processors](/docs/agents/processors)
+- [Workspace Skills](/docs/workspace/overview)

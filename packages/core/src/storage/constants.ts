@@ -25,6 +25,7 @@ export const TABLE_WORKSPACE_VERSIONS = 'mastra_workspace_versions';
 export const TABLE_SKILLS = 'mastra_skills';
 export const TABLE_SKILL_VERSIONS = 'mastra_skill_versions';
 export const TABLE_SKILL_BLOBS = 'mastra_skill_blobs';
+export const TABLE_FAVORITES = 'mastra_favorites';
 
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -34,6 +35,15 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 // Experiment tables
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
+export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
+
+// Schedules tables
+export const TABLE_SCHEDULES = 'mastra_schedules';
+export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
+
+// Channel tables
+export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
+export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -63,7 +73,13 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
-  | typeof TABLE_EXPERIMENT_RESULTS;
+  | typeof TABLE_EXPERIMENT_RESULTS
+  | typeof TABLE_BACKGROUND_TASKS
+  | typeof TABLE_FAVORITES
+  | typeof TABLE_SCHEDULES
+  | typeof TABLE_SCHEDULE_TRIGGERS
+  | typeof TABLE_CHANNEL_INSTALLATIONS
+  | typeof TABLE_CHANNEL_CONFIG;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -135,7 +151,9 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft' or 'published'
   activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this agent
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -163,6 +181,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workspace: { type: 'jsonb', nullable: true },
   skills: { type: 'jsonb', nullable: true },
   skillsFormat: { type: 'text', nullable: true },
+  browser: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
@@ -306,8 +325,17 @@ export const SKILLS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to skill_versions.id
   authorId: { type: 'text', nullable: true },
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
+  favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this skill
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const FAVORITES_SCHEMA: Record<string, StorageColumn> = {
+  userId: { type: 'text', nullable: false },
+  entityType: { type: 'text', nullable: false }, // 'agent' | 'skill'
+  entityId: { type: 'text', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
@@ -323,6 +351,7 @@ export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   references: { type: 'jsonb', nullable: true },
   scripts: { type: 'jsonb', nullable: true },
   assets: { type: 'jsonb', nullable: true },
+  files: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   tree: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
@@ -388,6 +417,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   tags: { type: 'jsonb', nullable: true },
   targetType: { type: 'text', nullable: true },
   targetIds: { type: 'jsonb', nullable: true },
+  scorerIds: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -404,6 +434,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   source: { type: 'jsonb', nullable: true },
+  expectedTrajectory: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -539,6 +570,72 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_FAVORITES]: FAVORITES_SCHEMA,
+  [TABLE_BACKGROUND_TASKS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    tool_call_id: { type: 'text', nullable: false },
+    tool_name: { type: 'text', nullable: false },
+    agent_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: true },
+    resource_id: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    args: { type: 'jsonb', nullable: false },
+    result: { type: 'jsonb', nullable: true },
+    error: { type: 'jsonb', nullable: true },
+    suspend_payload: { type: 'jsonb', nullable: true },
+    retry_count: { type: 'integer', nullable: false },
+    max_retries: { type: 'integer', nullable: false },
+    timeout_ms: { type: 'integer', nullable: false },
+    createdAt: { type: 'timestamp', nullable: false },
+    startedAt: { type: 'timestamp', nullable: true },
+    suspendedAt: { type: 'timestamp', nullable: true },
+    completedAt: { type: 'timestamp', nullable: true },
+  },
+  [TABLE_SCHEDULES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    target: { type: 'jsonb', nullable: false },
+    cron: { type: 'text', nullable: false },
+    timezone: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    next_fire_at: { type: 'bigint', nullable: false },
+    last_fire_at: { type: 'bigint', nullable: true },
+    last_run_id: { type: 'text', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    metadata: { type: 'jsonb', nullable: true },
+    owner_type: { type: 'text', nullable: true },
+    owner_id: { type: 'text', nullable: true },
+  },
+  [TABLE_SCHEDULE_TRIGGERS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    schedule_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: true },
+    scheduled_fire_at: { type: 'bigint', nullable: false },
+    actual_fire_at: { type: 'bigint', nullable: false },
+    outcome: { type: 'text', nullable: false },
+    error: { type: 'text', nullable: true },
+    trigger_kind: { type: 'text', nullable: false },
+    parent_trigger_id: { type: 'text', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
+  },
+  [TABLE_CHANNEL_INSTALLATIONS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    platform: { type: 'text', nullable: false },
+    agentId: { type: 'text', nullable: false },
+    status: { type: 'text', nullable: false },
+    webhookId: { type: 'text', nullable: true },
+    data: { type: 'jsonb', nullable: false },
+    configHash: { type: 'text', nullable: true },
+    error: { type: 'text', nullable: true },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
+  },
+  [TABLE_CHANNEL_CONFIG]: {
+    platform: { type: 'text', nullable: false, primaryKey: true },
+    data: { type: 'jsonb', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
+  },
 };
 
 /**
@@ -547,6 +644,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
+  [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
 };
 
 /**

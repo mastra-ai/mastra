@@ -467,7 +467,11 @@ describe('create command with --template flag', () => {
         timeout: undefined,
         llmApiKey: undefined,
         llmProvider: undefined,
+        skills: undefined,
+        mcpServer: undefined,
+        observability: undefined,
         needsInteractive: true,
+        onObservabilitySelected: expect.any(Function),
       });
       expect(init).toHaveBeenCalled();
     });

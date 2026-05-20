@@ -1,5 +1,4 @@
-import * as RadixTabs from '@radix-ui/react-tabs';
-import { useState } from 'react';
+import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { cn } from '@/lib/utils';
 
 export type TabsRootProps<T extends string> = {
@@ -11,23 +10,14 @@ export type TabsRootProps<T extends string> = {
 };
 
 export const Tabs = <T extends string>({ children, defaultTab, value, onValueChange, className }: TabsRootProps<T>) => {
-  const [internalTab, setInternalTab] = useState<T>(defaultTab);
-
-  // Use controlled mode if value and onValueChange are provided
-  const isControlled = value !== undefined && onValueChange !== undefined;
-  const currentTab = isControlled ? value : internalTab;
-  const handleTabChange = (newValue: string) => {
-    const typedValue = newValue as T;
-    if (isControlled) {
-      onValueChange(typedValue);
-    } else {
-      setInternalTab(typedValue);
-    }
-  };
-
   return (
-    <RadixTabs.Root value={currentTab} onValueChange={handleTabChange} className={cn('overflow-y-auto', className)}>
+    <BaseTabs.Root
+      defaultValue={defaultTab}
+      value={value}
+      onValueChange={onValueChange ? next => onValueChange(next as T) : undefined}
+      className={cn('overflow-y-auto', className)}
+    >
       {children}
-    </RadixTabs.Root>
+    </BaseTabs.Root>
   );
 };

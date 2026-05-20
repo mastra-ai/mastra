@@ -17,6 +17,14 @@ You can also retrieve message history to display past conversations in your UI.
 Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/memory/storage#threads-and-resources) for more detail.
 :::
 
+:::warning
+When you use memory with a client application, send **only the new message** from the client instead of the full conversation history.
+
+Sending the full history is redundant because Mastra loads messages from storage, and it can cause message ordering bugs when client-side timestamps conflict with stored timestamps.
+
+For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui#using-mastra-memory).
+:::
+
 ## Getting started
 
 Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
@@ -39,9 +47,9 @@ export const mastra = new Mastra({
 })
 ```
 
-Give your agent a `Memory`:
+Instantiate a [`Memory`](/reference/memory/memory-class) instance in your agent:
 
-```typescript title="src/mastra/agents/your-agent.ts"
+```typescript title="src/mastra/agents/test-agent.ts"
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
@@ -58,7 +66,7 @@ export const agent = new Agent({
 When you call the agent, messages are automatically saved to the database. You can specify a `threadId`, `resourceId`, and optional `metadata`:
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
+  <TabItem value="generate" label=".generate()">
     ```typescript
     await agent.generate('Hello', {
       memory: {
@@ -73,7 +81,7 @@ When you call the agent, messages are automatically saved to the database. You c
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     ```typescript
     await agent.stream('Hello', {
       memory: {
@@ -97,15 +105,21 @@ Threads and messages are created automatically when you call `agent.generate()` 
 
 You can use this history in two ways:
 
-- **Automatic inclusion** - Mastra automatically fetches and includes recent messages in the context window. By default, it includes the last 10 messages, keeping agents grounded in the conversation. You can adjust this number with `lastMessages`, but in most cases you don't need to think about it.
-- [**Manual querying**](#querying) - For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
+- **Automatic inclusion**: Mastra automatically fetches and includes recent messages in the context window. By default, it includes the last 10 messages, keeping agents grounded in the conversation. You can adjust this number with `lastMessages`, but in most cases you don't need to think about it.
+- [**Manual querying**](#querying): For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
+
+:::tip
+
+When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.
+
+:::
 
 ## Accessing memory
 
 To access memory functions for querying, cloning, or deleting threads and messages, call `getMemory()` on an agent:
 
 ```typescript
-const agent = mastra.getAgent('weatherAgent')
+const agent = mastra.getAgentById('test-agent')
 const memory = await agent.getMemory()
 ```
 

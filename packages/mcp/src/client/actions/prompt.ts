@@ -48,7 +48,8 @@ export class PromptClientActions {
       if (response && response.prompts && Array.isArray(response.prompts)) {
         return response.prompts.map(prompt => ({ ...prompt }));
       } else {
-        this.logger.warn(`Prompts response from server ${this.client.name} did not have expected structure.`, {
+        this.logger.warn('Prompts response did not have expected structure', {
+          server: this.client.name,
           response,
         });
         return [];
@@ -58,7 +59,8 @@ export class PromptClientActions {
       if (e.code === ErrorCode.MethodNotFound) {
         return [];
       }
-      this.logger.error(`Error getting prompts from server ${this.client.name}`, {
+      this.logger.error('Error getting prompts from server', {
+        server: this.client.name,
         error: e instanceof Error ? e.message : String(e),
       });
       throw new Error(

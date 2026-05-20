@@ -1,5 +1,5 @@
-import type { MastraUnion } from '@mastra/core/action';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MastraUnion } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 
 import type { VectorStoreResolver } from '../tools/types';

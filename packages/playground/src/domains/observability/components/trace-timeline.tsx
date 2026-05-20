@@ -1,0 +1,67 @@
+import { Spinner, cn } from '@mastra/playground-ui';
+import type { UISpan } from '../types';
+import { TraceTimelineSpan } from './trace-timeline-span';
+
+type TraceTimelineProps = {
+  hierarchicalSpans: UISpan[];
+  onSpanClick: (id: string) => void;
+  selectedSpanId?: string;
+  isLoading?: boolean;
+  fadedTypes?: string[];
+  expandedSpanIds?: string[];
+  setExpandedSpanIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  featuredSpanIds?: string[];
+};
+
+export function TraceTimeline({
+  hierarchicalSpans = [],
+  onSpanClick,
+  selectedSpanId,
+  isLoading,
+  fadedTypes,
+  expandedSpanIds,
+  setExpandedSpanIds,
+  featuredSpanIds,
+}: TraceTimelineProps) {
+  const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
+  const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
+  const overallEndTime = hierarchicalSpans?.[0]?.endTime || '';
+
+  return (
+    <>
+      {isLoading ? (
+        <div
+          className={cn(
+            'flex items-center text-ui-md gap-4 bg-surface3/50 rounded-md p-6 justify-center text-neutral3',
+            '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
+          )}
+        >
+          <Spinner /> Loading Trace Timeline ...
+        </div>
+      ) : (
+        <div
+          className={cn('grid items-start content-start gap-y-0.5 overflow-hidden grid-cols-[1fr_auto] xl:py-4', {
+            'xl:grid-cols-[1fr_auto_auto]': !overallEndTime,
+            'xl:grid-cols-[2fr_auto_1fr]': overallEndTime,
+          })}
+        >
+          {hierarchicalSpans?.map(span => (
+            <TraceTimelineSpan
+              key={span.id}
+              span={span}
+              onSpanClick={onSpanClick}
+              selectedSpanId={selectedSpanId}
+              overallLatency={overallLatency}
+              overallStartTime={overallStartTime}
+              overallEndTime={overallEndTime}
+              fadedTypes={fadedTypes}
+              featuredSpanIds={featuredSpanIds}
+              expandedSpanIds={expandedSpanIds}
+              setExpandedSpanIds={setExpandedSpanIds}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
