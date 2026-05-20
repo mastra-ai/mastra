@@ -1,5 +1,267 @@
 # @mastra/core
 
+## 1.36.0-alpha.9
+
+### Patch Changes
+
+- Fix in-memory observability storage to match the contract validated against DuckDB/ClickHouse vNext adapters. ([#16808](https://github.com/mastra-ai/mastra/pull/16808))
+
+  Previously, when running Mastra with the default in-memory storage, several observability operations behaved differently than they would against a production database:
+  - **`getSpans`** threw 'This storage provider does not support batch-fetching spans'. It now batch-fetches spans by id within a trace, enabling the optimized `getBranch` path on in-memory storage.
+  - **`batchCreateLogs`, `batchCreateMetrics`, `createScore`/`batchCreateScores`, `createFeedback`/`batchCreateFeedback`** appended duplicate records on retry. They now upsert by id, preserving the cursor id so delta polling does not re-emit the record. This makes client retries safe.
+  - **Discovery operations** (`getEntityTypes`, `getEntityNames`, `getServiceNames`, `getEnvironments`, `getTags`) only inspected spans. They now also scan logs and metrics, so dimensions emitted on those surfaces are surfaced in discovery results.
+  - **`getMetricTimeSeries`** merged grouped series whose label values contained the `|` character (e.g. `{segmentA: 'a', segmentB: 'b|c'}` collided with `{segmentA: 'a|b', segmentB: 'c'}`). Series are now keyed on the original label tuple, so colliding display names remain distinct series.
+
+## 1.36.0-alpha.8
+
+### Patch Changes
+
+- Fixed type error when a tool calls `suspend(...)` inside `execute` while also declaring an `outputSchema`. The `execute` return type now allows `void` in addition to the declared output shape, so the idiomatic `return await suspend(...)` pattern type-checks correctly. ([#16799](https://github.com/mastra-ai/mastra/pull/16799))
+
+## 1.36.0-alpha.7
+
+### Minor Changes
+
+- Added new editor configuration primitives for browser providers, agent builder integration, and stored-agent visibility. ([#16778](https://github.com/mastra-ai/mastra/pull/16778))
+
+  **New: `BrowserProvider` interface**
+
+  Implement a browser provider to expose browser automation tools to agents via the editor. Each provider declares an id, name, and config schema, then returns a `MastraBrowser` instance from `createBrowser`.
+
+  ```ts
+  import type { BrowserProvider } from '@mastra/core/editor';
+
+  const myProvider: BrowserProvider = {
+    id: 'my-browser',
+    name: 'My Browser',
+    description: 'Custom browser automation',
+    configSchema: z.object({ apiKey: z.string() }),
+    createBrowser: async config => {
+      return createMyBrowser(config.apiKey);
+    },
+  };
+  ```
+
+  **New: `MastraEditorConfig.browsers` and `.builder`**
+
+  Wire browser providers and agent-builder options into the editor:
+
+  ```ts
+  new MastraEditor({
+    browsers: { 'my-browser': myProvider },
+    builder: { features: { agent: { favorites: true } } },
+  });
+  ```
+
+  **New: `visibility` on `updateAgentMeta`**
+
+  Set an agent's visibility (private or public) through the editor namespace:
+
+  ```ts
+  await editor.agent.updateAgentMeta('agent-id', { visibility: 'public' });
+  ```
+
+## 1.36.0-alpha.6
+
+### Patch Changes
+
+- Added a Unix socket PubSub transport and wired the Mastra Code TUI through a per-resource socket so local sessions can coordinate thread streams across processes. Programmatic `createMastraCode` usage remains opt-in: ([#16669](https://github.com/mastra-ai/mastra/pull/16669))
+
+  ```ts
+  await createMastraCode({ unixSocketPubSub: true });
+  ```
+
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Improved MastraCode quiet mode so terminal sessions are easier to scan. ([#16771](https://github.com/mastra-ai/mastra/pull/16771))
+  - Quiet mode is now the default for new installs, and existing classic users get a one-time prompt to choose whether to enable it.
+  - Added compact tool previews with a configurable preview-line limit, including an option to hide previews.
+  - Improved repeated tool-call rendering, path continuation handling, task wrapping, shell/error previews, and spacing between tools, messages, plans, and completed subagents.
+  - Added edited line ranges to workspace edit results so tool UIs can show where replacements happened.
+
+- Fixed `backgroundTasks: { enabled: true }` silently dispatching foreground-only tools to the background. ([#16792](https://github.com/mastra-ai/mastra/pull/16792))
+
+  Previously, enabling `backgroundTasks` on the `Mastra` instance injected a system prompt into every agent that taught the LLM to flip any tool to background by passing `_background: { enabled: true }` in its arguments, and the resolver honored that override unconditionally. Models would readily do this for short, deterministic tools — a plain calculator could return `"Background task started…"` instead of `{ result: 42 }`, breaking `agent.generate()` / `agent.stream()` for tool-using flows.
+
+  The LLM `_background` override is now treated as a _modifier_ on tools the developer has opted in at the tool or agent layer, not a standalone opt-in. If a tool hasn't been opted in via tool-level `background: { enabled: true }` or agent-level `backgroundTasks: { tools: { … } }` (or `tools: 'all'`), `_background.enabled: true` from the model is ignored and the tool runs in the foreground. Opted-in tools continue to honor LLM overrides for `enabled`, `timeoutMs`, and `maxRetries` as documented.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/16783
+
+## 1.36.0-alpha.4
+
+### Minor Changes
+
+- Added `activateAfterIdle: "auto"` for Observational Memory early activation. ([#16663](https://github.com/mastra-ai/mastra/pull/16663))
+
+  Mastra can now choose an idle activation timeout from the active model provider's prompt cache behavior. OpenAI also respects `providerOptions.openai.promptCacheRetention` when available.
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        activateAfterIdle: 'auto',
+        activateOnProviderChange: true,
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a startup bug in `MastraCompositeStore.init()` when using `default` or `editor`. ([#16786](https://github.com/mastra-ai/mastra/pull/16786))
+
+  Before this fix, the composite initialized inner domains directly and could skip parent store initialization. That could skip adapter setup steps and cause missing-table errors during startup (most visibly with `LibSQLStore` on a local file).
+
+  Now, `MastraCompositeStore.init()` runs parent `default` and `editor` initialization first, then initializes only domains not already covered by those parents. This preserves adapter-specific initialization behavior and prevents startup races.
+
+  Fixes #16782.
+
+- Agent signals can now coordinate active thread runs across agents that share a PubSub instance, so thread subscribers and signal senders can observe the same run instead of being limited to one runtime instance. ([#16665](https://github.com/mastra-ai/mastra/pull/16665))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { EventEmitterPubSub } from '@mastra/core/events';
+
+  const pubsub = new EventEmitterPubSub();
+  const agent = new Agent({
+    id: 'agent',
+    name: 'Agent',
+    instructions: 'Help the user',
+    model,
+    pubsub,
+  });
+  ```
+
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Added the `EditorFavorite*` types and an optional `favorites` namespace on `IMastraEditor` so editor implementations can expose favoriting of stored agents and skills. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  ```ts
+  import type {
+    IMastraEditor,
+    IEditorFavoritesNamespace,
+    EditorFavoriteTargetInput,
+    EditorFavoriteToggleResult,
+  } from '@mastra/core/editor';
+
+  interface IMastraEditor {
+    // ...existing members...
+    favorites?: IEditorFavoritesNamespace;
+  }
+  ```
+
+  The `favorites` field is optional — existing implementations of `IMastraEditor` continue to work unchanged. `@mastra/editor` ships a default `EditorFavoritesNamespace` that wires this up against the storage `favorites` domain.
+
+  Also renamed `AgentFeatures.stars` to `AgentFeatures.favorites` in `@mastra/core/agent-builder/ee` so the feature flag aligns with the storage column (`favoriteCount`), HTTP routes (`/favorite`), and the editor `favorites` namespace. The field had no functional consumers, so this is a name-only change.
+
+- Added delta polling support for observability list APIs in core, DuckDB, and ClickHouse. ([#16632](https://github.com/mastra-ai/mastra/pull/16632))
+
+### Patch Changes
+
+- Fixed durable agents to honor activeTools when streaming. ([#16646](https://github.com/mastra-ai/mastra/pull/16646))
+
+- Fixed infinite recursion in `RequestContext.toJSON()` when multiple ([#16686](https://github.com/mastra-ai/mastra/pull/16686))
+  `RequestContext` instances reference each other through stored values.
+  Previously, serializing such cross-context cycles would cause a CPU hang.
+  Cyclic references are now detected and omitted from the serialized output,
+  consistent with how circular references within a single context are handled.
+
+- Fixed crash in CacheKeyGenerator.fromAIV4Part when a tool-invocation part has undefined toolInvocation. This can happen when observational memory seals a partially-streamed assistant message. Also guarded MessageMerger against the same condition. ([#16773](https://github.com/mastra-ai/mastra/pull/16773))
+
+- Restore MastraCode local command execution to inherit parent environment variables while redacting env-shaped and secret-looking workspace trace data. ([#16691](https://github.com/mastra-ai/mastra/pull/16691))
+
+## 1.36.0-alpha.2
+
+### Minor Changes
+
+- Added support for permission arrays in FGA checks and route configuration. When an array is provided, the user needs **any one** of the listed permissions (logical OR). ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  **Affected types**
+  - `FGACheckParams.permission`
+  - `FGARouteConfig.permission`
+  - `FGARouteInfo.requiresPermission`
+  - `FGADeniedError.permission`
+  - `CheckFGAOptions.permission`
+
+  Single-permission usage continues to work unchanged.
+
+  ```ts
+  // Before — single permission only
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or array (ANY-of)
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+- Added consistent FGA execution checks across agents, tools, memory, and workflows to prevent unauthenticated executions when FGA is configured. Pass an authenticated user through `requestContext` when invoking protected APIs directly: ([#16651](https://github.com/mastra-ai/mastra/pull/16651))
+
+  ```ts
+  const requestContext = new RequestContext();
+  requestContext.set('user', user);
+
+  await agent.generate('Summarize this thread', {
+    requestContext,
+  });
+  ```
+
+- `publishSkill` now returns the full skill file tree so consumers can persist the UI-facing tree alongside storage blobs without re-walking the source. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+  ```ts
+  import { publishSkill } from '@mastra/core/workspace';
+
+  const result = await publishSkill({ workspace, skillId, source });
+
+  // New: nested tree of folders + files; binary content base64-encoded.
+  for (const node of result.files) {
+    console.log(node.type, node.path);
+  }
+  ```
+
+  Also added two optional capability methods to `IMastraEditor` for server-side gating of builder-aware behavior:
+
+  ```ts
+  interface IMastraEditor {
+    // ...existing members...
+    hasEnabledBuilderConfig?(): boolean;
+    resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+  }
+  ```
+
+  Both methods are optional — existing implementations of `IMastraEditor` continue to work unchanged. Servers that consume them treat `undefined` / missing implementation as "no builder configured."
+
+- `publishSkillFromSource()` (and `collectSkillForPublish()`) now return a `files` field containing the full skill source as a tree of `StorageSkillFileNode` entries with base64-encoded blob content — handy for storing a UI-facing copy of a skill alongside its content-addressable tree: ([#16673](https://github.com/mastra-ai/mastra/pull/16673))
+
+  ```ts
+  const { snapshot, tree, files } = await publishSkillFromSource({ source });
+  // files: StorageSkillFileNode[] — name, mimeType, base64 content per node
+  ```
+
+  Existing callers that only destructure `{ snapshot, tree }` are unaffected; the field is additive.
+
+  Also adds `parseSkillSnapshotFromFiles()` for parsing skill snapshot frontmatter from a flat file list (used by the registry install flow):
+
+  ```ts
+  import { parseSkillSnapshotFromFiles, type SkillSnapshotFile } from '@mastra/core/workspace';
+
+  const files: SkillSnapshotFile[] = [{ path: 'SKILL.md', content: '...' }, ...];
+  const snapshot = parseSkillSnapshotFromFiles(files);
+  ```
+
+### Patch Changes
+
+- Fixed sub-agent streams so nested tool input progress is emitted while tool arguments are still being generated. This lets UIs show delegated agents preparing tool calls before the final tool input is available. Fixes #16422. ([#16553](https://github.com/mastra-ai/mastra/pull/16553))
+
 ## 1.36.0-alpha.1
 
 ### Minor Changes
