@@ -82,6 +82,20 @@ export interface ChannelAdapterConfig {
    * @default `"❌ Error: <error.message>"`
    */
   formatError?: (error: Error) => PostableMessage;
+
+  /**
+   * Stream agent text deltas to this adapter as the agent generates them, instead of
+   * buffering and posting once per step. On adapters with native streaming (e.g. Slack)
+   * this is rendered live; on adapters without it (e.g. Discord) the Chat SDK falls back
+   * to post + edit, which can feel noisy — leave it off there.
+   *
+   * - `false` (default) — buffer text and post once per `step-finish`.
+   * - `true` — stream with default options.
+   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval.
+   *
+   * @default false
+   */
+  streaming?: boolean | { updateIntervalMs?: number };
 }
 
 /**
@@ -244,19 +258,6 @@ export interface ChannelConfig {
   tools?: boolean;
 
   /**
-   * Stream agent text deltas to the platform as the agent generates them, instead of
-   * buffering and posting once per step. On Slack this uses native message streaming;
-   * other adapters fall back to post + edit handled by the Chat SDK.
-   *
-   * - `false` (default) — buffer text and post once per `step-finish`.
-   * - `true` — stream with default options.
-   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval (fallback path).
-   *
-   * @default false
-   */
-  streaming?: boolean | { updateIntervalMs?: number };
-
-  /**
    * Additional options passed directly to the Chat SDK.
    * Use this for advanced configuration not exposed by Mastra.
    *
@@ -377,8 +378,6 @@ export class AgentChannels {
   private handlerOverrides: ChannelHandlers;
   /** Additional Chat SDK options. */
   private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
-  /** Stream config: `false` = buffered post, otherwise options forwarded to `StreamingPlan`. */
-  private streaming: false | { updateIntervalMs?: number };
   /** Thread context config for fetching prior messages. */
   private threadContext: { maxMessages?: number };
   /** Determines whether a mime type should be sent inline to the model. */
@@ -459,7 +458,6 @@ export class AgentChannels {
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
     this.chatOptions = config.chatOptions ?? {};
-    this.streaming = config.streaming === true ? {} : config.streaming === undefined ? false : config.streaming;
     this.threadContext = config.threadContext ?? {};
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
@@ -1481,8 +1479,11 @@ export class AgentChannels {
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
 
-    const streamingEnabled = this.streaming !== false;
-    const streamingOptions = this.streaming === false ? undefined : this.streaming;
+    // Streaming is configured per-adapter so platforms with native streaming (e.g. Slack)
+    // can opt in independently of platforms that fall back to noisy post + edit (e.g. Discord).
+    const streamingConfig = adapterConfig?.streaming ?? false;
+    const streamingEnabled = streamingConfig !== false;
+    const streamingOptions = streamingConfig === true ? {} : streamingConfig === false ? undefined : streamingConfig;
 
     interface TrackedTool {
       displayName: string;
