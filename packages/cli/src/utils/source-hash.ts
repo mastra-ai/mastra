@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { open, readFile, stat } from 'node:fs/promises';
 import { dirname, join, relative, posix } from 'node:path';
 import { glob } from 'tinyglobby';
 
@@ -150,7 +150,15 @@ export async function writeBuildManifest(outputDirectory: string, sourceHash: st
   };
 
   const manifestPath = join(outputDirectory, MANIFEST_FILENAME);
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  // fsync the manifest to disk — some CI runners return stale page-cache
+  // content if we write and then immediately read.
+  const fh = await open(manifestPath, 'w');
+  try {
+    await fh.writeFile(JSON.stringify(manifest, null, 2));
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
 }
 
 /**
