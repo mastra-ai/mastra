@@ -307,6 +307,48 @@ describe('handleGoalCommand', () => {
     expect(goalManager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: true });
   });
 
+  it('pauses and saves the goal when judge continuation signal fails', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    (goalManager as any).goal = goal;
+    vi.spyOn(goalManager, 'evaluateAfterTurn').mockResolvedValue({
+      continuation: 'Continue working toward the goal: finish the task',
+      judgeResult: { decision: 'continue', reason: 'Keep going.' },
+    });
+    const saveToThread = vi.spyOn(goalManager, 'saveToThread').mockResolvedValue(undefined);
+    const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new Error('signal failed')) }));
+    const showError = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        harness: { sendSignal },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError,
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('Failed to send goal continuation: signal failed');
+    });
+    expect(goalManager.getGoal()).toMatchObject({ status: 'paused' });
+    expect(saveToThread).toHaveBeenCalledTimes(2);
+  });
+
   it('creates the pending new thread before saving a new goal', async () => {
     let currentThreadId = 'loaded-thread';
     const goal = {

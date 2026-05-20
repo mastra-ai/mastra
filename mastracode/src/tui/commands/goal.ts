@@ -371,6 +371,8 @@ function triggerGoalJudge(ctx: SlashCommandContext, options: { requireAssistantM
             },
           }).accepted;
         } catch (error) {
+          state.goalManager.pause();
+          await state.goalManager.saveToThread(state);
           ctx.showError(`Failed to send goal continuation: ${error instanceof Error ? error.message : String(error)}`);
         }
       } else {
