@@ -5,6 +5,7 @@ import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
 type TemplateInfoProps = {
   title?: string;
   description?: string;
+  imageURL?: string;
   githubUrl?: string;
   infoData?: KeyValueListItemData[];
   isLoading?: boolean;

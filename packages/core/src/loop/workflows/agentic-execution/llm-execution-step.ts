@@ -869,7 +869,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tools,
             toolChoice,
             activeTools,
-            providerOptions,
+            providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
             modelSettings,
             structuredOutput,
             workspace,
@@ -920,9 +920,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 tools,
                 toolChoice,
                 activeTools: activeTools as string[] | undefined,
-                providerOptions,
-                modelSettings,
-                structuredOutput,
+                providerOptions: currentStep.providerOptions,
+                modelSettings: currentStep.modelSettings,
+                structuredOutput: currentStep.structuredOutput,
                 retryCount: inputData.processorRetryCount || 0,
                 writer: inputStepWriter,
                 abortSignal: options?.abortSignal,
@@ -1233,9 +1233,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...currentStep.modelSettings,
                 ...modelConfig.modelSettings,
               } as Record<string, unknown> | undefined,
-              providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions) as
-                | Record<string, unknown>
-                | undefined,
+              providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(
                 currentStep.tools as Record<string, unknown> | undefined,
                 currentStep.activeTools as readonly string[] | undefined,
@@ -1251,8 +1249,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 execute({
                   runId,
                   model: currentStep.model,
-                  // Per-model providerOptions deep-merge per provider key on top of call-time providerOptions
-                  providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions),
+                  providerOptions: currentStep.providerOptions,
                   inputMessages,
                   tools: currentStep.tools,
                   toolChoice: currentStep.toolChoice,

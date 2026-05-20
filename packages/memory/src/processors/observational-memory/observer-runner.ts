@@ -142,7 +142,9 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
         }),
       },
-      buildObserverHistoryMessage(messagesToObserve),
+      buildObserverHistoryMessage(messagesToObserve, {
+        attachmentFilter: this.observationConfig.observeAttachments,
+      }),
     ];
 
     const doGenerate = async () => {
@@ -268,7 +270,9 @@ export class ObserverRunner {
           this.observationConfig.threadTitle,
         ),
       },
-      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
+      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
+        attachmentFilter: this.observationConfig.observeAttachments,
+      }),
     ];
 
     // Mark all messages as observed

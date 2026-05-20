@@ -111,6 +111,23 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/memory/observational-memory/buffer-status',
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
+      // POST /stored/agents requires a builder-resolved model policy and a
+      // model-allowlist-compatible payload; the generic harness produces a
+      // payload that fails allowlist enforcement. Behavior is covered by
+      // packages/server/src/server/handlers/stored-agents.test.ts.
+      '/stored/agents',
+      // Favorites toggles require an existing stored entity AND an
+      // authenticated caller (callerId is read from the auth-middleware
+      // request context). Behavior is covered by stored-{agent,skill}-favorites
+      // unit tests; the generic harness can't satisfy both prereqs.
+      '/stored/agents/:storedAgentId/favorite',
+      '/stored/skills/:storedSkillId/favorite',
+      // Builder registry routes that require external API calls + builder config
+      '/editor/builder/registries',
+      '/editor/builder/registries/:registryId/search',
+      '/editor/builder/registries/:registryId/popular',
+      '/editor/builder/registries/:registryId/preview',
+      '/editor/builder/registries/:registryId/install',
       // Long-lived SSE streams: stay open until the client disconnects, so the
       // test harness's real-HTTP-server cleanup (server.close awaiting drain)
       // hangs. These routes' behavior is exercised in unit tests.

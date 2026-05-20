@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
+  trackCommand: vi.fn(),
   showInfo: vi.fn(),
 }));
 
@@ -79,29 +80,56 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
+    mocks.trackCommand.mockClear();
     mocks.showInfo.mockClear();
   });
 
   it('routes /models to handleModelsPackCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
-    const ctx = {} as any;
+    const state = {
+      customSlashCommands: [],
+      harness: {
+        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        getResourceId: vi.fn(() => 'resource-1'),
+        getCurrentModeId: vi.fn(() => 'build'),
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
     const handled = await dispatchSlashCommand('/models', state, () => ctx);
 
     expect(handled).toBe(true);
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.trackCommand).toHaveBeenCalledWith('models', {
+      action: 'attempted',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      mode: 'build',
+    });
   });
 
   it('routes /custom-providers to handleCustomProvidersCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
-    const ctx = {} as any;
+    const state = {
+      customSlashCommands: [],
+      harness: {
+        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        getResourceId: vi.fn(() => 'resource-1'),
+        getCurrentModeId: vi.fn(() => 'build'),
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
     const handled = await dispatchSlashCommand('/custom-providers', state, () => ctx);
 
     expect(handled).toBe(true);
     expect(mocks.handleCustomProvidersCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleCustomProvidersCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.trackCommand).toHaveBeenCalledWith('custom-providers', {
+      action: 'attempted',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      mode: 'build',
+    });
   });
 
   it('treats /models:pack as unknown command', async () => {
@@ -311,14 +339,25 @@ describe('dispatchSlashCommand models routing', () => {
   it('keeps /new routed to the built-in command when a custom command has the same name', async () => {
     const state = {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
+      harness: {
+        getCurrentThreadId: vi.fn(() => null),
+        getResourceId: vi.fn(() => 'resource-1'),
+        getCurrentModeId: vi.fn(() => 'build'),
+      },
     } as any;
-    const ctx = {} as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
     const handled = await dispatchSlashCommand('/new', state, () => ctx);
 
     expect(handled).toBe(true);
     expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();
     expect(mocks.processSlashCommand).not.toHaveBeenCalled();
+    expect(mocks.trackCommand).toHaveBeenCalledWith('new', {
+      action: 'attempted',
+      threadId: null,
+      resourceId: 'resource-1',
+      mode: 'build',
+    });
   });
 
   it('routes //new to the matching custom command even when a built-in exists', async () => {

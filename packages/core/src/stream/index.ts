@@ -19,6 +19,7 @@ export type {
   ReasoningChunk,
   SourceChunk,
   ToolCallChunk,
+  PendingToolCall,
   ToolResultChunk,
 
   // Result Types

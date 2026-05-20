@@ -1,5 +1,74 @@
 # @mastra/convex
 
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Added native Convex vector search support for production workloads. The new `ConvexNativeVector` adapter uses ([#16729](https://github.com/mastra-ai/mastra/pull/16729))
+  Convex schema-defined vector indexes and `ctx.vectorSearch` instead of loading vectors through `ConvexVector` and
+  scoring them in JavaScript.
+
+  Define a native vector table in `convex/schema.ts`:
+
+  ```ts
+  import { defineSchema } from 'convex/server';
+  import { defineMastraNativeVectorTable } from '@mastra/convex/schema';
+
+  export default defineSchema({
+    docs_vectors: defineMastraNativeVectorTable({
+      dimensions: 1536,
+    }),
+  });
+  ```
+
+  Export the native vector handlers:
+
+  ```ts
+  import { mastraNativeVectorAction, mastraNativeVectorMutation, mastraNativeVectorQuery } from '@mastra/convex/server';
+
+  export const query = mastraNativeVectorAction;
+  export const read = mastraNativeVectorQuery;
+  export const write = mastraNativeVectorMutation;
+  ```
+
+  Then configure `ConvexNativeVector` in your Mastra app:
+
+  ```ts
+  import { ConvexNativeVector } from '@mastra/convex';
+
+  const vectorStore = new ConvexNativeVector({
+    id: 'convex-native-vectors',
+    deploymentUrl: process.env.CONVEX_URL!,
+    adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+    indexes: {
+      docs: {
+        tableName: 'docs_vectors',
+        vectorIndexName: 'by_embedding',
+        dimension: 1536,
+      },
+    },
+  });
+  ```
+
+- Added `ConvexServerCache` so Convex-backed Mastra apps can keep durable stream replay and response cache state in Convex. ([#16736](https://github.com/mastra-ai/mastra/pull/16736))
+
+  ```ts
+  import { ConvexServerCache } from '@mastra/convex';
+
+  const cache = new ConvexServerCache({
+    deploymentUrl: process.env.CONVEX_URL!,
+    adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  });
+  ```
+
+  The package also exports the Convex cache schema tables and server mutation for mounting the cache handler in a Convex app.
+  Existing Convex users who adopt the cache must add `mastra_cache` and `mastra_cache_list_items` to their Convex schema, mount the `mastraCache` handler, and deploy the schema update.
+
+### Patch Changes
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+
 ## 1.0.11
 
 ### Patch Changes

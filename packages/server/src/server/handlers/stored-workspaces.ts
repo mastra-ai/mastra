@@ -54,7 +54,14 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
         metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
-      return result;
+      // Annotate each workspace with whether it's registered at runtime
+      const runtimeWorkspaces = mastra.listWorkspaces();
+      const workspaces = result.workspaces.map(ws => ({
+        ...ws,
+        runtimeRegistered: ws.id in runtimeWorkspaces,
+      }));
+
+      return { ...result, workspaces };
     } catch (error) {
       return handleError(error, 'Error listing stored workspaces');
     }
@@ -247,10 +254,12 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
           ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
           : undefined;
 
-      // Update the workspace with both metadata-level and config-level fields
-      // The storage layer handles separating these into record updates vs new-version creation
-      await workspaceStore.update({
-        id: storedWorkspaceId,
+      // Update the workspace with both metadata-level and config-level fields.
+      // The storage layer handles separating these into record updates vs
+      // new-version creation. Strip undefined keys so omitted fields don't
+      // overwrite persisted values (same pattern as stored-skills PATCH).
+      const updateInput: Record<string, unknown> = { id: storedWorkspaceId };
+      const candidate: Record<string, unknown> = {
         authorId,
         ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
@@ -263,7 +272,11 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
         tools,
         autoSync,
         operationTimeout,
-      });
+      };
+      for (const [key, value] of Object.entries(candidate)) {
+        if (value !== undefined) updateInput[key] = value;
+      }
+      await workspaceStore.update(updateInput as Parameters<typeof workspaceStore.update>[0]);
 
       // Return the resolved workspace with the updated config
       const resolved = await workspaceStore.getByIdResolved(storedWorkspaceId);

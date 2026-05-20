@@ -1,3 +1,4 @@
+import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -20,9 +21,46 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
+import {
+  assertReadAccess,
+  assertWriteAccess,
+  getCallerAuthorId,
+  matchesAuthorFilter,
+  resolveAuthorFilter,
+} from './authorship';
+import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
+import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+
+/**
+ * Resolve a `browser` field that may be a boolean shorthand from the UI.
+ * - `true`  → look up the admin's builder default browser config
+ * - `false` → `null` (explicit clear)
+ * - object/null/undefined → pass through unchanged
+ */
+async function resolveBrowserField(browser: unknown, mastra: { getEditor?: () => unknown }): Promise<unknown> {
+  if (browser === true) {
+    const editor = mastra.getEditor?.() as any;
+    const builder = await editor?.resolveBuilder?.();
+    const defaultBrowser = builder?.getConfiguration?.()?.agent?.browser;
+    if (!defaultBrowser) {
+      console.warn(
+        '[mastra:server] Browser enabled (browser: true) but no default browser config found ' +
+          'in builder configuration. The agent will be created/updated without browser access. ' +
+          'Set `editor.builder.configuration.agent.browser` to fix this.',
+      );
+    }
+    return defaultBrowser ?? undefined;
+  }
+  if (browser === false) {
+    return null;
+  }
+  return browser;
+}
 
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'name',
@@ -42,6 +80,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'mcpClients',
   'skills',
   'workspace',
+  'browser',
 ] as const;
 
 // ============================================================================
@@ -61,7 +100,19 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
+  handler: async ({
+    mastra,
+    requestContext,
+    page,
+    perPage,
+    orderBy,
+    status,
+    authorId,
+    visibility,
+    metadata,
+    favoritedOnly,
+    pinFavoritedFor,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -74,17 +125,89 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Resolve the visibility scope for this caller. Non-owner queries for
+      // another author return only that author's public rows; default lists
+      // return the caller's rows plus legacy unowned records.
+      const filter = resolveAuthorFilter({
+        requestContext,
+        resource: 'stored-agents',
+        queryAuthorId: authorId,
+        queryVisibility: visibility === 'public' ? 'public' : undefined,
+      });
+
       const scope = await getStoredResourceScope(mastra, requestContext);
+      const scopedMetadata = scopeStoredResourceMetadata(metadata, scope);
+
+      const callerId = getCallerAuthorId(requestContext);
+      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
+      const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
+      const favoriteSubjectId = pinFavoritedFor ?? callerId;
+
+      // `?favoritedOnly=true`: fetch caller's favorited IDs, then refilter + recompute total.
+      if (honoredStarredOnly) {
+        const effectivePerPage: number = perPage ?? 100;
+        if (!favoriteSubjectId) {
+          return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
+        }
+        const favoritesStore = await storage.getStore('favorites');
+        if (!favoritesStore) {
+          throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
+        }
+        const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'agent' });
+        if (starredIds.length === 0) {
+          return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
+        }
+        const allMatching = await agentsStore.listResolved({
+          perPage: false,
+          orderBy,
+          status,
+          authorId: filter.kind === 'exact' ? filter.authorId : undefined,
+          metadata: scopedMetadata,
+          entityIds: starredIds,
+        });
+        const visible = allMatching.agents.filter(record => matchesAuthorFilter(record, filter));
+        const total = visible.length;
+        const startIdx = effectivePerPage === 0 ? 0 : page * effectivePerPage;
+        const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
+        const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
+        const annotated = sliced.map(record => ({ ...record, isFavorited: true }));
+        const hasMore = effectivePerPage > 0 && endIdx < total;
+        return { agents: annotated, total, page, perPage: effectivePerPage, hasMore };
+      }
+
       const result = await agentsStore.listResolved({
         page,
         perPage,
         orderBy,
         status,
-        authorId,
-        metadata: scopeStoredResourceMetadata(metadata, scope),
+        authorId: filter.kind === 'exact' ? filter.authorId : undefined,
+        metadata: scopedMetadata,
       });
 
-      return result;
+      // Post-filter to enforce ownership + visibility rules across all backends.
+      // Storage adapters can only do an equality filter on authorId, so we apply
+      // the ownedOrPublic / publicOnly logic here.
+      // Note: `total` is left as the storage-reported count to keep pagination
+      // math working. For `unrestricted` / `exact` filters nothing is removed.
+      // For `ownedOrPublic` / `publicOnly`, downstream UIs should treat the
+      // filter as a view over the caller's scope — an approximation is OK.
+      const visibleAgents = result.agents.filter(record => matchesAuthorFilter(record, filter));
+
+      if (!favoritesEnabled) {
+        return { ...result, agents: visibleAgents.map(stripFavoriteFields) };
+      }
+
+      const enrichment = await prepareFavoritesEnrichment(
+        mastra,
+        requestContext,
+        'agent',
+        visibleAgents.map(a => a.id),
+      );
+      const annotated = enrichment
+        ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
+        : visibleAgents;
+
+      return { ...result, agents: annotated };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
@@ -106,7 +229,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
     'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId, status, requestContext }) => {
+  handler: async ({ mastra, requestContext, storedAgentId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -126,7 +249,15 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
-      return agent;
+      // Throws 404 if the caller isn't the owner, admin, `stored-agents:read[:<id>]`
+      // holder, and the record isn't public/legacy-unowned.
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
+
+      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
+      if (enrichment) {
+        return { ...agent, isFavorited: enrichment.starredIds.has(agent.id) };
+      }
+      return stripFavoriteFields(agent);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -155,10 +286,10 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
   requiresAuth: true,
   handler: async ({
     mastra,
-    id: providedId,
-    authorId,
-    metadata,
     requestContext,
+    id: providedId,
+    metadata,
+    visibility: bodyVisibility,
     name,
     description,
     instructions,
@@ -175,6 +306,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     scorers,
     skills,
     workspace,
+    browser,
     requestContextSchema,
   }) => {
     try {
@@ -204,36 +336,76 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Create agent with flat StorageCreateAgentInput
-      // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
-      await agentsStore.create({
-        agent: {
-          id,
-          authorId,
-          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
-          name,
-          description,
-          instructions,
-          model,
-          tools,
-          defaultOptions,
-          workflows,
-          agents,
-          integrationTools,
-          mcpClients,
-          inputProcessors,
-          outputProcessors,
-          memory,
-          scorers,
-          skills,
-          workspace,
-          requestContextSchema,
-        } as StorageCreateAgentInput,
-      });
+      // Force authorId from the authenticated caller; ignore any body-provided value.
+      // No owner = always public (no auth / no user context).
+      // With an owner, respect the client's choice, defaulting to 'private'.
+      const authorId = getCallerAuthorId(requestContext) ?? undefined;
+      const visibility = authorId ? (bodyVisibility ?? 'private') : 'public';
 
-      // Return the resolved agent (thin record + version config)
-      // Use draft status since newly created entities start as drafts
-      const resolved = await agentsStore.getByIdResolved(id, { status: 'draft' });
+      // Reject oversized avatar images before writing to storage.
+      validateMetadataAvatarUrl(metadata);
+
+      // Enforce admin model allowlist before persisting. Mirrors UPDATE; when
+      // `model` is omitted the builder applies `defaults.model` server-side.
+      if (model !== undefined) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
+        }
+      }
+
+      const resolvedBrowser = await resolveBrowserField(browser, mastra);
+
+      const input = {
+        id,
+        authorId,
+        visibility,
+        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+        name,
+        description,
+        instructions,
+        model,
+        tools,
+        defaultOptions,
+        workflows,
+        agents,
+        integrationTools,
+        mcpClients,
+        inputProcessors,
+        outputProcessors,
+        memory,
+        scorers,
+        skills,
+        workspace,
+        browser: resolvedBrowser,
+        requestContextSchema,
+      } as StorageCreateAgentInput;
+
+      // Use editor.agent.create() when available to apply builder defaults
+      const editor = mastra.getEditor?.();
+      if (editor) {
+        await editor.agent.create(input);
+      } else {
+        // Fallback to direct storage create
+        await agentsStore.create({ agent: input });
+      }
+
+      // Publish the initial version so the agent is immediately usable.
+      // Without this, the thin record stays as status='draft' with activeVersionId=null,
+      // which makes the agent unreachable via status='published' resolution.
+      const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
+      const initialVersion = versions[0];
+      if (initialVersion) {
+        await agentsStore.update({
+          id,
+          activeVersionId: initialVersion.id,
+          status: 'published',
+        });
+        editor?.agent.clearCache(id);
+      }
+
+      // Return the resolved agent (thin record + version config) using the newly published version
+      const resolved = await agentsStore.getByIdResolved(id, { status: 'published' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
@@ -273,11 +445,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   requiresAuth: true,
   handler: async ({
     mastra,
+    requestContext,
     storedAgentId,
     // Metadata-level fields
     authorId,
     metadata,
-    requestContext,
+    visibility,
     // Config fields (snapshot-level)
     name,
     description,
@@ -295,6 +468,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     scorers,
     skills,
     workspace,
+    browser,
     requestContextSchema,
     // Version metadata
     changeMessage,
@@ -318,6 +492,34 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+
+      // Throws 404 if the caller isn't the owner, admin, or `agents:edit[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'stored-agents',
+        resourceId: storedAgentId,
+        action: 'edit',
+        record: existing,
+      });
+
+      // Reject oversized avatar images before writing to storage.
+      validateMetadataAvatarUrl(metadata);
+
+      // No owner = always public, regardless of what the client sent.
+      const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
+      const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
+
+      // Enforce admin model allowlist (Phase 6) before persisting.
+      if (model !== undefined) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
+        }
+      }
+
+      // Resolve boolean browser shorthand from the UI
+      const resolvedBrowser = await resolveBrowserField(browser, mastra);
+
       const scopedMetadata =
         metadata !== undefined
           ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
@@ -330,6 +532,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         id: storedAgentId,
         authorId,
         ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
+        visibility: resolvedVisibility,
         name,
         description,
         instructions,
@@ -346,6 +549,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser: resolvedBrowser,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 
@@ -367,6 +571,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser: resolvedBrowser,
         requestContextSchema,
       };
 
@@ -375,7 +580,6 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 
       // Handle auto-versioning with retry logic for race conditions
       // This creates a new version if there are meaningful config changes.
-      // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       const autoVersionResult = await handleAutoVersioning(
         agentsStore as unknown as VersionedStoreInterface,
         storedAgentId,
@@ -391,13 +595,29 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new Error('handleAutoVersioning returned undefined');
       }
 
+      // Auto-publish: activate the latest version so the update is immediately
+      // visible in list views. The Agent Builder UI has no separate "Publish"
+      // button, so without this every edit after creation would create orphaned
+      // draft versions that never surface in the list.
+      // When a proper publish flow ships, this block can be removed.
+      if (autoVersionResult.versionCreated) {
+        const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
+        const latestVersion = versions[0];
+        if (latestVersion) {
+          await agentsStore.update({
+            id: storedAgentId,
+            activeVersionId: latestVersion.id,
+          });
+        }
+      }
+
       // Clear the cached agent instance so the next request gets the updated config
       const editor = mastra.getEditor();
       if (editor) {
         editor.agent.clearCache(storedAgentId);
       }
 
-      // Return the resolved agent with the latest (draft) version so the UI sees its edits
+      // Return the resolved agent with the latest version
       const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
@@ -423,7 +643,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId, requestContext }) => {
+  handler: async ({ mastra, requestContext, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -443,7 +663,27 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
+      // Throws 404 if the caller isn't the owner, admin, or `agents:delete[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'stored-agents',
+        resourceId: storedAgentId,
+        action: 'delete',
+        record: existing,
+      });
+
       await agentsStore.delete(storedAgentId);
+
+      // Cascade: drop any favorite rows referencing this agent so they don't
+      // resurrect if the same id is reused. Failure must not abort the delete.
+      try {
+        const favoritesStore = await storage.getStore('favorites');
+        await favoritesStore?.deleteFavoritesForEntity({ entityType: 'agent', entityId: storedAgentId });
+      } catch (cascadeError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
+      }
 
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
