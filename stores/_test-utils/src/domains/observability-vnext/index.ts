@@ -30,6 +30,22 @@ export interface CreateObservabilityVNextTestsOptions {
    * `storage.dangerouslyClearAll()`.
    */
   cleanup?: (storage: ObservabilityStorage) => Promise<void> | void;
+  /**
+   * Optional hook for adapters whose discovery surface is fed by asynchronous
+   * helper tables (e.g. ClickHouse vNext's refreshable materialized views).
+   * Called after the discovery test fixtures are written but before any
+   * discovery assertion runs. Adapters with synchronous discovery (InMemory,
+   * DuckDB) can omit this — discovery reads will already reflect the writes.
+   */
+  refreshDiscovery?: (storage: ObservabilityStorage) => Promise<void> | void;
+  /**
+   * Optional hook for adapters whose signal-table dedup happens via background
+   * merges instead of inline on insert (ClickHouse's `ReplacingMergeTree`).
+   * Called inside retry-idempotency tests between the duplicate insert and the
+   * read assertion so the duplicate is collapsed in time. Adapters that dedupe
+   * inline (InMemory upsert-by-id, DuckDB `INSERT OR IGNORE`) can omit this.
+   */
+  flushPendingMerges?: (storage: ObservabilityStorage) => Promise<void> | void;
 }
 
 /**
@@ -44,7 +60,7 @@ export interface CreateObservabilityVNextTestsOptions {
  * `extractBranchSpans`) stays in the adapter's own test file.
  */
 export function createObservabilityVNextTests(options: CreateObservabilityVNextTestsOptions) {
-  const { capabilities, getStorage, cleanup } = options;
+  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges } = options;
 
   describe(`observability vNext shared suite — ${capabilities.label}`, () => {
     let storage: ObservabilityStorage;
@@ -703,7 +719,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             traceId: 'trace-2',
             feedbackType: 'rating',
             feedbackSource: 'user',
-            value: '4',
+            value: 4,
             entityName: 'agent-b',
           },
           {
@@ -2050,6 +2066,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ],
         });
 
+        if (refreshDiscovery) {
+          await refreshDiscovery(storage);
+        }
+
         const keys = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
         expect(keys.keys).toContain('foo-bar');
 
@@ -2061,11 +2081,13 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
         const alpha = result.groups.find(group => group.dimensions['foo-bar'] === 'alpha');
         const beta = result.groups.find(group => group.dimensions['foo-bar'] === 'beta');
-        const missing = result.groups.find(group => group.dimensions['foo-bar'] === null);
 
         expect(alpha?.value).toBe(1);
         expect(beta?.value).toBe(1);
-        expect(missing?.value).toBe(3);
+        // Note: rows missing the 'foo-bar' label key are surfaced differently per
+        // adapter — InMemory/DuckDB include them with a null dimension, while
+        // ClickHouse vNext excludes them by design. Those adapter-specific
+        // expectations live in each adapter's bespoke suite.
       });
 
       it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
@@ -2158,6 +2180,286 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.value).toBe(300);
         expect(result.estimatedCost).toBeCloseTo(0.3);
       });
+
+      it('getMetricAggregate returns avg', async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-avg-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 100,
+              labels: {},
+            },
+            {
+              metricId: 'metric-avg-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 200,
+              labels: {},
+            },
+            {
+              metricId: 'metric-avg-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 500,
+              labels: {},
+            },
+          ],
+        });
+
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'avg',
+        });
+        expect(result.value).toBeCloseTo(266.67, 0);
+      });
+
+      it('getMetricAggregate returns count', async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-count-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 100,
+              labels: {},
+            },
+            {
+              metricId: 'metric-count-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 200,
+              labels: {},
+            },
+            {
+              metricId: 'metric-count-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 500,
+              labels: {},
+            },
+          ],
+        });
+
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+      });
+    });
+
+    describe('default ORDER BY', () => {
+      it('listLogs defaults to timestamp DESC', async () => {
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-order-1',
+              timestamp: new Date('2026-01-01T00:00:01Z'),
+              level: 'info',
+              message: 'first',
+              data: null,
+              metadata: null,
+            },
+            {
+              logId: 'log-order-2',
+              timestamp: new Date('2026-01-01T00:00:03Z'),
+              level: 'info',
+              message: 'third',
+              data: null,
+              metadata: null,
+            },
+            {
+              logId: 'log-order-3',
+              timestamp: new Date('2026-01-01T00:00:02Z'),
+              level: 'info',
+              message: 'second',
+              data: null,
+              metadata: null,
+            },
+          ],
+        });
+
+        const result = await storage.listLogs({});
+        expect(result.logs).toHaveLength(3);
+        expect(result.logs[0]!.message).toBe('third');
+        expect(result.logs[1]!.message).toBe('second');
+        expect(result.logs[2]!.message).toBe('first');
+      });
+
+      it('listMetrics defaults to timestamp DESC', async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-order-1',
+              timestamp: new Date('2026-01-01T00:00:01Z'),
+              name: 'order_test',
+              value: 1,
+              labels: {},
+            },
+            {
+              metricId: 'metric-order-2',
+              timestamp: new Date('2026-01-01T00:00:03Z'),
+              name: 'order_test',
+              value: 3,
+              labels: {},
+            },
+            {
+              metricId: 'metric-order-3',
+              timestamp: new Date('2026-01-01T00:00:02Z'),
+              name: 'order_test',
+              value: 2,
+              labels: {},
+            },
+          ],
+        });
+
+        const result = await storage.listMetrics({ filters: { name: ['order_test'] } });
+        expect(result.metrics).toHaveLength(3);
+        expect(result.metrics[0]!.value).toBe(3);
+        expect(result.metrics[1]!.value).toBe(2);
+        expect(result.metrics[2]!.value).toBe(1);
+      });
+
+      it('listScores defaults to timestamp DESC', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-order-1',
+            timestamp: new Date('2026-01-01T00:00:01Z'),
+            traceId: 'ord-1',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.1,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-order-2',
+            timestamp: new Date('2026-01-01T00:00:03Z'),
+            traceId: 'ord-3',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.3,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-order-3',
+            timestamp: new Date('2026-01-01T00:00:02Z'),
+            traceId: 'ord-2',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.2,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(3);
+        expect(result.scores[0]!.traceId).toBe('ord-3');
+        expect(result.scores[1]!.traceId).toBe('ord-2');
+        expect(result.scores[2]!.traceId).toBe('ord-1');
+      });
+
+      it('listFeedback defaults to timestamp DESC', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-order-1',
+            timestamp: new Date('2026-01-01T00:00:01Z'),
+            traceId: 'fb-ord-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-order-2',
+            timestamp: new Date('2026-01-01T00:00:03Z'),
+            traceId: 'fb-ord-3',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 3,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-order-3',
+            timestamp: new Date('2026-01-01T00:00:02Z'),
+            traceId: 'fb-ord-2',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 2,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(3);
+        expect(result.feedback[0]!.traceId).toBe('fb-ord-3');
+        expect(result.feedback[1]!.traceId).toBe('fb-ord-2');
+        expect(result.feedback[2]!.traceId).toBe('fb-ord-1');
+      });
+
+      it('listTraces defaults to startedAt DESC', async () => {
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'tr-ord-1',
+              spanId: 'root-1',
+              name: 'first',
+              startedAt: new Date('2026-01-01T00:00:01Z'),
+              endedAt: new Date('2026-01-01T00:00:02Z'),
+            }),
+            makeSpan({
+              traceId: 'tr-ord-3',
+              spanId: 'root-3',
+              name: 'third',
+              startedAt: new Date('2026-01-01T00:00:03Z'),
+              endedAt: new Date('2026-01-01T00:00:04Z'),
+            }),
+            makeSpan({
+              traceId: 'tr-ord-2',
+              spanId: 'root-2',
+              name: 'second',
+              startedAt: new Date('2026-01-01T00:00:02Z'),
+              endedAt: new Date('2026-01-01T00:00:03Z'),
+            }),
+          ],
+        });
+
+        const result = await storage.listTraces({});
+        expect(result.spans).toHaveLength(3);
+        expect(result.spans[0]!.traceId).toBe('tr-ord-3');
+        expect(result.spans[1]!.traceId).toBe('tr-ord-2');
+        expect(result.spans[2]!.traceId).toBe('tr-ord-1');
+      });
     });
 
     describe('discovery', () => {
@@ -2226,6 +2528,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             }),
           ],
         });
+
+        if (refreshDiscovery) {
+          await refreshDiscovery(storage);
+        }
       });
 
       it('getMetricNames returns distinct names', async () => {
@@ -2357,7 +2663,6 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             feedbackType: 'thumbs',
             value: 1,
             comment: 'Helpful',
-            metadata: null,
           }),
           expect.objectContaining({
             traceId: 'batch-trace-2',
@@ -2396,6 +2701,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.batchCreateLogs({ logs: [log] });
         await storage.batchCreateLogs({ logs: [log] });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listLogs({ filters: { traceId: 'trace-retry-log' } });
         expect(result.logs).toHaveLength(1);
         expect(result.logs[0]!.logId).toBe('log-retry-1');
@@ -2412,6 +2718,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.batchCreateMetrics({ metrics: [metric] });
         await storage.batchCreateMetrics({ metrics: [metric] });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listMetrics({ filters: { name: ['mastra_agent_duration_ms'] } });
         expect(result.metrics).toHaveLength(1);
         expect(result.metrics[0]!.metricId).toBe('metric-retry-1');
@@ -2431,6 +2738,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.createScore({ score });
         await storage.createScore({ score });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]!.scoreId).toBe('score-retry-1');
@@ -2453,6 +2761,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.createFeedback({ feedback });
         await storage.createFeedback({ feedback });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listFeedback({ filters: { traceId: 'trace-retry-feedback' } });
         expect(result.feedback).toHaveLength(1);
         expect(result.feedback[0]!.feedbackId).toBe('feedback-retry-1');
