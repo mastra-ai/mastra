@@ -8,9 +8,15 @@ interface UpdateSkillParams {
   instructions?: string;
   visibility?: 'private' | 'public';
   files?: unknown[];
+  workspaceId?: string;
 }
 
-export function useUpdateSkill() {
+interface UseUpdateSkillOptions {
+  // No-op today; reserved for future toast/surface control.
+  silent?: boolean;
+}
+
+export function useUpdateSkill(_options: UseUpdateSkillOptions = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 

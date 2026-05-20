@@ -33,7 +33,7 @@ export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
 
   // Access requires read OR write (operators can browse but not create)
   const hasRequiredPermissions = !rbacEnabled || hasAnyPermission(['stored-agents:read', 'stored-agents:write']);
-  const canFetchSettings = !rbacEnabled || hasAnyPermission(['stored-agents:read']);
+  const canFetchSettings = !rbacEnabled || hasAnyPermission(['stored-agents:read', 'stored-agents:write']);
 
   // Granular capability flags
   const canWrite = !rbacEnabled || hasPermission('stored-agents:write');

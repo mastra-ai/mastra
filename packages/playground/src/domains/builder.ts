@@ -10,7 +10,8 @@ const modelAllowed = (policy: BuilderModelPolicy, provider: string, modelId?: st
   if (!policy.active || !policy.allowed?.length) return true;
   return policy.allowed.some(entry => {
     if (!providerMatches(provider, entry.provider)) return false;
-    return !entry.modelId || !modelId || entry.modelId === modelId;
+    if (!entry.modelId) return true;
+    return modelId !== undefined && entry.modelId === modelId;
   });
 };
 

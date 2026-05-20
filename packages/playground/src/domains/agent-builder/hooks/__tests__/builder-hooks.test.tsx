@@ -20,6 +20,7 @@ const {
   toast,
   permissionState,
   llmProvidersState,
+  navigateSpy,
 } = vi.hoisted(() => ({
   getBuilderSettings: vi.fn(async () => {
     const response = await fetch('http://localhost/api/builder/settings');
@@ -35,7 +36,13 @@ const {
   toast: { success: vi.fn(), error: vi.fn() },
   permissionState: { rbacEnabled: false },
   llmProvidersState: { data: undefined as any, isLoading: false },
+  navigateSpy: vi.fn(),
 }));
+
+vi.mock('react-router', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, useNavigate: () => navigateSpy };
+});
 
 vi.mock('@mastra/react', () => ({
   useMastraClient: () => ({ getBuilderSettings }),
@@ -230,6 +237,50 @@ describe('useAgentBuilderAllowedModels', () => {
     const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
 
     expect(result.current).toEqual({ providers: [], models: [], isLoading: false });
+  });
+
+  it('treats allowlist entries without modelId as provider-wide allows', async () => {
+    server.use(
+      http.get('http://localhost/api/builder/settings', () =>
+        HttpResponse.json({
+          ...builderSettings,
+          modelPolicy: {
+            active: true,
+            allowed: [{ provider: 'openai' }],
+            default: { provider: 'openai', modelId: 'gpt-4o' },
+          },
+        }),
+      ),
+    );
+    llmProvidersState.data = {
+      providers: [
+        { id: 'openai', name: 'openai', models: ['gpt-4o', 'gpt-4o-mini'] },
+        { id: 'anthropic', name: 'anthropic', models: ['claude-3-5-sonnet'] },
+      ],
+    };
+    llmProvidersState.isLoading = false;
+
+    const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.providers).toHaveLength(1));
+    expect(result.current.providers[0]).toEqual(
+      expect.objectContaining({ id: 'openai', models: ['gpt-4o', 'gpt-4o-mini'] }),
+    );
+    expect(result.current.models).toEqual([
+      { provider: 'openai', model: 'gpt-4o' },
+      { provider: 'openai', model: 'gpt-4o-mini' },
+    ]);
+  });
+});
+
+describe('isModelNotAllowedError', () => {
+  it('returns the error message when the code matches', async () => {
+    const { isModelNotAllowedError } = await import('@/domains/builder');
+    const err = Object.assign(new Error('Choose another model'), { code: 'MODEL_NOT_ALLOWED' });
+    expect(isModelNotAllowedError(err)).toEqual({ message: 'Choose another model' });
+    expect(isModelNotAllowedError({ code: 'MODEL_NOT_ALLOWED' })).toEqual({ message: 'Model is not allowed' });
+    expect(isModelNotAllowedError({ code: 'OTHER' })).toBeNull();
+    expect(isModelNotAllowedError(null)).toBeNull();
   });
 });
 
@@ -529,11 +580,20 @@ describe('useBuilderAgentAccess and useCanCreateAgent', () => {
 
   it('keeps legacy create route when only the experimental UI flag is enabled', async () => {
     server.use(http.get('http://localhost/api/builder/settings', () => HttpResponse.json({ enabled: false })));
-    (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_UI = 'true';
-    const { result } = renderHook(() => useCanCreateAgent(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current).toEqual({ canCreateAgent: true, createRoute: '/cms/agents/create', isLoading: false });
-    delete (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_UI;
+    const flagWindow = window as unknown as Record<string, unknown>;
+    const prev = flagWindow.MASTRA_EXPERIMENTAL_UI;
+    flagWindow.MASTRA_EXPERIMENTAL_UI = 'true';
+    try {
+      const { result } = renderHook(() => useCanCreateAgent(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current).toEqual({ canCreateAgent: true, createRoute: '/cms/agents/create', isLoading: false });
+    } finally {
+      if (prev === undefined) {
+        delete flagWindow.MASTRA_EXPERIMENTAL_UI;
+      } else {
+        flagWindow.MASTRA_EXPERIMENTAL_UI = prev;
+      }
+    }
   });
 });
 
@@ -663,6 +723,30 @@ describe('form-backed tools', () => {
       success: true,
       skillId: 'skill-created',
     });
+  });
+
+  it('requires workspaceId in the input schema when multiple workspaces are available', () => {
+    const wrapper = createFormWrapper();
+    const { result } = renderHook(
+      () =>
+        useCreateSkillTool({
+          availableWorkspaces: [
+            { id: 'workspace-a', name: 'A' },
+            { id: 'workspace-b', name: 'B' },
+          ],
+        }),
+      { wrapper },
+    );
+    const tool = result.current as any;
+    const missing = tool.inputSchema.safeParse({ name: 'Skill', description: 'Desc', instructions: 'Body' });
+    expect(missing.success).toBe(false);
+    const ok = tool.inputSchema.safeParse({
+      name: 'Skill',
+      description: 'Desc',
+      instructions: 'Body',
+      workspaceId: 'workspace-a',
+    });
+    expect(ok.success).toBe(true);
   });
 
   it('returns tool errors for missing workspace and create failures', async () => {
@@ -1011,8 +1095,8 @@ describe('small interaction hooks', () => {
     renderHook(() => useChannelConnectToast(), { wrapper: noopWrapper });
   });
 
-  it('captures starter user messages once and clears history state', () => {
-    const replaceState = vi.spyOn(window.history, 'replaceState');
+  it('captures starter user messages once and clears location state via navigate', () => {
+    navigateSpy.mockClear();
     const wrapper = ({ children }: PropsWithChildren) => (
       <MemoryRouter initialEntries={[{ pathname: '/agent-builder/agents/a', state: { userMessage: 'start' } }]}>
         {children}
@@ -1020,17 +1104,17 @@ describe('small interaction hooks', () => {
     );
     const { result } = renderHook(() => useStarterUserMessage(), { wrapper });
     expect(result.current).toBe('start');
-    expect(replaceState).toHaveBeenCalledWith({}, '');
+    expect(navigateSpy).toHaveBeenCalledWith('.', { replace: true, state: null });
   });
 
-  it('returns undefined starter messages without touching history', () => {
-    const replaceState = vi.spyOn(window.history, 'replaceState');
+  it('returns undefined starter messages without calling navigate', () => {
+    navigateSpy.mockClear();
     const wrapper = ({ children }: PropsWithChildren) => (
       <MemoryRouter initialEntries={['/agent-builder/agents/a']}>{children}</MemoryRouter>
     );
     const { result } = renderHook(() => useStarterUserMessage(), { wrapper });
     expect(result.current).toBeUndefined();
-    expect(replaceState).not.toHaveBeenCalled();
+    expect(navigateSpy).not.toHaveBeenCalled();
   });
 });
 
