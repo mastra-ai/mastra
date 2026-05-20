@@ -32,6 +32,40 @@ export interface SignalMigrationStatus {
   tables: SignalMigrationStatusTable[];
 }
 
+const CURSOR_ID_TABLES = [
+  'span_events',
+  'metric_events',
+  'log_events',
+  'score_events',
+  'feedback_events',
+] as const;
+
+/**
+ * Drop any leftover `DEFAULT nextval(...)` on observability `cursorId` columns.
+ *
+ * A previous version of the migration set this default via
+ * `ALTER COLUMN cursorId SET DEFAULT nextval(...)`. DuckDB WAL replay cannot
+ * bind that function expression before the default database is attached, so
+ * affected databases fail to reopen. Insert paths now write cursor IDs
+ * explicitly, so the catalog default is unnecessary and should be removed.
+ *
+ * We query `information_schema` first and only emit the `ALTER` for tables that
+ * actually carry the bad default; this avoids writing redundant SetDefault
+ * entries to the WAL on every startup for healthy databases.
+ */
+export async function dropLegacyCursorIdDefaults(db: DuckDBConnection): Promise<void> {
+  const rows = await db.query<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.columns
+     WHERE column_name = 'cursorId'
+       AND column_default IS NOT NULL
+       AND table_name IN (${CURSOR_ID_TABLES.map(t => `'${t}'`).join(', ')})`,
+  );
+
+  if (rows.length === 0) return;
+
+  await db.executeBatch(rows.map(row => `ALTER TABLE ${row.table_name} ALTER COLUMN cursorId DROP DEFAULT`));
+}
+
 const SIGNAL_MIGRATIONS: SignalMigration[] = [
   {
     table: 'metric_events',

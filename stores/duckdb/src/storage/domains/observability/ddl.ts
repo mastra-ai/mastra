@@ -319,6 +319,10 @@ export const ALL_MIGRATIONS = [
 
   // Existing rows intentionally keep NULL cursorId values; delta polling only
   // applies to rows written by insert paths that explicitly call nextval().
+  // Databases upgraded from a prior version may still carry a
+  // `DEFAULT nextval(...)` on cursorId, which breaks DuckDB WAL replay; that
+  // remediation lives in `dropLegacyCursorIdDefaults` and only runs when the
+  // bad default is detected in information_schema.
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
 

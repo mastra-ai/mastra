@@ -141,6 +141,56 @@ describe('ObservabilityStorageDuckDB', () => {
     expect(schemaStatements).not.toContain('ALTER COLUMN cursorId SET DEFAULT');
   });
 
+  it('drops the legacy cursorId default left behind by older migrations on init', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-cursor-default-'));
+    const dbPath = join(dir, 'observability.duckdb');
+    const observabilityTables = ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events'];
+    let db: DuckDBConnection | undefined;
+
+    try {
+      db = new DuckDBConnection({ path: dbPath });
+      const storage = new ConcreteObservabilityStorageDuckDB({ db });
+      await storage.init();
+
+      // Reintroduce the broken catalog default that the prior migration would
+      // have applied, to simulate a database upgraded from that version.
+      for (const table of observabilityTables) {
+        await db.execute(
+          `ALTER TABLE ${table} ALTER COLUMN cursorId SET DEFAULT nextval('${table}_cursor_id_seq')`,
+        );
+      }
+
+      await storage.init();
+
+      const rows = await db.query<{ table_name: string; column_default: string | null }>(
+        `SELECT table_name, column_default FROM information_schema.columns
+         WHERE column_name = 'cursorId' AND table_name IN (${observabilityTables.map(t => `'${t}'`).join(', ')})`,
+      );
+
+      expect(rows).toHaveLength(observabilityTables.length);
+      for (const row of rows) {
+        expect(row.column_default).toBeNull();
+      }
+    } finally {
+      await db?.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips the cursorId DROP DEFAULT when the column has no default', async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue([]),
+      execute: vi.fn(),
+      executeBatch: vi.fn().mockResolvedValue(undefined),
+    } as unknown as DuckDBConnection;
+    const storage = new ConcreteObservabilityStorageDuckDB({ db });
+
+    await storage.init();
+
+    expect(db.executeBatch).toHaveBeenCalledTimes(1);
+    expect(db.executeBatch).toHaveBeenCalledWith([...ALL_DDL, ...ALL_MIGRATIONS]);
+  });
+
   it('reopens a file database after cursor sequence migrations and explicit cursor writes', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-observability-'));
     const dbPath = join(dir, 'observability.duckdb');
