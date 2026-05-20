@@ -3292,6 +3292,9 @@ importers:
       picomatch:
         specifier: ^4.0.3
         version: 4.0.3
+      posthog-node:
+        specifier: ^5.30.6
+        version: 5.33.4(rxjs@7.8.1)
       tokenx:
         specifier: ^1.3.0
         version: 1.3.0
