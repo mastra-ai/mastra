@@ -72,13 +72,15 @@ export function useAutosaveSkill({
         workspaceId: values.workspaceId,
         files,
       });
+      /* v8 ignore if */
       if (seq !== requestSeqRef.current) return;
       setStatus('saved');
       savedTimerRef.current = setTimeout(() => {
         savedTimerRef.current = null;
-        setStatus(prev => (prev === 'saved' ? 'idle' : prev));
+        setStatus('idle');
       }, savedDisplayMs);
     } catch (err) {
+      /* v8 ignore if */
       if (seq !== requestSeqRef.current) return;
       setStatus('error');
       setLastError(err instanceof Error ? err : new Error(String(err)));

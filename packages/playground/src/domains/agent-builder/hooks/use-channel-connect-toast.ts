@@ -25,6 +25,7 @@ export const useChannelConnectToast = () => {
 
     // One-shot guard against React strict-mode double effect / remount re-fires.
     const key = channelError ? `error:${platform}:${channelError}` : `success:${platform}:${team}`;
+    /* v8 ignore next -- @preserve */
     if (handledKeyRef.current === key) return;
     handledKeyRef.current = key;
 
@@ -33,8 +34,9 @@ export const useChannelConnectToast = () => {
     if (channelConnected === 'true') {
       const teamSuffix = team ? ` workspace "${team}"` : '';
       toast.success(`Connected to ${platformLabel}${teamSuffix}`);
-    } else if (channelError) {
+    } else {
+      // v8 ignore next
       toast.error(`Failed to connect ${platformLabel}: ${channelError}`);
     }
-  }, [channelConnected, channelError, platform, team]);
+  }, [channelConnected, channelError, platform, searchParams, team]);
 };

@@ -119,6 +119,7 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
+    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -187,6 +188,8 @@ export interface GlobalSettings {
     thinkingLevel: ThinkingLevelSetting;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
+    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
+    quietModeMaxToolPreviewLines: number;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -204,8 +207,15 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Signal routing configuration
+  signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+}
+
+export interface SignalSettings {
+  /** Opt into local Unix socket PubSub for cross-process signal routing. */
+  unixSocketPubSub: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -238,6 +248,7 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
+    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -259,6 +270,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -274,15 +286,23 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  signals: { unixSocketPubSub: false },
   observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
     ? (value as ThinkingLevelSetting)
     : DEFAULTS.preferences.thinkingLevel;
+}
+
+function parseQuietModeMaxToolPreviewLines(value: unknown): number {
+  const rawValue =
+    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
+  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -292,7 +312,28 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
   };
+}
+
+function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
+  return Boolean(
+    rawOnboarding &&
+    typeof rawOnboarding === 'object' &&
+    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
+  );
+}
+
+function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
+  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
+  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
+}
+
+function getNewInstallDefaults(): GlobalSettings {
+  const settings = structuredClone(DEFAULTS);
+  settings.preferences.quietMode = true;
+  settings.onboarding.quietModePreferenceSelected = true;
+  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -480,8 +521,15 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        signals: {
+          unixSocketPubSub:
+            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
+              ? raw.signals.unixSocketPubSub
+              : DEFAULTS.signals.unixSocketPubSub,
+        },
         observability: parseObservabilitySettings(raw.observability),
       };
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -576,7 +624,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return structuredClone(DEFAULTS);
+  if (!existsSync(filePath)) return getNewInstallDefaults();
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
@@ -599,11 +647,21 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      signals: {
+        unixSocketPubSub:
+          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
+            ? raw.signals.unixSocketPubSub
+            : DEFAULTS.signals.unixSocketPubSub,
+      },
       observability: parseObservabilitySettings(raw.observability),
     };
 
     // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
+    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
+      settingsChanged = true;
+    }
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;

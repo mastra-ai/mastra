@@ -1,5 +1,14 @@
 # @mastra/datadog
 
+## 1.2.1-alpha.2
+
+### Patch Changes
+
+- Fixed Datadog LLM span input formatting to remove empty user messages. ([#16785](https://github.com/mastra-ai/mastra/pull/16785))
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+
 ## 1.2.1-alpha.1
 
 ### Patch Changes

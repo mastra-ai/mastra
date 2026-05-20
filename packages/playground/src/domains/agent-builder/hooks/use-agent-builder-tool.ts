@@ -36,7 +36,7 @@ export function useAgentBuilderTool({
   availableModels = [],
 }: UseAgentBuilderToolArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { tools: toolsEnabled, skills: skillsEnabled } = features;
+  const { tools: toolsEnabled, skills: skillsEnabled, browser: browserEnabled } = features;
 
   return useMemo(
     () =>
@@ -95,7 +95,7 @@ export function useAgentBuilderTool({
               { shouldDirty: true },
             );
           }
-          if (features.browser && typeof inputData?.browserEnabled === 'boolean') {
+          if (browserEnabled && typeof inputData?.browserEnabled === 'boolean') {
             formMethods.setValue('browserEnabled', inputData.browserEnabled, { shouldDirty: true });
           }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
@@ -105,11 +105,12 @@ export function useAgentBuilderTool({
           return { success: true };
         },
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills affects feature-gated schema/description fields
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills/browser affects feature-gated schema/description fields
     [
       formMethods,
       toolsEnabled,
       skillsEnabled,
+      browserEnabled,
       availableAgentTools,
       availableWorkspaces,
       availableSkills,
