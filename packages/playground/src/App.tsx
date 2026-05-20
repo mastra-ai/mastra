@@ -3,8 +3,8 @@ import { coreFeatures } from '@mastra/core/features';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import type { RouteObject } from 'react-router';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import type { RouteObject, LoaderFunctionArgs } from 'react-router';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -327,7 +327,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/agents/${params.agentId}/chat`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
@@ -423,7 +423,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/workflows/${params.workflowId}/graph`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/workflows/${params.workflowId}/graph`),
           },
           { path: 'graph', element: <Workflow /> },
           {

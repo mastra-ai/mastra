@@ -1,10 +1,11 @@
 import { useFormContext } from 'react-hook-form';
 
-import type { Visibility } from '../components/skill-edit/visibility-select';
 import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
 import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
 import { useUpdateSkill } from '@/domains/agents/hooks/use-update-skill';
+
+type Visibility = SkillEditFormValues['visibility'];
 
 const COPY: Record<Visibility, VisibilityCopy> = {
   public: {
