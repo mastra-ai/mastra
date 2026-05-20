@@ -140,18 +140,26 @@ agent.sendSignal(
 )
 ```
 
-Use a custom signal type for contextual messages that should reach the model as XML-wrapped context instead of normal user input:
+Use `attributes` to identify different users in a shared thread. The signal type and attributes are rendered as XML so the model can distinguish who said what:
 
 ```typescript
 agent.sendSignal(
   {
-    type: 'system-reminder',
-    contents: 'Continue from the previous tool result.',
-    attributes: { reminderType: 'tool-result' },
+    type: 'user',
+    contents: 'Can we simplify the API surface?',
+    attributes: { name: 'Devin', from: 'slack' },
   },
   { resourceId: 'user-123', threadId: 'thread-abc' },
 )
 ```
+
+The model receives this as:
+
+```xml
+<user name="Devin" from="slack">Can we simplify the API surface?</user>
+```
+
+The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
 
 ### `sendSignal(signal, options)`
 
@@ -163,7 +171,7 @@ Sends a signal to an active run or memory thread.
     name: 'signal',
     type: "{ type: 'user-message' | 'system-reminder' | string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      '`user-message` signals are treated as user input. `system-reminder` and other custom signal types are wrapped in XML context before the next model call. All signal types support `attributes`, which are included as XML attributes on the wrapping element for non-user-message types. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
+      '`user-message` signals without attributes are treated as plain user input. All other signals — including `user-message` with `attributes`, `system-reminder`, and custom types — are wrapped in an XML element named after the signal type with `attributes` rendered as XML attributes (e.g. `<user name="Devin" from="slack">message</user>`). The model sees the XML; the UI sees the raw contents and can read `attributes` for custom rendering. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
   },
   {
     name: 'options.runId',
