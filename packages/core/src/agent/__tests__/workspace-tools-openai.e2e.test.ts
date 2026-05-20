@@ -11,24 +11,30 @@ import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { FileExistsError } from '../../workspace';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
-const mock = createGatewayMock();
+const mock = createGatewayMock({
+  exactMatch: true,
+});
 
 let tempDir: string;
 
 beforeAll(async () => {
+  vi.clearAllMocks();
   mock.start();
-  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-openai-test-'));
+  tempDir = await path.join(os.tmpdir(), 'ws-openai-test-');
+  await fs.mkdir(tempDir, { recursive: true });
   await fs.writeFile(path.join(tempDir, 'hello.txt'), 'Hello, world!\nThis is a test file.\n');
   await fs.mkdir(path.join(tempDir, 'subdir'), { recursive: true });
   await fs.writeFile(path.join(tempDir, 'subdir', 'nested.ts'), 'export const x = 1;\n');
+  // Mock the file_stat tool to always return example data
 });
 
 afterAll(async () => {
@@ -128,6 +134,20 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
       });
 
       it('structured output + workspace tools: file_stat (control)', { timeout: 60_000 }, async () => {
+        vi.spyOn(LocalFilesystem.prototype, 'stat').mockImplementation(async (filepath: string) => {
+          // You can customize this mock data as needed for your tests
+          if (filepath.endsWith('hello.txt')) {
+            return {
+              name: 'hello.txt',
+              type: 'file',
+              size: 35,
+              createdAt: new Date('2026-05-05T23:44:37.565Z'),
+              modifiedAt: new Date('2026-05-05T23:44:37.565Z'),
+            };
+          }
+
+          throw new FileExistsError(filepath);
+        });
         const agent = createWorkspaceAgent(model);
         const result = await agent.generate('Use file_stat on "hello.txt" then summarize what you found.', {
           structuredOutput: { schema: structuredOutputSchema },
