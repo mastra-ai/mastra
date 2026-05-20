@@ -1,5 +1,14 @@
 # @mastra/duckdb
 
+## 1.4.0-alpha.1
+
+### Patch Changes
+
+- Fixed DuckDB observability storage so dev server restarts no longer fail when replaying cursor migrations. ([#16803](https://github.com/mastra-ai/mastra/pull/16803))
+
+- Updated dependencies [[`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509)]:
+  - @mastra/core@1.36.0-alpha.8
+
 ## 1.4.0-alpha.0
 
 ### Minor Changes

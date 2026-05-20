@@ -1012,7 +1012,17 @@
       "apiKeyEnvVar": "THEGRIDAI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "The Grid AI",
-      "models": ["text-max", "text-prime", "text-standard"],
+      "models": [
+        "agent-max",
+        "agent-prime",
+        "agent-standard",
+        "code-max",
+        "code-prime",
+        "code-standard",
+        "text-max",
+        "text-prime",
+        "text-standard"
+      ],
       "docUrl": "https://thegrid.ai/docs",
       "gateway": "models.dev"
     },
@@ -6110,7 +6120,17 @@
       "route/step-3.5-flash-2603",
       "route/stepfun-3.5-flash"
     ],
-    "the-grid-ai": ["text-max", "text-prime", "text-standard"],
+    "the-grid-ai": [
+      "agent-max",
+      "agent-prime",
+      "agent-standard",
+      "code-max",
+      "code-prime",
+      "code-standard",
+      "text-max",
+      "text-prime",
+      "text-standard"
+    ],
     "fastrouter": [
       "anthropic/claude-opus-4.1",
       "anthropic/claude-sonnet-4",
