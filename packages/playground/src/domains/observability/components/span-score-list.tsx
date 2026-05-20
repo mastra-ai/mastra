@@ -1,152 +1,81 @@
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
-import {
-  EntryList,
-  EntryListSkeleton,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
-  getShortId,
-} from '@mastra/playground-ui';
-import { isToday, format } from 'date-fns';
-import { useEffect, useState } from 'react';
-import { ScoreDialog } from '@/domains/scores';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { format } from 'date-fns';
 import { useLinkComponent } from '@/lib/framework';
 
-export const traceScoresListColumns = [
-  { name: 'shortId', label: 'ID', size: '1fr' },
-  { name: 'date', label: 'Date', size: '1fr' },
-  { name: 'time', label: 'Time', size: '1fr' },
-  { name: 'score', label: 'Score', size: '1fr' },
-  { name: 'scorer', label: 'Scorer', size: '1fr' },
-];
+const traceScoresListColumns = [
+  { label: 'ID', size: '1fr' },
+  { label: 'Date', size: '1fr' },
+  { label: 'Time', size: '1fr' },
+  { label: 'Score', size: '1fr' },
+  { label: 'Scorer', size: '1fr' },
+] as const;
+
+const gridColumns = traceScoresListColumns.map(c => c.size).join(' ');
 
 type SpanScoreListProps = {
   scoresData?: ListScoresResponse | null;
   isLoadingScoresData?: boolean;
-  initialScoreId?: string;
   traceId?: string;
   spanId?: string;
   onPageChange?: (page: number) => void;
   computeTraceLink: (traceId: string, spanId?: string) => string;
 };
 
-type SelectedScore = ScoreRowData | undefined;
-
 export function SpanScoreList({
   scoresData,
   isLoadingScoresData,
   traceId,
   spanId,
-  initialScoreId,
   onPageChange,
   computeTraceLink,
 }: SpanScoreListProps) {
   const { navigate } = useLinkComponent();
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const [selectedScore, setSelectedScore] = useState<SelectedScore | undefined>();
-
-  useEffect(() => {
-    if (initialScoreId) {
-      handleOnScore(initialScoreId);
-    }
-  }, [initialScoreId]);
 
   const handleOnScore = (scoreId: string) => {
-    const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
-    setSelectedScore(score);
-    setDialogIsOpen(true);
-
     if (traceId) {
       navigate(`${computeTraceLink(traceId, spanId)}&tab=scores&scoreId=${encodeURIComponent(scoreId)}`);
     }
   };
 
   if (isLoadingScoresData) {
-    return <EntryListSkeleton columns={traceScoresListColumns} />;
+    return <DataListSkeleton columns={gridColumns} />;
   }
 
-  const updateSelectedScore = (scoreId: string) => {
-    const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
-    setSelectedScore(score);
-  };
-
-  const toNextScore = getToNextEntryFn({
-    entries: scoresData?.scores || [],
-    id: selectedScore?.id,
-    update: updateSelectedScore,
-  });
-
-  const toPreviousScore = getToPreviousEntryFn({
-    entries: scoresData?.scores || [],
-    id: selectedScore?.id,
-    update: updateSelectedScore,
-  });
+  const scores = scoresData?.scores ?? [];
+  const currentPage = scoresData?.pagination?.page ?? 0;
 
   return (
-    <>
-      <EntryList>
-        <EntryList.Trim>
-          <EntryList.Header columns={traceScoresListColumns} />
-          {scoresData?.scores && scoresData.scores.length > 0 ? (
-            <EntryList.Entries>
-              {scoresData?.scores?.map((score: ScoreRowData) => {
-                const createdAtDate = new Date(score.createdAt);
-                const isTodayDate = isToday(createdAtDate);
+    <DataList columns={gridColumns}>
+      <DataList.Top>
+        {traceScoresListColumns.map(col => (
+          <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
+        ))}
+      </DataList.Top>
 
-                const entry = {
-                  id: score?.id,
-                  shortId: getShortId(score?.id) || 'n/a',
-                  date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-                  time: format(createdAtDate, 'h:mm:ss aaa'),
-                  score: score?.score,
-                  scorer: score?.scorer?.name || score?.scorer?.id,
-                };
+      {scores.length === 0 ? (
+        <DataList.NoMatch message="No scores found" />
+      ) : (
+        scores.map((score: ScoreRowData) => {
+          const createdAtDate = new Date(score.createdAt);
+          return (
+            <DataList.RowButton key={score.id} onClick={() => handleOnScore(score.id)}>
+              <DataList.IdCell id={score.id} />
+              <DataList.DateCell timestamp={createdAtDate} />
+              <DataList.Cell height="compact">{format(createdAtDate, 'h:mm:ss aaa')}</DataList.Cell>
+              <DataList.Cell height="compact">{String(score?.score ?? '')}</DataList.Cell>
+              <DataList.Cell height="compact">{String(score?.scorer?.name ?? score?.scorer?.id ?? '')}</DataList.Cell>
+            </DataList.RowButton>
+          );
+        })
+      )}
 
-                return (
-                  <EntryList.Entry
-                    key={score.id}
-                    columns={traceScoresListColumns}
-                    onClick={() => handleOnScore(score.id)}
-                    entry={entry}
-                  >
-                    {traceScoresListColumns.map(col => {
-                      const key = `col-${col.name}`;
-                      return (
-                        <EntryList.EntryText key={key}>
-                          {String(entry?.[col.name as keyof typeof entry] ?? '')}
-                        </EntryList.EntryText>
-                      );
-                    })}
-                  </EntryList.Entry>
-                );
-              })}
-            </EntryList.Entries>
-          ) : (
-            <EntryList.Message message="No scores found" type="info" />
-          )}
-        </EntryList.Trim>
-        <EntryList.Pagination
-          currentPage={scoresData?.pagination?.page || 0}
-          hasMore={scoresData?.pagination?.hasMore}
-          onNextPage={() => onPageChange && onPageChange((scoresData?.pagination?.page || 0) + 1)}
-          onPrevPage={() => onPageChange && onPageChange((scoresData?.pagination?.page || 0) - 1)}
-        />
-      </EntryList>
-      <ScoreDialog
-        scorerName={(selectedScore?.scorer?.name as string) || (selectedScore?.scorer?.id as string) || ''}
-        score={selectedScore as ScoreRowData}
-        isOpen={dialogIsOpen}
-        onClose={() => {
-          if (traceId) {
-            navigate(`${computeTraceLink(traceId, spanId)}&tab=scores`);
-          }
-          setDialogIsOpen(false);
-        }}
-        dialogLevel={3}
-        onNext={toNextScore}
-        onPrevious={toPreviousScore}
-        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
-        usageContext="SpanDialog"
+      <DataList.Pagination
+        currentPage={currentPage}
+        hasMore={scoresData?.pagination?.hasMore}
+        onNextPage={() => onPageChange?.(currentPage + 1)}
+        onPrevPage={() => onPageChange?.(currentPage - 1)}
       />
-    </>
+    </DataList>
   );
 }
