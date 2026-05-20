@@ -57,6 +57,7 @@ export interface GoalEvaluationOptions {
 // =============================================================================
 
 export const DEFAULT_MAX_TURNS = 50;
+const JUDGE_MAX_RETRIES = 2;
 const THREAD_GOAL_KEY = 'goal';
 
 const JUDGE_SYSTEM_PROMPT = `You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.
@@ -346,43 +347,49 @@ export class GoalManager {
     context: { lastUserContent: string | null; assistantStepsSinceLastUser: number; lastAssistantContent: string },
     options: GoalEvaluationOptions,
   ): Promise<GoalJudgeResult> {
-    try {
-      const memory = await this.getJudgeMemory(state);
-      const tools = await this.createJudgeTools(state);
-      const judgeAgent = this.createJudgeAgent(memory, tools);
-      if (!judgeAgent) {
-        return { decision: 'paused', reason: 'Judge model could not be initialized.' };
-      }
-
-      const recentUser = context.lastUserContent
-        ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
-        : '';
-
-      const stream = await judgeAgent.stream(
-        `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${context.lastAssistantContent}`,
-        {
-          ...(memory
-            ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
-            : {}),
-          abortSignal: options.abortSignal,
-          structuredOutput: {
-            schema: judgeSchema,
-          },
-        },
-      );
-
-      await this.consumeJudgeStream(stream, options.onActivity);
-      const output = (await stream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
-      if (!output) {
-        return { decision: 'paused', reason: 'Judge returned no structured decision.' };
-      }
-      return { decision: output.decision, reason: output.reason };
-    } catch (error) {
-      if (options.abortSignal?.aborted) {
-        return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
-      }
-      return { decision: 'paused', reason: `Judge could not evaluate this turn: ${formatError(error)}` };
+    const memory = await this.getJudgeMemory(state);
+    const tools = await this.createJudgeTools(state);
+    const judgeAgent = this.createJudgeAgent(memory, tools);
+    if (!judgeAgent) {
+      return { decision: 'paused', reason: 'Judge model could not be initialized.' };
     }
+
+    const recentUser = context.lastUserContent
+      ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
+      : '';
+
+    const prompt = `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${context.lastAssistantContent}`;
+    const streamOptions = {
+      ...(memory
+        ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
+        : {}),
+      abortSignal: options.abortSignal,
+      structuredOutput: {
+        schema: judgeSchema,
+      },
+    };
+
+    for (let attempt = 0; attempt <= JUDGE_MAX_RETRIES; attempt++) {
+      try {
+        const stream = await judgeAgent.stream(prompt, streamOptions);
+
+        await this.consumeJudgeStream(stream, options.onActivity);
+        const output = (await stream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
+        if (output) {
+          return { decision: output.decision, reason: output.reason };
+        }
+        if (attempt < JUDGE_MAX_RETRIES) continue;
+        return { decision: 'paused', reason: 'Judge returned no structured decision after retries.' };
+      } catch (error) {
+        if (options.abortSignal?.aborted) {
+          return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
+        }
+        if (attempt < JUDGE_MAX_RETRIES) continue;
+        return { decision: 'paused', reason: `Judge could not evaluate this turn: ${formatError(error)}` };
+      }
+    }
+
+    return { decision: 'paused', reason: 'Judge returned no structured decision after retries.' };
   }
 
   private async createJudgeTools(state: TUIState): Promise<Record<string, any>> {

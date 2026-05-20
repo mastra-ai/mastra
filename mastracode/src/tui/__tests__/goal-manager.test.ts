@@ -152,7 +152,7 @@ describe('GoalManager', () => {
     expect(manager.getGoal()?.turnsUsed).toBe(0);
   });
 
-  it('pauses with a specific reason when the judge returns no structured output', async () => {
+  it('retries and pauses when the judge consistently returns no structured output', async () => {
     mocks.stream.mockResolvedValue({
       consumeStream: vi.fn().mockResolvedValue(undefined),
       getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
@@ -166,10 +166,40 @@ describe('GoalManager', () => {
 
     const result = await manager.evaluateAfterTurn(createState());
 
+    expect(mocks.stream).toHaveBeenCalledTimes(3);
     expect(result.continuation).toBeNull();
-    expect(result.judgeResult).toEqual({ decision: 'paused', reason: 'Judge returned no structured decision.' });
+    expect(result.judgeResult).toEqual({
+      decision: 'paused',
+      reason: 'Judge returned no structured decision after retries.',
+    });
     expect(manager.getGoal()?.status).toBe('paused');
     expect(manager.getGoal()?.turnsUsed).toBe(0);
+  });
+
+  it('succeeds on retry when the judge returns structured output on second attempt', async () => {
+    let callCount = 0;
+    mocks.stream.mockImplementation(async () => {
+      callCount++;
+      return {
+        consumeStream: vi.fn().mockResolvedValue(undefined),
+        getFullOutput: vi.fn().mockResolvedValue(
+          callCount === 1 ? { object: undefined } : { object: { decision: 'continue', reason: 'Keep going.' } },
+        ),
+      };
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    const result = await manager.evaluateAfterTurn(createState());
+
+    expect(mocks.stream).toHaveBeenCalledTimes(2);
+    expect(result.continuation).toContain('Keep going.');
+    expect(result.judgeResult?.decision).toBe('continue');
+    expect(manager.getGoal()?.status).toBe('active');
   });
 
   it('uses stream with structured output and judge memory thread parent-goalId', async () => {

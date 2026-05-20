@@ -622,19 +622,20 @@ Usage:
           };
         }
 
-        const updatedTasks = tasks.map((task, index) =>
-          index === taskIndex
-            ? {
-                ...task,
-                ...(content !== undefined ? { content } : {}),
-                ...(status !== undefined ? { status } : {}),
-                ...(activeForm !== undefined ? { activeForm } : {}),
-              }
-            : task,
-        );
-        if (hasMultipleInProgress(updatedTasks)) {
-          return multipleInProgressError(tasks);
-        }
+        const updatedTasks = tasks.map((task, index) => {
+          if (index === taskIndex) {
+            return {
+              ...task,
+              ...(content !== undefined ? { content } : {}),
+              ...(status !== undefined ? { status } : {}),
+              ...(activeForm !== undefined ? { activeForm } : {}),
+            };
+          }
+          if (status === 'in_progress' && task.status === 'in_progress') {
+            return { ...task, status: 'pending' as const };
+          }
+          return task;
+        });
 
         return {
           content: formatTaskListResult(updatedTasks),
