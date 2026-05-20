@@ -9,7 +9,7 @@ const ELLIPSIS = '…';
 const ELLIPSIS_WIDTH = visibleWidth(ELLIPSIS);
 
 function fitVisibleText(text: string, maxWidth: number): { text: string; width: number; truncated: boolean } {
-  if (maxWidth <= 0) return { text: ELLIPSIS, width: ELLIPSIS_WIDTH, truncated: text.length > 0 };
+  if (maxWidth <= 0) return { text: '', width: 0, truncated: text.length > 0 };
 
   const targetWidth = Math.max(0, maxWidth - ELLIPSIS_WIDTH);
   let width = 0;
@@ -35,6 +35,8 @@ function fitVisibleText(text: string, maxWidth: number): { text: string; width: 
  *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
  */
 export function truncateAnsi(str: string, maxWidth: number): string {
+  if (maxWidth <= 0) return '';
+
   // The OSC 8 hyperlink body is terminated by BEL (\x07). We also
   // break on a new ESC (\x1b) so a missing terminator cannot scan
   // unbounded input and amplify polynomial backtracking.

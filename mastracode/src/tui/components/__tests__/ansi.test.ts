@@ -11,6 +11,15 @@ describe('truncateAnsi', () => {
   it('returns the string unchanged when it exactly fills maxWidth', () => {
     expect(truncateAnsi('hello', 5)).toBe('hello');
     expect(truncateAnsi('abc界', 5)).toBe('abc界');
+    expect(truncateAnsi('\x1b[31mhello\x1b[0m', 5)).toBe('\x1b[31mhello\x1b[0m');
+  });
+
+  it('returns no visible text when maxWidth is zero', () => {
+    expect(truncateAnsi('hello', 0)).toBe('');
+
+    const out = truncateAnsi('\x1b[31mhello\x1b[0m', 0);
+    expect(stripAnsi(out)).toBe('');
+    expect(visibleWidth(stripAnsi(out))).toBe(0);
   });
 
   it('preserves SGR escape sequences without counting them toward width', () => {
