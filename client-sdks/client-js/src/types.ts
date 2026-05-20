@@ -2301,6 +2301,46 @@ export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-provide
 export type GetToolProviderToolSchemaResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
 
+// ── v2 surface: authorize / connections / fields / status / health ──────────
+
+export type AuthorizeToolProviderParams = GeneratedRequest<Body<'POST /tool-providers/:providerId/authorize'>>;
+
+export type AuthorizeToolProviderResponse = GeneratedResponse<'POST /tool-providers/:providerId/authorize'>;
+
+export type ToolProviderAuthStatusResponse = GeneratedResponse<'GET /tool-providers/:providerId/auth-status/:authId'>;
+
+export type ToolProviderConnectionStatusParams = GeneratedRequest<
+  Body<'POST /tool-providers/:providerId/connection-status'>
+>;
+
+export type ToolProviderConnectionStatusResponse =
+  GeneratedResponse<'POST /tool-providers/:providerId/connection-status'>;
+
+export type ListToolProviderConnectionsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections'>
+>;
+
+export type ListToolProviderConnectionsResponse = GeneratedResponse<'GET /tool-providers/:providerId/connections'>;
+
+export type ListToolProviderConnectionFieldsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connection-fields'>
+>;
+
+export type ListToolProviderConnectionFieldsResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connection-fields'>;
+
+export type DisconnectToolProviderConnectionParams = GeneratedRequest<
+  QueryParams<'DELETE /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type DisconnectToolProviderConnectionResponse =
+  GeneratedResponse<'DELETE /tool-providers/:providerId/connections/:connectionId'>;
+
+export type GetToolProviderConnectionUsageResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;
+
+export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/:providerId/health'>;
+
 // ============================================================================
 // Processor Provider Types
 // ============================================================================
