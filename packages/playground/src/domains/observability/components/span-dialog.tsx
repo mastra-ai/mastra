@@ -20,7 +20,6 @@ type SpanDialogProps = {
   onPrevious?: () => void;
   onViewToggle?: () => void;
   defaultActiveTab?: string;
-  initialScoreId?: string;
   computeTraceLink: (traceId: string, spanId?: string) => string;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
@@ -39,7 +38,6 @@ export function SpanDialog({
   onViewToggle,
   spanInfo = [],
   defaultActiveTab = 'details',
-  initialScoreId,
   computeTraceLink,
   scorers,
   isLoadingScorers,
@@ -86,7 +84,6 @@ export function SpanDialog({
           isLoadingSpanScoresData={isLoadingSpanScoresData}
           spanInfo={spanInfo}
           defaultActiveTab={defaultActiveTab}
-          initialScoreId={initialScoreId}
           computeTraceLink={computeTraceLink}
           scorers={scorers}
           isLoadingScorers={isLoadingScorers}
