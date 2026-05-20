@@ -26,6 +26,7 @@ import type {
 } from '../../storage/domains/harness';
 import {
   HarnessStorage,
+  HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageVersionConflictError,
 } from '../../storage/domains/harness';
@@ -1075,6 +1076,48 @@ describe('Harness v1 — construction', () => {
     expect(delivered).toEqual(['outbox-key-1']);
   });
 
+  it('uses canonical payload hashes for channel outbox idempotency', async () => {
+    const storage = makeStorage();
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      channels: {
+        support: makeHarnessChannelConfig({ bindingId: 'support-binding' }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+
+    await expect(
+      harness.channels.enqueueOutbox(
+        channelOutboxInput({
+          payload: { b: 2, a: 1 },
+        }),
+      ),
+    ).resolves.toMatchObject({ duplicate: false, conflict: false });
+    await expect(
+      harness.channels.enqueueOutbox(
+        channelOutboxInput({
+          idempotencyKey: 'outbox-key-1',
+          payload: { a: 1, b: 2 },
+        }),
+      ),
+    ).resolves.toMatchObject({ duplicate: true, conflict: false });
+    await expect(
+      harness.channels.enqueueOutbox(
+        channelOutboxInput({
+          idempotencyKey: 'outbox-key-1',
+          payload: { a: 1, b: 2, c: null },
+        }),
+      ),
+    ).resolves.toMatchObject({ duplicate: true, conflict: true });
+  });
+
   it('returns session-scoped channel diagnostics without leaking provider payloads', async () => {
     const storage = makeStorage();
     const harness = new Harness({
@@ -1144,6 +1187,16 @@ describe('Harness v1 — construction', () => {
     expect(wire).not.toContain('secret');
     expect(wire).not.toContain('foreign-inbox');
     expect(wire).not.toContain('claim-secret');
+    await expect(
+      storage.claimChannelOutbox({
+        harnessName: 'primary',
+        channelId: 'support',
+        claimId: 'post-diagnostics',
+        limit: 10,
+        now: Date.now(),
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'outbox-1', claimId: 'post-diagnostics' })]);
   });
 
   it('marks channel diagnostics truncated only when visible sessions exceed the cap', async () => {
@@ -1302,6 +1355,95 @@ describe('Harness v1 — construction', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('does not call the outbox provider or mutate after pre-delivery claim ownership is lost', async () => {
+    const db = new InMemoryDB();
+    const storage = new InMemoryHarness({ db });
+    const deliver = vi.fn(async () => ({ providerMessageId: 'provider-message-1' }));
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      channels: {
+        support: makeHarnessChannelConfig({
+          adapter: { deliver },
+        }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+    const enqueued = await harness.channels.enqueueOutbox(channelOutboxInput());
+    const outboxItemId = enqueued.outboxItemId;
+    const dispatchNow = Date.now();
+    const claimTtlMs = 1_000;
+    const competingClaimId = 'claim-competing';
+    const competingClaimExpiresAt = dispatchNow + claimTtlMs * 5;
+    const renewSpy = vi.spyOn(storage, 'renewChannelOutboxClaim').mockImplementationOnce(async input => {
+      const claimed = db.harnessChannelOutbox.get(outboxItemId);
+      expect(claimed).toMatchObject({ status: 'claimed', claimId: 'claim-lost' });
+      db.harnessChannelOutbox.set(outboxItemId, {
+        ...claimed!,
+        claimId: competingClaimId,
+        claimExpiresAt: competingClaimExpiresAt,
+        updatedAt: dispatchNow + 1,
+      });
+      throw new HarnessStorageChannelOutboxClaimConflictError(outboxItemId, input.claimId);
+    });
+
+    await expect(
+      harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lost', now: dispatchNow, claimTtlMs }),
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      dead: 0,
+      items: [
+        {
+          outboxItemId: expect.any(String),
+          status: 'failed',
+          error: {
+            code: 'unknown',
+            message: `Channel outbox item "${outboxItemId}" is not held by claim "claim-lost"; claim was lost before failure could be recorded`,
+          },
+        },
+      ],
+    });
+    expect(renewSpy).toHaveBeenCalledOnce();
+    expect(deliver).not.toHaveBeenCalled();
+    const retainedByCompetingClaim = db.harnessChannelOutbox.get(outboxItemId);
+    expect(retainedByCompetingClaim).toMatchObject({
+      status: 'claimed',
+      claimId: competingClaimId,
+      claimExpiresAt: competingClaimExpiresAt,
+    });
+    expect(retainedByCompetingClaim?.sentAt).toBeUndefined();
+    expect(retainedByCompetingClaim?.failedAt).toBeUndefined();
+    expect(retainedByCompetingClaim?.lastError).toBeUndefined();
+    await expect(
+      storage.claimChannelOutbox({
+        harnessName: 'primary',
+        channelId: 'support',
+        claimId: 'early-recovery',
+        limit: 10,
+        now: dispatchNow + claimTtlMs + 1,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      storage.claimChannelOutbox({
+        harnessName: 'primary',
+        channelId: 'support',
+        claimId: 'recovery',
+        limit: 10,
+        now: competingClaimExpiresAt + 1,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: outboxItemId, status: 'claimed', claimId: 'recovery' })]);
   });
 
   it('records terminal provider failures on outbox dispatch', async () => {

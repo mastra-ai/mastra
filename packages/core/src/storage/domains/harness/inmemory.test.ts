@@ -1713,6 +1713,30 @@ describe('InMemoryHarness channel outbox ledger', () => {
       duplicate: true,
       conflict: true,
     });
+    await expect(
+      storage.enqueueChannelOutbox(
+        sampleChannelOutbox({
+          id: 'outbox-operation-conflict',
+          operationKind: 'message-edit',
+        }),
+      ),
+    ).resolves.toEqual({
+      outboxItemId: 'outbox-1',
+      duplicate: true,
+      conflict: true,
+    });
+    await expect(
+      storage.enqueueChannelOutbox(
+        sampleChannelOutbox({
+          id: 'outbox-delivery-semantics-conflict',
+          deliverySemantics: 'at-least-once',
+        }),
+      ),
+    ).resolves.toEqual({
+      outboxItemId: 'outbox-1',
+      duplicate: true,
+      conflict: true,
+    });
   });
 
   it('claims at most the oldest due row for one binding while allowing different bindings', async () => {
