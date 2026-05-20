@@ -14,6 +14,19 @@ class TestMastraServer extends MastraServer<any, any, any> {
   registerContextMiddleware = vi.fn();
   registerAuthMiddleware = vi.fn();
   registerHttpLoggingMiddleware = vi.fn();
+
+  buildCustomRouteHandlerForTest() {
+    return this.buildCustomRouteHandler();
+  }
+
+  handleCustomRouteRequestForTest(
+    url: string,
+    method: string,
+    headers: Record<string, string | string[] | undefined>,
+    body: unknown,
+  ) {
+    return this.handleCustomRouteRequest(url, method, headers, body);
+  }
 }
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
@@ -23,6 +36,45 @@ function createMockFGAProvider(authorized = true): IFGAProvider {
     filterAccessible: vi.fn(),
   };
 }
+
+describe('custom route forwarding', () => {
+  it('should forward DELETE JSON bodies to custom routes', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/items/:id',
+            method: 'DELETE',
+            handler: async c => {
+              const body = await c.req.json();
+              const { id } = c.req.param();
+
+              return c.json({ deleted: id, reason: body.reason });
+            },
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.buildCustomRouteHandlerForTest()).resolves.toBe(true);
+
+    const response = await adapter.handleCustomRouteRequestForTest(
+      'http://localhost/items/123',
+      'DELETE',
+      { 'content-type': 'application/json' },
+      { reason: 'no longer needed' },
+    );
+
+    expect(response).not.toBeNull();
+    expect(response!.status).toBe(200);
+    await expect(response!.json()).resolves.toEqual({
+      deleted: '123',
+      reason: 'no longer needed',
+    });
+  });
+});
 
 describe('FGA Middleware - checkRouteFGA', () => {
   let checkRouteFGA: (

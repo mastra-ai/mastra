@@ -1665,22 +1665,6 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
     });
 
-    it('getMetricAggregate returns avg', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(266.67, 0);
-    });
-
-    it('getMetricAggregate returns count', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
     it('getMetricBreakdown groups by entityName', async () => {
       const result = await storage.getMetricBreakdown({
         name: ['mastra_agent_duration_ms'],

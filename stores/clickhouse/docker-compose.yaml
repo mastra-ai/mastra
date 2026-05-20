@@ -20,3 +20,4 @@ services:
       - /var/lib/clickhouse
     volumes:
       - ./docker/keeper.test.xml:/etc/clickhouse-server/config.d/keeper.xml:ro
+      - ./docker/disable-jit.test.xml:/etc/clickhouse-server/users.d/disable-jit.xml:ro
