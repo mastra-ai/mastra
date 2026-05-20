@@ -99,8 +99,8 @@ export interface GithubSignalsInitOptions {
   threadId?: string;
 }
 
-interface GithubSignalsMemory {
-  listThreads(args: { perPage?: number | false; page?: number; filter?: { resourceId?: string } }): Promise<{
+export interface GithubSignalsMemory {
+  listThreads?(args: { perPage?: number | false; page?: number; filter?: { resourceId?: string } }): Promise<{
     threads: Array<GithubSignalsThread>;
     hasMore?: boolean;
     total?: number;
@@ -109,10 +109,28 @@ interface GithubSignalsMemory {
   updateThread?(args: { id: string; title: string; metadata: Record<string, unknown> }): Promise<unknown>;
 }
 
-interface GithubSignalsThread {
+export interface GithubSignalsThread {
   id: string;
   title?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface GithubSignalsThreadOptions {
+  memory: GithubSignalsMemory;
+  resourceId: string;
+  threadId: string;
+  agentId?: string;
+  repo?: string;
+  prNumber: number;
+  processedSignalId?: string;
+}
+
+export interface GithubSignalsSyncThreadOptions {
+  agentId?: string;
+  resourceId: string;
+  threadId: string;
+  repo?: string;
+  prNumber?: number;
 }
 
 interface GithubSubscriptionPersistence {
@@ -168,6 +186,8 @@ interface ActiveThreadContext {
   agentId: string;
   resourceId: string;
   threadId: string;
+  repo?: string;
+  prNumber?: number;
 }
 
 interface ActiveSubscription extends GithubPRSubscriptionMetadata {
@@ -547,6 +567,8 @@ export class GithubSignals {
       return subscriptions;
     }
 
+    if (!options.memory.listThreads) return subscriptions;
+
     let page = 0;
 
     do {
@@ -566,6 +588,122 @@ export class GithubSignals {
     } while (true);
 
     return subscriptions;
+  }
+
+  async subscribeThread(options: GithubSignalsThreadOptions): Promise<GithubPRSubscriptionMetadata | undefined> {
+    const thread = await this.#getThread(options.memory, options.resourceId, options.threadId);
+    if (!thread) return undefined;
+
+    const githubMetadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+    const processedSignalIds = new Set(githubMetadata.processedSignalIds);
+    if (options.processedSignalId && processedSignalIds.has(options.processedSignalId)) {
+      const key = threadSubscriptionKey({ repo: options.repo ?? this.#options.repo, prNumber: options.prNumber });
+      return githubMetadata.subscriptions[key];
+    }
+
+    const now = this.#options.now().toISOString();
+    const baseSubscription = {
+      agentId: this.getAgentId(options.agentId),
+      resourceId: options.resourceId,
+      threadId: options.threadId,
+      repo: options.repo ?? this.#options.repo,
+      prNumber: options.prNumber,
+    };
+    const key = threadSubscriptionKey(baseSubscription);
+    const existing = githubMetadata.subscriptions[key];
+    const subscription = await this.baselineSubscription({
+      ...existing,
+      ...baseSubscription,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+
+    githubMetadata.subscriptions[key] = subscription;
+    if (options.processedSignalId) {
+      processedSignalIds.add(options.processedSignalId);
+      githubMetadata.processedSignalIds = truncateProcessedSignalIds([...processedSignalIds]);
+    }
+
+    this.addSubscription(subscription, this.#createSubscriptionPersistence(options.memory, thread));
+    await this.#persistGithubMetadata(options.memory, thread, githubMetadata);
+    return subscription;
+  }
+
+  async unsubscribeThread(options: GithubSignalsThreadOptions): Promise<GithubPRSubscriptionMetadata | undefined> {
+    const thread = await this.#getThread(options.memory, options.resourceId, options.threadId);
+    if (!thread) return undefined;
+
+    const githubMetadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+    const processedSignalIds = new Set(githubMetadata.processedSignalIds);
+    if (options.processedSignalId && processedSignalIds.has(options.processedSignalId)) {
+      const key = threadSubscriptionKey({ repo: options.repo ?? this.#options.repo, prNumber: options.prNumber });
+      return githubMetadata.subscriptions[key];
+    }
+
+    const baseSubscription = {
+      agentId: this.getAgentId(options.agentId),
+      resourceId: options.resourceId,
+      threadId: options.threadId,
+      repo: options.repo ?? this.#options.repo,
+      prNumber: options.prNumber,
+    };
+    const key = threadSubscriptionKey(baseSubscription);
+    const existing = githubMetadata.subscriptions[key];
+    delete githubMetadata.subscriptions[key];
+    if (existing) githubMetadata.subscriptionHintShown = false;
+    if (options.processedSignalId) {
+      processedSignalIds.add(options.processedSignalId);
+      githubMetadata.processedSignalIds = truncateProcessedSignalIds([...processedSignalIds]);
+    }
+
+    this.removeSubscription(existing ?? baseSubscription);
+    await this.#persistGithubMetadata(options.memory, thread, githubMetadata);
+    return existing;
+  }
+
+  async syncThread(options: GithubSignalsSyncThreadOptions): Promise<{ pendingDelivered: number }> {
+    const context = {
+      agentId: this.getAgentId(options.agentId),
+      resourceId: options.resourceId,
+      threadId: options.threadId,
+      repo: options.repo,
+      prNumber: options.prNumber,
+    };
+    await this.poll(context);
+    const pendingDelivered = await this.deliverPendingNotifications({
+      ...context,
+      repo: options.repo,
+      prNumber: options.prNumber,
+    });
+    return { pendingDelivered };
+  }
+
+  async #getThread(memory: GithubSignalsMemory, resourceId: string, threadId: string) {
+    if (memory.getThreadById) return memory.getThreadById({ threadId, resourceId });
+    if (!memory.listThreads) return undefined;
+    let page = 0;
+    do {
+      const result = await memory.listThreads({ page, perPage: 100, filter: { resourceId } });
+      const thread = result.threads.find(candidate => candidate.id === threadId);
+      if (thread) return thread;
+      page += 1;
+      if (result.hasMore === false || result.threads.length === 0) break;
+      if (typeof result.total === 'number' && page * 100 >= result.total) break;
+    } while (true);
+    return undefined;
+  }
+
+  async #persistGithubMetadata(
+    memory: GithubSignalsMemory,
+    thread: GithubSignalsThread,
+    githubMetadata: GithubSignalsThreadMetadata,
+  ) {
+    if (!memory.updateThread) return;
+    await memory.updateThread({
+      id: thread.id,
+      title: thread.title ?? '',
+      metadata: setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, githubMetadata),
+    });
   }
 
   #createSubscriptionPersistence(
@@ -714,6 +852,8 @@ export class GithubSignals {
 
       for (const subscription of this.#activeSubscriptions.values()) {
         if (context && activeThreadKey(subscription) !== activeThreadKey(context)) continue;
+        if (context?.repo && subscription.repo !== context.repo) continue;
+        if (context?.prNumber && subscription.prNumber !== context.prNumber) continue;
         if (sharedInboxError) {
           const registeredAgent = this.#agents.get(subscription.agentId);
           if (registeredAgent) await this.#emitCommandError(registeredAgent, subscription, sharedInboxError);
@@ -1486,63 +1626,24 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
     const memory = await this.mastra?.getStorage()?.getStore('memory');
     if (!memory) return;
 
-    const thread = await memory.getThreadById({ threadId, resourceId });
-    if (!thread) return;
-
-    const githubMetadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
-    const processedSignalIds = new Set(githubMetadata.processedSignalIds);
-    if (processedSignalIds.has(signal.id)) return;
-
-    const repo = payload.repo ?? this.#options.repo;
-    const now = this.#options.now().toISOString();
     const agentId = this.#owner.getAgentId(
       signal.metadata?.agentId && typeof signal.metadata.agentId === 'string' ? signal.metadata.agentId : undefined,
     );
-    const baseSubscription = {
-      agentId,
+    const options = {
+      memory,
       resourceId,
       threadId,
-      repo,
+      agentId,
+      repo: payload.repo,
       prNumber: payload.prNumber,
+      processedSignalId: signal.id,
     };
-    const key = threadSubscriptionKey(baseSubscription);
 
     if (signalType === GITHUB_SUBSCRIBE_SIGNAL) {
-      const existing = githubMetadata.subscriptions[key];
-      const subscription = await this.#owner.baselineSubscription({
-        ...existing,
-        ...baseSubscription,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      });
-      githubMetadata.subscriptions[key] = subscription;
-      this.#owner.addSubscription(subscription, {
-        update: async updated => {
-          const currentThread =
-            (await memory.getThreadById?.({ threadId: updated.threadId, resourceId: updated.resourceId })) ?? thread;
-          const currentMetadata = getGithubSignalsMetadata(currentThread.metadata as ThreadMetadata | undefined);
-          const currentKey = threadSubscriptionKey(updated);
-          if (!currentMetadata.subscriptions[currentKey]) return;
-
-          currentMetadata.subscriptions[currentKey] = { ...updated };
-          await memory.updateThread({
-            id: currentThread.id,
-            title: currentThread.title ?? '',
-            metadata: setGithubSignalsMetadata(currentThread.metadata as ThreadMetadata | undefined, currentMetadata),
-          });
-        },
-      });
+      await this.#owner.subscribeThread(options);
     } else {
-      const existing = githubMetadata.subscriptions[key];
-      delete githubMetadata.subscriptions[key];
-      if (existing) githubMetadata.subscriptionHintShown = false;
-      this.#owner.removeSubscription(existing ?? { ...baseSubscription });
+      await this.#owner.unsubscribeThread(options);
     }
-
-    processedSignalIds.add(signal.id);
-    githubMetadata.processedSignalIds = truncateProcessedSignalIds([...processedSignalIds]);
-    const metadata = setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, githubMetadata);
-    await memory.updateThread({ id: thread.id, title: thread.title ?? '', metadata });
   }
 
   #toolResult(args: ProcessInputStepArgs): ProcessInputStepResult | undefined {

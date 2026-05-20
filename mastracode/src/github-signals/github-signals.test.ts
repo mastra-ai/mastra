@@ -240,6 +240,108 @@ describe('GithubSignals', () => {
     });
   });
 
+  it('subscribes a thread, persists metadata, and registers active polling', async () => {
+    const { memory, thread } = createHarness();
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot(),
+      createSnapshot({
+        failedChecks: [{ name: 'lint', conclusion: 'failure', details_url: 'https://github.com/checks/lint' }],
+      }),
+    ]);
+    const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+
+    const subscription = await github.subscribeThread({
+      memory: memory as any,
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+
+    expect(subscription).toMatchObject({ repo: 'mastra-ai/mastra', prNumber: 123 });
+    expect(Object.keys((thread.metadata as any).mastra.githubSignals.subscriptions)).toHaveLength(1);
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({ type: 'github-ci-failure', pr: 123, checkCount: 1 }),
+        contents: '- lint: failure',
+      }),
+      expect.objectContaining({ resourceId: 'resource-1', threadId: 'thread-1' }),
+    );
+  });
+
+  it('unsubscribes a thread and removes persisted metadata and active polling', async () => {
+    const { memory, thread } = createHarness();
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot(),
+      createSnapshot({
+        failedChecks: [{ name: 'lint', conclusion: 'failure', details_url: 'https://github.com/checks/lint' }],
+      }),
+    ]);
+    const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    await github.subscribeThread({
+      memory: memory as any,
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+
+    const removed = await github.unsubscribeThread({
+      memory: memory as any,
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+
+    expect(removed).toMatchObject({ repo: 'mastra-ai/mastra', prNumber: 123 });
+    expect(Object.keys((thread.metadata as any).mastra.githubSignals.subscriptions)).toHaveLength(0);
+
+    await github.poll();
+
+    expect(sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('syncs the current thread through polling and pending delivery', async () => {
+    const github = new GithubSignals({ repo: 'mastra-ai/mastra' });
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const poll = vi.spyOn(github, 'poll').mockResolvedValue(undefined);
+    const deliverPendingNotifications = vi.spyOn(github, 'deliverPendingNotifications').mockResolvedValue(2);
+
+    const result = await github.syncThread({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+    });
+
+    expect(result).toEqual({ pendingDelivered: 2 });
+    expect(poll).toHaveBeenCalledWith(expect.objectContaining({ repo: 'mastra-ai/mastra', prNumber: 123 }));
+    expect(deliverPendingNotifications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+      }),
+    );
+  });
+
   it('reads and enriches PR comment notifications from the shared LibSQL inbox cache', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');

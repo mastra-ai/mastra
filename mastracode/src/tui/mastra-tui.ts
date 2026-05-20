@@ -975,6 +975,7 @@ export class MastraTUI {
       harness: this.state.harness,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      githubSignals: this.state.options.githubSignals,
       analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,
