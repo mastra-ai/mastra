@@ -21,13 +21,17 @@ import type {
   AttachmentObjectPointer,
   AttachmentRendererDescriptor,
   AttachmentSource,
+  ChannelActionReceipt,
+  ChannelActionToken,
   ChannelDeliverySemantics,
+  ChannelInboxItem,
   ChannelOutboxEnqueueOptions,
   ChannelOutboxItem,
   ChannelOutboxOperationKind,
   ChannelProviderDeliveryReceipt,
   HarnessAttachmentKind,
   HarnessPrimitiveType,
+  HarnessRowErrorCode,
   HarnessStorage,
   JsonValue,
   SessionRecord as StoredSessionRecord,
@@ -339,6 +343,140 @@ export interface HarnessChannelBinding {
   platform: string;
   callbackTarget: string;
   durableId: string;
+}
+
+export interface HarnessChannelDiagnosticsOptions {
+  sessionId: string;
+  resourceId: string;
+  /**
+   * Maximum rows returned per diagnostic ledger.
+   */
+  limit?: number;
+}
+
+export interface HarnessChannelDiagnosticError {
+  code: HarnessRowErrorCode;
+  retryable?: boolean;
+}
+
+export interface HarnessChannelDiagnosticLease {
+  attempts: number;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+}
+
+export interface HarnessChannelInboxDiagnostic {
+  id: string;
+  status: ChannelInboxItem['status'];
+  channelId: string;
+  providerId: string;
+  bindingId?: string;
+  admissionId: string;
+  resourceId?: string;
+  threadId?: string;
+  sessionId?: string;
+  runId?: string;
+  signalId?: string;
+  queuedItemId?: string;
+  externalMessageId: string;
+  delivery?: ChannelInboxItem['delivery'];
+  mode?: string;
+  model?: string;
+  receivedAt: number;
+  admittedAt?: number;
+  acceptedAt?: number;
+  queuedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  updatedAt: number;
+  lease: HarnessChannelDiagnosticLease;
+  lastError?: HarnessChannelDiagnosticError;
+}
+
+export interface HarnessChannelActionTokenDiagnostic {
+  actionTokenId: string;
+  status: 'active' | 'expired' | 'revoked';
+  channelId: string;
+  providerId: string;
+  bindingId: string;
+  bindingGeneration: number;
+  resourceId: string;
+  owningSessionId: string;
+  itemId: string;
+  kind: ChannelActionToken['kind'];
+  runId: string;
+  pendingRequestedAt: number;
+  expiresAt?: number;
+  revokedAt?: number;
+  revokedReason?: ChannelActionToken['revokedReason'];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface HarnessChannelActionReceiptDiagnostic {
+  id: string;
+  status: ChannelActionReceipt['status'];
+  channelId: string;
+  providerId: string;
+  actionTokenId: string;
+  actionId: string;
+  bindingId: string;
+  bindingGeneration: number;
+  resourceId: string;
+  owningSessionId: string;
+  itemId: string;
+  kind: ChannelActionReceipt['kind'];
+  runId: string;
+  pendingRequestedAt: number;
+  conflictReason?: ChannelActionReceipt['conflictReason'];
+  acceptedAt?: number;
+  appliedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  createdAt: number;
+  updatedAt: number;
+  lease: HarnessChannelDiagnosticLease;
+  lastError?: HarnessChannelDiagnosticError;
+}
+
+export interface HarnessChannelOutboxDiagnostic {
+  id: string;
+  status: ChannelOutboxItem['status'];
+  channelId: string;
+  providerId: string;
+  bindingId: string;
+  bindingGeneration: number;
+  resourceId: string;
+  threadId: string;
+  sessionId?: string;
+  owningSessionId?: string;
+  source?: Pick<NonNullable<ChannelOutboxItem['source']>, 'kind' | 'id'>;
+  kind: ChannelOutboxItem['kind'];
+  operationKind: ChannelOutboxItem['operationKind'];
+  operationName?: string;
+  deliverySemantics: ChannelOutboxItem['deliverySemantics'];
+  sentAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  createdAt: number;
+  updatedAt: number;
+  lease: HarnessChannelDiagnosticLease;
+  lastError?: HarnessChannelDiagnosticError;
+}
+
+export interface HarnessChannelDiagnostics {
+  harnessName: string;
+  resourceId: string;
+  sessionId: string;
+  visibleSessionIds: string[];
+  bindings: HarnessChannelBinding[];
+  inbox: HarnessChannelInboxDiagnostic[];
+  actionTokens: HarnessChannelActionTokenDiagnostic[];
+  actionReceipts: HarnessChannelActionReceiptDiagnostic[];
+  outbox: HarnessChannelOutboxDiagnostic[];
+  limit: number;
+  truncated: boolean;
+  redacted: true;
 }
 
 export interface HarnessFileConfig {

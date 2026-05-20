@@ -5,6 +5,7 @@ import type {
   GetHarnessNameSessions_Response,
   GetHarnessNameSessions_QueryParams,
   GetHarnessNameSessionsSessionId_Response,
+  GetHarnessNameSessionsSessionIdChannelDiagnostics_Response,
   PostHarnessNameSessions_Body,
   PostHarnessNameSessions_Response,
 } from '../route-types.generated.js';
@@ -15,6 +16,7 @@ import { BaseResource } from './base';
 type JsonObject = Record<string, unknown>;
 export type HarnessSessionSnapshot = GetHarnessNameSessionsSessionId_Response;
 export type HarnessSessionSummary = GetHarnessNameSessions_Response['items'][number];
+export type ChannelDiagnostics = GetHarnessNameSessionsSessionIdChannelDiagnostics_Response;
 export type CreateHarnessSessionBody = PostHarnessNameSessions_Body;
 export type CreateHarnessSessionResponse = PostHarnessNameSessions_Response;
 export type AttachmentRef = {
@@ -130,6 +132,10 @@ export interface RemoteHarnessSubscriptionOptions {
 
 export interface RemoteHarnessStatePatchOptions {
   ifVersion?: number;
+}
+
+export interface RemoteSessionChannelDiagnosticsOptions {
+  limit?: number;
 }
 
 export type RemoteHarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
@@ -378,6 +384,13 @@ export class RemoteSession extends BaseResource {
 
   getGoal(): Promise<GoalResponse> {
     return this.request(`${this.sessionPath()}/goal`);
+  }
+
+  channelDiagnostics(options: RemoteSessionChannelDiagnosticsOptions = {}): Promise<ChannelDiagnostics> {
+    const searchParams = new URLSearchParams();
+    if (options.limit !== undefined) searchParams.set('limit', String(options.limit));
+    const query = searchParams.toString();
+    return this.request(`${this.sessionPath()}/channel-diagnostics${query ? `?${query}` : ''}`);
   }
 
   pauseGoal(): Promise<GoalResponse> {

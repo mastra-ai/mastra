@@ -8,6 +8,7 @@ import type {
   ChannelActionInitialClaim,
   ChannelActionReceipt,
   ChannelActionToken,
+  ChannelDiagnosticsRows,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
   ChannelInboxInitialClaim,
@@ -27,6 +28,7 @@ import type {
   HarnessWakeupInitialClaim,
   HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
+  ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
@@ -196,6 +198,14 @@ export class HarnessStorageSessionEventReplayUnsupportedError extends Error {
   readonly code = 'harness.storage.session_event_replay_unsupported' as const;
   constructor() {
     super('HarnessStorage session event replay must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageChannelDiagnosticsUnsupportedError extends Error {
+  readonly name = 'HarnessStorageChannelDiagnosticsUnsupportedError';
+  readonly code = 'harness.storage.channel_diagnostics_unsupported' as const;
+  constructor() {
+    super('HarnessStorage channel diagnostics must be implemented by this storage adapter');
   }
 }
 
@@ -863,6 +873,15 @@ export abstract class HarnessStorage extends StorageDomain {
     dead?: boolean;
     error: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
   }): Promise<void>;
+
+  /**
+   * Read-only session-scoped channel ledger diagnostics. Implementations must
+   * push `resourceId` and `sessionIds` filters to storage and must not mutate,
+   * claim, dispatch, retry, or reconcile rows.
+   */
+  async listChannelDiagnosticsRows(_opts: ListChannelDiagnosticsInput): Promise<ChannelDiagnosticsRows> {
+    throw new HarnessStorageChannelDiagnosticsUnsupportedError();
+  }
 
   // -------------------------------------------------------------------------
   // Wakeup ledger

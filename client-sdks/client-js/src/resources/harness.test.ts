@@ -294,6 +294,34 @@ describe('Harness Resource', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('fetches redacted channel diagnostics for a remote session', async () => {
+    const diagnostics = {
+      harnessName: 'default',
+      resourceId: 'resource-1',
+      sessionId: 'session-1',
+      visibleSessionIds: ['session-1'],
+      bindings: [],
+      inbox: [],
+      actionTokens: [],
+      actionReceipts: [],
+      outbox: [],
+      limit: 10,
+      truncated: false,
+      redacted: true,
+    };
+    mockJson({ session: makeSnapshot() });
+    mockJson(diagnostics);
+
+    const session = await client.getHarness().session();
+    await expect(session.channelDiagnostics({ limit: 10 })).resolves.toEqual(diagnostics);
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      'http://localhost:4111/api/harness/default/sessions/session-1/channel-diagnostics?limit=10',
+      expect.objectContaining({
+        headers: expect.objectContaining(clientOptions.headers),
+      }),
+    );
+  });
+
   it('recovers message settlement through result lookup after an event stream failure', async () => {
     mockJson({ session: makeSnapshot() });
     mockJson({ accepted: true, signalId: 'signal-1', runId: 'run-1', duplicate: false });

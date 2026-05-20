@@ -278,4 +278,148 @@ describe('HarnessPG', () => {
       expect.objectContaining({ id: 'wakeup-1', status: 'claimed', claimId: 'claim-wakeup', attempts: 1 }),
     ]);
   });
+
+  it('lists resource and session scoped channel diagnostics rows', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveChannelInboxItem({
+      id: 'inbox-root',
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack',
+      idempotencyKey: 'event-root',
+      payloadHash: 'payload-hash-root',
+      admissionId: 'admission-root',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      sessionId: 'session-1',
+      externalMessageId: 'message-root',
+      receivedAt: 1000,
+      updatedAt: 1000,
+      status: 'received',
+      attempts: 0,
+      requestContext: {},
+      content: 'hello',
+      attachments: [],
+    });
+    await harness!.saveChannelInboxItem({
+      id: 'inbox-hidden',
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack',
+      idempotencyKey: 'event-hidden',
+      payloadHash: 'payload-hash-hidden',
+      admissionId: 'admission-hidden',
+      resourceId: 'resource-2',
+      threadId: 'thread-1',
+      sessionId: 'session-1',
+      externalMessageId: 'message-hidden',
+      receivedAt: 1000,
+      updatedAt: 1000,
+      status: 'received',
+      attempts: 0,
+      requestContext: {},
+      content: 'hello',
+      attachments: [],
+    });
+    await harness!.createOrLoadChannelActionToken({
+      actionTokenId: 'action-token-1',
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack',
+      resourceId: 'resource-1',
+      owningSessionId: 'child-1',
+      itemId: 'question-1',
+      kind: 'question',
+      bindingId: 'binding-1',
+      bindingGeneration: 1,
+      runId: 'run-1',
+      pendingRequestedAt: 1000,
+      audience: {},
+      metadataHash: 'metadata-hash-1',
+      transportHash: 'transport-hash-1',
+      keyId: 'key-1',
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    await harness!.createOrLoadChannelActionReceipt({
+      id: 'receipt-1',
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack',
+      actionTokenId: 'action-token-1',
+      actionId: 'provider-action-1',
+      bindingId: 'binding-1',
+      bindingGeneration: 1,
+      resourceId: 'resource-1',
+      owningSessionId: 'child-1',
+      itemId: 'question-1',
+      kind: 'question',
+      runId: 'run-1',
+      pendingRequestedAt: 1000,
+      audience: {},
+      responseHash: 'response-hash-1',
+      response: { answer: 'approved' },
+      status: 'received',
+      attempts: 0,
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    await harness!.enqueueChannelOutbox({
+      id: 'outbox-owned-child',
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack',
+      bindingId: 'binding-1',
+      bindingGeneration: 1,
+      idempotencyKey: 'outbox-owned-child',
+      payloadHash: 'payload-hash-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      owningSessionId: 'child-1',
+      target: {
+        platform: 'slack',
+        externalTenantId: 'tenant-1',
+        externalChannelId: 'channel-1',
+        externalThreadId: 'thread-ext-1',
+      },
+      kind: 'assistant-message',
+      operationKind: 'message-create',
+      payload: { text: 'hello' },
+      deliverySemantics: 'native-idempotency',
+      status: 'pending',
+      attempts: 0,
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+
+    const rows = await harness!.listChannelDiagnosticsRows({
+      harnessName: 'default',
+      resourceId: 'resource-1',
+      sessionIds: ['session-1', 'child-1'],
+      limit: 10,
+    });
+
+    expect(rows.inbox.map(row => row.id)).toEqual(['inbox-root']);
+    expect(rows.actionTokens.map(row => row.actionTokenId)).toEqual(['action-token-1']);
+    expect(rows.actionReceipts.map(row => row.id)).toEqual(['receipt-1']);
+    expect(rows.outbox.map(row => row.id)).toEqual(['outbox-owned-child']);
+    await expect(
+      harness!.listChannelDiagnosticsRows({
+        harnessName: 'default',
+        resourceId: 'resource-1',
+        sessionIds: [],
+        limit: 10,
+      }),
+    ).resolves.toEqual({ inbox: [], actionTokens: [], actionReceipts: [], outbox: [] });
+    await expect(
+      harness!.listChannelDiagnosticsRows({
+        harnessName: 'default',
+        resourceId: 'resource-1',
+        sessionIds: ['session-1'],
+        limit: 0,
+      }),
+    ).resolves.toEqual({ inbox: [], actionTokens: [], actionReceipts: [], outbox: [] });
+  });
 });

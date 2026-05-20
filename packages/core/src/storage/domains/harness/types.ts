@@ -741,6 +741,23 @@ export interface EnqueueChannelOutboxResult {
   conflict: boolean;
 }
 
+export interface ListChannelDiagnosticsInput {
+  harnessName?: string;
+  resourceId: string;
+  sessionIds: readonly string[];
+  /**
+   * Maximum rows returned per channel ledger.
+   */
+  limit?: number;
+}
+
+export interface ChannelDiagnosticsRows {
+  inbox: ChannelInboxItem[];
+  actionTokens: ChannelActionToken[];
+  actionReceipts: ChannelActionReceipt[];
+  outbox: ChannelOutboxItem[];
+}
+
 export type HarnessWakeupSource = 'schedule' | 'proactive';
 
 export interface HarnessWakeupItem {

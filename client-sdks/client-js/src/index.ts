@@ -3,6 +3,7 @@ export * from './types';
 export * from './tools';
 export type {
   AttachmentRef,
+  ChannelDiagnostics,
   CreateHarnessSessionBody,
   CreateHarnessSessionResponse,
   Goal,
@@ -27,6 +28,7 @@ export type {
   RemoteHarnessSessionOptions,
   RemoteHarnessStatePatchOptions,
   RemoteHarnessSubscriptionOptions,
+  RemoteSessionChannelDiagnosticsOptions,
   RemoteSessionMessageOptions,
   RemoteSessionOperationOptions,
   RemoteSessionQueueOptions,

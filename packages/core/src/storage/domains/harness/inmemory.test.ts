@@ -1915,6 +1915,105 @@ describe('InMemoryHarness channel outbox ledger', () => {
   });
 });
 
+describe('InMemoryHarness channel diagnostics', () => {
+  it('lists resource and session scoped diagnostics rows across channel ledgers', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    await storage.saveChannelInboxItem(
+      sampleChannelInbox({
+        id: 'inbox-root',
+        idempotencyKey: 'event-root',
+        admissionId: 'admission-root',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+      }),
+    );
+    await storage.saveChannelInboxItem(
+      sampleChannelInbox({
+        id: 'inbox-child',
+        idempotencyKey: 'event-child',
+        admissionId: 'admission-child',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        sessionId: 'child-1',
+        updatedAt: 1200,
+      }),
+    );
+    await storage.saveChannelInboxItem(
+      sampleChannelInbox({
+        id: 'inbox-other-resource',
+        idempotencyKey: 'event-other-resource',
+        admissionId: 'admission-other-resource',
+        resourceId: 'resource-2',
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+      }),
+    );
+    await storage.saveChannelInboxItem(
+      sampleChannelInbox({
+        id: 'inbox-unbound',
+        idempotencyKey: 'event-unbound',
+        admissionId: 'admission-unbound',
+        resourceId: undefined,
+        sessionId: undefined,
+      }),
+    );
+    await storage.createOrLoadChannelActionToken(sampleChannelActionToken({ owningSessionId: 'child-1' }));
+    await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt({ owningSessionId: 'child-1' }));
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({
+        id: 'outbox-owned-child',
+        idempotencyKey: 'outbox-owned-child',
+        sessionId: undefined,
+        owningSessionId: 'child-1',
+      }),
+    );
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({
+        id: 'outbox-hidden',
+        idempotencyKey: 'outbox-hidden',
+        sessionId: 'hidden-session',
+        owningSessionId: 'hidden-session',
+      }),
+    );
+
+    const rows = await storage.listChannelDiagnosticsRows({
+      harnessName: 'default',
+      resourceId: 'resource-1',
+      sessionIds: ['session-1', 'child-1'],
+      limit: 10,
+    });
+
+    expect(rows.inbox.map(row => row.id)).toEqual(['inbox-child', 'inbox-root']);
+    expect(rows.actionTokens.map(row => row.actionTokenId)).toEqual(['action-token-1']);
+    expect(rows.actionReceipts.map(row => row.id)).toEqual(['receipt-1']);
+    expect(rows.outbox.map(row => row.id)).toEqual(['outbox-owned-child']);
+  });
+
+  it('short-circuits empty or non-positive diagnostics requests', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveChannelInboxItem(sampleChannelInbox());
+
+    await expect(
+      storage.listChannelDiagnosticsRows({
+        harnessName: 'default',
+        resourceId: 'resource-1',
+        sessionIds: [],
+        limit: 10,
+      }),
+    ).resolves.toEqual({ inbox: [], actionTokens: [], actionReceipts: [], outbox: [] });
+    await expect(
+      storage.listChannelDiagnosticsRows({
+        harnessName: 'default',
+        resourceId: 'resource-1',
+        sessionIds: ['session-1'],
+        limit: 0,
+      }),
+    ).resolves.toEqual({ inbox: [], actionTokens: [], actionReceipts: [], outbox: [] });
+  });
+});
+
 function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     harnessName: 'default',

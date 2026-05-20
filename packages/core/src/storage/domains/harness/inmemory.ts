@@ -32,6 +32,7 @@ import type {
   AttachmentSemanticMetadata,
   ChannelActionReceipt,
   ChannelActionToken,
+  ChannelDiagnosticsRows,
   ChannelInboxItem,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
@@ -47,6 +48,7 @@ import type {
   HarnessWakeupClaimStatus,
   HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
+  ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
@@ -1670,6 +1672,62 @@ export class InMemoryHarness extends HarnessStorage {
     };
     assertLegalChannelOutboxUpdate(current, next);
     this.db.harnessChannelOutbox.set(channelOutboxKey(next.harnessName, next.id), cloneJson(next));
+  }
+
+  async listChannelDiagnosticsRows(opts: ListChannelDiagnosticsInput): Promise<ChannelDiagnosticsRows> {
+    const namespace = resolveHarnessName(opts.harnessName, this.harnessName);
+    const limit = opts.limit ?? 50;
+    if (limit <= 0 || opts.sessionIds.length === 0) {
+      return { inbox: [], actionTokens: [], actionReceipts: [], outbox: [] };
+    }
+    const sessionIds = new Set(opts.sessionIds);
+    const byRecentUpdate = <T extends { id?: string; actionTokenId?: string; updatedAt: number }>(a: T, b: T) =>
+      b.updatedAt - a.updatedAt || String(b.id ?? b.actionTokenId).localeCompare(String(a.id ?? a.actionTokenId));
+
+    const inbox = Array.from(this.db.harnessChannelInbox.values())
+      .filter(
+        item =>
+          item.harnessName === namespace &&
+          item.resourceId === opts.resourceId &&
+          item.sessionId !== undefined &&
+          sessionIds.has(item.sessionId),
+      )
+      .sort(byRecentUpdate)
+      .slice(0, limit)
+      .map(item => cloneJson(item));
+    const actionTokens = Array.from(this.db.harnessChannelActionTokens.values())
+      .filter(
+        token =>
+          token.harnessName === namespace &&
+          token.resourceId === opts.resourceId &&
+          sessionIds.has(token.owningSessionId),
+      )
+      .sort(byRecentUpdate)
+      .slice(0, limit)
+      .map(token => cloneJson(token));
+    const actionReceipts = Array.from(this.db.harnessChannelActionReceipts.values())
+      .filter(
+        receipt =>
+          receipt.harnessName === namespace &&
+          receipt.resourceId === opts.resourceId &&
+          sessionIds.has(receipt.owningSessionId),
+      )
+      .sort(byRecentUpdate)
+      .slice(0, limit)
+      .map(receipt => cloneJson(receipt));
+    const outbox = Array.from(this.db.harnessChannelOutbox.values())
+      .filter(
+        item =>
+          item.harnessName === namespace &&
+          item.resourceId === opts.resourceId &&
+          ((item.sessionId !== undefined && sessionIds.has(item.sessionId)) ||
+            (item.owningSessionId !== undefined && sessionIds.has(item.owningSessionId))),
+      )
+      .sort(byRecentUpdate)
+      .slice(0, limit)
+      .map(item => cloneJson(item));
+
+    return { inbox, actionTokens, actionReceipts, outbox };
   }
 
   // -------------------------------------------------------------------------

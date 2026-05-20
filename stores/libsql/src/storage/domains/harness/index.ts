@@ -46,6 +46,7 @@ import type {
   AttachmentSemanticMetadata,
   ChannelActionReceipt,
   ChannelActionToken,
+  ChannelDiagnosticsRows,
   ChannelInboxItem,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
@@ -60,6 +61,7 @@ import type {
   HarnessSessionEventRecord,
   HarnessSessionEventReplayState,
   ListActiveSessionsByThreadInput,
+  ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
@@ -2853,6 +2855,56 @@ export class HarnessLibSQL extends HarnessStorage {
     if (update.rowsAffected === 0) {
       throw new HarnessStorageChannelOutboxClaimConflictError(opts.outboxItemId, opts.claimId);
     }
+  }
+
+  async listChannelDiagnosticsRows(opts: ListChannelDiagnosticsInput): Promise<ChannelDiagnosticsRows> {
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const limit = opts.limit ?? 50;
+    const sessionIds = Array.from(new Set(opts.sessionIds));
+    if (limit <= 0 || sessionIds.length === 0) {
+      return { inbox: [], actionTokens: [], actionReceipts: [], outbox: [] };
+    }
+    await this.#ensureChannelInboxTable();
+    await this.#ensureChannelActionTables();
+    await this.#ensureChannelOutboxTable();
+
+    const sessionPlaceholders = sessionIds.map(() => '?').join(', ');
+    const inbox = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_INBOX}
+            WHERE harness_name = ? AND resource_id = ? AND session_id IN (${sessionPlaceholders})
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?`,
+      args: [namespace, opts.resourceId, ...sessionIds, limit],
+    });
+    const actionTokens = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}
+            WHERE harness_name = ? AND resource_id = ? AND owning_session_id IN (${sessionPlaceholders})
+            ORDER BY updated_at DESC, action_token_id DESC
+            LIMIT ?`,
+      args: [namespace, opts.resourceId, ...sessionIds, limit],
+    });
+    const actionReceipts = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            WHERE harness_name = ? AND resource_id = ? AND owning_session_id IN (${sessionPlaceholders})
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?`,
+      args: [namespace, opts.resourceId, ...sessionIds, limit],
+    });
+    const outbox = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            WHERE harness_name = ? AND resource_id = ?
+              AND (session_id IN (${sessionPlaceholders}) OR owning_session_id IN (${sessionPlaceholders}))
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?`,
+      args: [namespace, opts.resourceId, ...sessionIds, ...sessionIds, limit],
+    });
+
+    return {
+      inbox: inbox.rows.map(row => rowToChannelInboxItem(row as Record<string, unknown>)),
+      actionTokens: actionTokens.rows.map(row => rowToChannelActionToken(row as Record<string, unknown>)),
+      actionReceipts: actionReceipts.rows.map(row => rowToChannelActionReceipt(row as Record<string, unknown>)),
+      outbox: outbox.rows.map(row => rowToChannelOutboxItem(row as Record<string, unknown>)),
+    };
   }
 
   async createOrLoadHarnessWakeupItem(

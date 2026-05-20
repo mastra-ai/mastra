@@ -12,7 +12,11 @@ import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-con
 import { describe, expect, it, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
-import { createHarnessSessionBodySchema } from '../schemas/harness';
+import {
+  createHarnessSessionBodySchema,
+  harnessChannelDiagnosticsQuerySchema,
+  harnessChannelDiagnosticsResponseSchema,
+} from '../schemas/harness';
 import { HARNESS_ROUTES } from '../server-adapter/routes/harness';
 
 import {
@@ -20,6 +24,7 @@ import {
   CREATE_HARNESS_SESSION_ROUTE,
   DELETE_HARNESS_ATTACHMENT_ROUTE,
   DELETE_HARNESS_GOAL_ROUTE,
+  GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE,
   GET_HARNESS_GOAL_ROUTE,
   GET_HARNESS_MESSAGE_RESULT_ROUTE,
   GET_HARNESS_QUEUE_RESULT_ROUTE,
@@ -153,6 +158,7 @@ describe('Harness server routes', () => {
     expect(HARNESS_ROUTES).toContain(LIST_HARNESS_SESSIONS_ROUTE);
     expect(HARNESS_ROUTES).toContain(CREATE_HARNESS_SESSION_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_SESSION_ROUTE);
+    expect(HARNESS_ROUTES).toContain(GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_ATTACHMENT_ROUTE);
     expect(HARNESS_ROUTES).toContain(DELETE_HARNESS_ATTACHMENT_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_MESSAGE_ROUTE);
@@ -178,6 +184,8 @@ describe('Harness server routes', () => {
     expect(CREATE_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_SESSION_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.requiresAuth).toBe(true);
+    expect(GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
@@ -597,6 +605,202 @@ describe('Harness server routes', () => {
       displayState: { sessionId: 'session-1' },
       tokenUsage: { totalTokens: 3 },
     });
+  });
+
+  it('returns read-only channel diagnostics for the authenticated resource', async () => {
+    const diagnostics = {
+      harnessName: 'code',
+      resourceId: 'resource-1',
+      sessionId: 'session-1',
+      visibleSessionIds: ['session-1'],
+      bindings: [
+        {
+          harnessName: 'code',
+          channelId: 'support',
+          bindingId: 'binding-1',
+          providerId: 'slack',
+          platform: 'slack',
+          callbackTarget: 'support',
+          durableId: 'code:support:binding-1',
+        },
+      ],
+      inbox: [
+        {
+          id: 'inbox-1',
+          status: 'failed',
+          channelId: 'support',
+          providerId: 'slack',
+          admissionId: 'admission-1',
+          externalMessageId: 'message-1',
+          receivedAt: 1000,
+          updatedAt: 1100,
+          lease: { attempts: 2, nextAttemptAt: 2000 },
+          lastError: { code: 'worker_unavailable', retryable: true },
+        },
+      ],
+      actionTokens: [],
+      actionReceipts: [],
+      outbox: [],
+      limit: 10,
+      truncated: false,
+      redacted: true,
+    };
+    const harness = {
+      getChannelDiagnostics: vi.fn(async () => diagnostics),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const result = await GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'query-code',
+        sessionId: 'query-session',
+        limit: 10,
+        requestPathParams: { name: 'code', sessionId: 'session-1' },
+      }),
+    );
+
+    expect(mastra.getHarness).toHaveBeenCalledWith('code');
+    expect(harness.getChannelDiagnostics).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      limit: 10,
+    });
+    expect(result).toEqual(diagnostics);
+  });
+
+  it('does not accept caller-declared resource ids for channel diagnostics', async () => {
+    expect(harnessChannelDiagnosticsQuerySchema.safeParse({ resourceId: 'attacker' }).success).toBe(false);
+    expect(harnessChannelDiagnosticsQuerySchema.safeParse({ limit: 51 }).success).toBe(false);
+
+    const harness = {
+      getChannelDiagnostics: vi.fn(async () => ({
+        harnessName: 'code',
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        visibleSessionIds: ['session-1'],
+        bindings: [],
+        inbox: [],
+        actionTokens: [],
+        actionReceipts: [],
+        outbox: [],
+        limit: 50,
+        truncated: false,
+        redacted: true,
+      })),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        resourceId: 'attacker',
+      }),
+    );
+
+    expect(harness.getChannelDiagnostics).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      limit: undefined,
+    });
+  });
+
+  it('rejects sensitive channel diagnostic fields in the response contract', async () => {
+    const result = harnessChannelDiagnosticsResponseSchema.safeParse({
+      harnessName: 'code',
+      resourceId: 'resource-1',
+      sessionId: 'session-1',
+      visibleSessionIds: ['session-1'],
+      bindings: [],
+      inbox: [
+        {
+          id: 'inbox-1',
+          status: 'received',
+          channelId: 'support',
+          providerId: 'slack',
+          admissionId: 'admission-1',
+          externalMessageId: 'message-1',
+          receivedAt: 1000,
+          updatedAt: 1000,
+          lease: { attempts: 0 },
+          content: 'raw provider message',
+          requestContext: { platformUserId: 'user-secret' },
+          claimId: 'claim-secret',
+        },
+      ],
+      actionTokens: [
+        {
+          actionTokenId: 'action-token-1',
+          status: 'active',
+          channelId: 'support',
+          providerId: 'slack',
+          bindingId: 'binding-1',
+          bindingGeneration: 1,
+          resourceId: 'resource-1',
+          owningSessionId: 'session-1',
+          itemId: 'question-1',
+          kind: 'question',
+          runId: 'run-1',
+          pendingRequestedAt: 1000,
+          createdAt: 1000,
+          updatedAt: 1000,
+          transportHash: 'token-secret',
+        },
+      ],
+      actionReceipts: [],
+      outbox: [],
+      limit: 10,
+      truncated: false,
+      redacted: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('returns tenant-safe not found for hidden channel diagnostics sessions', async () => {
+    const harness = {
+      getChannelDiagnostics: vi.fn(async () => null),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestContext: makeRequestContext('resource-2'),
+        }),
+      ),
+      404,
+      'harness.session_not_found',
+    );
+  });
+
+  it('maps unsupported channel diagnostics storage to 501', async () => {
+    const unsupported = Object.assign(new Error('Harness channel diagnostics are unavailable'), {
+      name: 'HarnessStorageChannelDiagnosticsUnsupportedError',
+    });
+    const harness = {
+      getChannelDiagnostics: vi.fn(async () => {
+        throw unsupported;
+      }),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+        }),
+      ),
+      501,
+      'harness.channel_diagnostics_unsupported',
+    );
   });
 
   it('reads session state with a session ETag', async () => {

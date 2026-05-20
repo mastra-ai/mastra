@@ -77929,6 +77929,311 @@ export interface GetHarnessNameSessionsSessionId_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/channel-diagnostics
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdChannelDiagnostics_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdChannelDiagnostics_QueryParams = {
+  limit?: number | undefined;
+};
+
+export type GetHarnessNameSessionsSessionIdChannelDiagnostics_Response = {
+  harnessName: string;
+  resourceId: string;
+  sessionId: string;
+  visibleSessionIds: string[];
+  bindings: {
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    providerId: string;
+    platform: string;
+    callbackTarget: string;
+    durableId: string;
+  }[];
+  inbox: {
+    id: string;
+    status: 'received' | 'admitted' | 'accepted' | 'queued' | 'failed' | 'dead';
+    channelId: string;
+    providerId: string;
+    bindingId?: string | undefined;
+    admissionId: string;
+    resourceId?: string | undefined;
+    threadId?: string | undefined;
+    sessionId?: string | undefined;
+    runId?: string | undefined;
+    signalId?: string | undefined;
+    queuedItemId?: string | undefined;
+    externalMessageId: string;
+    delivery?: ('message' | 'queue') | undefined;
+    mode?: string | undefined;
+    model?: string | undefined;
+    receivedAt: number;
+    admittedAt?: number | undefined;
+    acceptedAt?: number | undefined;
+    queuedAt?: number | undefined;
+    failedAt?: number | undefined;
+    deadAt?: number | undefined;
+    updatedAt: number;
+    lease: {
+      attempts: number;
+      claimExpiresAt?: number | undefined;
+      nextAttemptAt?: number | undefined;
+    };
+    lastError?:
+      | {
+          code: string;
+          retryable?: boolean | undefined;
+        }
+      | undefined;
+  }[];
+  actionTokens: {
+    actionTokenId: string;
+    status: 'active' | 'expired' | 'revoked';
+    channelId: string;
+    providerId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    resourceId: string;
+    owningSessionId: string;
+    itemId: string;
+    kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+    runId: string;
+    pendingRequestedAt: number;
+    expiresAt?: number | undefined;
+    revokedAt?: number | undefined;
+    revokedReason?: 'session_deleted' | undefined;
+    createdAt: number;
+    updatedAt: number;
+  }[];
+  actionReceipts: {
+    id: string;
+    status: 'received' | 'accepted' | 'applied' | 'conflict' | 'failed' | 'dead';
+    channelId: string;
+    providerId: string;
+    actionTokenId: string;
+    actionId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    resourceId: string;
+    owningSessionId: string;
+    itemId: string;
+    kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+    runId: string;
+    pendingRequestedAt: number;
+    conflictReason?: string | undefined;
+    acceptedAt?: number | undefined;
+    appliedAt?: number | undefined;
+    failedAt?: number | undefined;
+    deadAt?: number | undefined;
+    createdAt: number;
+    updatedAt: number;
+    lease: {
+      attempts: number;
+      claimExpiresAt?: number | undefined;
+      nextAttemptAt?: number | undefined;
+    };
+    lastError?:
+      | {
+          code: string;
+          retryable?: boolean | undefined;
+        }
+      | undefined;
+  }[];
+  outbox: {
+    id: string;
+    status: 'pending' | 'claimed' | 'sent' | 'failed' | 'dead';
+    channelId: string;
+    providerId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    resourceId: string;
+    threadId: string;
+    sessionId?: string | undefined;
+    owningSessionId?: string | undefined;
+    source?:
+      | {
+          kind: string;
+          id?: string | undefined;
+        }
+      | undefined;
+    kind: string;
+    operationKind: string;
+    operationName?: string | undefined;
+    deliverySemantics: string;
+    sentAt?: number | undefined;
+    failedAt?: number | undefined;
+    deadAt?: number | undefined;
+    createdAt: number;
+    updatedAt: number;
+    lease: {
+      attempts: number;
+      claimExpiresAt?: number | undefined;
+      nextAttemptAt?: number | undefined;
+    };
+    lastError?:
+      | {
+          code: string;
+          retryable?: boolean | undefined;
+        }
+      | undefined;
+  }[];
+  limit: number;
+  truncated: boolean;
+  redacted: true;
+};
+
+export type GetHarnessNameSessionsSessionIdChannelDiagnostics_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdChannelDiagnostics_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdChannelDiagnostics_PathParams }) &
+    (GetHarnessNameSessionsSessionIdChannelDiagnostics_QueryParams extends never
+      ? {}
+      : {} extends GetHarnessNameSessionsSessionIdChannelDiagnostics_QueryParams
+        ? { query?: GetHarnessNameSessionsSessionIdChannelDiagnostics_QueryParams }
+        : { query: GetHarnessNameSessionsSessionIdChannelDiagnostics_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdChannelDiagnostics_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdChannelDiagnostics_PathParams;
+  queryParams: GetHarnessNameSessionsSessionIdChannelDiagnostics_QueryParams;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdChannelDiagnostics_Request;
+  response: GetHarnessNameSessionsSessionIdChannelDiagnostics_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/attachments
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdAttachments_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+type PostHarnessNameSessionsSessionIdAttachments_Body_Auxiliary_1 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessionsSessionIdAttachments_Body_Auxiliary_1[]
+  | {
+      [key: string]: PostHarnessNameSessionsSessionIdAttachments_Body_Auxiliary_1;
+    };
+
+export type PostHarnessNameSessionsSessionIdAttachments_Body = {
+  kind?: ('file' | 'primitive' | 'element') | undefined;
+  file?: unknown | undefined;
+  data?: unknown | undefined;
+  payload?: unknown | undefined;
+  dataBase64?: string | undefined;
+  filename?: string | undefined;
+  name?: string | undefined;
+  contentType?: string | undefined;
+  mimeType?: string | undefined;
+  primitiveType?: string | undefined;
+  value?: unknown | undefined;
+  elementType?: string | undefined;
+  renderer?: unknown | undefined;
+  schemaId?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: PostHarnessNameSessionsSessionIdAttachments_Body_Auxiliary_1;
+      }
+    | undefined;
+};
+
+type PostHarnessNameSessionsSessionIdAttachments_Response_Auxiliary_1 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessionsSessionIdAttachments_Response_Auxiliary_1[]
+  | {
+      [key: string]: PostHarnessNameSessionsSessionIdAttachments_Response_Auxiliary_1;
+    };
+
+export type PostHarnessNameSessionsSessionIdAttachments_Response = {
+  attachmentId: string;
+  resourceId: string;
+  ownerSessionId?: string | undefined;
+  bytes?: number | undefined;
+  sha256?: string | undefined;
+  source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+  kind?: ('file' | 'primitive' | 'element') | undefined;
+  name?: string | undefined;
+  mimeType?: string | undefined;
+  primitiveType?: string | undefined;
+  elementType?: string | undefined;
+  renderer?: unknown | undefined;
+  schemaId?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: PostHarnessNameSessionsSessionIdAttachments_Response_Auxiliary_1;
+      }
+    | undefined;
+  object?: unknown | undefined;
+};
+
+export type PostHarnessNameSessionsSessionIdAttachments_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdAttachments_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdAttachments_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessNameSessionsSessionIdAttachments_Body extends never
+      ? {}
+      : {} extends PostHarnessNameSessionsSessionIdAttachments_Body
+        ? { body?: PostHarnessNameSessionsSessionIdAttachments_Body }
+        : { body: PostHarnessNameSessionsSessionIdAttachments_Body })
+>;
+
+export interface PostHarnessNameSessionsSessionIdAttachments_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdAttachments_PathParams;
+  queryParams: never;
+  body: PostHarnessNameSessionsSessionIdAttachments_Body;
+  request: PostHarnessNameSessionsSessionIdAttachments_Request;
+  response: PostHarnessNameSessionsSessionIdAttachments_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /harness/:name/sessions/:sessionId/attachments/:attachmentId
+// ============================================================================
+export type DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+  /** Harness attachment id */
+  attachmentId: string;
+};
+
+export type DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Request = Simplify<
+  (DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_PathParams extends never
+    ? {}
+    : { params: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_RouteContract {
+  pathParams: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
 // Route: POST /harness/:name/sessions/:sessionId/messages
 // ============================================================================
 export type PostHarnessNameSessionsSessionIdMessages_PathParams = {
@@ -77954,35 +78259,122 @@ export type PostHarnessNameSessionsSessionIdMessages_Body = {
   mode?: string | undefined;
   model?: string | undefined;
   attachments?:
-    | {
-        attachmentId: string;
-        resourceId: string;
-        ownerSessionId?: string | undefined;
-        bytes?: number | undefined;
-        sha256?: string | undefined;
-        source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
-        kind?: ('file' | 'primitive' | 'element') | undefined;
-        name?: string | undefined;
-        mimeType?: string | undefined;
-        primitiveType?: string | undefined;
-        elementType?: string | undefined;
-        renderer?:
-          | {
-              [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
-            }
-          | undefined;
-        schemaId?: string | undefined;
-        metadata?:
-          | {
-              [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
-            }
-          | undefined;
-        object?:
-          | {
-              [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
-            }
-          | undefined;
-      }[]
+    | (
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            kind?: ('file' | 'primitive' | 'element') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+          }
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+            kind: 'ref';
+            attachmentKind?: ('file' | 'primitive' | 'element') | undefined;
+          }
+        | {
+            kind: 'url';
+            url: string;
+            name: string;
+            mimeType?: string | undefined;
+            sha256?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+                }
+              | undefined;
+          }
+      )[]
+    | undefined;
+  files?:
+    | (
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            kind?: ('file' | 'primitive' | 'element') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+          }
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+            kind: 'ref';
+            attachmentKind?: ('file' | 'primitive' | 'element') | undefined;
+          }
+        | {
+            kind: 'url';
+            url: string;
+            name: string;
+            mimeType?: string | undefined;
+            sha256?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+                }
+              | undefined;
+          }
+      )[]
     | undefined;
 };
 
@@ -78041,35 +78433,122 @@ export type PostHarnessNameSessionsSessionIdQueue_Body = {
   model?: string | undefined;
   yolo?: boolean | undefined;
   attachments?:
-    | {
-        attachmentId: string;
-        resourceId: string;
-        ownerSessionId?: string | undefined;
-        bytes?: number | undefined;
-        sha256?: string | undefined;
-        source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
-        kind?: ('file' | 'primitive' | 'element') | undefined;
-        name?: string | undefined;
-        mimeType?: string | undefined;
-        primitiveType?: string | undefined;
-        elementType?: string | undefined;
-        renderer?:
-          | {
-              [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
-            }
-          | undefined;
-        schemaId?: string | undefined;
-        metadata?:
-          | {
-              [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
-            }
-          | undefined;
-        object?:
-          | {
-              [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
-            }
-          | undefined;
-      }[]
+    | (
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            kind?: ('file' | 'primitive' | 'element') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+          }
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+            kind: 'ref';
+            attachmentKind?: ('file' | 'primitive' | 'element') | undefined;
+          }
+        | {
+            kind: 'url';
+            url: string;
+            name: string;
+            mimeType?: string | undefined;
+            sha256?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+                }
+              | undefined;
+          }
+      )[]
+    | undefined;
+  files?:
+    | (
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            kind?: ('file' | 'primitive' | 'element') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+          }
+        | {
+            attachmentId: string;
+            resourceId: string;
+            ownerSessionId?: string | undefined;
+            bytes?: number | undefined;
+            sha256?: string | undefined;
+            source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+            name?: string | undefined;
+            mimeType?: string | undefined;
+            primitiveType?: string | undefined;
+            elementType?: string | undefined;
+            renderer?: unknown | undefined;
+            schemaId?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+                }
+              | undefined;
+            object?: unknown | undefined;
+            kind: 'ref';
+            attachmentKind?: ('file' | 'primitive' | 'element') | undefined;
+          }
+        | {
+            kind: 'url';
+            url: string;
+            name: string;
+            mimeType?: string | undefined;
+            sha256?: string | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+                }
+              | undefined;
+          }
+      )[]
     | undefined;
 };
 
@@ -79265,6 +79744,9 @@ export interface RouteTypes {
   'GET /harness/:name/sessions': GetHarnessNameSessions_RouteContract;
   'POST /harness/:name/sessions': PostHarnessNameSessions_RouteContract;
   'GET /harness/:name/sessions/:sessionId': GetHarnessNameSessionsSessionId_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/channel-diagnostics': GetHarnessNameSessionsSessionIdChannelDiagnostics_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/attachments': PostHarnessNameSessionsSessionIdAttachments_RouteContract;
+  'DELETE /harness/:name/sessions/:sessionId/attachments/:attachmentId': DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_RouteContract;
   'POST /harness/:name/sessions/:sessionId/messages': PostHarnessNameSessionsSessionIdMessages_RouteContract;
   'POST /harness/:name/sessions/:sessionId/queue': PostHarnessNameSessionsSessionIdQueue_RouteContract;
   'GET /harness/:name/sessions/:sessionId/message-results/:signalId': GetHarnessNameSessionsSessionIdMessageResultsSignalId_RouteContract;
@@ -79543,6 +80025,15 @@ export interface Client {
   '/harness/:name/sessions/:sessionId': {
     DELETE: DeleteHarnessNameSessionsSessionId_RouteContract;
     GET: GetHarnessNameSessionsSessionId_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/attachments': {
+    POST: PostHarnessNameSessionsSessionIdAttachments_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/attachments/:attachmentId': {
+    DELETE: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/channel-diagnostics': {
+    GET: GetHarnessNameSessionsSessionIdChannelDiagnostics_RouteContract;
   };
   '/harness/:name/sessions/:sessionId/events': {
     GET: GetHarnessNameSessionsSessionIdEvents_RouteContract;

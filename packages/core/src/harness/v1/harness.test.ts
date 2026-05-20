@@ -17,7 +17,13 @@ import type { ChannelProvider } from '../../channels';
 import { PubSub } from '../../events';
 import type { Event, EventCallback, SubscribeOptions } from '../../events';
 import { Mastra } from '../../mastra';
-import type { ChannelOutboxEnqueueOptions } from '../../storage/domains/harness';
+import type {
+  ChannelActionReceipt,
+  ChannelActionToken,
+  ChannelInboxItem,
+  ChannelOutboxEnqueueOptions,
+  ChannelOutboxItem,
+} from '../../storage/domains/harness';
 import {
   HarnessStorage,
   HarnessStorageDeleteGuardConflictError,
@@ -124,6 +130,123 @@ function channelOutboxInput(overrides: Partial<ChannelOutboxEnqueueOptions> = {}
     kind: 'assistant-message',
     operationKind: 'message-create',
     payload: { text: 'hello' },
+    ...overrides,
+  };
+}
+
+function channelInboxRow(overrides: Partial<ChannelInboxItem> = {}): ChannelInboxItem {
+  return {
+    id: 'inbox-1',
+    harnessName: 'primary',
+    channelId: 'support',
+    providerId: 'slack',
+    idempotencyKey: 'provider-event-1',
+    payloadHash: 'payload-hash-1',
+    admissionId: 'admission-1',
+    bindingId: 'support-binding',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionId: 'session-1',
+    externalMessageId: 'message-1',
+    receivedAt: 1000,
+    updatedAt: 1000,
+    status: 'received',
+    attempts: 0,
+    claimId: 'claim-secret',
+    claimExpiresAt: 2000,
+    requestContext: { metadata: { secret: 'request-context-secret' } },
+    content: 'content-secret',
+    attachments: [],
+    lastError: { code: 'worker_unavailable', message: 'message-secret', retryable: true },
+    ...overrides,
+  };
+}
+
+function channelActionTokenRow(overrides: Partial<ChannelActionToken> = {}): ChannelActionToken {
+  return {
+    actionTokenId: 'action-token-1',
+    harnessName: 'primary',
+    channelId: 'support',
+    providerId: 'slack',
+    resourceId: 'resource-1',
+    owningSessionId: 'session-1',
+    itemId: 'question-1',
+    kind: 'question',
+    bindingId: 'support-binding',
+    bindingGeneration: 1,
+    runId: 'run-1',
+    pendingRequestedAt: 1000,
+    audience: { secret: 'audience-secret' },
+    metadataHash: 'metadata-secret',
+    transportHash: 'transport-secret',
+    keyId: 'key-secret',
+    expiresAt: 10_000,
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function channelActionReceiptRow(overrides: Partial<ChannelActionReceipt> = {}): ChannelActionReceipt {
+  return {
+    id: 'receipt-1',
+    harnessName: 'primary',
+    channelId: 'support',
+    providerId: 'slack',
+    actionTokenId: 'action-token-1',
+    actionId: 'provider-action-1',
+    bindingId: 'support-binding',
+    bindingGeneration: 1,
+    resourceId: 'resource-1',
+    owningSessionId: 'session-1',
+    itemId: 'question-1',
+    kind: 'question',
+    runId: 'run-1',
+    pendingRequestedAt: 1000,
+    audience: { secret: 'audience-secret' },
+    verifiedActor: { platformUserId: 'user-secret' },
+    responseHash: 'response-secret',
+    response: { secret: 'response-secret' },
+    status: 'received',
+    attempts: 1,
+    claimId: 'receipt-claim-secret',
+    claimExpiresAt: 3000,
+    lastError: { code: 'provider_delivery_failed', message: 'receipt-error-secret', retryable: true },
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function channelOutboxRow(overrides: Partial<ChannelOutboxItem> = {}): ChannelOutboxItem {
+  return {
+    id: 'outbox-1',
+    harnessName: 'primary',
+    channelId: 'support',
+    providerId: 'slack',
+    bindingId: 'support-binding',
+    bindingGeneration: 1,
+    idempotencyKey: 'outbox-key-1',
+    payloadHash: 'payload-secret',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionId: 'session-1',
+    owningSessionId: 'session-1',
+    source: { kind: 'session-event', id: 'event-1', metadata: { secret: 'source-secret' } },
+    target: {
+      platform: 'slack',
+      externalTenantId: 'tenant-secret',
+      externalChannelId: 'channel-secret',
+      externalThreadId: 'thread-secret',
+    },
+    kind: 'assistant-message',
+    operationKind: 'message-create',
+    payload: { secret: 'payload-secret' },
+    deliverySemantics: 'native-idempotency',
+    status: 'pending',
+    attempts: 0,
+    createdAt: 1000,
+    updatedAt: 1000,
     ...overrides,
   };
 }
@@ -950,6 +1073,118 @@ describe('Harness v1 — construction', () => {
       items: [{ outboxItemId: expect.any(String), status: 'sent', providerMessageId: 'provider-message-1' }],
     });
     expect(delivered).toEqual(['outbox-key-1']);
+  });
+
+  it('returns session-scoped channel diagnostics without leaking provider payloads', async () => {
+    const storage = makeStorage();
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      channels: {
+        support: makeHarnessChannelConfig({ bindingId: 'support-binding' }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+    const root = await harness.session({ sessionId: 'session-1', resourceId: 'resource-1', threadId: { fresh: true } });
+    const child = await harness.session({
+      sessionId: 'child-1',
+      resourceId: 'resource-1',
+      parentSessionId: root.id,
+      threadId: { fresh: true },
+    });
+
+    await storage.saveChannelInboxItem(channelInboxRow());
+    await storage.createOrLoadChannelActionToken(
+      channelActionTokenRow({ owningSessionId: child.id, expiresAt: Date.now() + 60_000 }),
+    );
+    await storage.createOrLoadChannelActionReceipt(channelActionReceiptRow({ owningSessionId: child.id }));
+    await storage.enqueueChannelOutbox(channelOutboxRow());
+    await storage.saveChannelInboxItem(
+      channelInboxRow({
+        id: 'foreign-inbox',
+        idempotencyKey: 'foreign-event',
+        admissionId: 'foreign-admission',
+        resourceId: 'resource-2',
+        sessionId: 'foreign-session',
+      }),
+    );
+
+    const listSpy = vi.spyOn(storage, 'listChannelDiagnosticsRows');
+    const diagnostics = await harness.getChannelDiagnostics({
+      sessionId: root.id,
+      resourceId: 'resource-1',
+      limit: 10,
+    });
+
+    expect(diagnostics).toMatchObject({
+      sessionId: root.id,
+      resourceId: 'resource-1',
+      visibleSessionIds: expect.arrayContaining([root.id, child.id]),
+      bindings: [{ channelId: 'support', providerId: 'slack', bindingId: 'support-binding' }],
+      inbox: [{ id: 'inbox-1', status: 'received', lastError: { code: 'worker_unavailable', retryable: true } }],
+      actionTokens: [{ actionTokenId: 'action-token-1', owningSessionId: child.id, status: 'active' }],
+      actionReceipts: [{ id: 'receipt-1', owningSessionId: child.id, lastError: { code: 'provider_delivery_failed' } }],
+      outbox: [{ id: 'outbox-1', source: { kind: 'session-event', id: 'event-1' } }],
+      redacted: true,
+      truncated: false,
+    });
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ harnessName: 'primary', resourceId: 'resource-1', sessionIds: [root.id, child.id] }),
+    );
+    listSpy.mockClear();
+    await harness.getChannelDiagnostics({ sessionId: root.id, resourceId: 'resource-1', limit: 1000 });
+    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ limit: 51 }));
+    const wire = JSON.stringify(diagnostics);
+    expect(wire).not.toContain('secret');
+    expect(wire).not.toContain('foreign-inbox');
+    expect(wire).not.toContain('claim-secret');
+  });
+
+  it('marks channel diagnostics truncated only when visible sessions exceed the cap', async () => {
+    const storage = makeStorage();
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      harnesses: { primary: harness },
+    });
+    const root = await harness.session({ sessionId: 'session-1', resourceId: 'resource-1', threadId: { fresh: true } });
+    for (let index = 0; index < 255; index += 1) {
+      await harness.session({
+        sessionId: `child-${index}`,
+        resourceId: 'resource-1',
+        parentSessionId: root.id,
+        threadId: { fresh: true },
+      });
+    }
+
+    await expect(
+      harness.getChannelDiagnostics({ sessionId: root.id, resourceId: 'resource-1' }),
+    ).resolves.toMatchObject({
+      visibleSessionIds: expect.arrayContaining([root.id, 'child-254']),
+      truncated: false,
+    });
+
+    await harness.session({
+      sessionId: 'child-over-cap',
+      resourceId: 'resource-1',
+      parentSessionId: root.id,
+      threadId: { fresh: true },
+    });
+
+    const diagnostics = await harness.getChannelDiagnostics({ sessionId: root.id, resourceId: 'resource-1' });
+    expect(diagnostics?.visibleSessionIds).toHaveLength(256);
+    expect(diagnostics?.truncated).toBe(true);
   });
 
   it('uses lookup reconciliation before retrying lookup-reconcile outbox rows', async () => {

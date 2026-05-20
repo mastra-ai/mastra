@@ -10,6 +10,7 @@ import type {
   AttachmentRef,
   GoalOptions,
   GoalState,
+  HarnessChannelDiagnostics,
   HarnessMessage,
   InboxResponseResult,
   PermissionRules,
@@ -28,6 +29,8 @@ import type { StatusCode } from '../http-exception';
 import {
   createHarnessSessionBodySchema,
   createHarnessSessionResponseSchema,
+  harnessChannelDiagnosticsQuerySchema,
+  harnessChannelDiagnosticsResponseSchema,
   harnessAttachmentPathParams,
   harnessAttachmentUploadBodySchema,
   harnessAttachmentUploadResponseSchema,
@@ -271,6 +274,11 @@ type HarnessLike = {
   loadSession(opts: { sessionId: string; includeClosed?: boolean }): Promise<SessionRecord | null>;
   lookupMessageResult(opts: { sessionId: string; resourceId: string; signalId: string }): Promise<unknown>;
   lookupQueueResult(opts: { sessionId: string; resourceId: string; queuedItemId: string }): Promise<unknown>;
+  getChannelDiagnostics?(opts: {
+    sessionId: string;
+    resourceId: string;
+    limit?: number;
+  }): Promise<HarnessChannelDiagnostics | null>;
   closeSession(opts: { sessionId: string; resourceId?: string }): Promise<void>;
   ownerId?: string;
 };
@@ -1396,6 +1404,9 @@ function mapHarnessError(error: unknown): never {
   if (name === 'HarnessStorageSessionEventReplayUnsupportedError') {
     throwHarnessHttpError(501, 'harness.event_replay_unsupported', message, undefined, false);
   }
+  if (name === 'HarnessStorageChannelDiagnosticsUnsupportedError') {
+    throwHarnessHttpError(501, 'harness.channel_diagnostics_unsupported', message, undefined, false);
+  }
   if (name === 'HarnessQueueFullError') {
     throwHarnessHttpError(429, 'harness.queue_full', message, {
       sessionId: harnessErrorString(error, 'sessionId'),
@@ -1875,6 +1886,42 @@ export const GET_HARNESS_SESSION_ROUTE = createRoute({
         status: 200,
         headers: { etag: `"${stored.version}"` },
       });
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/channel-diagnostics',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  queryParamSchema: harnessChannelDiagnosticsQuerySchema,
+  responseSchema: harnessChannelDiagnosticsResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Get Harness channel diagnostics',
+  description: 'Returns redacted, read-only channel ledger diagnostics for a resource-scoped Harness session.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, limit, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      if (!harness.getChannelDiagnostics) {
+        throwHarnessHttpError(
+          501,
+          'harness.channel_diagnostics_unsupported',
+          'Harness channel diagnostics are unavailable',
+        );
+      }
+      const diagnostics = await harness.getChannelDiagnostics({ sessionId: pathSessionId, resourceId, limit });
+      if (!diagnostics) {
+        throwSessionNotFound(pathSessionId);
+      }
+      return diagnostics;
     } catch (error) {
       return mapHarnessError(error);
     }

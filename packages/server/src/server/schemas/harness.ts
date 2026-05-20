@@ -52,6 +52,12 @@ export const listHarnessSessionsQuerySchema = z.object({
   includeClosed: includeClosedSchema,
 });
 
+export const harnessChannelDiagnosticsQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+
 export const createHarnessSessionBodySchema = z
   .object({
     sessionId: z.string().min(1).optional(),
@@ -171,6 +177,157 @@ export const harnessSessionSnapshotSchema = z.object({
 export const createHarnessSessionResponseSchema = z.object({
   session: harnessSessionSnapshotSchema,
 });
+
+const channelDiagnosticErrorSchema = z
+  .object({
+    code: z.string(),
+    retryable: z.boolean().optional(),
+  })
+  .strict();
+
+const channelDiagnosticLeaseSchema = z
+  .object({
+    attempts: z.number(),
+    claimExpiresAt: z.number().optional(),
+    nextAttemptAt: z.number().optional(),
+  })
+  .strict();
+
+const channelBindingDiagnosticSchema = z
+  .object({
+    harnessName: z.string(),
+    channelId: z.string(),
+    bindingId: z.string(),
+    providerId: z.string(),
+    platform: z.string(),
+    callbackTarget: z.string(),
+    durableId: z.string(),
+  })
+  .strict();
+
+const channelInboxDiagnosticSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(['received', 'admitted', 'accepted', 'queued', 'failed', 'dead']),
+    channelId: z.string(),
+    providerId: z.string(),
+    bindingId: z.string().optional(),
+    admissionId: z.string(),
+    resourceId: z.string().optional(),
+    threadId: z.string().optional(),
+    sessionId: z.string().optional(),
+    runId: z.string().optional(),
+    signalId: z.string().optional(),
+    queuedItemId: z.string().optional(),
+    externalMessageId: z.string(),
+    delivery: z.enum(['message', 'queue']).optional(),
+    mode: z.string().optional(),
+    model: z.string().optional(),
+    receivedAt: z.number(),
+    admittedAt: z.number().optional(),
+    acceptedAt: z.number().optional(),
+    queuedAt: z.number().optional(),
+    failedAt: z.number().optional(),
+    deadAt: z.number().optional(),
+    updatedAt: z.number(),
+    lease: channelDiagnosticLeaseSchema,
+    lastError: channelDiagnosticErrorSchema.optional(),
+  })
+  .strict();
+
+const channelActionTokenDiagnosticSchema = z
+  .object({
+    actionTokenId: z.string(),
+    status: z.enum(['active', 'expired', 'revoked']),
+    channelId: z.string(),
+    providerId: z.string(),
+    bindingId: z.string(),
+    bindingGeneration: z.number(),
+    resourceId: z.string(),
+    owningSessionId: z.string(),
+    itemId: z.string(),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    runId: z.string(),
+    pendingRequestedAt: z.number(),
+    expiresAt: z.number().optional(),
+    revokedAt: z.number().optional(),
+    revokedReason: z.enum(['session_deleted']).optional(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+  })
+  .strict();
+
+const channelActionReceiptDiagnosticSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(['received', 'accepted', 'applied', 'conflict', 'failed', 'dead']),
+    channelId: z.string(),
+    providerId: z.string(),
+    actionTokenId: z.string(),
+    actionId: z.string(),
+    bindingId: z.string(),
+    bindingGeneration: z.number(),
+    resourceId: z.string(),
+    owningSessionId: z.string(),
+    itemId: z.string(),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    runId: z.string(),
+    pendingRequestedAt: z.number(),
+    conflictReason: z.string().optional(),
+    acceptedAt: z.number().optional(),
+    appliedAt: z.number().optional(),
+    failedAt: z.number().optional(),
+    deadAt: z.number().optional(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+    lease: channelDiagnosticLeaseSchema,
+    lastError: channelDiagnosticErrorSchema.optional(),
+  })
+  .strict();
+
+const channelOutboxDiagnosticSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(['pending', 'claimed', 'sent', 'failed', 'dead']),
+    channelId: z.string(),
+    providerId: z.string(),
+    bindingId: z.string(),
+    bindingGeneration: z.number(),
+    resourceId: z.string(),
+    threadId: z.string(),
+    sessionId: z.string().optional(),
+    owningSessionId: z.string().optional(),
+    source: z.object({ kind: z.string(), id: z.string().optional() }).strict().optional(),
+    kind: z.string(),
+    operationKind: z.string(),
+    operationName: z.string().optional(),
+    deliverySemantics: z.string(),
+    sentAt: z.number().optional(),
+    failedAt: z.number().optional(),
+    deadAt: z.number().optional(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+    lease: channelDiagnosticLeaseSchema,
+    lastError: channelDiagnosticErrorSchema.optional(),
+  })
+  .strict();
+
+export const harnessChannelDiagnosticsResponseSchema = z
+  .object({
+    harnessName: z.string(),
+    resourceId: z.string(),
+    sessionId: z.string(),
+    visibleSessionIds: z.array(z.string()),
+    bindings: z.array(channelBindingDiagnosticSchema),
+    inbox: z.array(channelInboxDiagnosticSchema),
+    actionTokens: z.array(channelActionTokenDiagnosticSchema),
+    actionReceipts: z.array(channelActionReceiptDiagnosticSchema),
+    outbox: z.array(channelOutboxDiagnosticSchema),
+    limit: z.number(),
+    truncated: z.boolean(),
+    redacted: z.literal(true),
+  })
+  .strict();
 
 const attachmentRefSchema = z
   .object({

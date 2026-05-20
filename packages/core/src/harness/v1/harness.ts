@@ -34,6 +34,10 @@ import type {
   AttachmentSemanticMetadata,
   JsonValue,
   HarnessRowErrorCode,
+  ChannelActionReceipt,
+  ChannelActionToken,
+  ChannelDiagnosticsRows,
+  ChannelInboxItem,
   ChannelOutboxEnqueueOptions,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
@@ -82,6 +86,8 @@ import type {
   AttachmentUploadOptions,
   ChannelOutboxDispatchOptions,
   ChannelOutboxDispatchResult,
+  HarnessChannelDiagnostics,
+  HarnessChannelDiagnosticsOptions,
   HarnessChannelBinding,
   HarnessChannelConfig,
   HarnessConfig,
@@ -123,6 +129,9 @@ const DEFAULT_PERMISSION_POLICY: PermissionPolicy = 'ask';
 const DEFAULT_CHANNEL_OUTBOX_CLAIM_TTL_MS = 30_000;
 const DEFAULT_CHANNEL_OUTBOX_BATCH_SIZE = 10;
 const DEFAULT_CHANNEL_OUTBOX_MAX_ATTEMPTS = 3;
+const CHANNEL_DIAGNOSTICS_DEFAULT_LIMIT = 50;
+const CHANNEL_DIAGNOSTICS_MAX_DESCENDANT_DEPTH = 32;
+const CHANNEL_DIAGNOSTICS_MAX_VISIBLE_SESSIONS = 256;
 
 type CloseTreeNode = {
   record: SessionRecord;
@@ -336,6 +345,185 @@ function stripHarnessInternalThreadMetadata(
     if (!HARNESS_INTERNAL_THREAD_METADATA_KEYS.has(key)) publicMetadata[key] = value;
   }
   return Object.keys(publicMetadata).length > 0 ? publicMetadata : undefined;
+}
+
+function projectChannelDiagnostics(
+  session: SessionRecord,
+  bindings: HarnessChannelBinding[],
+  rows: ChannelDiagnosticsRows,
+  visibleSessionIds: string[],
+  limit: number,
+  visibleSessionIdsTruncated: boolean,
+): HarnessChannelDiagnostics {
+  const trim = <T>(items: T[]) => items.slice(0, limit);
+  const visibleBindingIds = new Set<string>();
+  for (const item of rows.inbox) if (item.bindingId !== undefined) visibleBindingIds.add(item.bindingId);
+  for (const item of rows.actionTokens) visibleBindingIds.add(item.bindingId);
+  for (const item of rows.actionReceipts) visibleBindingIds.add(item.bindingId);
+  for (const item of rows.outbox) visibleBindingIds.add(item.bindingId);
+  const truncated =
+    visibleSessionIdsTruncated ||
+    rows.inbox.length > limit ||
+    rows.actionTokens.length > limit ||
+    rows.actionReceipts.length > limit ||
+    rows.outbox.length > limit;
+  const now = Date.now();
+  return {
+    harnessName: session.harnessName,
+    resourceId: session.resourceId,
+    sessionId: session.id,
+    visibleSessionIds,
+    bindings: bindings.filter(binding => visibleBindingIds.has(binding.bindingId)),
+    inbox: trim(rows.inbox).map(projectChannelInboxDiagnostic),
+    actionTokens: trim(rows.actionTokens).map(token => projectChannelActionTokenDiagnostic(token, now)),
+    actionReceipts: trim(rows.actionReceipts).map(projectChannelActionReceiptDiagnostic),
+    outbox: trim(rows.outbox).map(projectChannelOutboxDiagnostic),
+    limit,
+    truncated,
+    redacted: true,
+  };
+}
+
+function resolveChannelDiagnosticsLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return CHANNEL_DIAGNOSTICS_DEFAULT_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), CHANNEL_DIAGNOSTICS_DEFAULT_LIMIT);
+}
+
+function projectChannelLeaseDiagnostic(row: {
+  attempts: number;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+}): HarnessChannelDiagnostics['inbox'][number]['lease'] {
+  return {
+    attempts: row.attempts,
+    ...(row.claimExpiresAt !== undefined ? { claimExpiresAt: row.claimExpiresAt } : {}),
+    ...(row.nextAttemptAt !== undefined ? { nextAttemptAt: row.nextAttemptAt } : {}),
+  };
+}
+
+function projectChannelError(error: { code: HarnessRowErrorCode; retryable?: boolean } | undefined) {
+  if (!error) return undefined;
+  return { code: error.code, ...(error.retryable !== undefined ? { retryable: error.retryable } : {}) };
+}
+
+function projectChannelInboxDiagnostic(item: ChannelInboxItem): HarnessChannelDiagnostics['inbox'][number] {
+  return {
+    id: item.id,
+    status: item.status,
+    channelId: item.channelId,
+    providerId: item.providerId,
+    ...(item.bindingId !== undefined ? { bindingId: item.bindingId } : {}),
+    admissionId: item.admissionId,
+    ...(item.resourceId !== undefined ? { resourceId: item.resourceId } : {}),
+    ...(item.threadId !== undefined ? { threadId: item.threadId } : {}),
+    ...(item.sessionId !== undefined ? { sessionId: item.sessionId } : {}),
+    ...(item.runId !== undefined ? { runId: item.runId } : {}),
+    ...(item.signalId !== undefined ? { signalId: item.signalId } : {}),
+    ...(item.queuedItemId !== undefined ? { queuedItemId: item.queuedItemId } : {}),
+    externalMessageId: item.externalMessageId,
+    ...(item.delivery !== undefined ? { delivery: item.delivery } : {}),
+    ...(item.mode !== undefined ? { mode: item.mode } : {}),
+    ...(item.model !== undefined ? { model: item.model } : {}),
+    receivedAt: item.receivedAt,
+    ...(item.admittedAt !== undefined ? { admittedAt: item.admittedAt } : {}),
+    ...(item.acceptedAt !== undefined ? { acceptedAt: item.acceptedAt } : {}),
+    ...(item.queuedAt !== undefined ? { queuedAt: item.queuedAt } : {}),
+    ...(item.failedAt !== undefined ? { failedAt: item.failedAt } : {}),
+    ...(item.deadAt !== undefined ? { deadAt: item.deadAt } : {}),
+    updatedAt: item.updatedAt,
+    lease: projectChannelLeaseDiagnostic(item),
+    ...(item.lastError !== undefined ? { lastError: projectChannelError(item.lastError) } : {}),
+  };
+}
+
+function projectChannelActionTokenDiagnostic(
+  token: ChannelActionToken,
+  now: number,
+): HarnessChannelDiagnostics['actionTokens'][number] {
+  const status =
+    token.revokedAt !== undefined
+      ? 'revoked'
+      : token.expiresAt !== undefined && token.expiresAt <= now
+        ? 'expired'
+        : 'active';
+  return {
+    actionTokenId: token.actionTokenId,
+    status,
+    channelId: token.channelId,
+    providerId: token.providerId,
+    bindingId: token.bindingId,
+    bindingGeneration: token.bindingGeneration,
+    resourceId: token.resourceId,
+    owningSessionId: token.owningSessionId,
+    itemId: token.itemId,
+    kind: token.kind,
+    runId: token.runId,
+    pendingRequestedAt: token.pendingRequestedAt,
+    ...(token.expiresAt !== undefined ? { expiresAt: token.expiresAt } : {}),
+    ...(token.revokedAt !== undefined ? { revokedAt: token.revokedAt } : {}),
+    ...(token.revokedReason !== undefined ? { revokedReason: token.revokedReason } : {}),
+    createdAt: token.createdAt,
+    updatedAt: token.updatedAt,
+  };
+}
+
+function projectChannelActionReceiptDiagnostic(
+  receipt: ChannelActionReceipt,
+): HarnessChannelDiagnostics['actionReceipts'][number] {
+  return {
+    id: receipt.id,
+    status: receipt.status,
+    channelId: receipt.channelId,
+    providerId: receipt.providerId,
+    actionTokenId: receipt.actionTokenId,
+    actionId: receipt.actionId,
+    bindingId: receipt.bindingId,
+    bindingGeneration: receipt.bindingGeneration,
+    resourceId: receipt.resourceId,
+    owningSessionId: receipt.owningSessionId,
+    itemId: receipt.itemId,
+    kind: receipt.kind,
+    runId: receipt.runId,
+    pendingRequestedAt: receipt.pendingRequestedAt,
+    ...(receipt.conflictReason !== undefined ? { conflictReason: receipt.conflictReason } : {}),
+    ...(receipt.acceptedAt !== undefined ? { acceptedAt: receipt.acceptedAt } : {}),
+    ...(receipt.appliedAt !== undefined ? { appliedAt: receipt.appliedAt } : {}),
+    ...(receipt.failedAt !== undefined ? { failedAt: receipt.failedAt } : {}),
+    ...(receipt.deadAt !== undefined ? { deadAt: receipt.deadAt } : {}),
+    createdAt: receipt.createdAt,
+    updatedAt: receipt.updatedAt,
+    lease: projectChannelLeaseDiagnostic(receipt),
+    ...(receipt.lastError !== undefined ? { lastError: projectChannelError(receipt.lastError) } : {}),
+  };
+}
+
+function projectChannelOutboxDiagnostic(item: ChannelOutboxItem): HarnessChannelDiagnostics['outbox'][number] {
+  return {
+    id: item.id,
+    status: item.status,
+    channelId: item.channelId,
+    providerId: item.providerId,
+    bindingId: item.bindingId,
+    bindingGeneration: item.bindingGeneration,
+    resourceId: item.resourceId,
+    threadId: item.threadId,
+    ...(item.sessionId !== undefined ? { sessionId: item.sessionId } : {}),
+    ...(item.owningSessionId !== undefined ? { owningSessionId: item.owningSessionId } : {}),
+    ...(item.source !== undefined
+      ? { source: { kind: item.source.kind, ...(item.source.id ? { id: item.source.id } : {}) } }
+      : {}),
+    kind: item.kind,
+    operationKind: item.operationKind,
+    ...(item.operationName !== undefined ? { operationName: item.operationName } : {}),
+    deliverySemantics: item.deliverySemantics,
+    ...(item.sentAt !== undefined ? { sentAt: item.sentAt } : {}),
+    ...(item.failedAt !== undefined ? { failedAt: item.failedAt } : {}),
+    ...(item.deadAt !== undefined ? { deadAt: item.deadAt } : {}),
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    lease: projectChannelLeaseDiagnostic(item),
+    ...(item.lastError !== undefined ? { lastError: projectChannelError(item.lastError) } : {}),
+  };
 }
 
 export class Harness {
@@ -957,7 +1145,38 @@ export class Harness {
     return this._channelRegistry.get(channelId);
   }
 
+  /**
+   * Return read-only, redacted diagnostics for channel ledger rows visible to a
+   * session. This method delegates to the storage read-only diagnostics contract
+   * and never claims, retries, dispatches, or reconciles work.
+   */
+  async getChannelDiagnostics(opts: HarnessChannelDiagnosticsOptions): Promise<HarnessChannelDiagnostics | null> {
+    const storage = this._requireStorage('getChannelDiagnostics()');
+    const root = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!root || root.resourceId !== opts.resourceId) return null;
+
+    const visibleSessions = await this._visibleChannelDiagnosticSessionIds(root);
+    const limit = resolveChannelDiagnosticsLimit(opts.limit);
+    const rows = await storage.listChannelDiagnosticsRows({
+      harnessName: this._harnessName,
+      resourceId: opts.resourceId,
+      sessionIds: visibleSessions.sessionIds,
+      limit: limit + 1,
+    });
+    return projectChannelDiagnostics(
+      root,
+      this.listChannelBindings(),
+      rows,
+      visibleSessions.sessionIds,
+      limit,
+      visibleSessions.truncated,
+    );
+  }
+
   channels = {
+    diagnostics: (opts: HarnessChannelDiagnosticsOptions): Promise<HarnessChannelDiagnostics | null> =>
+      this.getChannelDiagnostics(opts),
+
     enqueueOutbox: async (
       opts: ChannelOutboxEnqueueOptions,
     ): Promise<{
@@ -1068,6 +1287,41 @@ export class Harness {
       );
     }
     return provider;
+  }
+
+  private async _visibleChannelDiagnosticSessionIds(
+    root: SessionRecord,
+  ): Promise<{ sessionIds: string[]; truncated: boolean }> {
+    const summaries = await this.listSessions({ resourceId: root.resourceId, includeClosed: true });
+    const childrenByParent = new Map<string, SessionSummary[]>();
+    for (const summary of summaries) {
+      if (!summary.parentSessionId) continue;
+      if (summary.resourceId !== root.resourceId) continue;
+      const children = childrenByParent.get(summary.parentSessionId) ?? [];
+      children.push(summary);
+      childrenByParent.set(summary.parentSessionId, children);
+    }
+
+    const visible = new Set<string>([root.id]);
+    let truncated = false;
+    const stack: Array<{ id: string; depth: number }> = [{ id: root.id, depth: 0 }];
+    while (stack.length > 0) {
+      const { id: parentId, depth } = stack.pop()!;
+      if (depth >= CHANNEL_DIAGNOSTICS_MAX_DESCENDANT_DEPTH) {
+        if ((childrenByParent.get(parentId)?.length ?? 0) > 0) truncated = true;
+        continue;
+      }
+      for (const child of childrenByParent.get(parentId) ?? []) {
+        if (visible.has(child.id)) continue;
+        if (visible.size >= CHANNEL_DIAGNOSTICS_MAX_VISIBLE_SESSIONS) {
+          truncated = true;
+          return { sessionIds: Array.from(visible), truncated };
+        }
+        visible.add(child.id);
+        stack.push({ id: child.id, depth: depth + 1 });
+      }
+    }
+    return { sessionIds: Array.from(visible), truncated };
   }
 
   private _resolveChannelDeliverySemantics(
