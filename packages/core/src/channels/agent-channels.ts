@@ -1,4 +1,4 @@
-import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type { Chat, Adapter, CardElement, ChatConfig, Message, Plan, StateAdapter, StreamChunk, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -26,6 +26,9 @@ import {
   formatToolRunning,
   stripToolPrefix,
 } from './formatting';
+import { clearPersistedPlan, loadPersistedPlan, savePersistedPlan } from './plan-persistence';
+import type { PersistedPlan, PersistedPlanTask } from './plan-persistence';
+import { createPlanTools } from './plan-tools';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext, ThreadHistoryMessage } from './types';
@@ -96,6 +99,7 @@ export interface ChannelAdapterCardsConfig extends ChannelAdapterBaseConfig {
    * @default 'cards'
    */
   toolDisplay?: 'cards';
+  plan?: never;
 
   /**
    * Use rich card formatting for tool calls, approvals, and results.
@@ -134,15 +138,78 @@ export interface ChannelAdapterCardsConfig extends ChannelAdapterBaseConfig {
 export interface ChannelAdapterStreamingToolsConfig extends ChannelAdapterBaseConfig {
   /** See {@link ChannelAdapterCardsConfig.toolDisplay} for mode descriptions. */
   toolDisplay: 'timeline' | 'grouped' | 'hidden';
+  plan?: never;
 }
 
 /**
- * Per-adapter configuration. `toolDisplay` is a discriminator: in `'cards'`
- * mode (the default) `cards` and `formatToolCall` are available; in
- * `'timeline'` / `'grouped'` / `'hidden'` they are not, because those modes
- * render through the streaming session instead of per-tool cards.
+ * Options for `plan` mode (when passed as an object instead of `true`).
+ *
+ * Plan mode renders an LLM-driven Chat SDK `Plan` block in the channel. The
+ * agent gets auto-injected task tools (`task_write`, `task_update`,
+ * `task_complete`, `task_check`, `complete_plan`) and drives the plan
+ * lifecycle itself. Non-plan tool calls fold under the currently in-progress
+ * task (`'inline'`) or execute silently (`'hidden'`).
+ *
+ * Plan state is persisted to the Mastra thread metadata under
+ * `metadata.channelPlan` so it survives server restarts.
  */
-export type ChannelAdapterConfig = ChannelAdapterCardsConfig | ChannelAdapterStreamingToolsConfig;
+export interface ChannelAdapterPlanOptions {
+  /**
+   * How non-plan tool calls render while the plan is active.
+   *
+   * - `'inline'` (default) — fold each tool call as a child line under the
+   *   currently in-progress task.
+   * - `'hidden'` — tools execute silently; only plan tasks render.
+   *
+   * @default 'inline'
+   */
+  toolDisplay?: 'inline' | 'hidden';
+
+  /**
+   * Initial message shown above the task list when the plan block is first
+   * posted. Pass `undefined` to use the default `'Working…'`.
+   */
+  initialMessage?: string;
+
+  /**
+   * Default completion message used when the LLM calls `complete_plan`
+   * without passing its own `completeMessage`. Defaults to `'Done'`.
+   */
+  completeMessage?: string;
+}
+
+/**
+ * `plan` mode: render tool calls as a live-updating Chat SDK `Plan` block,
+ * with lifecycle driven by LLM-controlled task tools auto-injected into the
+ * agent. Mutually exclusive with `toolDisplay` / `cards` / `formatToolCall`.
+ *
+ * - `plan: true` is sugar for `plan: { toolDisplay: 'inline' }`.
+ * - Requires `streaming: true`. If streaming is off, plan mode falls back to
+ *   `'cards'` with a one-time warning.
+ *
+ * Plan state is persisted to Mastra thread metadata under
+ * `metadata.channelPlan` so it survives server restarts. On restart, the
+ * channel rehydrates the plan and posts a new Plan widget; the old widget
+ * becomes orphaned.
+ */
+export interface ChannelAdapterPlanConfig extends ChannelAdapterBaseConfig {
+  /** Enable Plan rendering with LLM-driven task tools. Requires `streaming: true`. */
+  plan: true | ChannelAdapterPlanOptions;
+  toolDisplay?: never;
+  cards?: never;
+  formatToolCall?: never;
+}
+
+/**
+ * Per-adapter configuration. `toolDisplay` / `plan` is a discriminator:
+ *  - `'cards'` (default): `cards` and `formatToolCall` apply.
+ *  - `'timeline'` / `'grouped'` / `'hidden'`: render through streaming session.
+ *  - `plan: true`: render through Chat SDK `Plan` block (spike).
+ */
+export type ChannelAdapterConfig =
+  | ChannelAdapterCardsConfig
+  | ChannelAdapterStreamingToolsConfig
+  | ChannelAdapterPlanConfig;
 
 /**
  * Narrow an adapter config to the `'cards'` variant (where `cards` and
@@ -150,7 +217,28 @@ export type ChannelAdapterConfig = ChannelAdapterCardsConfig | ChannelAdapterStr
  */
 function asCardsConfig(config: ChannelAdapterConfig | undefined): ChannelAdapterCardsConfig | undefined {
   if (!config) return undefined;
-  return !config.toolDisplay || config.toolDisplay === 'cards' ? config : undefined;
+  if ((config as ChannelAdapterPlanConfig).plan) return undefined;
+  const tc = config as ChannelAdapterCardsConfig | ChannelAdapterStreamingToolsConfig;
+  return !tc.toolDisplay || tc.toolDisplay === 'cards' ? (tc as ChannelAdapterCardsConfig) : undefined;
+}
+
+/**
+ * Resolve the plan-mode options on an adapter config, normalizing the
+ * `plan: true` shorthand into a full options object. Returns `null` when the
+ * adapter is not configured for plan mode.
+ */
+export function resolvePlanConfig(
+  config: ChannelAdapterConfig | undefined,
+): Required<Pick<ChannelAdapterPlanOptions, 'toolDisplay' | 'initialMessage' | 'completeMessage'>> | null {
+  if (!config) return null;
+  const planValue = (config as ChannelAdapterPlanConfig).plan;
+  if (!planValue) return null;
+  const options: ChannelAdapterPlanOptions = planValue === true ? {} : planValue;
+  return {
+    toolDisplay: options.toolDisplay ?? 'inline',
+    initialMessage: options.initialMessage ?? 'Working…',
+    completeMessage: options.completeMessage ?? 'Done',
+  };
 }
 
 /**
@@ -498,6 +586,26 @@ export class AgentChannels {
    */
   private warnedToolDisplayFallback = new Set<string>();
 
+  /**
+   * In-memory cache of the active plan per Mastra thread. Each entry holds the
+   * persisted plan state (mirroring `metadata.channelPlan` in storage) and a
+   * lazily-created `Plan` instance for live updates. `instance` is `null`
+   * until the channel posts the Plan widget; after a server restart it is
+   * recreated on demand.
+   *
+   * Keyed by Mastra thread ID so plan tools (which only see the channel
+   * request context) can resolve the right entry.
+   */
+  private activePlans = new Map<
+    string,
+    {
+      persisted: PersistedPlan;
+      instance: Plan | null;
+      sdkThread: Thread;
+      platform: string;
+    }
+  >();
+
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
     const adapters: Record<string, Adapter> = {};
@@ -784,6 +892,7 @@ export class AgentChannels {
               eventType: 'action',
               messageId,
               actor: event.user,
+              mastraThreadId: mastraThread.id,
             });
             const requestContext = new RequestContext();
             requestContext.set('channel', channelContext);
@@ -833,6 +942,7 @@ export class AgentChannels {
             eventType: 'action',
             messageId,
             actor: event.user,
+            mastraThreadId: mastraThread.id,
           });
           const requestContext = new RequestContext();
           requestContext.set('channel', channelContext);
@@ -1050,7 +1160,18 @@ export class AgentChannels {
    */
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};
-    return this.makeChannelTools();
+    const channelTools = this.makeChannelTools();
+    if (this.anyAdapterHasPlan()) {
+      return { ...channelTools, ...createPlanTools(this) };
+    }
+    return channelTools;
+  }
+
+  private anyAdapterHasPlan(): boolean {
+    for (const cfg of Object.values(this.adapterConfigs)) {
+      if (resolvePlanConfig(cfg)) return true;
+    }
+    return false;
   }
 
   /**
@@ -1111,12 +1232,13 @@ export class AgentChannels {
     eventType: string;
     messageId: string | undefined;
     actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
+    mastraThreadId?: string;
   }): {
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
   } {
-    const { sdkThread, platform, eventType, messageId, actor } = params;
+    const { sdkThread, platform, eventType, messageId, actor, mastraThreadId } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
     const botMention = botUserId ? sdkThread.mentionUser(botUserId) : undefined;
@@ -1128,6 +1250,7 @@ export class AgentChannels {
       eventType,
       isDM: sdkThread.isDM,
       threadId: sdkThread.id,
+      mastraThreadId,
       channelId: sdkThread.channelId,
       messageId,
       userId: actor.userId,
@@ -1345,6 +1468,7 @@ export class AgentChannels {
       eventType: sdkThread.isDM ? 'message' : 'mention',
       messageId: message.id,
       actor: message.author,
+      mastraThreadId: mastraThread.id,
     });
 
     const requestContext = new RequestContext();
@@ -1482,8 +1606,12 @@ export class AgentChannels {
   }): AgentThreadSubscription<any> {
     const { mastraThreadId, resourceId, sdkThread, platform } = params;
     const existing = this.threadSubscriptions.get(mastraThreadId);
-    if (existing) return existing.subscription;
+    if (existing) {
+      this.logger?.debug('[CHANNEL] reusing thread subscription', { platform, mastraThreadId });
+      return existing.subscription;
+    }
 
+    this.logger?.debug('[CHANNEL] creating thread subscription', { platform, mastraThreadId, resourceId });
     // subscribeToThread() is synchronous-ish (returns a Promise that resolves on the next
     // microtask); kicking it off here keeps the cache slot reserved so concurrent callers
     // for the same thread don't race to create duplicate subscriptions.
@@ -1509,15 +1637,22 @@ export class AgentChannels {
       },
     };
 
-    const consumer = this.consumeAgentStream(stream, sdkThread, platform).catch(err => {
-      this.log('error', `[${platform}] Thread subscription consumer failed`, { error: err });
-      // Drop the cache entry so subsequent messages reopen a fresh subscription.
-      const entry = this.threadSubscriptions.get(mastraThreadId);
-      if (entry?.subscription === placeholder) {
-        this.threadSubscriptions.delete(mastraThreadId);
-      }
-      void subscriptionPromise.then(sub => sub.unsubscribe()).catch(() => {});
-    });
+    const consumer = this.consumeAgentStream(stream, sdkThread, platform, mastraThreadId)
+      .then(() => {
+        this.logger?.debug('[CHANNEL] thread subscription consumer ended cleanly', {
+          platform,
+          mastraThreadId,
+        });
+      })
+      .catch(err => {
+        this.log('error', `[${platform}] Thread subscription consumer failed`, { error: err });
+        // Drop the cache entry so subsequent messages reopen a fresh subscription.
+        const entry = this.threadSubscriptions.get(mastraThreadId);
+        if (entry?.subscription === placeholder) {
+          this.threadSubscriptions.delete(mastraThreadId);
+        }
+        void subscriptionPromise.then(sub => sub.unsubscribe()).catch(() => {});
+      });
 
     this.threadSubscriptions.set(mastraThreadId, { subscription: placeholder, consumer });
     // Update the placeholder with the real activeRunId/abort once the handle resolves so
@@ -1535,6 +1670,7 @@ export class AgentChannels {
     stream: AsyncIterable<AgentChunkType<any>>,
     sdkThread: Thread,
     platform: string,
+    mastraThreadId: string,
     approvalContext?: { toolCallId: string; messageId: string },
   ): Promise<void> {
     const adapter = this.adapters[platform]!;
@@ -1566,6 +1702,67 @@ export class AgentChannels {
     }
     const groupTasks: 'plan' | 'timeline' | undefined =
       toolDisplay === 'timeline' ? 'timeline' : toolDisplay === 'grouped' ? 'plan' : undefined;
+
+    // --- Plan mode ---
+    // Opt-in via `plan: true | { ... }` on the per-adapter config. Mutually
+    // exclusive with `toolDisplay` at the type level. Requires `streaming:
+    // true`; falls back to `'cards'` with a one-time warn if not.
+    const planConfig = resolvePlanConfig(adapterConfig);
+    if (planConfig && !streamingEnabled) {
+      if (!this.warnedToolDisplayFallback.has(`${platform}:plan`)) {
+        this.warnedToolDisplayFallback.add(`${platform}:plan`);
+        this.log('warn', `[${platform}] plan mode requires streaming: true; falling back to 'cards'.`);
+      }
+    }
+    const planEnabled = !!planConfig && streamingEnabled;
+    const planToolDisplay: 'inline' | 'hidden' = planConfig?.toolDisplay ?? 'inline';
+    this.logger?.debug('[CHANNEL] consumeAgentStream started', {
+      platform,
+      streamingEnabled,
+      toolDisplay: requestedToolDisplay,
+      resolvedToolDisplay: toolDisplay,
+      planEnabled,
+      hasApprovalContext: !!approvalContext,
+    });
+
+    // Rehydrate any persisted plan from a previous run / restart. The first
+    // tool that mutates the plan (`task_write`) will lazily post a new widget
+    // via `ensurePlanInstanceForTool`; the old widget from before the restart
+    // becomes orphaned.
+    if (planEnabled && !this.activePlans.has(mastraThreadId)) {
+      const existing = await loadPersistedPlan(this.agent, mastraThreadId);
+      if (existing && existing.status === 'active') {
+        await this.beginActivePlan({
+          mastraThreadId,
+          sdkThread,
+          platform,
+          initialMessage: existing.initialMessage,
+          completeMessage: existing.completeMessage,
+          toolDisplay: existing.toolDisplay,
+          existing,
+        });
+      }
+    }
+
+    /**
+     * Append a tool output line under the currently in-progress plan task,
+     * persist it, and edit the live widget. No-op when no plan is active or
+     * no task is in progress.
+     */
+    const appendInlineToolOutput = async (line: string) => {
+      const entry = this.activePlans.get(mastraThreadId);
+      if (!entry || !entry.instance) return;
+      const active = entry.persisted.tasks.find(t => t.status === 'in_progress');
+      if (!active) return;
+      const outputs = [...(active.toolOutputs ?? []), line];
+      active.toolOutputs = outputs;
+      try {
+        await entry.instance.updateTask({ id: active.id, output: outputs.join('\n') });
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] plan inline output failed', { error: e });
+      }
+      await savePersistedPlan(this.agent, mastraThreadId, entry.persisted);
+    };
 
     interface TrackedTool {
       displayName: string;
@@ -1606,6 +1803,7 @@ export class AgentChannels {
     let streamingSession: StreamingSession | null = null;
 
     const openStreamingSession = (): StreamingSession => {
+      this.logger?.debug('[CHANNEL] opening streaming session', { platform, groupTasks });
       let buffer: (string | StreamChunk)[] = [];
       let closed = false;
       let resolveNext: (() => void) | undefined;
@@ -1683,8 +1881,9 @@ export class AgentChannels {
       };
     };
 
-    const closeStreamingSession = async () => {
+    const closeStreamingSession = async (reason: string = 'unknown') => {
       if (!streamingSession) return;
+      this.logger?.debug('[CHANNEL] closing streaming session', { platform, reason });
       const session = streamingSession;
       streamingSession = null;
       session.close();
@@ -1703,12 +1902,12 @@ export class AgentChannels {
     };
     seedApprovalContext();
 
-    const flushText = async () => {
+    const flushText = async (reason: string = 'flush') => {
       // Streaming path: close the active streaming session (if any) so that
       // any subsequent out-of-band post (tool card, file, error) lands after
       // the streamed text in platform message order.
       if (streamingEnabled) {
-        await closeStreamingSession();
+        await closeStreamingSession(reason);
         return;
       }
       // Buffered path: strip zero-width chars (U+200B, U+200C, U+200D, U+FEFF)
@@ -1781,14 +1980,20 @@ export class AgentChannels {
 
       // --- Text flush triggers ---
       if (chunk.type === 'step-finish') {
-        await flushText();
+        this.logger?.debug('[CHANNEL] step-finish', { platform });
+        await flushText('step-finish');
         continue;
       }
 
       // --- Run boundary: a single subscription stream carries many runs back-to-back,
       // so we flush whatever's pending and reset per-run state before the next run starts.
       if (chunk.type === 'finish') {
-        await flushText();
+        this.logger?.debug('[CHANNEL] run finished', { platform });
+        await flushText('finish');
+        // Plan persists across `finish` — the LLM owns the lifecycle and
+        // decides when to call `complete_plan`. This is what makes
+        // "agent asks user a question mid-plan, user answers, agent resumes"
+        // work as a single plan block.
         resetRunState();
         continue;
       }
@@ -1797,7 +2002,9 @@ export class AgentChannels {
       // MastraModelOutput.error field. Post the failure to the channel and reset state
       // so a follow-up run on the same subscription starts clean.
       if (chunk.type === 'error') {
-        await flushText();
+        this.logger?.debug('[CHANNEL] run errored', { platform });
+        await flushText('error');
+        if (planEnabled) await this.forceCompletePlan(mastraThreadId, 'Stopped');
         const errPayload = chunk.payload as { error?: unknown };
         const rawError = errPayload.error;
         const message =
@@ -1820,7 +2027,9 @@ export class AgentChannels {
       }
 
       if (chunk.type === 'abort') {
-        await flushText();
+        this.logger?.debug('[CHANNEL] run aborted', { platform });
+        await flushText('abort');
+        if (planEnabled) await this.forceCompletePlan(mastraThreadId, 'Stopped');
         resetRunState();
         continue;
       }
@@ -1835,9 +2044,13 @@ export class AgentChannels {
         ) as Record<string, unknown>;
         const argsSummary = formatArgsSummary(rawArgs);
 
-        // `'hidden'`: never render anything — just track the call so the result
-        // handler can correlate, but skip cards and `task_update` chunks alike.
+        // `'hidden'`: never render the tool itself — but still flush any
+        // in-flight text so the preceding assistant message finalizes as its
+        // own post (matches `'cards'` symmetry; without this the next text
+        // delta keeps appending to the same streaming session and the
+        // pre-tool message can get lost on platforms that don't re-render).
         if (toolDisplay === 'hidden') {
+          await flushText('hidden-tool-call');
           toolCalls.set(chunk.payload.toolCallId, {
             displayName,
             argsSummary,
@@ -1861,6 +2074,24 @@ export class AgentChannels {
             status: 'in_progress',
             details: argsSummary || undefined,
           });
+          toolCalls.set(chunk.payload.toolCallId, {
+            displayName,
+            argsSummary,
+            startedAt: Date.now(),
+            messageId: undefined,
+          });
+          continue;
+        }
+
+        // Plan mode (LLM-driven): non-plan tool calls fold under the active
+        // in-progress plan task. `'inline'` appends a child line; `'hidden'`
+        // executes silently. No `Plan` is auto-created from raw tool calls —
+        // the LLM must call `task_write` first.
+        if (planEnabled) {
+          await flushText('plan-tool-call');
+          if (planToolDisplay === 'inline') {
+            await appendInlineToolOutput(`→ ${displayName}${argsSummary ? ` ${argsSummary}` : ''}`);
+          }
           toolCalls.set(chunk.payload.toolCallId, {
             displayName,
             argsSummary,
@@ -1932,6 +2163,18 @@ export class AgentChannels {
           continue;
         }
 
+        // Plan mode: fold the tool result under the in-progress plan task as
+        // an additional inline line. The plan task's own status is owned by
+        // the LLM (via `task_complete`); we only record the tool outcome.
+        if (planEnabled) {
+          if (planToolDisplay === 'inline') {
+            const prefix = chunk.payload.isError ? '⚠' : '✓';
+            const summary = resultText || (chunk.payload.isError ? 'error' : 'done');
+            await appendInlineToolOutput(`${prefix} ${summary}`);
+          }
+          continue;
+        }
+
         // `'cards'`: edit the "Running…" card with the result, or post the
         // user-provided custom formatting.
         if (cardsConfig?.formatToolCall) {
@@ -1973,6 +2216,9 @@ export class AgentChannels {
         if (toolDisplay !== 'cards') {
           await closeStreamingSession();
         }
+        // Plan mode: leave the plan open — the LLM resumes and decides
+        // whether to mark its current task complete via `task_complete`.
+        // The approval card lands out-of-band as its own message.
 
         // `useCards` is always true here so the approve/deny buttons render as
         // a Block Kit actions block; non-cards modes never set `cards: false`.
@@ -2056,12 +2302,220 @@ export class AgentChannels {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Plan-tool internals
+  //
+  // The plan tools live in `./plan-tools.ts` to keep this class manageable.
+  // The methods below are the contract between the tools module and this
+  // class — they own the persisted plan state, the live `Plan` instance, and
+  // the metadata I/O so the tools can stay stateless.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Look up the active plan entry for the current channel request. Returns
+   * `null` if the request is not channel-driven or the adapter does not have
+   * plan mode enabled. Used by `createPlanTools` to gate tool execution.
+   */
+  private async resolveActivePlanForTool(
+    requestContext: RequestContext | undefined,
+  ): Promise<{ mastraThreadId: string; platform: string } | null> {
+    const channel = requestContext?.get('channel') as ChannelContext | undefined;
+    const mastraThreadId = channel?.mastraThreadId;
+    const platform = channel?.platform;
+    if (!mastraThreadId || !platform) return null;
+    if (!resolvePlanConfig(this.adapterConfigs[platform])) return null;
+    return { mastraThreadId, platform };
+  }
+
+  /**
+   * Atomically mutate the persisted task list for a thread, mirror the
+   * change into the live `Plan` instance (if any), and persist the result
+   * back to thread metadata. Returns the new task list.
+   *
+   * `mutate` may return a new array or mutate the provided array in place.
+   */
+  private async applyPlanMutation(
+    mastraThreadId: string,
+    mutate: (tasks: PersistedPlanTask[]) => PersistedPlanTask[] | void,
+  ): Promise<PersistedPlanTask[]> {
+    const entry = this.activePlans.get(mastraThreadId);
+    if (!entry) throw new Error('No active plan for this thread');
+    const beforeById = new Map(entry.persisted.tasks.map(t => [t.id, t]));
+    const next = mutate(entry.persisted.tasks);
+    const tasks = Array.isArray(next) ? next : entry.persisted.tasks;
+    entry.persisted = { ...entry.persisted, tasks };
+    await this.syncPlanInstanceWithTasks(entry, beforeById);
+    await savePersistedPlan(this.agent, mastraThreadId, entry.persisted);
+    return entry.persisted.tasks;
+  }
+
+  /**
+   * Read the current task list for a thread without mutating. Returns an
+   * empty list when no plan is active.
+   */
+  private async readPlanTasks(mastraThreadId: string): Promise<PersistedPlanTask[]> {
+    const entry = this.activePlans.get(mastraThreadId);
+    return entry ? [...entry.persisted.tasks] : [];
+  }
+
+  /**
+   * Lazily create the `Plan` instance for a thread and post it to the
+   * platform. Called the first time `task_write` runs, or after a server
+   * restart when the persisted plan is found but no instance exists yet.
+   */
+  private async ensurePlanInstanceForTool(mastraThreadId: string): Promise<void> {
+    const entry = this.activePlans.get(mastraThreadId);
+    if (!entry || entry.instance) return;
+    const PlanCtor = chatModule().Plan;
+    const initialMessage = entry.persisted.initialMessage || 'Working…';
+    const instance = new PlanCtor({ initialMessage });
+    try {
+      await entry.sdkThread.post(instance);
+    } catch (e) {
+      this.logger?.debug('[CHANNEL] Failed to post plan widget', { error: e });
+    }
+    entry.instance = instance;
+    // Replay existing tasks onto the freshly-posted widget.
+    for (const task of entry.persisted.tasks) {
+      try {
+        await instance.addTask({
+          title: task.title,
+          ...(task.details ? { children: task.details } : {}),
+        });
+        if (task.status !== 'pending') {
+          await instance.updateTask({
+            status: task.status === 'completed' ? 'complete' : 'in_progress',
+          });
+        }
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] Failed to replay plan task', { error: e });
+      }
+    }
+  }
+
+  /**
+   * Finalize the plan from a tool call (`complete_plan`). Closes the live
+   * widget, clears persisted metadata, and drops the in-memory entry.
+   */
+  private async finalizePlanFromTool(mastraThreadId: string, completeMessage?: string): Promise<void> {
+    const entry = this.activePlans.get(mastraThreadId);
+    if (!entry) return;
+    const message = completeMessage ?? entry.persisted.completeMessage ?? 'Done';
+    if (entry.instance) {
+      try {
+        await entry.instance.complete({ completeMessage: message });
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] plan.complete failed', { error: e });
+      }
+    }
+    this.activePlans.delete(mastraThreadId);
+    await clearPersistedPlan(this.agent, mastraThreadId);
+  }
+
+  /**
+   * Force-close an active plan because the run errored, aborted, or the
+   * consumer is tearing down. Mirrors `finalizePlanFromTool` but uses a
+   * fallback message and is safe to call without an active entry.
+   */
+  private async forceCompletePlan(mastraThreadId: string, message: string): Promise<void> {
+    const entry = this.activePlans.get(mastraThreadId);
+    if (!entry) return;
+    if (entry.instance) {
+      try {
+        await entry.instance.complete({ completeMessage: message });
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] plan.complete failed', { error: e });
+      }
+    }
+    this.activePlans.delete(mastraThreadId);
+    await clearPersistedPlan(this.agent, mastraThreadId);
+  }
+
+  /**
+   * Open a fresh active-plan entry for a thread. Used the first time the
+   * LLM calls `task_write`, or on rehydration after a restart. Persists the
+   * new plan shell to metadata so a subsequent crash still finds it.
+   */
+  private async beginActivePlan(params: {
+    mastraThreadId: string;
+    sdkThread: Thread;
+    platform: string;
+    initialMessage: string;
+    completeMessage: string;
+    toolDisplay: 'inline' | 'hidden';
+    existing?: PersistedPlan;
+  }): Promise<void> {
+    const { mastraThreadId, sdkThread, platform, initialMessage, completeMessage, toolDisplay, existing } = params;
+    const persisted: PersistedPlan = existing ?? {
+      planId: crypto.randomUUID(),
+      status: 'active',
+      createdAt: Date.now(),
+      initialMessage,
+      completeMessage,
+      toolDisplay,
+      tasks: [],
+    };
+    this.activePlans.set(mastraThreadId, { persisted, instance: null, sdkThread, platform });
+    if (!existing) await savePersistedPlan(this.agent, mastraThreadId, persisted);
+  }
+
+  /**
+   * Diff the new task list against the previous one and apply the deltas to
+   * the live `Plan` instance — `addTask` for new ids, `updateTask` for
+   * status changes. No-ops when no instance is attached yet (replay happens
+   * later in `ensurePlanInstanceForTool`).
+   */
+  private async syncPlanInstanceWithTasks(
+    entry: { persisted: PersistedPlan; instance: Plan | null },
+    before: Map<string, PersistedPlanTask>,
+  ): Promise<void> {
+    const instance = entry.instance;
+    if (!instance) return;
+    for (const task of entry.persisted.tasks) {
+      const prior = before.get(task.id);
+      if (!prior) {
+        try {
+          await instance.addTask({
+            title: task.title,
+            ...(task.details ? { children: task.details } : {}),
+          });
+          if (task.status === 'in_progress') {
+            await instance.updateTask({ status: 'in_progress' });
+          } else if (task.status === 'completed') {
+            await instance.updateTask({ status: 'complete' });
+          }
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] plan.addTask failed', { error: e });
+        }
+        continue;
+      }
+      if (prior.status !== task.status) {
+        try {
+          await instance.updateTask({
+            id: task.id,
+            status:
+              task.status === 'completed' ? 'complete' : task.status === 'in_progress' ? 'in_progress' : 'pending',
+          });
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] plan.updateTask failed', { error: e });
+        }
+      }
+    }
+  }
+
   /**
    * Generate generic channel tools that resolve the adapter from request context.
    * Tool names are platform-agnostic (e.g. `send_message`, not `discord_send_message`).
    */
   private makeChannelTools() {
+    // Auto-inject plan tools when any adapter has `plan` enabled. The LLM
+    // sees a single set of plan tools globally; tools resolve which thread
+    // they apply to via the per-request channel context.
+    const anyAdapterPlanEnabled = Object.values(this.adapterConfigs).some(c => resolvePlanConfig(c) != null);
+    const planTools = anyAdapterPlanEnabled ? createPlanTools(this) : {};
+
     return {
+      ...planTools,
       add_reaction: createTool({
         id: 'add_reaction',
         description: 'Add an emoji reaction to a message.',

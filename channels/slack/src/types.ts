@@ -70,6 +70,17 @@ export interface SlackAdapterChannelConfig {
    * @default 'cards'
    */
   toolDisplay?: ChannelAdapterConfig['toolDisplay'];
+
+  /**
+   * Render an LLM-driven plan block in Slack via auto-injected
+   * `task_write` / `task_update` / `task_complete` / `task_check` /
+   * `complete_plan` tools. Non-plan tool calls fold inline under the active
+   * task (`'inline'`, the default) or execute silently (`'hidden'`).
+   *
+   * Mutually exclusive with `toolDisplay` / `cards` / `formatToolCall`.
+   * Requires `streaming: true` (Slack default).
+   */
+  plan?: ChannelAdapterConfig['plan'];
 }
 
 // =============================================================================
@@ -145,6 +156,17 @@ export interface SlackProviderConfig {
    * @default 'cards'
    */
   toolDisplay?: ChannelAdapterConfig['toolDisplay'];
+
+  /**
+   * Render an LLM-driven plan block in Slack via auto-injected
+   * `task_write` / `task_update` / `task_complete` / `task_check` /
+   * `complete_plan` tools. Non-plan tool calls fold inline under the active
+   * task (`'inline'`, the default) or execute silently (`'hidden'`).
+   *
+   * Mutually exclusive with `toolDisplay` / `cards` / `formatToolCall`.
+   * Requires `streaming: true` (Slack default).
+   */
+  plan?: ChannelAdapterConfig['plan'];
 
   // ---------------------------------------------------------------------------
   // Forwarded AgentChannels-level options

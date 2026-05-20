@@ -5,6 +5,7 @@ import {
   type ChannelPlatformInfo,
   type ChannelInstallationInfo,
   type ChannelConnectResult,
+  type ChannelAdapterConfig,
   AgentChannels,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
@@ -761,9 +762,9 @@ export class SlackProvider implements ChannelProvider {
    */
   #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
-    const { adapterConfig, cors, gateway, cards, formatToolCall, formatError, streaming, toolDisplay } =
+    const { adapterConfig, cors, gateway, cards, formatToolCall, formatError, streaming, toolDisplay, plan } =
       this.#channelConfig;
-    const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, toolDisplay };
+    const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, toolDisplay, plan };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
     // Slack supports native message streaming, so SlackProvider defaults `streaming: true`.
     // Users can opt out by passing `streaming: false` at the top level (or via `adapterConfig`).
@@ -783,7 +784,13 @@ export class SlackProvider implements ChannelProvider {
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
-    const slackEntry = Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter;
+    // `SlackAdapterChannelConfig` is a flat shape (TS can't narrow to one variant
+    // of the core `ChannelAdapterConfig` discriminated union without a runtime
+    // check); the union's exclusivity is enforced by Slack's own type definitions.
+    const slackEntry =
+      Object.keys(adapterConfig).length > 0
+        ? ({ adapter, ...adapterConfig } as unknown as ChannelAdapterConfig)
+        : adapter;
     const existing = agent.getChannels() as AgentChannels | undefined;
     const existingConfig = existing?.channelConfig;
     existing?.close();

@@ -101,7 +101,13 @@ async function drive(
   sdkThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
 ) {
-  await (channels as any).consumeAgentStream(chunkStream(chunks), sdkThread, 'test', approvalContext);
+  await (channels as any).consumeAgentStream(
+    chunkStream(chunks),
+    sdkThread,
+    'test',
+    'mastra-thread-test',
+    approvalContext,
+  );
 }
 
 // Drain a StreamingPlan's underlying iterable so we can assert on the
@@ -231,7 +237,10 @@ describe('consumeAgentStream', () => {
     it('streams tool cards as separate posts in the default cards mode', async () => {
       // When `toolDisplay` is left at the default `'cards'`, tools render via
       // running/result cards (one post per tool) regardless of streaming.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true });
+      // NOTE: spike branch routes the default (undeclared) toolDisplay through
+      // a Plan instance when streaming is on; declare `'cards'` explicitly so
+      // this test continues to cover the running-card + edit-on-result path.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
       await drive(
         channels,
         [
@@ -362,13 +371,19 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
 
-      // Streaming text still posts; tools render nothing.
+      // Streaming text still posts; tools render nothing. The pre-tool text
+      // flushes as its own message before the (silenced) tool call, then
+      // post-tool text streams as a second message — symmetric with 'cards'
+      // and required so the pre-tool message doesn't get lost on platforms
+      // that finalize on session close.
       const posts = calls.filter(c => c.kind === 'post');
-      expect(posts).toHaveLength(1);
+      expect(posts).toHaveLength(2);
       expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
 
-      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
-      const taskUpdates = drained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
+      const drainedAll = await Promise.all(
+        posts.map(p => drainStreamingPlan((p as Extract<Call, { kind: 'post' }>).arg)),
+      );
+      const taskUpdates = drainedAll.flat().filter(p => typeof p === 'object' && (p as any).type === 'task_update');
       expect(taskUpdates).toHaveLength(0);
     });
 

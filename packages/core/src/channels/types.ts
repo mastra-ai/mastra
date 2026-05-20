@@ -198,6 +198,8 @@ export type ChannelContext = {
   isDM?: boolean;
   /** The platform thread ID (e.g. 'discord:guildId:channelId:threadId'). */
   threadId?: string;
+  /** The Mastra thread ID. Used by channel-injected tools (e.g. plan tools) that need to look up persisted thread metadata. */
+  mastraThreadId?: string;
   /** The platform channel ID. */
   channelId?: string;
   /** Platform message ID of the message that triggered this turn. */

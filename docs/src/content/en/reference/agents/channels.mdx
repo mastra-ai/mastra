@@ -198,6 +198,13 @@ const agent = new Agent({
     description:
       'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards. `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Approve/deny prompts always render as a separate card regardless of mode.',
   },
+  {
+    name: 'plan',
+    type: "true | { toolDisplay?: 'inline' | 'hidden'; initialMessage?: string; completeMessage?: string }",
+    isOptional: true,
+    description:
+      'Render an LLM-driven plan block per thread. When set, the channel auto-injects `task_write` / `task_update` / `task_complete` / `task_check` / `complete_plan` tools and surfaces task progress as a live plan widget. Non-plan tool calls fold under the active task (`"inline"`, the default) or execute silently (`"hidden"`). Mutually exclusive with `toolDisplay`, `cards`, and `formatToolCall`.',
+  },
 ]}
 />
 
@@ -234,6 +241,51 @@ const agent = new Agent({
         adapter: createSlackAdapter(),
         streaming: true, // already the Slack default
         toolDisplay: 'timeline',
+      },
+    },
+  },
+})
+```
+
+## Plan mode
+
+Setting `plan` on an adapter switches it into an LLM-driven plan mode. The
+channel auto-injects five tools into the agent so the model can outline and
+update work as it goes:
+
+- `task_write({ tasks })` — create or replace the task list. The first call
+  posts a new plan block to the channel.
+- `task_update({ id, status?, title?, details? })` — patch a single task.
+- `task_complete({ id })` — shortcut for marking a task `completed`.
+- `task_check()` — read-only summary of pending / in-progress / completed
+  tasks (matches the `mastracode` API shape).
+- `complete_plan({ completeMessage?, force? })` — finalize the plan. Refuses
+  to complete while tasks are still pending or in-progress unless `force` is
+  set.
+
+Non-plan tool calls fold under the currently in-progress task. With the
+default `toolDisplay: 'inline'`, each call is appended as a child line under
+the active task (`→ getWeather Toronto`). With `toolDisplay: 'hidden'`, those
+calls execute silently and only the LLM-curated tasks render.
+
+Plan state is persisted to the thread metadata under `channelPlan`, so the
+plan survives multi-turn conversations and server restarts. On restart the
+channel re-posts a fresh plan widget and replays the persisted task list.
+
+```typescript title="src/mastra/agents/planner.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  name: 'Planner Agent',
+  instructions:
+    'Before doing work, call `task_write` to outline your plan. Mark tasks complete as you finish each one, and call `complete_plan` when done.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        plan: true, // shorthand for { toolDisplay: 'inline' }
       },
     },
   },
