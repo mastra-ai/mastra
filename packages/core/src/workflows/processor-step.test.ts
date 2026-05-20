@@ -1,7 +1,9 @@
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
-import type { MastraDBMessage, MessageList } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
@@ -10,19 +12,29 @@ import { createStep, createWorkflow, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
+  let systemMessages: CoreMessage[] = [];
   const mockMessageList = {
     get: {
       all: { db: () => messages },
       input: { db: () => messages.filter(m => m.role === 'user') },
       response: { db: () => messages.filter(m => m.role === 'assistant') },
     },
-    add: vi.fn(),
-    addSystem: vi.fn(),
-    removeByIds: vi.fn(),
+    add: vi.fn((message: MastraDBMessage) => {
+      messages.push(message);
+    }),
+    addSystem: vi.fn((message: CoreMessage) => {
+      systemMessages.push(message);
+    }),
+    replaceAllSystemMessages: vi.fn((messages: CoreMessage[]) => {
+      systemMessages = [...messages];
+    }),
+    removeByIds: vi.fn((ids: string[]) => {
+      messages = messages.filter(m => !ids.includes(m.id));
+    }),
     startRecording: vi.fn(),
     stopRecording: vi.fn(() => []),
     makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
-    getAllSystemMessages: vi.fn(() => []),
+    getAllSystemMessages: vi.fn(() => systemMessages),
   } as unknown as MessageList;
   return mockMessageList;
 }
@@ -255,6 +267,43 @@ describe('createStep with Processor', () => {
       expect(result).toEqual(
         expect.objectContaining({
           messages: [{ id: '1', content: 'test', step: 5 }],
+        }),
+      );
+    });
+
+    it('should expose MessageList system mutations from processInputStep output', async () => {
+      const processor: Processor = {
+        id: 'input-step-message-list-processor',
+        processInputStep: async ({ messageList }) => {
+          messageList.addSystem({ role: 'system', content: 'Injected policy' });
+          return messageList;
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const message = {
+        id: '1',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'test' }] },
+      } as MastraDBMessage;
+      messageList.add([message], 'input');
+
+      const result = await step.execute({
+        inputData: {
+          phase: 'inputStep',
+          messages: [message],
+          messageList,
+          stepNumber: 0,
+          systemMessages: [],
+        },
+      } as any);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          messages: [message],
+          systemMessages: [expect.objectContaining({ role: 'system', content: 'Injected policy' })],
         }),
       );
     });

@@ -139,6 +139,50 @@ describe('processInputStep', () => {
       expect(typeof runner.runProcessInputStep).toBe('function');
     });
 
+    it('should include MessageList system mutations in the input step processor span output', async () => {
+      const processorSpan = {
+        end: vi.fn(),
+        error: vi.fn(),
+      };
+      const currentSpan = {
+        createChildSpan: vi.fn(() => processorSpan),
+      };
+
+      const stepProcessor: Processor = {
+        id: 'system-mutating-processor',
+        processInputStep: async ({ messageList }) => {
+          messageList.addSystem({ role: 'system', content: 'Injected policy' });
+          return messageList;
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [stepProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        tracingContext: { currentSpan } as any,
+      });
+
+      expect(processorSpan.end).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: expect.objectContaining({
+            systemMessages: [expect.objectContaining({ role: 'system', content: 'Injected policy' })],
+          }),
+        }),
+      );
+    });
+
     it('should rotate the active response message id for later processors and the final step result', async () => {
       const seenMessageIds: string[] = [];
       const rotateResponseMessageId = vi.fn(() => 'response-2');

@@ -1195,12 +1195,18 @@ function createStepFromProcessor<TProcessorId extends string>(
                 checkedMessageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
-              // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps.
+              const updatedMessages = checkedMessageList.get.all.db();
+              const updatedSystemMessages = checkedMessageList.getAllSystemMessages();
+
+              // Preserve the realized MessageList state in return so span output and subsequent steps
+              // can observe mutations made via messageList even when the processor returns the same MessageList.
+              const { messages: _messages, systemMessages: _systemMessages, ...validatedRest } = validatedResult;
+
               return {
                 ...passThrough,
-                messages,
-                ...validatedResult,
+                messages: updatedMessages,
+                systemMessages: updatedSystemMessages,
+                ...validatedRest,
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
