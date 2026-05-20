@@ -48,8 +48,6 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import ObservabilityOverview from './pages/observability-overview';
-import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
@@ -259,7 +257,6 @@ export const routes: RouteObject[] = [
           ]),
 
       { path: '/logs', element: <Logs />, handle: navHandle('/logs') },
-      { path: '/primitives', element: <Primitives />, handle: navHandle('/primitives') },
       { path: '/evaluation', element: <Evaluation />, handle: navHandle('/evaluation') },
       { path: '/scorers', element: <Scorers />, handle: navHandle('/scorers') },
       {
@@ -268,11 +265,6 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      {
-        path: '/observability-overview',
-        element: <ObservabilityOverview />,
-        handle: navHandle('/observability-overview'),
-      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',

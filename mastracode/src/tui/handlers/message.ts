@@ -17,6 +17,10 @@ import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
+function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
+
 /**
  * Get content parts after the last tool_call/tool_result in the message.
  * These are the parts that should be rendered in the current streaming component.
@@ -244,12 +248,14 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         );
         component.setExpanded(state.toolOutputExpanded);
         if (state.quietMode) {
+          component.setCompactToolModeColor(getCurrentModeColor(ctx));
           component.setQuietModeDisplay('quiet');
           component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
         }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
+        reconcileChatBoundarySpacers(state.chatContainer);
 
         state.streamingComponent = new AssistantMessageComponent(
           undefined,

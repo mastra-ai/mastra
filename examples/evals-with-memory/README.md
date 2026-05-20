@@ -23,6 +23,7 @@ pnpm ex:all
 ## The three approaches
 
 ### 1. `runEvals` with global `targetOptions.memory`
+
 Script: `src/runeval-global.ts`
 
 Simplest. Pass `targetOptions: { memory: { thread, resource } }` once and
@@ -42,6 +43,7 @@ Verified: all items land in one thread, scorer runs cleanly, no
 `threadId required` errors.
 
 ### 2. `runEvals` once per item (per-item threads)
+
 Script: `src/runeval-per-item.ts`
 
 `runEvals` does **not** support per-item agent options today. Pre-seeding
@@ -64,6 +66,7 @@ for (const it of items) {
 ```
 
 ### 3. `dataset.startExperiment` with inline task
+
 Script: `src/dataset.ts`
 
 The dataset / experiment runner (`runExperiment` under the hood) does
