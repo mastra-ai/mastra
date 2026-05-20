@@ -2,10 +2,12 @@ import type {
   StoredAgentSkillConfig,
   StoredAgentToolConfig,
   StoredSkillResponse,
+  StoredToolProviderConfig,
   StoredWorkspaceRef,
 } from '@mastra/client-js';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
+import { buildToolProvidersForSave } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';
 
 export interface SaveParams {
   name: string;
@@ -26,6 +28,7 @@ export interface SaveParams {
    */
   model: AgentBuilderModel | undefined;
   metadata: Record<string, unknown> | undefined;
+  toolProviders: Record<string, StoredToolProviderConfig> | undefined;
 }
 
 function buildEnabledRecord(
@@ -81,6 +84,8 @@ export function formValuesToSaveParams(
 
   const browser = values.browserEnabled === true;
 
+  const toolProviders = buildToolProvidersForSave(values.toolProviders);
+
   return {
     name: values.name,
     description,
@@ -94,5 +99,6 @@ export function formValuesToSaveParams(
     visibility: values.visibility,
     model: values.model,
     metadata,
+    toolProviders,
   };
 }

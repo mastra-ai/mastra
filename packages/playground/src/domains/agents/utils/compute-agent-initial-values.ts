@@ -12,6 +12,7 @@ import {
   mapInstructionBlocksFromApi,
   parseObservationalMemoryFromApi,
 } from './agent-form-mappers';
+import { extractFormToolProviders } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';
 
 /**
  * Map a `GetAgentResponse` (from `GET /agents/:id`) into an `AgentDataSource`
@@ -58,6 +59,7 @@ export interface AgentDataSource {
   model?: unknown;
   tools?: unknown;
   integrationTools?: unknown;
+  toolProviders?: unknown;
   workflows?: unknown;
   agents?: unknown;
   scorers?: unknown;
@@ -116,6 +118,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
     integrationTools: normalizeIntegrationToolsToRecord(
       dataSource.integrationTools as Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
     ),
+    toolProviders: extractFormToolProviders(dataSource.toolProviders),
     workflows: normalizeToolsToRecord(dataSource.workflows as Parameters<typeof normalizeToolsToRecord>[0]),
     agents: normalizeToolsToRecord(dataSource.agents as Parameters<typeof normalizeToolsToRecord>[0]),
     scorers: normalizeScorersFromApi(dataSource.scorers as Parameters<typeof normalizeScorersFromApi>[0]),

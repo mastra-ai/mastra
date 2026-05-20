@@ -17,6 +17,7 @@ import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
 import { computeAgentInitialValues } from '../utils/compute-agent-initial-values';
 import type { AgentDataSource } from '../utils/compute-agent-initial-values';
 import { useStoredAgentMutations } from './use-stored-agents';
+import { buildToolProvidersForSave } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';
 
 type CreateOptions = {
   mode: 'create';
@@ -146,6 +147,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           instructions: mapInstructionBlocksToApi(values.instructionBlocks),
           tools: Object.keys(registryTools).length > 0 ? registryTools : {},
           integrationTools: transformIntegrationToolsForApi(values.integrationTools),
+          toolProviders: buildToolProvidersForSave(values.toolProviders),
           mcpClients: mcpClientsParam,
           requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
         };
@@ -189,6 +191,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         model: values.model,
         tools: Object.keys(registryTools).length > 0 ? registryTools : {},
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
+        toolProviders: buildToolProvidersForSave(values.toolProviders),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,

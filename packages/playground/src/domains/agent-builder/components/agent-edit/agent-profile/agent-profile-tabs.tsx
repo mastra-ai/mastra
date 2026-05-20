@@ -1,12 +1,17 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import { useFormContext } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
+import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
 import { Instructions } from './instructions';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
 import { useBuilderModelPolicy } from '@/domains/builder';
+import { ToolProvidersSection } from '@/domains/tool-providers/components/tool-providers-section';
+
+const BUILDER_ALLOWED_SCOPES = ['per-author', 'shared'] as const;
 
 export interface AgentProfileTabsProps {
   availableAgentTools: AgentTool[];
@@ -28,10 +33,12 @@ export const AgentProfileTabs = ({
 }: AgentProfileTabsProps) => {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
+  const form = useFormContext<AgentBuilderEditFormValues>();
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
   const skillsTabEnabled = features.skills && availableSkills.length > 0;
+  const connectionsTabEnabled = Boolean(form);
 
   const tabContentClassName = 'h-full min-h-0';
   const isEditable = !disabled;
@@ -46,6 +53,7 @@ export const AgentProfileTabs = ({
           <Tab value="instructions">Instructions</Tab>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
+          {connectionsTabEnabled && <Tab value="connections">Connections</Tab>}
           {skillsTabEnabled && <Tab value="skills">Skills</Tab>}
         </TabList>
 
@@ -63,6 +71,14 @@ export const AgentProfileTabs = ({
           {toolsTabEnabled && (
             <TabContent value="tools" className={tabContentClassName}>
               <Tools availableAgentTools={availableAgentTools} editable={isEditable} />
+            </TabContent>
+          )}
+
+          {connectionsTabEnabled && (
+            <TabContent value="connections" className={tabContentClassName}>
+              <div className="h-full min-h-0 overflow-y-auto p-4">
+                <ToolProvidersSection form={form} readOnly={!isEditable} allowedScopes={BUILDER_ALLOWED_SCOPES} />
+              </div>
             </TabContent>
           )}
 
