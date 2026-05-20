@@ -196,13 +196,13 @@ describe('createWorkflow() with runner parameter', () => {
         execute: async () => 'result2',
       });
 
-      const runner = createMockRunner();
       const workflow = createWorkflow({
         id: 'branched-workflow',
         runner,
-      })
-        .branch('branch-1', step1)
-        .branch('branch-2', step2);
+      }).branch([
+        [async () => true, step1],
+        [async () => false, step2],
+      ]);
 
       expect(workflow).toBeDefined();
       expect(workflow.id).toBe('branched-workflow');
