@@ -340,6 +340,12 @@ describe('formatOutput', () => {
       expect(result).toEqual(messages);
     });
 
+    it('preserves structured tool call messages without content', () => {
+      const toolCalls = [{ name: 'search', arguments: { q: 'mastra' }, toolId: 'call-1', type: 'function' }];
+      const result = formatOutput([{ role: 'assistant', toolCalls }], SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'assistant', content: '', toolCalls }]);
+    });
+
     it('extracts text property from object output', () => {
       const result = formatOutput({ text: 'Hello world', metadata: { model: 'gpt-4' } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'assistant', content: 'Hello world' }]);

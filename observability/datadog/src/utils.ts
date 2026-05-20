@@ -155,7 +155,7 @@ export function safeStringify(data: unknown): string {
  * Checks if data is already in message array format ({role, content}[]).
  */
 function isMessageArray(data: any): data is Array<{ role: string; content: any; toolCalls?: DatadogToolCall[] }> {
-  return Array.isArray(data) && data.every(m => m?.role && m?.content !== undefined);
+  return Array.isArray(data) && data.every(m => m?.role && (m?.content !== undefined || Array.isArray(m.toolCalls)));
 }
 
 function isModelDataSpan(spanType: SpanType): boolean {
