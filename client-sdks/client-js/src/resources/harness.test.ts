@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import { RemoteHarnessOperationError, RemoteHarnessUnsupportedError } from './harness';
+import { RemoteHarnessOperationError, RemoteHarnessUnsupportedError, type AttachmentRef } from './harness';
 
 global.fetch = vi.fn();
 
@@ -225,6 +225,83 @@ describe('Harness Resource', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ content: 'later', admissionId: 'queue-admission-1' }),
+      }),
+    );
+  });
+
+  it('passes file, primitive, and element attachment refs through message and queue admissions', async () => {
+    const attachments: AttachmentRef[] = [
+      {
+        attachmentId: 'file-attachment-1',
+        resourceId: 'resource-1',
+        ownerSessionId: 'session-1',
+        source: 'preupload',
+        kind: 'file',
+        name: 'paper.pdf',
+        mimeType: 'application/pdf',
+        bytes: 1234,
+        sha256: '0'.repeat(64),
+      },
+      {
+        attachmentId: 'primitive-attachment-1',
+        resourceId: 'resource-1',
+        ownerSessionId: 'session-1',
+        source: 'preupload',
+        kind: 'primitive',
+        primitiveType: 'table',
+        schemaId: 'schema:table:v1',
+        object: {
+          providerId: 'cloudflare-r2',
+          objectKey: 'harness/resource-1/session-1/primitives/primitive-attachment-1.json',
+          etag: 'primitive-etag-1',
+          storageClass: 'standard',
+        },
+      },
+      {
+        attachmentId: 'element-attachment-1',
+        resourceId: 'resource-1',
+        ownerSessionId: 'session-1',
+        source: 'preupload',
+        kind: 'element',
+        elementType: 'chart',
+        renderer: { type: 'vega-lite' },
+        metadata: { cloudStorage: 'r2' },
+      },
+    ];
+    mockJson({ session: makeSnapshot() });
+    mockJson({ accepted: true, signalId: 'signal-1', runId: 'run-1', duplicate: false });
+    mockJson({ accepted: true, queuedItemId: 'queue-1', duplicate: false });
+
+    const session = await client.getHarness().session();
+    await expect(
+      session.admitMessage({ content: 'summarize attachments', admissionId: 'message-admission-1', attachments }),
+    ).resolves.toEqual({ accepted: true, signalId: 'signal-1', runId: 'run-1', duplicate: false });
+    await expect(
+      session.admitQueue({ content: 'process attachments later', admissionId: 'queue-admission-1', attachments }),
+    ).resolves.toEqual({ accepted: true, queuedItemId: 'queue-1', duplicate: false });
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:4111/api/harness/default/sessions/session-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          content: 'summarize attachments',
+          admissionId: 'message-admission-1',
+          attachments,
+        }),
+      }),
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost:4111/api/harness/default/sessions/session-1/queue',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          content: 'process attachments later',
+          admissionId: 'queue-admission-1',
+          attachments,
+        }),
       }),
     );
   });
