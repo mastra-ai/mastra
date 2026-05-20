@@ -1911,7 +1911,7 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('scores', () => {
-    it('supports deprecated source aliases for scores', async () => {
+    it('accepts deprecated `source` filter for scores (DuckDB-specific)', async () => {
       await storage.createScore({
         score: {
           scoreId: 'score-test-1',
@@ -1932,31 +1932,8 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       expect(filtered.scores).toHaveLength(1);
-      expect(filtered.scores[0]!.traceId).toBe('trace-legacy-score');
       expect(filtered.scores[0]!.source).toBe('manual');
       expect(filtered.scores[0]!.scoreSource).toBe('manual');
-    });
-
-    it('supports nullable traceId for scores at the storage boundary', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: null,
-          spanId: null,
-          scorerId: 'quality',
-          scoreSource: 'automated',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(1);
-      expect(result.scores[0]!.traceId).toBeNull();
-      expect(result.scores[0]!.scoreSource).toBe('automated');
     });
 
     it('supports page deltaCursor and delta polling for scores', async () => {
@@ -2022,7 +1999,7 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('feedback', () => {
-    it('supports deprecated source aliases for feedback', async () => {
+    it('accepts deprecated `source` filter for feedback (DuckDB-specific)', async () => {
       await storage.createFeedback({
         feedback: {
           feedbackId: 'feedback-test-1',
@@ -2044,32 +2021,8 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       expect(filtered.feedback).toHaveLength(1);
-      expect(filtered.feedback[0]!.traceId).toBe('trace-legacy-feedback');
       expect(filtered.feedback[0]!.source).toBe('manual');
       expect(filtered.feedback[0]!.feedbackSource).toBe('manual');
-    });
-
-    it('supports nullable traceId for feedback at the storage boundary', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: null,
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          sourceId: null,
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(1);
-      expect(result.feedback[0]!.traceId).toBeNull();
-      expect(result.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('supports page deltaCursor and delta polling for feedback', async () => {

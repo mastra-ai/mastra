@@ -2868,30 +2868,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(match!.feedbackSource).toBe('manual');
     });
 
-    it('deprecated feedback source alias still writes to feedbackSource column', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date(),
-          traceId: 'trace-fbs-compat',
-          spanId: null,
-          source: 'legacy-user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listFeedback({});
-      const match = result.feedback.find(f => f.traceId === 'trace-fbs-compat');
-      expect(match).toBeDefined();
-      expect(match!.feedbackSource).toBe('legacy-user');
-    });
-
     it('filters feedback by feedbackSource', async () => {
       await storage.createFeedback({
         feedback: {

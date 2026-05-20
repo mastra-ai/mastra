@@ -2898,6 +2898,50 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         );
         expect(await storage.getScoreById('missing-score')).toBeNull();
       });
+
+      it('supports nullable traceId for scores at the storage boundary', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-null-trace-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: null,
+            spanId: null,
+            scorerId: 'quality',
+            scoreSource: 'automated',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.traceId).toBeNull();
+        expect(result.scores[0]!.scoreSource).toBe('automated');
+      });
+
+      it('accepts deprecated `source` alias on score input and writes it to scoreSource', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-legacy-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-legacy-score',
+            spanId: null,
+            scorerId: 'legacy',
+            source: 'manual',
+            score: 1,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listScores({ filters: { scorerId: 'legacy' } });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.traceId).toBe('trace-legacy-score');
+        expect(result.scores[0]!.scoreSource).toBe('manual');
+      });
     });
 
     describe('feedback (create + list)', () => {
@@ -2945,6 +2989,52 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(filtered.feedback).toHaveLength(1);
         expect(filtered.feedback[0]!.value).toBe(1);
         expect(filtered.feedback[0]!.sourceId).toBe('source-1');
+      });
+
+      it('supports nullable traceId for feedback at the storage boundary', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-null-trace-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: null,
+            spanId: null,
+            feedbackSource: 'manual',
+            feedbackType: 'rating',
+            value: 5,
+            comment: null,
+            experimentId: null,
+            sourceId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.traceId).toBeNull();
+        expect(result.feedback[0]!.feedbackSource).toBe('manual');
+      });
+
+      it('accepts deprecated `source` alias on feedback input and writes it to feedbackSource', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-legacy-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-legacy-feedback',
+            spanId: null,
+            source: 'manual',
+            feedbackType: 'rating',
+            value: 5,
+            comment: null,
+            experimentId: null,
+            sourceId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listFeedback({ filters: { feedbackSource: 'manual' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.traceId).toBe('trace-legacy-feedback');
+        expect(result.feedback[0]!.feedbackSource).toBe('manual');
       });
     });
 
