@@ -39,7 +39,10 @@ describe('MCP client transport', () => {
 
       const result = await calculator.execute({ operation: 'add', a: 10, b: 32 });
 
-      expect(result).toEqual({ result: 42 });
+      // When the tool throws server-side, MCP wraps the failure in
+      // { content: [...], isError: true }. Surface that content in the
+      // assertion message so CI logs tell us *why* the tool threw.
+      expect(result, `MCP returned error envelope: ${JSON.stringify(result)}`).toEqual({ result: 42 });
     });
 
     it('should execute string-transform tool via Streamable HTTP', async () => {
@@ -50,7 +53,7 @@ describe('MCP client transport', () => {
 
       const result = await transform.execute({ text: 'hello world', transform: 'upper' });
 
-      expect(result).toEqual({ result: 'HELLO WORLD' });
+      expect(result, `MCP returned error envelope: ${JSON.stringify(result)}`).toEqual({ result: 'HELLO WORLD' });
     });
   });
 
@@ -89,7 +92,7 @@ describe('MCP client transport', () => {
 
       const result = await calculator.execute({ operation: 'subtract', a: 100, b: 58 });
 
-      expect(result).toEqual({ result: 42 });
+      expect(result, `MCP returned error envelope: ${JSON.stringify(result)}`).toEqual({ result: 42 });
     });
 
     it('should execute string-transform tool via SSE transport', async () => {
@@ -100,7 +103,7 @@ describe('MCP client transport', () => {
 
       const result = await transform.execute({ text: 'mastra', transform: 'reverse' });
 
-      expect(result).toEqual({ result: 'artsam' });
+      expect(result, `MCP returned error envelope: ${JSON.stringify(result)}`).toEqual({ result: 'artsam' });
     });
   });
 });

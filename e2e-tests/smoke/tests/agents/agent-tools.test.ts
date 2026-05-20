@@ -35,7 +35,10 @@ describe('agent-scoped tools', () => {
         }),
       });
 
-      expect(status).toBe(200);
+      // Surface the actual server response body on unexpected status so CI
+      // logs tell us *why* the tool execute failed (Linux CI sees 500s that
+      // never reproduce on macOS — this captures the error for diagnosis).
+      expect(status, `expected 200 but got ${status} — body: ${JSON.stringify(data)}`).toBe(200);
       expect(data).toEqual({ result: 42 });
     });
 
@@ -50,7 +53,7 @@ describe('agent-scoped tools', () => {
         },
       );
 
-      expect(status).toBe(200);
+      expect(status, `expected 200 but got ${status} — body: ${JSON.stringify(data)}`).toBe(200);
       expect(data).toEqual({ result: 'artsam' });
     });
 
