@@ -140,10 +140,41 @@ export class WorkflowScheduler extends MastraBase {
       return;
     }
 
+    if (due.length === 0 && !this.#config.enabled) {
+      // Nothing due right now and the scheduler was not explicitly enabled
+      // for imperative usage. Check whether any schedules exist at all — if
+      // not, suspend the tick loop so we stop hitting the DB.
+      // Mastra.registerWorkflow() will restart the loop when a new schedule
+      // is registered.
+      try {
+        const all = await this.#schedulesStore.listSchedules();
+        if (all.length === 0) {
+          this.logger.info('No schedules remain — suspending scheduler tick loop');
+          this.#suspendLoop();
+        }
+      } catch (err) {
+        this.logger.error('Failed to check schedules', { error: err });
+      }
+      return;
+    }
+
     for (const schedule of due) {
       if (this.#stopping) break;
       await this.#fireSchedule(schedule);
     }
+  }
+
+  /**
+   * Suspend the tick loop without a full stop(). Unlike stop() this does
+   * not await the in-flight tick (we ARE the in-flight tick) and leaves
+   * #stopping=false so start() can re-arm the interval cleanly.
+   */
+  #suspendLoop(): void {
+    if (this.#intervalHandle) {
+      clearInterval(this.#intervalHandle);
+      this.#intervalHandle = undefined;
+    }
+    this.#started = false;
   }
 
   async #fireSchedule(schedule: Schedule): Promise<void> {

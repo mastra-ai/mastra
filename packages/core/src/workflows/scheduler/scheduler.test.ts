@@ -271,4 +271,128 @@ describe('WorkflowScheduler', () => {
     await scheduler.stop();
     expect(scheduler.isRunning).toBe(false);
   });
+
+  it('auto-suspends the tick loop when no active schedules remain', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000 },
+    });
+
+    // Start with zero schedules — the immediate tick should auto-suspend.
+    await scheduler.start();
+    expect(scheduler.isRunning).toBe(false);
+  });
+
+  it('auto-suspends after the last active schedule is fired and none remain', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000 },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-only',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    // First tick fires the schedule and advances nextFireAt to the future.
+    await scheduler.start();
+    expect(scheduler.isRunning).toBe(true);
+    expect(events).toHaveLength(1);
+
+    // Delete the schedule so the table is empty.
+    await store.deleteSchedule('sched-only');
+
+    // Next tick finds nothing due and no active schedules → auto-suspend.
+    await scheduler.tick();
+    expect(scheduler.isRunning).toBe(false);
+  });
+
+  it('can be restarted after auto-suspend', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000 },
+    });
+
+    // Start with no schedules — auto-suspends immediately.
+    await scheduler.start();
+    expect(scheduler.isRunning).toBe(false);
+
+    // Register a due schedule and restart.
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-restart',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    await scheduler.start();
+    expect(scheduler.isRunning).toBe(true);
+    expect(events).toHaveLength(1);
+
+    await scheduler.stop();
+  });
+
+  it('does not auto-suspend when config.enabled is true (imperative mode)', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000, enabled: true },
+    });
+
+    // Zero schedules, but enabled:true keeps the loop alive for imperative use.
+    await scheduler.start();
+    expect(scheduler.isRunning).toBe(true);
+
+    await scheduler.stop();
+  });
+
+  it('does not auto-suspend when active schedules exist but none are due yet', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000 },
+    });
+
+    const future = Date.now() + 60_000;
+    await store.createSchedule({
+      id: 'sched-future',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: future,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    await scheduler.start();
+    // Active schedule exists, just not due yet — should keep running.
+    expect(scheduler.isRunning).toBe(true);
+
+    await scheduler.stop();
+  });
 });

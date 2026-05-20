@@ -54,7 +54,8 @@ describe('Mastra — workflow scheduler integration', () => {
       workflows: { wf } as any,
     });
 
-    // Allow the async scheduler init to complete.
+    // Start workers — the SchedulerWorker initializes and starts the tick loop.
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
 
     const scheduler = mastra.scheduler;
@@ -78,6 +79,7 @@ describe('Mastra — workflow scheduler integration', () => {
       storage,
     });
 
+    await mastra.startWorkers();
     await flushAsyncInit();
 
     expect(mastra.scheduler).toBeUndefined();
@@ -111,6 +113,7 @@ describe('Mastra — workflow scheduler integration', () => {
       workflows: { wf } as any,
     });
 
+    await mastra.startWorkers();
     await flushAsyncInit();
 
     expect(mastra.scheduler).toBeUndefined();
@@ -126,6 +129,7 @@ describe('Mastra — workflow scheduler integration', () => {
       scheduler: { enabled: true },
     });
 
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     expect(mastra.scheduler!.isRunning).toBe(true);
@@ -150,7 +154,7 @@ describe('Mastra — workflow scheduler integration', () => {
       workflows: { wf: wf as any },
     });
 
-    // The scheduler picks the workflow up because it's evented now and has a schedule.
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     const schedulesStore = await mastra.getStorage()!.getStore('schedules');
@@ -167,6 +171,7 @@ describe('Mastra — workflow scheduler integration', () => {
       scheduler: { enabled: true },
     });
 
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     expect(mastra.scheduler!.isRunning).toBe(true);
@@ -205,6 +210,7 @@ describe('Mastra — workflow scheduler integration', () => {
         storage,
         workflows: { wf } as any,
       });
+      await mastra.startWorkers();
       await waitForScheduler(mastra);
       return mastra;
     };
@@ -305,6 +311,7 @@ describe('Mastra — workflow scheduler integration', () => {
         storage,
         workflows: { wf } as any,
       });
+      await mastra.startWorkers();
       await waitForScheduler(mastra);
       return mastra;
     };
@@ -374,6 +381,7 @@ describe('Mastra — workflow scheduler integration', () => {
         )
         .commit();
       const first = new Mastra({ logger: false, storage, workflows: { wfSingle } as any });
+      await first.startWorkers();
       await waitForScheduler(first);
       const schedulesStore = (await storage.getStore('schedules'))!;
       expect((await schedulesStore.listSchedules()).map(r => r.id)).toEqual(['wf_multi-wf']);
