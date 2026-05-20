@@ -87,6 +87,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient, QueryValues, TxClient } from '../../client';
 import { PgDB, generateIndexSQL, generateTableSQL, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { POSTGRES_IDENTIFIER_MAX_LENGTH, truncateIdentifier } from '../../db/constraint-utils';
 
 type HarnessWakeupClaimStatus = Extract<HarnessWakeupItem['status'], 'due' | 'claimed' | 'failed'>;
 type PgHarnessExecuteArgs = string | { sql: string; args?: QueryValues };
@@ -220,58 +221,58 @@ function qualifyHarnessTableNames(sql: string, schemaName?: string): string {
 function harnessIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
   return [
     {
-      name: `${schemaPrefix}idx_harness_sessions_active_key`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_sessions_active_key'),
       table: TABLE_HARNESS_SESSIONS,
       columns: ['harness_name', 'resource_id', 'thread_id'],
       unique: true,
       where: '"closed_at" IS NULL',
     },
     {
-      name: `${schemaPrefix}idx_harness_sessions_thread_scope`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_sessions_thread_scope'),
       table: TABLE_HARNESS_SESSIONS,
       columns: ['harness_name', 'resource_id', 'thread_id', 'last_activity_at'],
     },
     {
-      name: `${schemaPrefix}idx_harness_sessions_thread_global`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_sessions_thread_global'),
       table: TABLE_HARNESS_SESSIONS,
       columns: ['thread_id', 'last_activity_at'],
     },
     {
-      name: `${schemaPrefix}idx_harness_sessions_active_thread`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_sessions_active_thread'),
       table: TABLE_HARNESS_SESSIONS,
       columns: ['harness_name', 'thread_id', 'last_activity_at'],
       where: '"closed_at" IS NULL',
     },
     {
-      name: `${schemaPrefix}idx_harness_sessions_active_thread_global`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_sessions_active_thread_global'),
       table: TABLE_HARNESS_SESSIONS,
       columns: ['thread_id', 'last_activity_at'],
       where: '"closed_at" IS NULL',
     },
     {
-      name: `${schemaPrefix}idx_harness_session_events_replay`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_session_events_replay'),
       table: TABLE_HARNESS_SESSION_EVENTS,
       columns: ['harness_name', 'session_id', 'resource_id', 'thread_id', 'epoch', 'sequence'],
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_inbox_idempotency`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_inbox_idempotency'),
       table: TABLE_HARNESS_CHANNEL_INBOX,
       columns: ['harness_name', 'channel_id', 'idempotency_key'],
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_inbox_claim`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_inbox_claim'),
       table: TABLE_HARNESS_CHANNEL_INBOX,
       columns: ['harness_name', 'channel_id', 'status', 'next_attempt_at', 'claim_expires_at', 'received_at'],
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_action_tokens_transport`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_action_tokens_transport'),
       table: TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
       columns: ['harness_name', 'channel_id', 'transport_hash'],
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_action_tokens_pending`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_action_tokens_pending'),
       table: TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
       columns: [
         'harness_name',
@@ -288,55 +289,63 @@ function harnessIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_action_receipts_token`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_action_receipts_token'),
       table: TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
       columns: ['harness_name', 'channel_id', 'action_token_id'],
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_action_receipts_action`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_action_receipts_action'),
       table: TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
       columns: ['harness_name', 'channel_id', 'action_id', 'created_at'],
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_action_receipts_claim`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_action_receipts_claim'),
       table: TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
       columns: ['harness_name', 'channel_id', 'status', 'next_attempt_at', 'claim_expires_at', 'created_at'],
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_outbox_idempotency`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_outbox_idempotency'),
       table: TABLE_HARNESS_CHANNEL_OUTBOX,
       columns: ['harness_name', 'binding_id', 'idempotency_key'],
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_outbox_claim`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_outbox_claim'),
       table: TABLE_HARNESS_CHANNEL_OUTBOX,
       columns: ['harness_name', 'channel_id', 'status', 'next_attempt_at', 'claim_expires_at', 'created_at', 'id'],
     },
     {
-      name: `${schemaPrefix}idx_harness_channel_outbox_binding_order`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_channel_outbox_binding_order'),
       table: TABLE_HARNESS_CHANNEL_OUTBOX,
       columns: ['harness_name', 'binding_id', 'status', 'created_at', 'id'],
     },
     {
-      name: `${schemaPrefix}idx_harness_wakeups_idempotency`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_wakeups_idempotency'),
       table: TABLE_HARNESS_WAKEUPS,
       columns: ['harness_name', 'idempotency_key'],
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_wakeups_source_fire`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_wakeups_source_fire'),
       table: TABLE_HARNESS_WAKEUPS,
       columns: ['harness_name', 'source', 'source_id', 'fire_id'],
       unique: true,
     },
     {
-      name: `${schemaPrefix}idx_harness_wakeups_claim`,
+      name: harnessIndexName(schemaPrefix, 'idx_harness_wakeups_claim'),
       table: TABLE_HARNESS_WAKEUPS,
       columns: ['harness_name', 'source', 'status', 'due_at', 'next_attempt_at', 'claim_expires_at'],
     },
   ];
+}
+
+function harnessIndexName(schemaPrefix: string, baseName: string): string {
+  const name = `${schemaPrefix}${baseName}`;
+  if (Buffer.byteLength(name, 'utf-8') <= POSTGRES_IDENTIFIER_MAX_LENGTH) return name;
+
+  const suffix = `_${createHash('sha256').update(name).digest('hex').slice(0, 8)}`;
+  return `${truncateIdentifier(name, POSTGRES_IDENTIFIER_MAX_LENGTH - Buffer.byteLength(suffix, 'utf-8'))}${suffix}`;
 }
 
 /**
@@ -3578,7 +3587,8 @@ export class HarnessPG extends HarnessStorage {
   async #createDefaultIndexes(indexNames?: readonly string[]): Promise<void> {
     if (this.#skipDefaultIndexes) return;
     const prefix = this.#schemaPrefix();
-    const allowedNames = indexNames === undefined ? undefined : new Set(indexNames.map(name => `${prefix}${name}`));
+    const allowedNames =
+      indexNames === undefined ? undefined : new Set(indexNames.map(name => harnessIndexName(prefix, name)));
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       if (allowedNames !== undefined && !allowedNames.has(indexDef.name)) continue;
       await this.#db.createIndex(indexDef);

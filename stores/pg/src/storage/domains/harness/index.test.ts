@@ -4,7 +4,7 @@ import { createSampleSessionRecord } from '@internal/storage-test-utils';
 import { HarnessStorageThreadDeleteFenceConflictError, TABLE_HARNESS_SESSION_EVENTS } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
-import { exportSchemas, PostgresStore } from '../..';
+import { exportSchemas, HarnessPG, PostgresStore } from '../..';
 import { TEST_CONFIG } from '../../test-utils';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -59,6 +59,61 @@ describe('HarnessPG', () => {
       'idx_harness_sessions_active_key',
       'idx_harness_wakeups_idempotency',
     ]);
+  });
+
+  it('keeps long schema-prefixed default index names valid and unique', async () => {
+    const schemaName = 'migration_test_schema_1779266119440_dfd7f958d5b5e8';
+    const indexNames = HarnessPG.getDefaultIndexDefs(`${schemaName}_`).map(index => index.name);
+
+    expect(indexNames).toHaveLength(new Set(indexNames).size);
+    for (const indexName of indexNames) {
+      expect(Buffer.byteLength(indexName, 'utf-8')).toBeLessThanOrEqual(63);
+    }
+
+    const ddl = HarnessPG.getExportDDL(schemaName).join('\n');
+    expect(ddl).toContain('CREATE INDEX');
+    expect(ddl).toMatch(/_idx_[0-9a-f]{8}/);
+    expect(ddl).not.toContain(`${schemaName}_idx_harness_session_events_replay`);
+  });
+
+  it('preserves existing mixed-case short schema index names', () => {
+    const indexNames = HarnessPG.getDefaultIndexDefs('TenantA_').map(index => index.name);
+
+    expect(indexNames).toContain('TenantA_idx_harness_sessions_active_key');
+    for (const indexName of indexNames) {
+      expect(indexName.startsWith('TenantA_')).toBe(true);
+      expect(Buffer.byteLength(indexName, 'utf-8')).toBeLessThanOrEqual(63);
+    }
+  });
+
+  it('initializes Harness indexes for long schema names', async () => {
+    const schemaName = `harness_long_schema_${randomUUID().replaceAll('-', '_')}`;
+    const longSchemaStore = new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-harness-long-schema-indexes',
+      schemaName,
+    });
+    try {
+      await longSchemaStore.init();
+      const expectedNames = HarnessPG.getDefaultIndexDefs(`${schemaName}_`).map(index => index.name);
+      const indexes = await longSchemaStore.db.manyOrNone<{ indexname: string }>(
+        `SELECT indexname FROM pg_indexes
+         WHERE schemaname = $1
+           AND indexname = ANY($2)
+         ORDER BY indexname`,
+        [schemaName, expectedNames],
+      );
+
+      expect(indexes.map(row => row.indexname)).toEqual([...expectedNames].sort());
+    } finally {
+      await longSchemaStore.close().catch(() => {});
+      const cleanupStore = new PostgresStore({ ...TEST_CONFIG, id: 'pg-harness-long-schema-index-cleanup' });
+      try {
+        await cleanupStore.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      } finally {
+        await cleanupStore.close();
+      }
+    }
   });
 
   it('allows legacy duplicate active sessions when default indexes are skipped', async () => {
