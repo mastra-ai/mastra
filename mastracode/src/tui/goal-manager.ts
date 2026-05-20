@@ -360,9 +360,7 @@ export class GoalManager {
 
     const prompt = `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${context.lastAssistantContent}`;
     const streamOptions = {
-      ...(memory
-        ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
-        : {}),
+      ...(memory ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } } : {}),
       abortSignal: options.abortSignal,
       structuredOutput: {
         schema: judgeSchema,

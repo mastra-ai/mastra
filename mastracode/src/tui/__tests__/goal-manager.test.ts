@@ -182,9 +182,11 @@ describe('GoalManager', () => {
       callCount++;
       return {
         consumeStream: vi.fn().mockResolvedValue(undefined),
-        getFullOutput: vi.fn().mockResolvedValue(
-          callCount === 1 ? { object: undefined } : { object: { decision: 'continue', reason: 'Keep going.' } },
-        ),
+        getFullOutput: vi
+          .fn()
+          .mockResolvedValue(
+            callCount === 1 ? { object: undefined } : { object: { decision: 'continue', reason: 'Keep going.' } },
+          ),
       };
     });
     mocks.agentConstructor.mockImplementation(function () {
