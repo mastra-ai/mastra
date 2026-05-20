@@ -764,7 +764,9 @@ export class SlackProvider implements ChannelProvider {
     const { adapterConfig, cors, gateway, cards, formatToolCall, formatError, streaming } = this.#channelConfig;
     const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
-    return { ...adapterConfig, ...filteredTopLevel } as SlackAdapterChannelConfig;
+    // Slack supports native message streaming, so SlackProvider defaults `streaming: true`.
+    // Users can opt out by passing `streaming: false` at the top level (or via `adapterConfig`).
+    return { streaming: true, ...adapterConfig, ...filteredTopLevel } as SlackAdapterChannelConfig;
   }
 
   /**
