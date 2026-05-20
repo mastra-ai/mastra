@@ -29,6 +29,20 @@ vi.mock('@mariozechner/pi-tui', () => ({
       this.children.push(child);
     }
   },
+  Container: class {
+    children: unknown[] = [];
+    constructor() {}
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+    removeChildren() {
+      this.children = [];
+    }
+    clear() {
+      this.children = [];
+    }
+    invalidate() {}
+  },
   SelectList: class {
     onSelect?: (item: { value: string; label: string }) => void;
     onCancel?: () => void;
@@ -201,6 +215,49 @@ describe('handleGoalCommand', () => {
       `Goal resumed: "finish the task" — 3/${DEFAULT_MAX_TURNS} turns used. Sending continuation...`,
     );
     expect(sendMessage).toHaveBeenCalledWith({ content: 'Continue working toward the goal: finish the task' });
+  });
+
+  it('retriggers judge evaluation instead of main agent when resume follows a judge failure', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    // Inject the goal state directly
+    (goalManager as any).goal = goal;
+    const evaluateAfterTurn = vi.spyOn(goalManager, 'evaluateAfterTurn').mockResolvedValue({
+      continuation: null,
+      judgeResult: { decision: 'paused', reason: 'Judge returned no structured decision.' },
+    });
+    const sendMessage = vi.fn();
+    const showInfo = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        harness: { sendMessage },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo,
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    // Should NOT send a main-agent continuation
+    expect(sendMessage).not.toHaveBeenCalled();
+    // Should show the judge retrigger message
+    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('retriggering judge evaluation'));
+    // evaluateAfterTurn should have been called (via triggerGoalJudge)
+    expect(evaluateAfterTurn).toHaveBeenCalled();
   });
 
   it('creates the pending new thread before saving a new goal', async () => {

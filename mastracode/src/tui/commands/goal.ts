@@ -372,10 +372,33 @@ function triggerGoalJudge(ctx: SlashCommandContext): void {
         } catch (error) {
           ctx.showError(`Failed to send goal continuation: ${error instanceof Error ? error.message : String(error)}`);
         }
-      } else if (currentGoal.status === 'paused') {
-        ctx.showInfo(
-          `Goal paused (attempt ${currentGoal.turnsUsed}/${currentGoal.maxTurns}). Use /goal resume to continue.`,
-        );
+      } else {
+        // Persist the final judge response so the conversation history survives reloads.
+        if (judgeResult) {
+          const harness = state.harness as typeof state.harness & {
+            saveSystemReminderMessage?: (args: { reminderType: string; message: string }) => Promise<unknown>;
+          };
+          await harness.saveSystemReminderMessage?.({
+            reminderType: 'goal-judge',
+            message: `${judgeResult.decision} (${currentGoal.turnsUsed}/${currentGoal.maxTurns})\n${judgeResult.reason}`,
+          });
+        }
+        if (currentGoal.status === 'paused') {
+          ctx.showInfo(
+            `Goal paused (attempt ${currentGoal.turnsUsed}/${currentGoal.maxTurns}). Use /goal resume to continue.`,
+          );
+        }
+
+        if (judgeResult?.decision === 'done' && currentGoal.id === state.planStartedGoalId) {
+          const goalId = state.planStartedGoalId;
+          state.planStartedGoalId = undefined;
+          try {
+            await state.harness.switchMode({ modeId: 'plan' });
+          } catch (error) {
+            ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
+            state.planStartedGoalId = goalId;
+          }
+        }
       }
     })
     .catch(() => {

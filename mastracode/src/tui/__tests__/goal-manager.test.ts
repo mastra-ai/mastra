@@ -152,7 +152,7 @@ describe('GoalManager', () => {
     expect(manager.getGoal()?.turnsUsed).toBe(0);
   });
 
-  it('pauses with a specific reason when the judge returns no structured output', async () => {
+  it('pauses with a specific reason when the judge returns no structured output after retry', async () => {
     mocks.stream.mockResolvedValue({
       consumeStream: vi.fn().mockResolvedValue(undefined),
       getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
@@ -170,6 +170,57 @@ describe('GoalManager', () => {
     expect(result.judgeResult).toEqual({ decision: 'paused', reason: 'Judge returned no structured decision.' });
     expect(manager.getGoal()?.status).toBe('paused');
     expect(manager.getGoal()?.turnsUsed).toBe(0);
+    // Both the initial and retry calls should have been made
+    expect(mocks.stream).toHaveBeenCalledTimes(2);
+    expect(manager.getGoal()?.lastPauseWasJudgeFailure).toBe(true);
+  });
+
+  it('recovers via the retry follow-up prompt when the first stream has no structured output', async () => {
+    let callCount = 0;
+    mocks.stream.mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          consumeStream: vi.fn().mockResolvedValue(undefined),
+          getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
+        };
+      }
+      return {
+        consumeStream: vi.fn().mockResolvedValue(undefined),
+        getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'continue', reason: 'Still working.' } }),
+      };
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    const result = await manager.evaluateAfterTurn(createState());
+
+    expect(result.judgeResult).toEqual({ decision: 'continue', reason: 'Still working.' });
+    expect(result.continuation).toBeTruthy();
+    expect(manager.getGoal()?.status).toBe('active');
+    // The retry prompt should ask for JSON without tools
+    expect(mocks.stream.mock.calls[1][0]).toContain('JSON');
+  });
+
+  it('passes maxSteps: 50 to the judge stream call', async () => {
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'done', reason: 'Finished.' } }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    await manager.evaluateAfterTurn(createState());
+
+    expect(mocks.stream).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ maxSteps: 50 }));
   });
 
   it('uses stream with structured output and judge memory thread parent-goalId', async () => {
