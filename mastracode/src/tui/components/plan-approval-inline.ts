@@ -75,7 +75,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     }
   }
 
-  constructor(options: PlanApprovalInlineOptions, private ui: TUI) {
+  constructor(
+    options: PlanApprovalInlineOptions,
+    private ui: TUI,
+  ) {
     super();
     this.planTitle = options.title;
     this.planContent = options.plan;
