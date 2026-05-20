@@ -1,11 +1,12 @@
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
-import { Searchbar, Skeleton, Txt, cn } from '@mastra/playground-ui';
+import { Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
+import { AgentSearchbar } from '../agent-searchbar';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { toProviders } from '@/domains/agent-builder/services/to-providers';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
@@ -28,7 +29,10 @@ export const Models = ({ editable = true }: Modelprops) => {
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4" data-testid="model-detail-picker">
+    <div
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-y-auto"
+      data-testid="model-detail-picker"
+    >
       <ModelPicker disabled={!editable} />
     </div>
   );
@@ -64,10 +68,13 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const visibleEntries = filterProvidersModel(policyAllowedModels, provider, search);
 
   return (
-    <div className="h-full pb-6 pt-2">
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6" data-testid="model-card-picker">
+    <div className="h-full overflow-y-auto">
+      <div
+        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 overflow-y-auto"
+        data-testid="model-card-picker"
+      >
         <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
-          <Searchbar
+          <AgentSearchbar
             onSearch={setSearch}
             label="Search models"
             placeholder="Search models or providers..."

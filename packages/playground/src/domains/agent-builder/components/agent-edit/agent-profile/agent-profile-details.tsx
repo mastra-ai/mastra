@@ -1,16 +1,23 @@
 import { cn } from '@mastra/playground-ui';
+import type { CSSProperties } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
 export interface AgentProfileDetailsProps {
   disabled?: boolean;
   className?: string;
+  mode?: 'default' | 'highlighted';
 }
 
-export const AgentProfileDetails = ({ disabled = false, className }: AgentProfileDetailsProps) => {
+const HIGHLIGHTED_CLASSNAME =
+  'px-24 justify-center items-center text-center [&_input]:text-center [&_textarea]:text-center [&_input]:text-[var(--agent-color-fg)] [&_textarea]:text-[var(--agent-color-fg)]';
+
+export const AgentProfileDetails = ({ disabled = false, className, mode = 'default' }: AgentProfileDetailsProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const draftName = useWatch({ control, name: 'name' }) ?? '';
   const draftDescription = useWatch({ control, name: 'description' }) ?? '';
+  const agentColor = useAgentColor();
 
   const handleDraftNameChange = (value: string) => {
     if (disabled) return;
@@ -21,8 +28,22 @@ export const AgentProfileDetails = ({ disabled = false, className }: AgentProfil
     setValue('description', value, { shouldDirty: true });
   };
 
+  const isHighlighted = mode === 'highlighted';
+  const wrapperStyle = isHighlighted
+    ? ({
+        ['--agent-color-fg']: agentColor?.background,
+      } as CSSProperties)
+    : undefined;
+
   return (
-    <div className={cn('flex w-full flex-col items-start gap-0.5 max-w-[60ch]', className)}>
+    <div
+      className={cn(
+        'flex w-full flex-col items-start gap-0.5 max-w-[60ch]',
+        isHighlighted && HIGHLIGHTED_CLASSNAME,
+        className,
+      )}
+      style={wrapperStyle}
+    >
       <input
         type="text"
         value={draftName}

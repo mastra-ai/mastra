@@ -18,7 +18,7 @@ export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsPr
   };
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] px-2 py-2">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] px-2">
       <CodeEditor
         data-testid="system-prompt-dialog-input"
         value={displayedPrompt}

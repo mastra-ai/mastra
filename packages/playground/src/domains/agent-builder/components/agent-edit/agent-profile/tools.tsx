@@ -1,4 +1,4 @@
-import { Searchbar, Txt, cn } from '@mastra/playground-ui';
+import { Txt, cn } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useState } from 'react';
@@ -6,6 +6,7 @@ import { useFormContext } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
+import { AgentSearchbar } from '../agent-searchbar';
 
 interface ToolsProps {
   editable?: boolean;
@@ -29,9 +30,15 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
   const visibleTools = getVisibleTools(availableAgentTools, search);
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 pt-2" data-testid="tools-card-picker">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6" data-testid="tools-card-picker">
       <div data-testid="tools-card-picker-search" className="shrink-0 max-w-[30ch]">
-        <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools..." size="lg" debounceMs={0} />
+        <AgentSearchbar
+          onSearch={setSearch}
+          label="Search tools"
+          placeholder="Search tools..."
+          size="lg"
+          debounceMs={0}
+        />
       </div>
 
       {visibleTools.length === 0 ? (

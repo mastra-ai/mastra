@@ -33,7 +33,7 @@ export const AgentProfileTabs = ({
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
   const skillsTabEnabled = features.skills && availableSkills.length > 0;
 
-  const tabContentClassName = 'h-full min-h-0';
+  const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
   const isEditable = !disabled;
 
   const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
