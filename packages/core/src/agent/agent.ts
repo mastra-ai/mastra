@@ -1833,6 +1833,9 @@ export class Agent<
         mastra: this.#mastra,
         getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
         getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
+        assertAgentExecutionPreflight: this.#assertAgentExecutionPreflight.bind(this),
+        needsAgentExecutionPreflight: () =>
+          Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga),
         hasOwnMemory: this.hasOwnMemory.bind(this),
         getInstructions: async (options: { requestContext: RequestContext }) => {
           const result = await this.getInstructions(options);
@@ -6668,7 +6671,7 @@ export class Agent<
     }
     let preparedOptionsWithPubSub: (AgentExecutionOptionsBase<any> & { runId?: string; _pubsub: PubSub }) | undefined;
     let preflightedRequestContext: RequestContext | undefined = skipExecutionPreflight
-      ? preflightedDefaultOptions?.requestContext ?? requestContextToUse
+      ? (preflightedDefaultOptions?.requestContext ?? requestContextToUse)
       : undefined;
     let hasPreflightedRequestContext = skipExecutionPreflight;
     const reserveAdmittedRun = () => {

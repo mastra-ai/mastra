@@ -1,6 +1,7 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -51,6 +52,39 @@ function createMockModel() {
       content: [{ type: 'text', text: 'ok' }],
     }),
   });
+}
+
+function createMockLegacyModel() {
+  const doGenerate = vi.fn(async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { promptTokens: 5, completionTokens: 10 },
+    text: 'ok',
+  }));
+  const doStream = vi.fn(async () => ({
+    stream: simulateReadableStream({
+      chunks: [
+        { type: 'text-delta' as const, textDelta: 'ok' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 5, completionTokens: 10 },
+        },
+      ],
+    }),
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }));
+
+  return Object.assign(
+    new MockLanguageModelV1({
+      doGenerate,
+      doStream,
+    }),
+    {
+      doGenerateMock: doGenerate,
+      doStreamMock: doStream,
+    },
+  );
 }
 
 function createWorkflowRunStorage({
@@ -390,6 +424,332 @@ describe('Agent FGA checks', () => {
 
       await expect(agent.stream('test')).rejects.toThrow(FGADeniedError);
       expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateLegacy()', () => {
+    it('should call FGA provider check when FGA provider is configured', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockLegacyModel(),
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await agent.generateLegacy('test', { requestContext: requestContext as any });
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1', organizationMembershipId: 'om-1' },
+        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+      );
+    });
+
+    it('should fail closed when FGA is configured and no user is present in requestContext', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.generateLegacy('test')).rejects.toThrow(FGADeniedError);
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(model.doGenerateMock).not.toHaveBeenCalled();
+    });
+
+    it('should fail closed before legacy structured output option validation', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const model = createMockLegacyModel();
+      const defaultGenerateOptionsLegacy = vi.fn(() => {
+        throw new Error('default options should not run');
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        defaultGenerateOptionsLegacy,
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.generateLegacy('test', { structuredOutput: { schema: z.object({}) } } as any)).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(defaultGenerateOptionsLegacy).not.toHaveBeenCalled();
+      expect(model.doGenerateMock).not.toHaveBeenCalled();
+    });
+
+    it('should reject unsupported structured output before resolving legacy defaults when no preflight is configured', async () => {
+      const mastra = createMockMastra();
+      const model = createMockLegacyModel();
+      const defaultGenerateOptionsLegacy = vi.fn(() => {
+        throw new Error('default options should not run');
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        defaultGenerateOptionsLegacy,
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(
+        agent.generateLegacy('test', { structuredOutput: { schema: z.object({}) } } as any),
+      ).rejects.toMatchObject({
+        id: 'AGENT_GENERATE_LEGACY_STRUCTURED_OUTPUT_NOT_SUPPORTED',
+      });
+      expect(defaultGenerateOptionsLegacy).not.toHaveBeenCalled();
+      expect(model.doGenerateMock).not.toHaveBeenCalled();
+    });
+
+    it('should throw FGADeniedError when FGA check fails', async () => {
+      const fgaProvider = createMockFGAProvider(false);
+      const mastra = createMockMastra(fgaProvider);
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(agent.generateLegacy('test', { requestContext: requestContext as any })).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(model.doGenerateMock).not.toHaveBeenCalled();
+    });
+
+    it('should authorize the explicit request context over default legacy options', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const defaultRequestContext = new RequestContext();
+      defaultRequestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+      const explicitRequestContext = new RequestContext();
+      explicitRequestContext.set('user', { id: 'explicit-user', organizationMembershipId: 'explicit-om' });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockLegacyModel(),
+        defaultGenerateOptionsLegacy: { requestContext: defaultRequestContext as any },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await agent.generateLegacy('test', { requestContext: explicitRequestContext as any });
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'explicit-user', organizationMembershipId: 'explicit-om' },
+        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+      );
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+    });
+
+    it('should authorize the effective request context from default legacy options', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockLegacyModel(),
+        defaultGenerateOptionsLegacy: { requestContext: requestContext as any },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await agent.generateLegacy('test');
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'default-user', organizationMembershipId: 'default-om' },
+        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+      );
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+    });
+
+    it('should still run local legacy calls without a user when no FGA provider is configured', async () => {
+      const mastra = createMockMastra();
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      await agent.generateLegacy('test');
+
+      expect(model.doGenerateMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should validate request context schema before local legacy calls without FGA', async () => {
+      const mastra = createMockMastra();
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        requestContextSchema: z.object({ allowed: z.literal(true) }),
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.generateLegacy('test')).rejects.toMatchObject({
+        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+      });
+      expect(model.doGenerateMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('streamLegacy()', () => {
+    it('should call FGA provider check when FGA provider is configured', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockLegacyModel(),
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      const stream = await agent.streamLegacy('test', { requestContext: requestContext as any });
+      await stream.consumeStream();
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1', organizationMembershipId: 'om-1' },
+        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+      );
+    });
+
+    it('should fail closed when FGA is configured and no user is present in requestContext', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.streamLegacy('test')).rejects.toThrow(FGADeniedError);
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(model.doStreamMock).not.toHaveBeenCalled();
+    });
+
+    it('should throw FGADeniedError when FGA check fails', async () => {
+      const fgaProvider = createMockFGAProvider(false);
+      const mastra = createMockMastra(fgaProvider);
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(agent.streamLegacy('test', { requestContext: requestContext as any })).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(model.doStreamMock).not.toHaveBeenCalled();
+    });
+
+    it('should authorize the explicit request context over default legacy options', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const defaultRequestContext = new RequestContext();
+      defaultRequestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+      const explicitRequestContext = new RequestContext();
+      explicitRequestContext.set('user', { id: 'explicit-user', organizationMembershipId: 'explicit-om' });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockLegacyModel(),
+        defaultStreamOptionsLegacy: { requestContext: defaultRequestContext as any },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const stream = await agent.streamLegacy('test', { requestContext: explicitRequestContext as any });
+      await stream.consumeStream();
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'explicit-user', organizationMembershipId: 'explicit-om' },
+        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+      );
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+    });
+
+    it('should authorize the effective request context from default legacy options', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockLegacyModel(),
+        defaultStreamOptionsLegacy: { requestContext: requestContext as any },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const stream = await agent.streamLegacy('test');
+      await stream.consumeStream();
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'default-user', organizationMembershipId: 'default-om' },
+        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+      );
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+    });
+
+    it('should still run local legacy streams without a user when no FGA provider is configured', async () => {
+      const mastra = createMockMastra();
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      const stream = await agent.streamLegacy('test');
+      await stream.consumeStream();
+
+      expect(model.doStreamMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should validate request context schema before local legacy streams without FGA', async () => {
+      const mastra = createMockMastra();
+      const model = createMockLegacyModel();
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        requestContextSchema: z.object({ allowed: z.literal(true) }),
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.streamLegacy('test')).rejects.toMatchObject({
+        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+      });
+      expect(model.doStreamMock).not.toHaveBeenCalled();
     });
   });
 
