@@ -4,17 +4,36 @@ import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
 
 /**
- * Per-adapter overrides forwarded to the SlackAdapter entry inside
- * `AgentChannels.adapters` — equivalent to passing
- * `{ adapter, ...adapterConfig }` when wiring up `AgentChannels` manually.
- * The `adapter` instance itself is created by the provider.
+ * Per-adapter overrides applied to the Slack entry inside
+ * `AgentChannels.adapters`. Field types are borrowed from
+ * `ChannelAdapterConfig` so the runtime contract stays in sync, but the shape
+ * and defaults are owned by Slack.
  */
-export type SlackAdapterChannelConfig = Omit<ChannelAdapterConfig, 'adapter' | 'streaming'> & {
+export interface SlackAdapterChannelConfig {
+  /** CORS configuration for the Slack webhook route. */
+  cors?: ChannelAdapterConfig['cors'];
+
+  /** Slack gateway listener toggle. Currently a no-op for Slack (HTTP-only). */
+  gateway?: ChannelAdapterConfig['gateway'];
+
   /**
-   * Stream agent text deltas to this adapter as the agent generates them, instead of
-   * buffering and posting once per step. On adapters with native streaming (e.g. Slack)
-   * this is rendered live; on adapters without it (e.g. Discord) the Chat SDK falls back
-   * to post + edit, which can feel noisy — leave it off there.
+   * Use rich card formatting for tool calls, approvals, and results.
+   * Set to `false` to fall back to plain text.
+   *
+   * @default true
+   */
+  cards?: ChannelAdapterConfig['cards'];
+
+  /** Override how tool calls are rendered in Slack messages. */
+  formatToolCall?: ChannelAdapterConfig['formatToolCall'];
+
+  /** Override how errors are rendered in Slack messages. */
+  formatError?: ChannelAdapterConfig['formatError'];
+
+  /**
+   * Stream agent text deltas to Slack as the agent generates them, instead of
+   * buffering and posting once per step. Slack supports native message streaming,
+   * so this defaults to `true`.
    *
    * - `true` (default) — stream with default options.
    * - `false` — buffer text and post once per `step-finish`.
@@ -23,13 +42,7 @@ export type SlackAdapterChannelConfig = Omit<ChannelAdapterConfig, 'adapter' | '
    * @default true
    */
   streaming?: boolean | { updateIntervalMs?: number };
-};
-
-/** AgentChannels fields that the provider forwards. `adapters` and `userName` are provider-managed. */
-type ForwardedAgentChannelsOptions = Pick<
-  ChannelConfig,
-  'inlineMedia' | 'inlineLinks' | 'state' | 'threadContext' | 'tools' | 'chatOptions'
->;
+}
 
 // =============================================================================
 // Global Configuration (Mastra-level)
@@ -38,17 +51,53 @@ type ForwardedAgentChannelsOptions = Pick<
 /**
  * Configuration for SlackProvider at the Mastra level.
  *
- * In addition to the provider-specific fields documented below, this accepts
- * options that are forwarded to the underlying `AgentChannels` instances
- * managed by the provider — for example `handlers`, `inlineMedia`, `cards`,
- * `formatToolCall`, and `streaming`.
+ * Combines Slack-specific fields (tokens, baseUrl, OAuth callbacks),
+ * Slack-adapter overrides (`cards`, `formatToolCall`, `streaming`, …), and a
+ * curated subset of `AgentChannels` options forwarded to every connected agent
+ * (`handlers`, `inlineMedia`, `inlineLinks`, …).
  */
-export interface SlackProviderConfig extends ForwardedAgentChannelsOptions, SlackAdapterChannelConfig {
+export interface SlackProviderConfig {
+  // ---------------------------------------------------------------------------
+  // Slack-adapter overrides
+  // (applied to the Slack entry inside `AgentChannels.adapters`)
+  // ---------------------------------------------------------------------------
+
+  /** CORS configuration for the Slack webhook route. */
+  cors?: ChannelAdapterConfig['cors'];
+
+  /** Slack gateway listener toggle. Currently a no-op for Slack (HTTP-only). */
+  gateway?: ChannelAdapterConfig['gateway'];
+
   /**
-   * Logger forwarded to the underlying `SlackAdapter` for internal error
-   * reporting. Defaults to the adapter's `ConsoleLogger`.
+   * Use rich card formatting for tool calls, approvals, and results.
+   * Set to `false` to fall back to plain text.
+   *
+   * @default true
    */
-  logger?: SlackAdapterConfig['logger'];
+  cards?: ChannelAdapterConfig['cards'];
+
+  /** Override how tool calls are rendered in Slack messages. */
+  formatToolCall?: ChannelAdapterConfig['formatToolCall'];
+
+  /** Override how errors are rendered in Slack messages. */
+  formatError?: ChannelAdapterConfig['formatError'];
+
+  /**
+   * Stream agent text deltas to Slack as the agent generates them, instead of
+   * buffering and posting once per step. Slack supports native message streaming,
+   * so this defaults to `true`.
+   *
+   * - `true` (default) — stream with default options.
+   * - `false` — buffer text and post once per `step-finish`.
+   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval.
+   *
+   * @default true
+   */
+  streaming?: boolean | { updateIntervalMs?: number };
+
+  // ---------------------------------------------------------------------------
+  // Forwarded AgentChannels-level options
+  // ---------------------------------------------------------------------------
 
   /**
    * Override built-in event handlers (e.g. `onDirectMessage`, `onMention`).
@@ -65,6 +114,34 @@ export interface SlackProviderConfig extends ForwardedAgentChannelsOptions, Slac
    * ```
    */
   handlers?: ChannelHandlers;
+
+  /** Which media types to send inline to the model. See `ChannelConfig.inlineMedia`. */
+  inlineMedia?: ChannelConfig['inlineMedia'];
+
+  /** Promote URLs in message text to file parts. See `ChannelConfig.inlineLinks`. */
+  inlineLinks?: ChannelConfig['inlineLinks'];
+
+  /** State adapter for deduplication, locking, and subscriptions. */
+  state?: ChannelConfig['state'];
+
+  /** Fetch recent thread messages from Slack when the agent joins mid-conversation. */
+  threadContext?: ChannelConfig['threadContext'];
+
+  /** Whether to include channel tools (add_reaction, remove_reaction). */
+  tools?: ChannelConfig['tools'];
+
+  /** Additional options passed directly to the Chat SDK. */
+  chatOptions?: ChannelConfig['chatOptions'];
+
+  // ---------------------------------------------------------------------------
+  // Slack-specific
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Logger forwarded to the underlying `SlackAdapter` for internal error
+   * reporting. Defaults to the adapter's `ConsoleLogger`.
+   */
+  logger?: SlackAdapterConfig['logger'];
 
   /**
    * Slack App Configuration access token for programmatic app creation.
