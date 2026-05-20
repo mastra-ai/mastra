@@ -204,6 +204,27 @@ describe('GoalManager', () => {
     expect(manager.getGoal()?.status).toBe('active');
   });
 
+  it('returns interrupted instead of retrying when aborted and output is empty', async () => {
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const abortController = new AbortController();
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    abortController.abort();
+    const result = await manager.evaluateAfterTurn(createState(), { abortSignal: abortController.signal });
+
+    expect(mocks.stream).toHaveBeenCalledTimes(1);
+    expect(result.judgeResult).toEqual({ decision: 'paused', reason: 'Judge evaluation was interrupted.' });
+    expect(manager.getGoal()?.status).toBe('paused');
+  });
+
   it('uses stream with structured output and judge memory thread parent-goalId', async () => {
     let turnsUsedWhileJudging: number | undefined;
     mocks.stream.mockImplementation(async () => {

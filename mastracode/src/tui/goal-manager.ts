@@ -376,6 +376,9 @@ export class GoalManager {
         if (output) {
           return { decision: output.decision, reason: output.reason };
         }
+        if (options.abortSignal?.aborted) {
+          return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
+        }
         if (attempt < JUDGE_MAX_RETRIES) continue;
         return { decision: 'paused', reason: 'Judge returned no structured decision after retries.' };
       } catch (error) {
