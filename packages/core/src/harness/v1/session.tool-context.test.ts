@@ -246,3 +246,87 @@ describe('HarnessRequestContext — queued turns', () => {
     ).rejects.toBeInstanceOf(HarnessValidationError);
   });
 });
+
+describe('HarnessRequestContext — §15 pending registration acceptance', () => {
+  it('commits a question pending row before emitting the pending event', async () => {
+    const { harness, storage, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const eventRecords: Array<Promise<unknown>> = [];
+    session.subscribe(event => {
+      if (event.type === 'suspension_required' && event.kind === 'question') {
+        eventRecords.push(storage.loadSession({ sessionId: session.id }));
+      }
+    });
+
+    await session.message({ content: 'capture context' });
+    const slot = getHarnessSlot(agent.streamCalls);
+
+    await (slot.registerQuestion as any)({
+      questionId: 'question-1',
+      question: 'Pick one',
+      options: [{ label: 'A' }],
+      selectionMode: 'single_select',
+      runId: 'run-question-1',
+      toolCallId: 'tool-question-1',
+    });
+
+    expect(eventRecords).toHaveLength(1);
+    await expect(eventRecords[0]).resolves.toMatchObject({
+      pendingResume: {
+        kind: 'question',
+        itemId: 'question-1',
+        runId: 'run-question-1',
+        toolCallId: 'tool-question-1',
+        payload: {
+          question: 'Pick one',
+          options: [{ label: 'A' }],
+          selectionMode: 'single_select',
+        },
+      },
+    });
+  });
+
+  it('commits a plan pending row before emitting the pending event', async () => {
+    const { harness, storage, agent } = setupHarness({
+      modes: [
+        { id: 'plan', agentId: 'default', transitionsTo: 'build' },
+        { id: 'build', agentId: 'default' },
+      ],
+      defaultModeId: 'plan',
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const eventRecords: Array<Promise<unknown>> = [];
+    session.subscribe(event => {
+      if (event.type === 'suspension_required' && event.kind === 'plan-approval') {
+        eventRecords.push(storage.loadSession({ sessionId: session.id }));
+      }
+    });
+
+    await session.message({ content: 'capture plan context', mode: 'plan' });
+    const slot = getHarnessSlot(agent.streamCalls);
+
+    await (slot.registerPlanApproval as any)({
+      planId: 'plan-1',
+      title: 'Plan title',
+      plan: 'Step 1',
+      runId: 'run-plan-1',
+      toolCallId: 'tool-plan-1',
+    });
+
+    expect(eventRecords).toHaveLength(1);
+    await expect(eventRecords[0]).resolves.toMatchObject({
+      pendingResume: {
+        kind: 'plan-approval',
+        itemId: 'plan-1',
+        runId: 'run-plan-1',
+        toolCallId: 'tool-plan-1',
+        modeId: 'plan',
+        transitionModeId: 'build',
+        payload: {
+          title: 'Plan title',
+          plan: 'Step 1',
+        },
+      },
+    });
+  });
+});

@@ -9,9 +9,9 @@
  * and state mutation, display snapshots, message listing, pending inbox
  * responses, permissions, code/workspace skills, subagents, goals, event
  * forwarding, abort, idle waiting, wakeup queue admission, and the core
- * admission/mutation primitives used by remote routes. Remote SDKs, full
- * channel routing, and request-context `registerQuestion` /
- * `registerPlanApproval` support remain follow-up lanes.
+ * admission/mutation primitives used by remote routes, plus request-context
+ * `registerQuestion` / `registerPlanApproval` pending registration. Remote
+ * SDKs and full channel routing remain follow-up lanes.
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.

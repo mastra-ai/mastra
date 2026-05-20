@@ -9,6 +9,7 @@ import { BlobsLibSQL } from './domains/blobs';
 import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
+import { FavoritesLibSQL } from './domains/favorites';
 import { HarnessLibSQL } from './domains/harness';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';

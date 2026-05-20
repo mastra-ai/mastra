@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { createSampleSessionRecord } from '@internal/storage-test-utils';
-import { HarnessStorageThreadDeleteFenceConflictError, TABLE_HARNESS_SESSION_EVENTS } from '@mastra/core/storage';
+import {
+  HarnessStorageAttachmentInUseError,
+  HarnessStorageAttachmentUnavailableError,
+  HarnessStorageThreadDeleteFenceConflictError,
+  TABLE_HARNESS_SESSION_EVENTS,
+} from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { exportSchemas, HarnessPG, PostgresStore } from '../..';
@@ -230,6 +235,61 @@ describe('HarnessPG', () => {
       elementType: 'citation-card',
       renderer: { id: 'citation-card', version: '2' },
       metadata: { doi: '10.1234/example' },
+    });
+  });
+
+  it('keeps §15 attachment-reference admission atomic and delete-guarded', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h', ifVersion: 0 });
+    const initial = await harness!.loadSession({ sessionId: 'session-1' });
+    if (!initial) throw new Error('expected session');
+
+    await harness!.saveAttachment({
+      sessionId: 'session-1',
+      attachmentId: 'attachment-1',
+      name: 'note.txt',
+      mimeType: 'text/plain',
+      source: 'preupload',
+      data: new Uint8Array([1, 2, 3]),
+    });
+    await expect(
+      harness!.saveSessionWithAttachmentReferences(
+        { ...initial, state: { admitted: 'missing-ref' } },
+        { ownerId: 'h', ifVersion: initial.version },
+        [
+          { sessionId: 'session-1', attachmentId: 'attachment-1', source: 'queued_item', sourceId: 'queued-valid' },
+          { sessionId: 'session-1', attachmentId: 'missing', source: 'queued_item', sourceId: 'queued-missing' },
+        ],
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageAttachmentUnavailableError);
+    await expect(harness!.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+      version: initial.version,
+      state: {},
+    });
+    await expect(
+      harness!.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).resolves.toEqual([]);
+
+    const saved = await harness!.saveSessionWithAttachmentReferences(
+      { ...initial, state: { admitted: 'queued-ref' } },
+      { ownerId: 'h', ifVersion: initial.version },
+      [{ sessionId: 'session-1', attachmentId: 'attachment-1', source: 'queued_item', sourceId: 'queued-1' }],
+    );
+
+    expect(saved.version).toBe(initial.version + 1);
+    await expect(
+      harness!.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).resolves.toEqual([{ source: 'queued_item', sourceId: 'queued-1' }]);
+    await expect(
+      harness!.deleteAttachment({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).rejects.toBeInstanceOf(HarnessStorageAttachmentInUseError);
+    await expect(
+      harness!.loadAttachment({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).resolves.toMatchObject({
+      name: 'note.txt',
+      data: new Uint8Array([1, 2, 3]),
     });
   });
 

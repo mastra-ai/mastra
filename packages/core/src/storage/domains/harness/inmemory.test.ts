@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { InMemoryDB } from '../inmemory-db';
 import type { HarnessStorageParentSessionUnavailableError } from './base';
 import {
+  HarnessStorageAttachmentInUseError,
+  HarnessStorageAttachmentUnavailableError,
   HarnessStorageChannelActionClaimConflictError,
   HarnessStorageChannelActionReceiptTransitionError,
   HarnessStorageChannelInboxClaimConflictError,
@@ -592,6 +594,59 @@ describe('InMemoryHarness admission storage contract', () => {
         await expect(fence.assertActive()).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
       },
     );
+  });
+
+  it('keeps §15 attachment-reference admission atomic and delete-guarded', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession(), { ownerId: 'h', ifVersion: 0 });
+    const initial = await storage.loadSession({ sessionId: 'session-1' });
+    if (!initial) throw new Error('expected session');
+
+    await storage.saveAttachment({
+      sessionId: 'session-1',
+      attachmentId: 'attachment-1',
+      name: 'note.txt',
+      mimeType: 'text/plain',
+      source: 'preupload',
+      data: new Uint8Array([1, 2, 3]),
+    });
+    await expect(
+      storage.saveSessionWithAttachmentReferences(
+        { ...initial, state: { admitted: 'missing-ref' } },
+        { ownerId: 'h', ifVersion: initial.version },
+        [
+          { sessionId: 'session-1', attachmentId: 'attachment-1', source: 'queued_item', sourceId: 'queued-valid' },
+          { sessionId: 'session-1', attachmentId: 'missing', source: 'queued_item', sourceId: 'queued-missing' },
+        ],
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageAttachmentUnavailableError);
+    await expect(storage.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+      version: initial.version,
+      state: {},
+    });
+    await expect(
+      storage.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).resolves.toEqual([]);
+
+    const saved = await storage.saveSessionWithAttachmentReferences(
+      { ...initial, state: { admitted: 'queued-ref' } },
+      { ownerId: 'h', ifVersion: initial.version },
+      [{ sessionId: 'session-1', attachmentId: 'attachment-1', source: 'queued_item', sourceId: 'queued-1' }],
+    );
+
+    expect(saved.version).toBe(initial.version + 1);
+    await expect(
+      storage.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).resolves.toEqual([{ source: 'queued_item', sourceId: 'queued-1' }]);
+    await expect(
+      storage.deleteAttachment({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).rejects.toBeInstanceOf(HarnessStorageAttachmentInUseError);
+    await expect(
+      storage.loadAttachment({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
+    ).resolves.toMatchObject({
+      name: 'note.txt',
+      data: new Uint8Array([1, 2, 3]),
+    });
   });
 
   it('compacts terminal queue receipts into namespace-scoped tombstones', async () => {

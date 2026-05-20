@@ -6,7 +6,7 @@ import {
 } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { Mastra } from '@mastra/core/mastra';
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
@@ -33,6 +33,16 @@ const mastra = new Mastra({
 });
 
 createTestSuite(mastra.getStorage()!);
+
+describe('LibSQLStore domain wiring', () => {
+  it('initializes the favorites domain exposed by the composite store', async () => {
+    const store = new LibSQLStore({ id: 'libsql-favorites-wiring', url: 'file::memory:?cache=shared' });
+    await store.init();
+
+    expect(store.stores.favorites).toBeDefined();
+    await expect(store.getStore('favorites')).resolves.toBe(store.stores.favorites);
+  });
+});
 
 // Configuration validation tests
 createConfigValidationTests({
