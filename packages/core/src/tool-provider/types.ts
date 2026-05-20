@@ -363,6 +363,12 @@ export interface ToolProvider {
   readonly info: ToolProviderInfo;
 
   /**
+   * Optional human-readable display name surfaced in the picker. Falls back
+   * to `info.name` when absent.
+   */
+  readonly displayName?: string;
+
+  /**
    * Static capability flags. Required when the v2 surface is implemented;
    * legacy providers may omit it.
    */
