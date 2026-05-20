@@ -4,7 +4,14 @@ import type { DateRangePreset } from '../../../ds/components/DateTimeRangePicker
 import { useMetrics } from '../hooks/use-metrics';
 import type { DatePreset } from '../hooks/use-metrics';
 
-const METRICS_PRESETS: readonly DateRangePreset[] = ['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom'];
+const METRICS_PRESETS: readonly DateRangePreset[] = [
+  'last-24h',
+  'last-3d',
+  'last-7d',
+  'last-14d',
+  'last-30d',
+  'custom',
+];
 
 function toPickerPreset(preset: DatePreset): DateRangePreset {
   switch (preset) {

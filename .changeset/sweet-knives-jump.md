@@ -6,6 +6,6 @@ Added a custom date range option to the Metrics page date picker. You can now fi
 
 The selected range is reflected in the URL so it can be bookmarked or shared:
 
-```
+```txt
 /metrics?period=custom&dateFrom=2026-05-01T00:00:00.000Z&dateTo=2026-05-07T23:59:59.999Z
 ```
