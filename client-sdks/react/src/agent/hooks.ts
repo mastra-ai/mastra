@@ -8,6 +8,7 @@ import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { resolveInitialMessagesSync } from './initial-messages-sync';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
@@ -115,11 +116,19 @@ export const useChat = ({
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
+  const _lastInitialMessagesThreadId = useRef(threadId);
+
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages || []);
-    setMessages(formattedMessages);
-    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
-  }, [initialMessages]);
+    const threadChanged = _lastInitialMessagesThreadId.current !== threadId;
+    _lastInitialMessagesThreadId.current = threadId;
+
+    setMessages(currentMessages => {
+      const nextMessages = resolveInitialMessagesSync({ currentMessages, formattedMessages, threadChanged });
+      _currentRunId.current = extractRunIdFromMessages(nextMessages);
+      return nextMessages;
+    });
+  }, [initialMessages, threadId]);
 
   useEffect(() => {
     _requestContext.current = propsRequestContext;
