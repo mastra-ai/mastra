@@ -1,10 +1,11 @@
 import { useFormContext } from 'react-hook-form';
 
-import type { Visibility } from '../components/agent-edit/visibility-select';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
 import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+
+type Visibility = NonNullable<AgentBuilderEditFormValues['visibility']>;
 
 const COPY: Record<Visibility, VisibilityCopy> = {
   public: {

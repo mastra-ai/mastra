@@ -10,6 +10,7 @@ import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 interface CreateSkillParams {
   name: string;
   description: string;
+  visibility?: 'private' | 'public';
   workspaceId: string;
   files: InMemoryFileNode[];
 }
@@ -34,7 +35,7 @@ export function useCreateSkill() {
 
   return useMutation({
     mutationFn: async (params: CreateSkillParams): Promise<StoredSkillResponse> => {
-      const { name, description, workspaceId, files } = params;
+      const { name, description, visibility, workspaceId, files } = params;
       // Write all files to workspace filesystem
       const filesToWrite = flattenFiles(files, '');
       await Promise.all(
@@ -52,6 +53,7 @@ export function useCreateSkill() {
       return client.createStoredSkill({
         name,
         description,
+        visibility,
         instructions: extractSkillInstructions(files),
         license: extractSkillLicense(files),
         files,
