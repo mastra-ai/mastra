@@ -76,6 +76,27 @@ export const DELTA_MV_NAMES = [
 ] as const;
 
 /**
+ * `generateSerialID` counter keys used by the serial delta-cursor strategy.
+ * Each delta MV passes one of these to `generateSerialID(...)` to mint a
+ * monotonic `cursorId` per row.
+ *
+ * ClickHouse's `generateSerialID` is server-lifetime keyed and starts at 0.
+ * On an empty stream `max(cursorId)` also returns 0, which would collide with
+ * the very first row inserted after a server cold-start (both reported as 0,
+ * skipping that row in `WHERE cursorId > 0` reads). `init()` burns the 0
+ * value for every counter so the first real row is guaranteed to land at
+ * `cursorId >= 1`.
+ */
+export const DELTA_CURSOR_COUNTER_NAMES = [
+  'mastra_trace_roots_delta_cursor',
+  'mastra_trace_branches_delta_cursor',
+  'mastra_metric_events_delta_cursor',
+  'mastra_log_events_delta_cursor',
+  'mastra_score_events_delta_cursor',
+  'mastra_feedback_events_delta_cursor',
+] as const;
+
+/**
  * Span types that anchor a listable trace branch -- a named entity got
  * invoked. Materialized into `mastra_trace_branches` so they're listable
  * independently of where they appear in a trace tree.
