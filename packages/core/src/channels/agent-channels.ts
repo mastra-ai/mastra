@@ -1,4 +1,4 @@
-import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -35,8 +35,8 @@ const DEFAULT_INLINE_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/
 /** Message content that can be posted to a channel. */
 export type PostableMessage = string | CardElement;
 
-/** Per-adapter configuration. */
-export interface ChannelAdapterConfig {
+/** Per-adapter configuration shared across all `toolDisplay` modes. */
+export interface ChannelAdapterBaseConfig {
   adapter: Adapter;
   /**
    * CORS configuration for the generated webhook route for this adapter.
@@ -51,29 +51,6 @@ export interface ChannelAdapterConfig {
    * serverless deployments that only need slash commands via HTTP Interactions.
    */
   gateway?: boolean;
-
-  /**
-   * Use rich card formatting for tool calls, approvals, and results.
-   * Set to `false` to use plain text formatting instead.
-   *
-   * Some platforms (e.g. Discord) may have rendering issues with cards.
-   * @default true
-   */
-  cards?: boolean;
-
-  /**
-   * Override how tool calls are rendered in the chat.
-   * Called once per tool invocation after the result is available.
-   * Return `null` to suppress the message entirely.
-   *
-   * @default - A Card showing the function-call signature and result.
-   */
-  formatToolCall?: (info: {
-    toolName: string;
-    args: Record<string, unknown>;
-    result: unknown;
-    isError?: boolean;
-  }) => PostableMessage | null;
 
   /**
    * Override how errors are rendered in the chat.
@@ -96,6 +73,84 @@ export interface ChannelAdapterConfig {
    * @default false
    */
   streaming?: boolean | { updateIntervalMs?: number };
+}
+
+/**
+ * `'cards'` mode (default): per-tool "Running…" → "Result" cards. This is the
+ * only mode where `cards` and `formatToolCall` apply.
+ */
+export interface ChannelAdapterCardsConfig extends ChannelAdapterBaseConfig {
+  /**
+   * How tool calls are rendered in the channel.
+   *
+   * - `'cards'` (default) — per-tool "Running…" → "Result" cards. Only this
+   *   mode accepts `cards` and `formatToolCall`.
+   * - `'timeline'` — emit `task_update` chunks into the active streaming
+   *   session so each tool renders as an inline task card alongside text.
+   *   Requires `streaming: true`. Slack renders this natively; other adapters
+   *   may render a placeholder or omit the result.
+   * - `'grouped'` — same as `'timeline'` but tasks combine into a single plan
+   *   block (`StreamingPlan({ groupTasks: 'plan' })`). Requires `streaming: true`.
+   * - `'hidden'` — execute tools silently. Only the typing status indicates work.
+   *
+   * @default 'cards'
+   */
+  toolDisplay?: 'cards';
+
+  /**
+   * Use rich card formatting for tool calls, approvals, and results.
+   * Set to `false` to use plain text formatting instead.
+   *
+   * Some platforms (e.g. Discord) may have rendering issues with cards.
+   *
+   * @default true
+   */
+  cards?: boolean;
+
+  /**
+   * Override how tool calls are rendered in the chat.
+   * Called once per tool invocation after the result is available.
+   * Return `null` to suppress the message entirely.
+   *
+   * Only available in `'cards'` mode (the default). To use a different
+   * rendering strategy, set `toolDisplay` to `'timeline'`, `'grouped'`, or
+   * `'hidden'` instead.
+   *
+   * @default - A Card showing the function-call signature and result.
+   */
+  formatToolCall?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    result: unknown;
+    isError?: boolean;
+  }) => PostableMessage | null;
+}
+
+/**
+ * Non-`'cards'` modes: tool calls route through the streaming session (or run
+ * silently). `cards` and `formatToolCall` are not available here — they only
+ * apply to the `'cards'` renderer.
+ */
+export interface ChannelAdapterStreamingToolsConfig extends ChannelAdapterBaseConfig {
+  /** See {@link ChannelAdapterCardsConfig.toolDisplay} for mode descriptions. */
+  toolDisplay: 'timeline' | 'grouped' | 'hidden';
+}
+
+/**
+ * Per-adapter configuration. `toolDisplay` is a discriminator: in `'cards'`
+ * mode (the default) `cards` and `formatToolCall` are available; in
+ * `'timeline'` / `'grouped'` / `'hidden'` they are not, because those modes
+ * render through the streaming session instead of per-tool cards.
+ */
+export type ChannelAdapterConfig = ChannelAdapterCardsConfig | ChannelAdapterStreamingToolsConfig;
+
+/**
+ * Narrow an adapter config to the `'cards'` variant (where `cards` and
+ * `formatToolCall` live), or `undefined` if the adapter is in a non-cards mode.
+ */
+function asCardsConfig(config: ChannelAdapterConfig | undefined): ChannelAdapterCardsConfig | undefined {
+  if (!config) return undefined;
+  return !config.toolDisplay || config.toolDisplay === 'cards' ? config : undefined;
 }
 
 /**
@@ -436,6 +491,13 @@ export class AgentChannels {
     { messageId?: string; displayName: string; argsSummary: string; startedAt: number }
   >();
 
+  /**
+   * Platforms we've already warned about for misconfigured `toolDisplay` (e.g.
+   * `'timeline'` without `streaming: true`). Keeps log output to one warn per
+   * platform per AgentChannels instance.
+   */
+  private warnedToolDisplayFallback = new Set<string>();
+
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
     const adapters: Record<string, Adapter> = {};
@@ -699,7 +761,7 @@ export class AgentChannels {
           // Build the card header with tool name and args
           const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
           const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
-          const useCards = adapterConfig?.cards !== false;
+          const useCards = asCardsConfig(adapterConfig)?.cards !== false;
 
           if (!approved) {
             const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
@@ -1275,7 +1337,7 @@ export class AgentChannels {
     // message into an already-running agent loop or wakes the thread with an idle stream
     // using the same options we used to pass to agent.stream().
     const adapterConfig = this.adapterConfigs[platform];
-    const useCards = adapterConfig?.cards !== false;
+    const useCards = asCardsConfig(adapterConfig)?.cards !== false;
 
     const { channelContext, attributes, providerOptions } = this.buildEventContext({
       sdkThread,
@@ -1477,13 +1539,33 @@ export class AgentChannels {
   ): Promise<void> {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
-    const useCards = adapterConfig?.cards !== false;
+    const cardsConfig = asCardsConfig(adapterConfig);
+    const useCards = cardsConfig?.cards !== false;
 
     // Streaming is configured per-adapter so platforms with native streaming (e.g. Slack)
     // can opt in independently of platforms that fall back to noisy post + edit (e.g. Discord).
     const streamingConfig = adapterConfig?.streaming ?? false;
     const streamingEnabled = streamingConfig !== false;
     const streamingOptions = streamingConfig === true ? {} : streamingConfig === false ? undefined : streamingConfig;
+
+    // Resolve the tool-display mode once per run. `'timeline'` and `'grouped'`
+    // require streaming because they push `task_update` chunks into the
+    // streaming session — fall back to `'cards'` (with a one-time warn) if a
+    // user asks for them without enabling streaming.
+    const requestedToolDisplay = adapterConfig?.toolDisplay ?? 'cards';
+    let toolDisplay: 'cards' | 'timeline' | 'grouped' | 'hidden' = requestedToolDisplay;
+    if ((toolDisplay === 'timeline' || toolDisplay === 'grouped') && !streamingEnabled) {
+      if (!this.warnedToolDisplayFallback.has(platform)) {
+        this.warnedToolDisplayFallback.add(platform);
+        this.log(
+          'warn',
+          `[${platform}] toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`,
+        );
+      }
+      toolDisplay = 'cards';
+    }
+    const groupTasks: 'plan' | 'timeline' | undefined =
+      toolDisplay === 'timeline' ? 'timeline' : toolDisplay === 'grouped' ? 'plan' : undefined;
 
     interface TrackedTool {
       displayName: string;
@@ -1517,14 +1599,14 @@ export class AgentChannels {
     // closes on step-finish / finish / error / abort / out-of-band chunk so the
     // next message (tool card, file, follow-up text) lands in the right order.
     interface StreamingSession {
-      push: (piece: string) => void;
+      push: (piece: string | StreamChunk) => void;
       close: () => void;
       done: Promise<void>;
     }
     let streamingSession: StreamingSession | null = null;
 
     const openStreamingSession = (): StreamingSession => {
-      let buffer: string[] = [];
+      let buffer: (string | StreamChunk)[] = [];
       let closed = false;
       let resolveNext: (() => void) | undefined;
       const waitForNext = () =>
@@ -1532,7 +1614,7 @@ export class AgentChannels {
           resolveNext = resolve;
         });
 
-      async function* iterate(): AsyncGenerator<string> {
+      async function* iterate(): AsyncGenerator<string | StreamChunk> {
         while (true) {
           while (buffer.length > 0) {
             yield buffer.shift()!;
@@ -1543,9 +1625,13 @@ export class AgentChannels {
       }
 
       const iterable = iterate();
+      // When `toolDisplay` is `'timeline'` or `'grouped'` we let `StreamingPlan`
+      // group the `task_update` chunks for us — `'timeline'` keeps each tool as
+      // its own inline card; `'grouped'` collapses them into one plan block.
       const postable = streamingOptions
         ? new (chatModule().StreamingPlan)(iterable, {
             updateIntervalMs: streamingOptions.updateIntervalMs,
+            ...(groupTasks ? { groupTasks } : {}),
           })
         : iterable;
 
@@ -1555,12 +1641,13 @@ export class AgentChannels {
         } catch (e) {
           this.logger?.warn('[CHANNEL] streaming post failed, falling back to buffered text', { error: e });
           // Drain whatever was queued plus anything pushed after the failure
-          // and post it as a single buffered message.
-          const fallback = buffer.join('');
+          // and post it as a single buffered message. Drop non-string chunks
+          // (task_update etc.) since the buffered fallback is text-only.
+          const fallback = buffer.filter((p): p is string => typeof p === 'string').join('');
           buffer = [];
           if (!closed) {
             await waitForNext();
-            fallback.concat(buffer.join(''));
+            fallback.concat(buffer.filter((p): p is string => typeof p === 'string').join(''));
           }
           const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
           if (cleaned) {
@@ -1738,19 +1825,58 @@ export class AgentChannels {
         continue;
       }
 
-      // --- Tool call: post eager "Running…" card ---
+      // --- Tool call ---
       if (chunk.type === 'tool-call') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-        await flushText();
         const displayName = stripToolPrefix(chunk.payload.toolName);
-        setTypingStatus(`Using ${displayName}…`);
+        setTypingStatus(`Calling ${displayName}…`);
         const rawArgs = (
           typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
         ) as Record<string, unknown>;
         const argsSummary = formatArgsSummary(rawArgs);
 
+        // `'hidden'`: never render anything — just track the call so the result
+        // handler can correlate, but skip cards and `task_update` chunks alike.
+        if (toolDisplay === 'hidden') {
+          toolCalls.set(chunk.payload.toolCallId, {
+            displayName,
+            argsSummary,
+            startedAt: Date.now(),
+            messageId: undefined,
+          });
+          continue;
+        }
+
+        // `'timeline'` / `'grouped'`: push a `task_update` into the active
+        // streaming session so the platform renders the tool inline with the
+        // streaming text (Slack natively; other adapters may render a
+        // placeholder). The session is shared with text-deltas so chunks
+        // interleave in platform message order under one StreamingPlan post.
+        if (toolDisplay === 'timeline' || toolDisplay === 'grouped') {
+          if (!streamingSession) streamingSession = openStreamingSession();
+          streamingSession.push({
+            type: 'task_update',
+            id: chunk.payload.toolCallId,
+            title: displayName,
+            status: 'in_progress',
+            details: argsSummary || undefined,
+          });
+          toolCalls.set(chunk.payload.toolCallId, {
+            displayName,
+            argsSummary,
+            startedAt: Date.now(),
+            messageId: undefined,
+          });
+          continue;
+        }
+
+        // `'cards'` (default): post an eager "Running…" card that the result
+        // handler will edit in place. Skip the eager post when a custom
+        // `formatToolCall` is configured — that runs once on tool-result with
+        // the full result and we don't want a leading placeholder card.
+        await flushText();
         let messageId: string | undefined;
-        if (!adapterConfig?.formatToolCall) {
+        if (!cardsConfig?.formatToolCall) {
           const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
           messageId = sentMessage?.id;
         }
@@ -1764,7 +1890,7 @@ export class AgentChannels {
         continue;
       }
 
-      // --- Tool result: edit the "Running…" card with the outcome ---
+      // --- Tool result ---
       if (chunk.type === 'tool-result') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
         // Tool finished — revert status until the next text/tool/reasoning chunk
@@ -1788,8 +1914,28 @@ export class AgentChannels {
         const channelMsgId = tracked?.messageId;
         const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
 
-        if (adapterConfig?.formatToolCall) {
-          const custom = adapterConfig.formatToolCall({
+        // `'hidden'`: drop the result silently.
+        if (toolDisplay === 'hidden') continue;
+
+        // `'timeline'` / `'grouped'`: complete the task in place. We don't
+        // repeat `details` here — the Chat SDK appends to the existing task
+        // entry by id, so re-sending the args would show them twice.
+        if (toolDisplay === 'timeline' || toolDisplay === 'grouped') {
+          if (!streamingSession) streamingSession = openStreamingSession();
+          streamingSession.push({
+            type: 'task_update',
+            id: chunk.payload.toolCallId,
+            title: displayName,
+            status: chunk.payload.isError ? 'error' : 'complete',
+            output: resultText || undefined,
+          });
+          continue;
+        }
+
+        // `'cards'`: edit the "Running…" card with the result, or post the
+        // user-provided custom formatting.
+        if (cardsConfig?.formatToolCall) {
+          const custom = cardsConfig.formatToolCall({
             toolName: displayName,
             args: (chunk.payload.args ?? {}) as Record<string, unknown>,
             result: chunk.payload.result,
@@ -1812,7 +1958,11 @@ export class AgentChannels {
         continue;
       }
 
-      // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
+      // --- Tool approval: post an out-of-band Approve/Deny card. ---
+      // Approvals always render as a separate card because `task_update` chunks
+      // can't carry interactive buttons. In non-`'cards'` modes we close the
+      // streaming session first so the approval card lands cleanly after the
+      // timeline/grouped block instead of getting swallowed by it.
       if (chunk.type === 'tool-call-approval') {
         const { toolCallId, toolName, args: toolArgs } = chunk.payload;
         const tracked = toolCalls.get(toolCallId);
@@ -1820,6 +1970,12 @@ export class AgentChannels {
         const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
         const channelMsgId = tracked?.messageId;
 
+        if (toolDisplay !== 'cards') {
+          await closeStreamingSession();
+        }
+
+        // `useCards` is always true here so the approve/deny buttons render as
+        // a Block Kit actions block; non-cards modes never set `cards: false`.
         const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
 
         await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
@@ -1978,10 +2134,12 @@ export class AgentChannels {
     void reconnect();
   }
 
-  private log(level: 'info' | 'error' | 'debug', message: string, ...args: unknown[]): void {
+  private log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {
     if (!this.logger) return;
     if (level === 'error') {
       this.logger.error(message, { args });
+    } else if (level === 'warn') {
+      this.logger.warn(message, { args });
     } else if (level === 'debug') {
       this.logger.debug(message, { args });
     } else {
