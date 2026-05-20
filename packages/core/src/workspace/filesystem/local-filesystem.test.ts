@@ -546,6 +546,31 @@ describe('LocalFilesystem', () => {
       await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
     });
 
+    it('should suggest the concrete relative form when the first segment exists in the workspace', async () => {
+      // Create a `src/` directory in the workspace; the LLM passes `/src/app.ts`.
+      // The hint should suggest `src/app.ts` because `<basePath>/src` is real.
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await expect(localFs.writeFile('/src/app.ts', 'nope')).rejects.toThrow(/"src\/app\.ts"/);
+      await expect(localFs.writeFile('/src/app.ts', 'nope')).rejects.toThrow(/relative path/);
+    });
+
+    it('should fall back to a soft hint when the suggested path would be misleading', async () => {
+      // `/etc/passwd` has no corresponding `<basePath>/etc` — don't invent a
+      // suggestion that points somewhere the LLM almost certainly didn't mean.
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(/relative to the workspace root/);
+      await expect(localFs.readFile('/etc/passwd')).rejects.not.toThrow(/"etc\/passwd"/);
+    });
+
+    it('should not suggest a relative path that would itself escape the workspace', async () => {
+      // `/../etc/passwd` strips to `../etc/passwd`. Suggesting that as a
+      // "relative path" would just fail again on the next turn — fall back
+      // to the soft hint instead.
+      await expect(localFs.readFile('/../etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('/../etc/passwd')).rejects.toThrow(/relative to the workspace root/);
+      await expect(localFs.readFile('/../etc/passwd')).rejects.not.toThrow(/"\.\.\//);
+    });
+
     it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
       // Write a file via relative path
       await localFs.writeFile('test.txt', 'relative content');
@@ -722,6 +747,38 @@ describe('LocalFilesystem', () => {
 
         const content = await fs.readFile(path.join(outsideDir, 'new-file.txt'), 'utf-8');
         expect(content).toBe('new content');
+      });
+
+      it('should allow access through the canonical target of a symlinked allowed path', async () => {
+        const allowedRootLink = path.join(tempDir, 'allowed-root-link');
+        await fs.symlink(outsideDir, allowedRootLink);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [allowedRootLink],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should allow access through a symlink path when the canonical root is allowed', async () => {
+        const allowedRootLink = path.join(tempDir, 'allowed-root-link');
+        await fs.symlink(outsideDir, allowedRootLink);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(allowedRootLink, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
       });
 
       it('should block path traversal that escapes all roots', async () => {

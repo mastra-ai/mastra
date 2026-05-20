@@ -10,7 +10,6 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 - use `react-best-practices` skill
 - use `tailwind-best-practices` skill
 
-
 ## Commands
 
 ### Local Commands (run from `packages/playground`)
@@ -36,13 +35,12 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 
 - **Route Configuration**: Define React Router routes and pages
 - **Component Composition**: Assemble pages using `packages/playground-ui` primitives
-- **FORBIDDEN**: Creating new UI components, layouts, or data-fetching logic
+- **Integration Components**: Components that wrap external SDKs (e.g. `@mcp-ui/client`) live here in `src/domains/` rather than in `playground-ui`, to keep the shared component library free of heavy third-party dependencies
 
 ## Key Principles
 
-- This package is **composition only** - no business logic
-- All UI components must come from `packages/playground-ui`
-- All data-fetching hooks must come from `packages/playground-ui`
+- This package is primarily **composition** — prefer `playground-ui` for general UI components
+- Integration-specific components (wrapping external SDKs like `@mcp-ui/client`) belong in `src/domains/` here
+- All general-purpose UI components and data-fetching hooks should come from `packages/playground-ui`
 - Pages should be thin wrappers around `playground-ui` components
-- When in doubt, add functionality to `playground-ui` instead
-
+- When in doubt about general UI, add functionality to `playground-ui` instead

@@ -18,17 +18,42 @@ import type {
   GetMetricLabelValuesResponse,
   AggregationType,
   AggregationInterval,
+  MetricDistinctColumn,
 } from '@mastra/core/storage';
+import { METRIC_DISTINCT_COLUMNS, listMetricsArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereClause } from './filters';
 import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
+import {
+  assertDeltaPollingEnabled,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  extendWhereClause,
+  validateCursorId,
+} from './polling';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function getAggregationSql(aggregation: AggregationType, measure = 'value'): string {
+function resolveDistinctColumnSql(distinctColumn: MetricDistinctColumn | undefined): string {
+  if (!distinctColumn) {
+    throw new Error(`count_distinct aggregation requires a 'distinctColumn' argument`);
+  }
+  // Defense-in-depth: the schema enum already restricts this, but the value
+  // flows into raw SQL so we re-check against the system-level allowlist.
+  if (!(METRIC_DISTINCT_COLUMNS as readonly string[]).includes(distinctColumn)) {
+    throw new Error(`Invalid distinctColumn: ${distinctColumn}`);
+  }
+  return parseFieldKey(distinctColumn);
+}
+
+function getAggregationSql(
+  aggregation: AggregationType,
+  measure = 'value',
+  distinctColumn?: MetricDistinctColumn,
+): string {
   switch (aggregation) {
     case 'sum':
       return `SUM(${measure})`;
@@ -40,6 +65,10 @@ function getAggregationSql(aggregation: AggregationType, measure = 'value'): str
       return `MAX(${measure})`;
     case 'count':
       return `CAST(COUNT(${measure}) AS DOUBLE)`;
+    case 'count_distinct': {
+      // DuckDB has `approx_count_distinct` (HyperLogLog) for dashboard scale.
+      return `CAST(approx_count_distinct(${resolveDistinctColumnSql(distinctColumn)}) AS DOUBLE)`;
+    }
     case 'last':
       return `arg_max(${measure}, timestamp)`;
     default:
@@ -73,7 +102,9 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
 }
 
 const METRIC_COLUMNS = [
+  'metricId',
   'timestamp',
+  'cursorId',
   'name',
   'value',
   'traceId',
@@ -81,9 +112,12 @@ const METRIC_COLUMNS = [
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',
+  'rootEntityVersionId',
   'rootEntityType',
   'rootEntityId',
   'rootEntityName',
@@ -95,7 +129,7 @@ const METRIC_COLUMNS = [
   'threadId',
   'requestId',
   'environment',
-  'source',
+  'executionSource',
   'serviceName',
   'experimentId',
   'provider',
@@ -201,6 +235,7 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
 
 function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    metricId: row.metricId as string,
     timestamp: toDate(row.timestamp),
     name: row.name as string,
     value: Number(row.value),
@@ -209,9 +244,12 @@ function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown
     entityType: (row.entityType as string) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
+    entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     parentEntityType: (row.parentEntityType as string) ?? null,
     parentEntityId: (row.parentEntityId as string) ?? null,
     parentEntityName: (row.parentEntityName as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     rootEntityType: (row.rootEntityType as string) ?? null,
     rootEntityId: (row.rootEntityId as string) ?? null,
     rootEntityName: (row.rootEntityName as string) ?? null,
@@ -223,7 +261,7 @@ function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown
     threadId: (row.threadId as string) ?? null,
     requestId: (row.requestId as string) ?? null,
     environment: (row.environment as string) ?? null,
-    source: (row.source as string) ?? null,
+    executionSource: (row.executionSource as string) ?? null,
     serviceName: (row.serviceName as string) ?? null,
     experimentId: (row.experimentId as string) ?? null,
     provider: (row.provider as string) ?? null,
@@ -248,7 +286,9 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
   const tuples = args.metrics.map(m => {
     return `(${[
+      v(m.metricId),
       v(m.timestamp),
+      "nextval('metric_events_cursor_id_seq')",
       v(m.name),
       v(m.value),
       v(m.traceId ?? null),
@@ -256,9 +296,12 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
       v(m.entityType ?? null),
       v(m.entityId ?? null),
       v(m.entityName ?? null),
+      v(m.entityVersionId ?? null),
+      v(m.parentEntityVersionId ?? null),
       v(m.parentEntityType ?? null),
       v(m.parentEntityId ?? null),
       v(m.parentEntityName ?? null),
+      v(m.rootEntityVersionId ?? null),
       v(m.rootEntityType ?? null),
       v(m.rootEntityId ?? null),
       v(m.rootEntityName ?? null),
@@ -270,7 +313,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
       v(m.threadId ?? null),
       v(m.requestId ?? null),
       v(m.environment ?? null),
-      v(m.source ?? null),
+      v(m.executionSource ?? null),
       v(m.serviceName ?? null),
       v(m.experimentId ?? null),
       v(m.provider ?? null),
@@ -285,19 +328,57 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
     ].join(', ')})`;
   });
 
-  await db.execute(`INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')}`);
+  await db.execute(
+    `INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')} ON CONFLICT DO NOTHING`,
+  );
 }
 
 /** Query metric events with filtering, ordering, and pagination. */
 export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): Promise<ListMetricsResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listMetricsArgsSchema.parse(args);
+  const filterRecord = filters as Record<string, unknown> | undefined;
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>);
+  const { clause: filterClause, params: filterParams } = buildWhereClause(filterRecord);
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const streamHeadCursor = await getStreamHeadCursor(db);
+    if (after === undefined) {
+      return {
+        metrics: [],
+        delta: { limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursorId = validateCursorId(after);
+    const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT * FROM metric_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
+      [...filterParams, afterCursorId, limit + 1],
+    );
+
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: row.cursorId,
+      metric: rowToMetricRecord(row),
+    }));
+
+    return {
+      metrics: visibleRows.map(row => row.metric) as ListMetricsResponse['metrics'],
+      delta: { limit, hasMore: rows.length > limit },
+      deltaCursor:
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : streamHeadCursor,
+    };
+  }
+
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  const currentDeltaCursor = deltaPollingFeatureEnabled()
+    ? await getDeltaCursor(db, filterClause, filterParams)
+    : undefined;
 
   const countResult = await db.query<{ total: number }>(
     `SELECT COUNT(*) AS total FROM metric_events ${filterClause}`,
@@ -313,7 +394,28 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     metrics: rows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+async function getDeltaCursor(db: DuckDBConnection, filterClause: string, filterParams: unknown[]): Promise<string> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM metric_events ${filterClause}`,
+    filterParams,
+  );
+
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM metric_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
+}
+
+async function getStreamHeadCursor(db: DuckDBConnection): Promise<string> {
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM metric_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }
 
 // ============================================================================
@@ -325,7 +427,7 @@ export async function getMetricAggregate(
   db: DuckDBConnection,
   args: GetMetricAggregateArgs,
 ): Promise<GetMetricAggregateResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const { clause: nameClause, params: nameParams } = buildMetricNameFilter(args.name);
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
@@ -430,7 +532,7 @@ export async function getMetricBreakdown(
   db: DuckDBConnection,
   args: GetMetricBreakdownArgs,
 ): Promise<GetMetricBreakdownResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const { clause: nameClause, params: nameParams } = buildMetricNameFilter(args.name);
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
@@ -445,8 +547,13 @@ export async function getMetricBreakdown(
   const resolvedGroupBy = resolveGroupBy(args.groupBy);
   const selectGroupBy = resolvedGroupBy.map(entry => entry.selectSql).join(', ');
   const groupByCols = resolvedGroupBy.map(entry => entry.groupSql).join(', ');
-  const sql = `SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY value DESC`;
-  const rows = await db.query<Record<string, unknown>>(sql, allParams);
+
+  const orderDirection = args.orderDirection === 'ASC' ? 'ASC' : 'DESC';
+  const limitClause = typeof args.limit === 'number' ? `LIMIT ?` : '';
+  const limitParams = typeof args.limit === 'number' ? [args.limit] : [];
+
+  const sql = `SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY value ${orderDirection} ${limitClause}`;
+  const rows = await db.query<Record<string, unknown>>(sql, [...allParams, ...limitParams]);
 
   const groups = rows.map(row => {
     const dimensions: Record<string, string | null> = {};
@@ -472,7 +579,7 @@ export async function getMetricTimeSeries(
   db: DuckDBConnection,
   args: GetMetricTimeSeriesArgs,
 ): Promise<GetMetricTimeSeriesResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const intervalSql = getIntervalSql(args.interval);
   const { clause: nameClause, params: nameParams } = buildMetricNameFilter(args.name);
   const { clause: filterClause, params: filterParams } = buildWhereClause(

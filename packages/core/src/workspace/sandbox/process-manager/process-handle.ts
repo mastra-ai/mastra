@@ -12,16 +12,139 @@ import { Readable, Writable } from 'node:stream';
 import type { CommandResult } from '../types';
 import type { SpawnProcessOptions } from './types';
 
+export const DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES = 1024 * 1024;
+const RETAINED_OUTPUT_COMPACT_CHUNK_THRESHOLD = 128;
+
+/** @internal */
+export function validateMaxRetainedProcessOutputBytes(maxRetainedBytes: number): number {
+  if (maxRetainedBytes === Infinity) return maxRetainedBytes;
+  if (!Number.isFinite(maxRetainedBytes) || maxRetainedBytes < 0 || !Number.isInteger(maxRetainedBytes)) {
+    throw new RangeError('maxRetainedBytes must be a non-negative integer or Infinity');
+  }
+  return maxRetainedBytes;
+}
+
+function getPreviousCodePointStart(value: string, end: number): number {
+  let start = end - 1;
+  const codeUnit = value.charCodeAt(start);
+
+  if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff && start > 0) {
+    const previousCodeUnit = value.charCodeAt(start - 1);
+    if (previousCodeUnit >= 0xd800 && previousCodeUnit <= 0xdbff) {
+      start -= 1;
+    }
+  }
+
+  return start;
+}
+
+function trimToMaxBytes(value: string, maxBytes: number): string {
+  if (maxBytes <= 0) return '';
+
+  let retainedBytes = 0;
+  let end = value.length;
+  let start = end;
+
+  while (start > 0) {
+    const characterStart = getPreviousCodePointStart(value, start);
+    const characterBytes = Buffer.byteLength(value.slice(characterStart, end));
+    if (retainedBytes + characterBytes > maxBytes) break;
+    retainedBytes += characterBytes;
+    end = characterStart;
+    start = characterStart;
+  }
+
+  const retained = value.slice(start);
+  return retained.length === value.length ? retained : Buffer.from(retained, 'utf8').toString('utf8');
+}
+
+class RetainedOutputBuffer {
+  private chunks: Array<{ data: string; bytes: number }> = [];
+  private bytes = 0;
+  private droppedBytes = 0;
+  private cachedValue: string | undefined;
+
+  constructor(private readonly maxBytes: number) {}
+
+  append(data: string): void {
+    const dataBytes = Buffer.byteLength(data);
+    if (dataBytes === 0) return;
+    if (this.maxBytes === 0) {
+      this.droppedBytes += dataBytes;
+      return;
+    }
+
+    this.chunks.push({ data, bytes: dataBytes });
+    this.bytes += dataBytes;
+    this.cachedValue = undefined;
+
+    this.trim();
+    this.compactIfNeeded();
+  }
+
+  toString(): string {
+    this.cachedValue ??= this.chunks.map(chunk => chunk.data).join('');
+    return this.cachedValue;
+  }
+
+  get truncated(): boolean {
+    return this.droppedBytes > 0;
+  }
+
+  get dropped(): number {
+    return this.droppedBytes;
+  }
+
+  private trim(): void {
+    if (this.maxBytes === Infinity) return;
+
+    while (this.bytes > this.maxBytes && this.chunks.length > 0) {
+      const overflowBytes = this.bytes - this.maxBytes;
+      const firstChunk = this.chunks[0]!;
+
+      if (firstChunk.bytes <= overflowBytes) {
+        this.chunks.shift();
+        this.bytes -= firstChunk.bytes;
+        this.droppedBytes += firstChunk.bytes;
+        continue;
+      }
+
+      const retainedData = trimToMaxBytes(firstChunk.data, firstChunk.bytes - overflowBytes);
+      const retainedBytes = Buffer.byteLength(retainedData);
+      const droppedBytes = firstChunk.bytes - retainedBytes;
+
+      if (retainedBytes === 0) {
+        this.chunks.shift();
+        this.bytes -= droppedBytes;
+        this.droppedBytes += droppedBytes;
+        continue;
+      }
+
+      this.chunks[0] = { data: retainedData, bytes: retainedBytes };
+      this.bytes -= droppedBytes;
+      this.droppedBytes += droppedBytes;
+    }
+  }
+
+  private compactIfNeeded(): void {
+    if (this.chunks.length <= RETAINED_OUTPUT_COMPACT_CHUNK_THRESHOLD) return;
+    const data = this.toString();
+    this.bytes = Buffer.byteLength(data);
+    this.chunks = this.bytes === 0 ? [] : [{ data, bytes: this.bytes }];
+    this.cachedValue = data;
+  }
+}
+
 /**
  * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
- * wait). The base class handles stdout/stderr accumulation, callback
+ * wait). The base class handles bounded stdout/stderr accumulation, callback
  * dispatch via `emitStdout`/`emitStderr`, lazy `reader`/`writer` stream
  * getters, and optional streaming callbacks on `wait()`.
  *
  * **For consumers:**
- * - `handle.stdout` — poll accumulated output
+ * - `handle.stdout` — poll retained output
  * - `handle.wait()` — wait for exit, optionally with streaming callbacks
  * - `handle.reader` / `handle.writer` — Node.js stream interop (LSP, JSON-RPC, pipes)
  * - `onStdout`/`onStderr` callbacks in {@link SpawnProcessOptions} — stream at spawn time
@@ -85,14 +208,20 @@ export abstract class ProcessHandle {
     throw new Error(`${this.constructor.name} must implement wait()`);
   }
 
-  private _stdout = '';
-  private _stderr = '';
+  private _stdout: RetainedOutputBuffer;
+  private _stderr: RetainedOutputBuffer;
   private _stdoutListeners = new Set<(data: string) => void>();
   private _stderrListeners = new Set<(data: string) => void>();
   private _reader?: Readable;
   private _writer?: Writable;
 
-  constructor(options?: Pick<SpawnProcessOptions, 'onStdout' | 'onStderr'>) {
+  constructor(options?: Pick<SpawnProcessOptions, 'maxRetainedBytes' | 'onStdout' | 'onStderr'>) {
+    const maxRetainedBytes = validateMaxRetainedProcessOutputBytes(
+      options?.maxRetainedBytes ?? DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
+    );
+    this._stdout = new RetainedOutputBuffer(maxRetainedBytes);
+    this._stderr = new RetainedOutputBuffer(maxRetainedBytes);
+
     // Spawn-time callbacks are permanent listeners
     if (options?.onStdout) this._stdoutListeners.add(options.onStdout);
     if (options?.onStderr) this._stderrListeners.add(options.onStderr);
@@ -105,7 +234,14 @@ export abstract class ProcessHandle {
       if (waitOptions?.onStdout) this._stdoutListeners.add(waitOptions.onStdout);
       if (waitOptions?.onStderr) this._stderrListeners.add(waitOptions.onStderr);
       try {
-        return await implWait();
+        const result = await implWait();
+        return {
+          ...result,
+          stdoutTruncated: this.stdoutTruncated,
+          stderrTruncated: this.stderrTruncated,
+          stdoutDroppedBytes: this.stdoutDroppedBytes,
+          stderrDroppedBytes: this.stderrDroppedBytes,
+        };
       } finally {
         if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
@@ -113,14 +249,34 @@ export abstract class ProcessHandle {
     };
   }
 
-  /** Accumulated stdout so far */
+  /** Retained stdout so far */
   get stdout(): string {
-    return this._stdout;
+    return this._stdout.toString();
   }
 
-  /** Accumulated stderr so far */
+  /** Retained stderr so far */
   get stderr(): string {
-    return this._stderr;
+    return this._stderr.toString();
+  }
+
+  /** Whether stdout has dropped older output due to the retention limit */
+  get stdoutTruncated(): boolean {
+    return this._stdout.truncated;
+  }
+
+  /** Whether stderr has dropped older output due to the retention limit */
+  get stderrTruncated(): boolean {
+    return this._stderr.truncated;
+  }
+
+  /** Number of stdout bytes dropped due to the retention limit */
+  get stdoutDroppedBytes(): number {
+    return this._stdout.dropped;
+  }
+
+  /** Number of stderr bytes dropped due to the retention limit */
+  get stderrDroppedBytes(): number {
+    return this._stderr.dropped;
   }
 
   /**
@@ -128,7 +284,7 @@ export abstract class ProcessHandle {
    * @internal Called by subclasses and process managers to dispatch transport data.
    */
   emitStdout(data: string): void {
-    this._stdout += data;
+    this._stdout.append(data);
     for (const listener of this._stdoutListeners) listener(data);
     this._reader?.push(data);
   }
@@ -138,7 +294,7 @@ export abstract class ProcessHandle {
    * @internal Called by subclasses and process managers to dispatch transport data.
    */
   emitStderr(data: string): void {
-    this._stderr += data;
+    this._stderr.append(data);
     for (const listener of this._stderrListeners) listener(data);
   }
 

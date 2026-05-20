@@ -19,9 +19,11 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
   await mkdir(newPath, { recursive: true });
   await cp(projectPath, newPath, { recursive: true });
 
+  const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
+
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  spawnSync(pkgManager, ['install'], {
+  spawnSync(pkgManager, installArgs, {
     cwd: newPath,
     stdio: 'inherit',
     shell: true,

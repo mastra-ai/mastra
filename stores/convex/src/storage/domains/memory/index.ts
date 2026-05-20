@@ -52,7 +52,13 @@ export class MemoryConvex extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     const row = await this.#db.load<
       (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null
     >({
@@ -60,7 +66,7 @@ export class MemoryConvex extends MemoryStorage {
       keys: { id: threadId },
     });
 
-    if (!row) return null;
+    if (!row || (resourceId !== undefined && row.resourceId !== resourceId)) return null;
 
     return {
       ...row,

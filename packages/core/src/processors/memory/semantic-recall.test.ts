@@ -1412,6 +1412,64 @@ describe('SemanticRecall', () => {
       expect(mockVector.upsert).not.toHaveBeenCalled();
     });
 
+    it('should skip embedding messages when memoryConfig.readOnly is true', async () => {
+      const mockStorage = {
+        listMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn(),
+      };
+
+      const mockVector = {
+        upsert: vi.fn(),
+        query: vi.fn(),
+        createIndex: vi.fn(),
+        listIndexes: vi.fn(),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraDBMessage = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+        memoryConfig: { readOnly: true },
+      });
+
+      const messageList = new MessageList();
+      messageList.add([userMessage], 'input');
+
+      const result = await processor.processOutputResult({
+        messages: [userMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      expect(result).toBe(messageList);
+      expect(mockEmbedder.doEmbed).not.toHaveBeenCalled();
+      expect(mockVector.createIndex).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
     it('should handle embedding errors gracefully', async () => {
       const mockStorage = {
         listMessages: vi.fn(),

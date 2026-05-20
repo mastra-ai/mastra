@@ -259,6 +259,32 @@ describe('resolveInstructionBlocks', () => {
     expect(result).toBe('');
   });
 
+  it('should JSON-stringify array template variables in text blocks', async () => {
+    const products = [
+      { productKey: 'royal-canin', variant: 'rcv31115' },
+      { productKey: 'zeal-treats', variant: 'dtz0110' },
+    ];
+    const blocks: AgentInstructionBlock[] = [{ type: 'text', content: 'Products in cart: {{products}}.' }];
+    const result = await resolveInstructionBlocks(blocks, { products }, { promptBlocksStorage: storage });
+    expect(result).toBe(`Products in cart: ${JSON.stringify(products)}.`);
+  });
+
+  it('should JSON-stringify object template variables in prompt_block_ref content', async () => {
+    await storage.create({
+      promptBlock: {
+        id: 'block-obj',
+        name: 'Object block',
+        content: 'User prefs: {{preferences}}',
+      },
+    });
+    await storage.update({ id: 'block-obj', status: 'published' });
+
+    const preferences = { theme: 'dark', notifications: true };
+    const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'block-obj' }];
+    const result = await resolveInstructionBlocks(blocks, { preferences }, { promptBlocksStorage: storage });
+    expect(result).toBe(`User prefs: ${JSON.stringify(preferences)}`);
+  });
+
   // --- Preview mode tests (includeDrafts) ---
 
   it('should include draft prompt_block_ref when includeDrafts is true', async () => {

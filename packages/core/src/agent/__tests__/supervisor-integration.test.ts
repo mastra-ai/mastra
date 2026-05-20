@@ -6,6 +6,7 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor, ProcessOutputResultArgs } from '../../processors/index';
+import { RequestContext, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -3075,6 +3076,162 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     expect(promptStr).toContain('Do the task please');
   });
 
+  it('should hide sub-agent tool results from supervisor model context while preserving raw tool results', async () => {
+    const nestedToolArg = 'SECRET_NESTED_TOOL_ARG';
+    const nestedToolResult = 'SECRET_NESTED_TOOL_RESULT';
+    const rawSubAgentText = 'Task completed.';
+    const processedSubAgentText = 'Processed summary without nested tool details.';
+
+    const isTextPart = (part: unknown): part is { type: 'text'; text?: string } =>
+      typeof part === 'object' && part !== null && (part as { type?: unknown }).type === 'text';
+
+    const getAgentToolPayload = (
+      toolResult: unknown,
+    ): { toolName?: string; result?: { subAgentToolResults?: unknown } } | undefined => {
+      if (typeof toolResult !== 'object' || toolResult === null) return undefined;
+
+      const payload = (toolResult as { payload?: unknown }).payload;
+      if (typeof payload !== 'object' || payload === null) return undefined;
+
+      return payload as { toolName?: string; result?: { subAgentToolResults?: unknown } };
+    };
+
+    const textTransformProcessor: Processor<'text-transform'> = {
+      id: 'text-transform',
+      async processOutputResult(args: ProcessOutputResultArgs) {
+        return args.messages.map(msg => {
+          if (msg.role !== 'assistant') return msg;
+          const parts = msg.content?.parts ?? [];
+          return {
+            ...msg,
+            content: {
+              ...msg.content,
+              format: msg.content?.format ?? 2,
+              parts: parts.map(part => (isTextPart(part) ? { ...part, text: processedSubAgentText } : part)),
+            },
+          };
+        });
+      },
+    };
+
+    const subAgentTool = createTool({
+      id: 'lookup-secret',
+      description: 'Looks up private data',
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => ({
+        query,
+        secret: nestedToolResult,
+        records: [{ id: 'private-record', value: nestedToolResult }],
+      }),
+    });
+
+    const runSupervisor = async (includeSubAgentToolResultsInModelContext?: boolean) => {
+      const supervisorPrompts: unknown[] = [];
+
+      const subAgent = new Agent({
+        id: 'context-isolation-sub-agent',
+        name: 'context-isolation-sub-agent',
+        description: 'A sub-agent that uses a nested tool',
+        instructions: 'Use lookupSecret, then summarize the result.',
+        model: makeSubAgentModelWithTool('lookupSecret', { query: nestedToolArg }),
+        tools: { lookupSecret: subAgentTool },
+        outputProcessors: [textTransformProcessor],
+      });
+
+      let supervisorCallCount = 0;
+      const supervisorAgent = new Agent({
+        id: 'context-isolation-supervisor',
+        name: 'context-isolation-supervisor',
+        instructions: 'Delegate to sub-agents.',
+        model: new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            supervisorCallCount++;
+            supervisorPrompts.push(prompt);
+
+            if (supervisorCallCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'agent-subAgent',
+                    input: JSON.stringify({ prompt: 'Research the private record', maxSteps: 3 }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Done',
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          },
+        }),
+        agents: { subAgent },
+        memory: new MockMemory(),
+      });
+
+      const delegation =
+        includeSubAgentToolResultsInModelContext === undefined ? {} : { includeSubAgentToolResultsInModelContext };
+
+      const result = await supervisorAgent.generate('Delegate this task', {
+        maxSteps: 5,
+        delegation,
+      });
+
+      expect(supervisorPrompts.length).toBeGreaterThanOrEqual(2);
+
+      return {
+        result,
+        supervisorContextAfterDelegation: JSON.stringify(supervisorPrompts[1]),
+      };
+    };
+
+    const assertTextOnlySupervisorContext = (supervisorContextAfterDelegation: string) => {
+      expect(supervisorContextAfterDelegation).toContain(processedSubAgentText);
+      expect(supervisorContextAfterDelegation).not.toContain(rawSubAgentText);
+      expect(supervisorContextAfterDelegation).not.toContain('subAgentToolResults');
+      expect(supervisorContextAfterDelegation).not.toContain(nestedToolArg);
+      expect(supervisorContextAfterDelegation).not.toContain(nestedToolResult);
+    };
+
+    const implicitDefaultRun = await runSupervisor();
+    assertTextOnlySupervisorContext(implicitDefaultRun.supervisorContextAfterDelegation);
+
+    const defaultRun = await runSupervisor(false);
+    const supervisorContextAfterDelegation = defaultRun.supervisorContextAfterDelegation;
+    assertTextOnlySupervisorContext(supervisorContextAfterDelegation);
+
+    const agentToolResult = defaultRun.result.toolResults
+      .map(getAgentToolPayload)
+      .find(payload => payload?.toolName === 'agent-subAgent')?.result;
+
+    expect(agentToolResult?.subAgentToolResults).toEqual([
+      expect.objectContaining({
+        toolName: 'lookupSecret',
+        args: { query: nestedToolArg },
+        result: expect.objectContaining({ secret: nestedToolResult }),
+      }),
+    ]);
+
+    const optInRun = await runSupervisor(true);
+    expect(optInRun.supervisorContextAfterDelegation).toContain(processedSubAgentText);
+    expect(optInRun.supervisorContextAfterDelegation).toContain('subAgentToolResults');
+    expect(optInRun.supervisorContextAfterDelegation).toContain(nestedToolArg);
+    expect(optInRun.supervisorContextAfterDelegation).toContain(nestedToolResult);
+  });
+
   it('should save only the last user message and response to sub-agent memory (not full supervisor context)', async () => {
     // The supervisor forwards ALL messages as context to the sub-agent (so it can see
     // the full conversation history), but only the immediate delegation prompt + response
@@ -3230,6 +3387,128 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         expect(allSavedContent).not.toContain('I live in Paris');
       }
     }
+  });
+
+  it('should isolate sub-agent memory when threadId and resourceId are set via requestContext reserved keys', async () => {
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent response' }],
+        warnings: [],
+      }),
+    });
+
+    const memoryStore = new InMemoryStore();
+    const subAgentMemory = new MockMemory({ storage: memoryStore });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-reserved-keys-test',
+      name: 'Sub Agent Reserved Keys Test',
+      description: 'A sub-agent for testing reserved key isolation',
+      instructions: 'Answer questions.',
+      model: subAgentMockModel,
+      memory: subAgentMemory,
+    });
+
+    let supervisorCallCount = 0;
+    const resourceId = randomUUID();
+    const threadId = randomUUID();
+
+    const supervisorAgent = new Agent({
+      id: 'supervisor-reserved-keys',
+      name: 'Supervisor Reserved Keys',
+      instructions: 'Delegate to sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'What is my name?', threadId, resourceId }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'Sub-agent says: Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    // Set reserved keys on requestContext (simulates middleware + body merge)
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    await supervisorAgent.generate([{ role: 'user', content: 'What is my name?' }], {
+      maxSteps: 3,
+      requestContext,
+      memory: {
+        resource: resourceId,
+        thread: threadId,
+      },
+    });
+
+    // Sub-agent should have its own isolated thread, not the parent's
+    const subAgentResourceId = `${resourceId}-subAgent`;
+    const memoryStorage = await subAgentMemory.storage.getStore('memory');
+    expect(memoryStorage).toBeDefined();
+
+    if (memoryStorage) {
+      const allThreadsResult = await memoryStorage.listThreads({ filter: { resourceId: subAgentResourceId } });
+      const allThreads = allThreadsResult.threads;
+
+      // Sub-agent should have its own thread
+      expect(allThreads.length).toBeGreaterThan(0);
+
+      const subAgentThread = allThreads[0];
+      expect(subAgentThread).toBeDefined();
+
+      if (subAgentThread) {
+        // Sub-agent thread ID should NOT be the parent's thread ID
+        expect(subAgentThread.id).not.toBe(threadId);
+
+        const subAgentMessages = await memoryStorage.listMessages({
+          threadId: subAgentThread.id,
+          perPage: 100,
+        });
+
+        expect(subAgentMessages.messages.length).toBeGreaterThanOrEqual(2);
+
+        // First message should be the delegation prompt
+        expect(subAgentMessages.messages[0].role).toBe('user');
+        const userContent =
+          typeof subAgentMessages.messages[0].content === 'string'
+            ? subAgentMessages.messages[0].content
+            : JSON.stringify(subAgentMessages.messages[0].content);
+        expect(userContent).toContain('What is my name');
+
+        // Second message should be the sub-agent's response
+        expect(subAgentMessages.messages[1].role).toBe('assistant');
+      }
+    }
+
+    // Verify reserved keys are restored for the parent after sub-agent execution
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe(threadId);
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe(resourceId);
   });
 
   describe('Sub-agent instructions merge', () => {

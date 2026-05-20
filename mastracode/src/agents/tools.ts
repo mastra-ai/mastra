@@ -2,16 +2,18 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { z } from 'zod';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
+type MastraCodeState = z.infer<typeof stateSchema>;
+
 /** Minimal shape for tools passed to createDynamicTools. */
-interface ToolLike {
-  execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown;
-  [key: string]: unknown;
-}
+type ToolLike = {
+  execute?: (...args: any[]) => Promise<unknown> | unknown;
+} & Record<string, any>;
 
 function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
   if (!hookManager || typeof tool?.execute !== 'function') {
@@ -31,7 +33,7 @@ function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookM
       let output: unknown;
       let toolError = false;
       try {
-        output = await tool.execute(input, toolContext);
+        output = await tool.execute?.(input, toolContext);
         return output;
       } catch (error) {
         toolError = true;
@@ -53,8 +55,8 @@ export function createDynamicTools(
   disabledTools?: string[],
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
-    const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
-    const state = ctx?.getState?.();
+    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+    const state = ctx?.getState();
 
     const modelId = state?.currentModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');

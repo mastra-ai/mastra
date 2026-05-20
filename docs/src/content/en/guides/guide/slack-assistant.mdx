@@ -1,0 +1,162 @@
+---
+title: "Guide: Building a Slack assistant"
+description: Build a Mastra agent that responds to messages and mentions on Slack using the channel adapter.
+---
+
+# Building a Slack assistant
+
+In this guide, you'll build a Mastra agent that responds to messages and mentions on Slack. You'll learn how to configure a channel adapter, set up a Slack app with the right permissions, connect it to your agent via a webhook, and test the interaction.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow the [installation guide](/guides/getting-started/quickstart) if needed.
+- A [Slack workspace](https://slack.com/) where you can create apps
+
+## Create the agent
+
+Install the Slack adapter:
+
+```bash npm2yarn
+npm install @chat-adapter/slack
+```
+
+Create a new file `src/mastra/agents/slack-agent.ts` and define your agent:
+
+```ts title="src/mastra/agents/slack-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const slackAgent = new Agent({
+  id: 'slack-agent',
+  name: 'Slack Agent',
+  instructions:
+    'You are a helpful assistant. Answer questions, help with tasks, and have natural conversations.',
+  model: 'anthropic/claude-opus-4-6',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+```
+
+The `channels` property tells Mastra to generate a webhook endpoint for each adapter. In this case, the Slack adapter handles event verification, signature validation, and message formatting automatically.
+
+Register the agent in your `src/mastra/index.ts` file:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+// highlight-next-line
+import { slackAgent } from './agents/slack-agent'
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  agents: { slackAgent },
+})
+```
+
+## Create a Slack app
+
+You need a Slack app to connect your agent to a workspace.
+
+Go to [https://api.slack.com/apps](https://api.slack.com/apps) and select **Create New App** > **From scratch**. Give it a name and select your workspace.
+
+Navigate to **OAuth & Permissions** and scroll to **Bot Token Scopes**. Add the following scopes:
+
+- `app_mentions:read`
+- `channels:history`
+- `channels:read`
+- `chat:write`
+- `users:read`
+
+At the top of **OAuth & Permissions**, select **Install to Workspace**. Copy the **Bot User OAuth Token** (`xoxb-...`).
+
+Go to **Basic Information** > **App Credentials** and copy the **Signing Secret** (e.g. `c3a4...`).
+
+Ensure **Socket Mode** is turned **off** under **Settings** > **Socket Mode**.
+
+Add the credentials to your `.env` file:
+
+```bash title=".env"
+SLACK_SIGNING_SECRET=your-signing-secret
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+```
+
+The adapter reads these environment variables by default. See the [Chat SDK Slack adapter docs](https://chat-sdk.dev/adapters/slack) for more details.
+
+## Connect the webhook
+
+Slack delivers events to your agent via a webhook. Mastra generates this endpoint automatically for each channel adapter.
+
+Start the dev server:
+
+```bash npm2yarn
+npm run dev
+```
+
+During local development, Slack needs a public URL to reach your local server. Open a new terminal and start a tunnel:
+
+```bash
+npx cloudflared tunnel --url http://localhost:4111
+```
+
+This outputs a temporary public URL like `https://triple-arms-solutions-kit.trycloudflare.com`. The URL changes each time you restart the tunnel.
+
+In your Slack app settings, go to **Event Subscriptions** and toggle **Enable Events** to **On**.
+
+Set the **Request URL** to your tunnel URL with the agent webhook path:
+
+```text
+https://<your-tunnel-url>/api/agents/slack-agent/channels/slack/webhook
+```
+
+Slack sends a verification request. If your dev server is running, it responds with a green checkmark.
+
+Under **Subscribe to bot events**, add:
+
+- `app_mention`
+- `message.channels`
+
+Select **Save Changes**. Slack requires you to reinstall the app after changing event subscriptions. Go to **OAuth & Permissions** and select **Reinstall to Workspace** to apply the updated permissions.
+
+:::note
+
+The tunnel URL is for local development only. When you [deploy your application](/docs/deployment/overview), update the **Request URL** in your Slack app's **Event Subscriptions** to your production URL (e.g. `https://your-app.example.com/api/agents/slack-agent/channels/slack/webhook`).
+
+:::
+
+## Test the agent
+
+Before testing with Slack, you can refine your agent's behavior in [Studio](/docs/studio/overview). Open [http://localhost:4111/](http://localhost:4111/) to chat with your agent directly, adjust its instructions, and inspect traces to see how responses are generated.
+
+Once you're happy with the agent's responses, test the Slack integration. Invite the bot to a channel in Slack:
+
+```text
+/invite @your-bot-name
+```
+
+Mention the bot in the channel:
+
+```text
+@your-bot-name What can you help me with?
+```
+
+The agent responds in the thread. Output may vary depending on the model and instructions.
+
+## Next steps
+
+You can extend this agent to:
+
+- [Deploy your application](/docs/deployment/overview) and update the Slack **Request URL** to your production endpoint
+- Add more adapters (Discord, Telegram) to the same agent so it responds on multiple platforms
+- Configure [multimodal content](/docs/agents/channels#multimodal-content) to let your agent process images, video, and audio shared in chat
+- Add [tools](/docs/agents/using-tools) to give the agent access to external APIs and data
+
+Learn more:
+
+- [Channels overview](/docs/agents/channels)
+- [Studio](/docs/studio/overview)
+- [Deployment overview](/docs/deployment/overview)
+- [Chat SDK adapter docs](https://chat-sdk.dev)

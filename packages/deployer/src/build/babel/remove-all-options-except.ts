@@ -83,12 +83,11 @@ export function removeAllOptionsFromMastraExcept(
 
           if (!hasExport) {
             if (logger) {
-              logger.warn(`Mastra ${option} config could not be extracted. Please make sure your entry file looks like this:
-export const mastra = new Mastra({
-  ${option}: <value>
-})
-
-`);
+              logger.warn('Mastra config could not be extracted', {
+                option,
+                details:
+                  'Please make sure your entry file looks like this:\nexport const mastra = new Mastra({\n  <option>: <value>\n})',
+              });
             }
 
             const fallbackExportDeclaration = t.exportNamedDeclaration(

@@ -60,4 +60,26 @@ describe('om progress label styling', () => {
 
     expect(rendered).toContain('memory ');
   });
+
+  it('hides reflection savings when compression saved no tokens', () => {
+    const rendered = formatReflectionStatus(
+      {
+        ...baseState,
+        observationTokens: 300,
+        buffered: {
+          ...baseState.buffered,
+          reflection: {
+            status: 'complete',
+            inputObservationTokens: 300,
+            observationTokens: 300,
+          },
+        },
+      },
+      'full',
+    );
+
+    expect(rendered).toContain('memory 0.3/40k');
+    expect(rendered).not.toContain('↓');
+    expect(rendered).not.toContain('-0k');
+  });
 });

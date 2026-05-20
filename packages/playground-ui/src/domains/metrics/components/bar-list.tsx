@@ -1,5 +1,5 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { CHART_COLORS } from './metrics-utils';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 
 export function BarListContent({
   data,

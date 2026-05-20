@@ -1,0 +1,49 @@
+{
+  "name": "builder-smoke-test-project",
+  "type": "module",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "mastra:dev": "mastra dev",
+    "mastra:build": "mastra build"
+  },
+  "dependencies": {
+    "zod": "^4.3.6",
+    "typescript": "^5.9.3",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/anthropic": "^3.0.0",
+    "ai": "^6.0.1",
+    "@mastra/client-js": "beta",
+    "@mastra/core": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/loggers": "beta",
+    "@mastra/memory": "beta",
+    "@mastra/observability": "beta",
+    "@mastra/editor": "beta",
+    "@mastra/auth-workos": "beta",
+    "@mastra/stagehand": "beta",
+    "@mastra/slack": "beta",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "mastra": "link:__WORKTREE_ROOT__/packages/cli",
+    "@types/node": "^22.10.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:__WORKTREE_ROOT__/packages/core",
+      "@mastra/loggers": "link:__WORKTREE_ROOT__/packages/loggers",
+      "@mastra/memory": "link:__WORKTREE_ROOT__/packages/memory",
+      "@mastra/client-js": "link:__WORKTREE_ROOT__/client-sdks/client-js",
+      "@mastra/libsql": "link:__WORKTREE_ROOT__/stores/libsql",
+      "@mastra/observability": "link:__WORKTREE_ROOT__/observability/mastra",
+      "@mastra/editor": "link:__WORKTREE_ROOT__/packages/editor",
+      "@mastra/auth-workos": "link:__WORKTREE_ROOT__/auth/workos",
+      "@mastra/stagehand": "link:__WORKTREE_ROOT__/browser/stagehand",
+      "@mastra/slack": "link:__WORKTREE_ROOT__/channels/slack",
+      "mastra": "link:__WORKTREE_ROOT__/packages/cli"
+    }
+  },
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3"
+}

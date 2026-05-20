@@ -1,15 +1,21 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
-import path from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openai } from '@ai-sdk/openai-v5';
-import { useLLMRecording } from '@internal/llm-recorder';
+import { useLLMRecording, getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { CompositeVoice } from '../../composite-voice';
 
-describe('CompositeVoice with AI SDK Models', () => {
-  useLLMRecording('core-src-voice-aisdk-__tests__-composite-voice.e2e');
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+const testDir = dirname(fileURLToPath(import.meta.url));
+const recordingsDir = resolve(testDir, '__recordings__');
+const outputDir = resolve(testDir, 'test-outputs');
+
+describe('CompositeVoice with AI SDK Models', () => {
+  useLLMRecording('core-src-voice-aisdk-__tests__-composite-voice.e2e', { recordingsDir });
 
   beforeAll(() => {
     try {
@@ -41,7 +47,7 @@ describe('CompositeVoice with AI SDK Models', () => {
 
       expect(audioBuffer.length).toBeGreaterThan(0);
 
-      const outputPath = path.join(outputDir, 'composite-aisdk-speech.mp3');
+      const outputPath = resolve(outputDir, 'composite-aisdk-speech.mp3');
       writeFileSync(outputPath, audioBuffer);
     }, 10000);
 
@@ -175,7 +181,7 @@ describe('CompositeVoice with AI SDK Models', () => {
 
       expect(audioBuffer.length).toBeGreaterThan(0);
 
-      const outputPath = path.join(outputDir, 'composite-round-trip.mp3');
+      const outputPath = resolve(outputDir, 'composite-round-trip.mp3');
       writeFileSync(outputPath, audioBuffer);
     }, 25000);
   });

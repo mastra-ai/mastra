@@ -17,7 +17,7 @@ const docFromMarkdown = MDocument.fromMarkdown('# Your Markdown content...')
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`)
 ```
 
-## Step 1: Document processing
+## Document processing
 
 Use `chunk` to split documents into manageable pieces. Mastra supports multiple chunking strategies optimized for different document types:
 
@@ -77,7 +77,7 @@ Metadata extraction may use LLM calls, so ensure your API key is set.
 
 We go deeper into chunking strategies in our [`chunk()` reference documentation](/reference/rag/chunk).
 
-## Step 2: Embedding generation
+## Embedding generation
 
 Transform chunks into embeddings using your preferred provider. Mastra supports embedding models through the model router.
 

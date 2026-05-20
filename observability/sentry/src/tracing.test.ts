@@ -404,8 +404,8 @@ describe('SentryExporter', () => {
         expect.objectContaining({
           'gen_ai.usage.input_tokens': 150,
           'gen_ai.usage.output_tokens': 75,
-          'gen_ai.usage.cached_input_tokens': 100,
-          'gen_ai.usage.cache_write_tokens': 50,
+          'gen_ai.usage.cache_read.input_tokens': 100,
+          'gen_ai.usage.cache_creation.input_tokens': 50,
         }),
       );
     });
@@ -709,7 +709,7 @@ describe('SentryExporter', () => {
       expect(mockSpan.end).toHaveBeenCalledWith(endTime.getTime());
     });
 
-    it('should handle errors and capture exception', async () => {
+    it('should handle errors and capture exception with the original stack trace', async () => {
       const span = createMockSpan({
         id: 'error-span',
         name: 'failing-tool',
@@ -725,7 +725,61 @@ describe('SentryExporter', () => {
         exportedSpan: span,
       });
 
+      const originalStack =
+        'Error: Tool execution failed\n    at userCode (/app/src/tool.ts:42:7)\n    at run (/app/src/runner.ts:10:3)';
+
       // Add error info before ending
+      span.errorInfo = {
+        message: 'Tool execution failed',
+        id: 'TOOL_ERROR',
+        category: 'EXECUTION',
+        name: 'ToolError',
+        stack: originalStack,
+      };
+      span.endTime = new Date();
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: span,
+      });
+
+      // captureException should receive an Error instance so Sentry preserves the
+      // real stack trace instead of synthesizing one from the exporter's call site.
+      expect(SentryMock.captureException).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          contexts: expect.objectContaining({
+            trace: expect.objectContaining({
+              trace_id: span.traceId,
+              span_id: span.id,
+            }),
+          }),
+        }),
+      );
+
+      const [capturedError] = SentryMock.captureException.mock.calls[0];
+      expect(capturedError).toBeInstanceOf(Error);
+      expect(capturedError.message).toBe('Tool execution failed');
+      expect(capturedError.name).toBe('ToolError');
+      expect(capturedError.stack).toBe(originalStack);
+    });
+
+    it('should still capture exception when errorInfo has no stack', async () => {
+      const span = createMockSpan({
+        id: 'error-span-no-stack',
+        name: 'failing-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        attributes: {
+          toolId: 'failing-tool',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
       span.errorInfo = {
         message: 'Tool execution failed',
         id: 'TOOL_ERROR',
@@ -738,17 +792,10 @@ describe('SentryExporter', () => {
         exportedSpan: span,
       });
 
-      expect(SentryMock.captureException).toHaveBeenCalledWith(
-        'Tool execution failed',
-        expect.objectContaining({
-          contexts: expect.objectContaining({
-            trace: expect.objectContaining({
-              trace_id: span.traceId,
-              span_id: span.id,
-            }),
-          }),
-        }),
-      );
+      expect(SentryMock.captureException).toHaveBeenCalledWith(expect.any(Error), expect.any(Object));
+      const [capturedError] = SentryMock.captureException.mock.calls[0];
+      expect(capturedError).toBeInstanceOf(Error);
+      expect(capturedError.message).toBe('Tool execution failed');
     });
 
     it('should remove span from map after ending', async () => {
@@ -845,8 +892,8 @@ describe('SentryExporter', () => {
       // Verify tokens were copied to the parent span
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.input_tokens', 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.output_tokens', 50);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read_input_tokens', 20);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_write_input_tokens', 10);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read.input_tokens', 20);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_creation.input_tokens', 10);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning_tokens', 30);
     });
 

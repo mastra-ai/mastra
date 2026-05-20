@@ -1,7 +1,9 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { ModelRouterLanguageModel } from './router';
@@ -90,6 +92,7 @@ export async function resolveModelConfig(
   // TODO need a better trick, maybe symbol
   if (
     modelConfig instanceof ModelRouterLanguageModel ||
+    modelConfig instanceof AISDKV4LegacyLanguageModel ||
     modelConfig instanceof AISDKV5LanguageModel ||
     modelConfig instanceof AISDKV6LanguageModel
   ) {
@@ -105,7 +108,9 @@ export async function resolveModelConfig(
       return new AISDKV6LanguageModel(modelConfig as LanguageModelV3);
     }
     if (modelConfig.specificationVersion === 'v1') {
-      return modelConfig;
+      // Wrap legacy v1 models so the underlying SDK client (and any
+      // enumerable config) does not leak into observability spans.
+      return new AISDKV4LegacyLanguageModel(modelConfig as LanguageModelV1);
     }
     // Unknown specificationVersion from a third-party provider (e.g. ollama-ai-provider-v2).
     // If the model has doStream/doGenerate methods, wrap it as a modern model

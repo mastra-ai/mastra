@@ -229,7 +229,7 @@ describe('Workspace', () => {
   // Search Operations
   // ===========================================================================
   describe('search operations', () => {
-    it('should have canBM25=true when bm25 is enabled', () => {
+    it('should have canBM25=true when bm25 is enabled', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
@@ -241,7 +241,7 @@ describe('Workspace', () => {
       expect(workspace.canHybrid).toBe(false);
     });
 
-    it('should have canBM25=false when bm25 not configured', () => {
+    it('should have canBM25=false when bm25 not configured', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
@@ -429,7 +429,7 @@ Line 3 conclusion`;
       expect(capturedIndexName).toBe('custom_index_name');
     });
 
-    it('should throw error for invalid searchIndexName starting with digit', () => {
+    it('should throw error for invalid searchIndexName starting with digit', async () => {
       const mockVectorStore = {
         id: 'mock-vector',
         upsert: vi.fn(async () => []),
@@ -451,7 +451,7 @@ Line 3 conclusion`;
       ).toThrow(/Invalid searchIndexName/);
     });
 
-    it('should throw error for searchIndexName exceeding 63 characters', () => {
+    it('should throw error for searchIndexName exceeding 63 characters', async () => {
       const mockVectorStore = {
         id: 'mock-vector',
         upsert: vi.fn(async () => []),
@@ -511,13 +511,13 @@ Line 3 conclusion`;
   // Skills
   // ===========================================================================
   describe('skills', () => {
-    it('should return undefined when no skills configured', () => {
+    it('should return undefined when no skills configured', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
       expect(workspace.skills).toBeUndefined();
     });
 
-    it('should allow skills without filesystem (via LocalSkillSource)', () => {
+    it('should allow skills without filesystem (via LocalSkillSource)', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({
         sandbox,
@@ -528,13 +528,13 @@ Line 3 conclusion`;
       expect(workspace.skills).toBeDefined();
     });
 
-    it('should return undefined when no skills configured', () => {
+    it('should return undefined when no skills configured', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
       expect(workspace.skills).toBeUndefined();
     });
 
-    it('should return skills instance when skills and filesystem configured', () => {
+    it('should return skills instance when skills and filesystem configured', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
@@ -543,7 +543,7 @@ Line 3 conclusion`;
       expect(workspace.skills).toBeDefined();
     });
 
-    it('should return same skills instance on repeated access', () => {
+    it('should return same skills instance on repeated access', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
@@ -553,6 +553,65 @@ Line 3 conclusion`;
       const skills1 = workspace.skills;
       const skills2 = workspace.skills;
       expect(skills1).toBe(skills2);
+    });
+
+    it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
+      await fs.mkdir(path.join(tempDir, '.agents', 'skills', 'mastra'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, '.agents', 'skills', 'mastra', 'SKILL.md'),
+        skillContent('mastra', 'helping with Mastra development'),
+      );
+      await fs.mkdir(path.join(tempDir, '.claude', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(tempDir, '.agents', 'skills', 'mastra'),
+        path.join(tempDir, '.claude', 'skills', 'mastra'),
+      );
+
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+      });
+      const workspace = new Workspace({
+        filesystem,
+        skills: ['.claude/skills', '.agents/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'mastra', path: '.agents/skills/mastra' },
+      ]);
+      await expect(workspace.skills!.get('mastra')).resolves.toMatchObject({
+        name: 'mastra',
+        path: expect.stringMatching(/\/mastra$/),
+      });
+    });
+
+    it('should list a skill through an allowed symlink root that points outside the workspace', async () => {
+      const externalSkillRoot = await fs.mkdtemp(path.join(tempDir, 'external-skill-root-'));
+      await fs.mkdir(path.join(externalSkillRoot, 'linked-tool'), { recursive: true });
+      await fs.writeFile(
+        path.join(externalSkillRoot, 'linked-tool', 'SKILL.md'),
+        skillContent('linked-tool', 'Query GitHub PR activity from a linked skill'),
+      );
+      await fs.mkdir(path.join(tempDir, '.mastracode', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(externalSkillRoot, 'linked-tool'),
+        path.join(tempDir, '.mastracode', 'skills', 'linked-tool'),
+      );
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [path.join(tempDir, '.mastracode', 'skills')],
+        }),
+        skills: ['.mastracode/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'linked-tool', path: '.mastracode/skills/linked-tool' },
+      ]);
+      await expect(workspace.skills!.get('linked-tool')).resolves.toMatchObject({
+        name: 'linked-tool',
+        path: '.mastracode/skills/linked-tool',
+      });
     });
 
     // =========================================================================
@@ -879,7 +938,7 @@ Line 3 conclusion`;
   // getInstructions
   // ===========================================================================
   describe('getInstructions', () => {
-    it('should return filesystem instructions when only filesystem configured', () => {
+    it('should return filesystem instructions when only filesystem configured', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
@@ -889,7 +948,7 @@ Line 3 conclusion`;
       expect(instructions).not.toContain('command execution');
     });
 
-    it('should return sandbox instructions when only sandbox configured', () => {
+    it('should return sandbox instructions when only sandbox configured', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
 
@@ -899,7 +958,7 @@ Line 3 conclusion`;
       expect(instructions).toContain(tempDir);
     });
 
-    it('should return both sandbox and filesystem instructions', () => {
+    it('should return both sandbox and filesystem instructions', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ filesystem, sandbox });
@@ -910,7 +969,7 @@ Line 3 conclusion`;
       expect(instructions).toContain('Local filesystem');
     });
 
-    it('should classify mounted filesystems by mount state', () => {
+    it('should classify mounted filesystems by mount state', async () => {
       // Create a workspace with a mock sandbox that has mounts in different states
       const mockMountEntries = new Map([
         [
@@ -964,7 +1023,7 @@ Line 3 conclusion`;
       expect(instructions).toContain('/error: r2 (read-write)');
     });
 
-    it('should fall back to fs instructions when sandbox has no mounts', () => {
+    it('should fall back to fs instructions when sandbox has no mounts', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ filesystem, sandbox });
@@ -976,7 +1035,7 @@ Line 3 conclusion`;
       expect(instructions).toContain('Local command execution');
     });
 
-    it('should return empty string when workspace has no instructions', () => {
+    it('should return empty string when workspace has no instructions', async () => {
       const mockSandbox = {
         provider: 'custom',
         status: 'running',
@@ -988,7 +1047,7 @@ Line 3 conclusion`;
       expect(workspace.getInstructions()).toBe('');
     });
 
-    it('should pass requestContext to filesystem getInstructions', () => {
+    it('should pass requestContext to filesystem getInstructions', async () => {
       const ctx = new RequestContext([['locale', 'fr']]);
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
@@ -1003,7 +1062,7 @@ Line 3 conclusion`;
       expect(instructions).toContain('Local filesystem');
     });
 
-    it('should pass requestContext to sandbox getInstructions', () => {
+    it('should pass requestContext to sandbox getInstructions', async () => {
       const ctx = new RequestContext([['tenant', 'acme']]);
       const sandbox = new LocalSandbox({
         workingDirectory: tempDir,
@@ -1023,7 +1082,7 @@ Line 3 conclusion`;
   // Path Context (deprecated — kept for backward compat)
   // ===========================================================================
   describe('getPathContext', () => {
-    it('should combine instructions from both filesystem and sandbox', () => {
+    it('should combine instructions from both filesystem and sandbox', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
 
@@ -1039,7 +1098,7 @@ Line 3 conclusion`;
       expect(context.instructions).toContain('Local command execution');
     });
 
-    it('should return only filesystem instructions when no sandbox configured', () => {
+    it('should return only filesystem instructions when no sandbox configured', async () => {
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
       });
@@ -1053,7 +1112,7 @@ Line 3 conclusion`;
       expect(context.instructions).not.toContain('command execution');
     });
 
-    it('should return only sandbox instructions when no filesystem configured', () => {
+    it('should return only sandbox instructions when no filesystem configured', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
 
@@ -1069,7 +1128,7 @@ Line 3 conclusion`;
   // Error Classes
   // ===========================================================================
   describe('error classes', () => {
-    it('should create WorkspaceError with code', () => {
+    it('should create WorkspaceError with code', async () => {
       const error = new WorkspaceError('Test error', 'TEST_CODE', 'ws-123');
 
       expect(error.message).toBe('Test error');
@@ -1078,21 +1137,21 @@ Line 3 conclusion`;
       expect(error.name).toBe('WorkspaceError');
     });
 
-    it('should create FilesystemNotAvailableError', () => {
+    it('should create FilesystemNotAvailableError', async () => {
       const error = new FilesystemNotAvailableError();
 
       expect(error.code).toBe('NO_FILESYSTEM');
       expect(error.name).toBe('FilesystemNotAvailableError');
     });
 
-    it('should create SandboxNotAvailableError', () => {
+    it('should create SandboxNotAvailableError', async () => {
       const error = new SandboxNotAvailableError();
 
       expect(error.code).toBe('NO_SANDBOX');
       expect(error.name).toBe('SandboxNotAvailableError');
     });
 
-    it('should create SearchNotAvailableError', () => {
+    it('should create SearchNotAvailableError', async () => {
       const error = new SearchNotAvailableError();
 
       expect(error.code).toBe('NO_SEARCH');
@@ -1104,14 +1163,14 @@ Line 3 conclusion`;
   // getToolsConfig
   // ===========================================================================
   describe('getToolsConfig', () => {
-    it('should return undefined when no tools config provided', () => {
+    it('should return undefined when no tools config provided', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
       expect(workspace.getToolsConfig()).toBeUndefined();
     });
 
-    it('should return tools config when provided', () => {
+    it('should return tools config when provided', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const toolsConfig = {
         mastra_workspace_read_file: { enabled: true, requireApproval: false },
@@ -1127,12 +1186,12 @@ Line 3 conclusion`;
   // setToolsConfig
   // ===========================================================================
   describe('setToolsConfig', () => {
-    it('should disable tools excluded by config on next createWorkspaceTools call', () => {
+    it('should disable tools excluded by config on next createWorkspaceTools call', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
       // All tools available initially
-      const toolsBefore = createWorkspaceTools(workspace);
+      const toolsBefore = await createWorkspaceTools(workspace);
       expect(toolsBefore[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
       expect(toolsBefore[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeDefined();
 
@@ -1142,14 +1201,14 @@ Line 3 conclusion`;
         mastra_workspace_edit_file: { enabled: false },
       });
 
-      const toolsAfter = createWorkspaceTools(workspace);
+      const toolsAfter = await createWorkspaceTools(workspace);
       expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
       expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeUndefined();
       // Other tools still available
       expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
     });
 
-    it('should re-enable all tools when config is cleared', () => {
+    it('should re-enable all tools when config is cleared', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
@@ -1157,17 +1216,17 @@ Line 3 conclusion`;
       });
 
       // Write tool disabled initially
-      const toolsBefore = createWorkspaceTools(workspace);
+      const toolsBefore = await createWorkspaceTools(workspace);
       expect(toolsBefore[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
 
       // Clear config — all tools re-enabled
       workspace.setToolsConfig(undefined);
 
-      const toolsAfter = createWorkspaceTools(workspace);
+      const toolsAfter = await createWorkspaceTools(workspace);
       expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
     });
 
-    it('should replace existing config entirely', () => {
+    it('should replace existing config entirely', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
@@ -1175,7 +1234,7 @@ Line 3 conclusion`;
       });
 
       // Write disabled, edit enabled
-      const tools1 = createWorkspaceTools(workspace);
+      const tools1 = await createWorkspaceTools(workspace);
       expect(tools1[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
       expect(tools1[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeDefined();
 
@@ -1184,7 +1243,7 @@ Line 3 conclusion`;
         mastra_workspace_edit_file: { enabled: false },
       });
 
-      const tools2 = createWorkspaceTools(workspace);
+      const tools2 = await createWorkspaceTools(workspace);
       expect(tools2[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
       expect(tools2[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeUndefined();
     });
@@ -1194,7 +1253,7 @@ Line 3 conclusion`;
   // __setLogger
   // ===========================================================================
   describe('__setLogger', () => {
-    it('should propagate logger to MastraFilesystem', () => {
+    it('should propagate logger to MastraFilesystem', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const spy = vi.spyOn(filesystem, '__setLogger');
       const workspace = new Workspace({ filesystem });
@@ -1205,7 +1264,7 @@ Line 3 conclusion`;
       expect(spy).toHaveBeenCalledWith(mockLogger);
     });
 
-    it('should propagate logger to MastraSandbox', () => {
+    it('should propagate logger to MastraSandbox', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const spy = vi.spyOn(sandbox, '__setLogger');
       const workspace = new Workspace({ sandbox });
@@ -1216,7 +1275,7 @@ Line 3 conclusion`;
       expect(spy).toHaveBeenCalledWith(mockLogger);
     });
 
-    it('should propagate logger to both providers', () => {
+    it('should propagate logger to both providers', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const fsSpy = vi.spyOn(filesystem, '__setLogger');
@@ -1230,7 +1289,7 @@ Line 3 conclusion`;
       expect(sbSpy).toHaveBeenCalledWith(mockLogger);
     });
 
-    it('should not throw for non-Mastra filesystem providers', () => {
+    it('should not throw for non-Mastra filesystem providers', async () => {
       // A plain object implementing WorkspaceFilesystem (not extending MastraFilesystem)
       const plainFs = {
         id: 'plain',
@@ -1620,6 +1679,41 @@ Line 3 conclusion`;
 
       await workspace.destroy();
     });
+
+    it('should log warning when search engine indexing fails', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      const searchEngine = (workspace as any)._searchEngine;
+      vi.spyOn(searchEngine, 'index').mockRejectedValue(new Error('embedder failed'));
+
+      // __setLogger is normally called by Mastra; we call it directly for unit testing
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      (workspace as any).__setLogger(mockLogger);
+
+      await workspace.init();
+
+      expect(workspace.status).toBe('ready');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to index file'),
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+
+      vi.restoreAllMocks();
+      await workspace.destroy();
+    });
   });
 
   // ===========================================================================
@@ -1835,7 +1929,7 @@ Line 3 conclusion`;
       await workspace.destroy();
     });
 
-    it('should return composite instructions in path context', () => {
+    it('should return composite instructions in path context', async () => {
       const cfs = new CompositeFilesystem({
         mounts: {
           '/local': new LocalFilesystem({ basePath: tempDirA }),
@@ -2040,7 +2134,7 @@ Line 3 conclusion`;
       await workspace.destroy();
     });
 
-    it('should throw when both filesystem and mounts are provided', () => {
+    it('should throw when both filesystem and mounts are provided', async () => {
       expect(
         () =>
           new Workspace({
@@ -2052,7 +2146,7 @@ Line 3 conclusion`;
       ).toThrow('Cannot use both "filesystem" and "mounts"');
     });
 
-    it('should warn when a mount uses LocalFilesystem with contained: false', () => {
+    it('should warn when a mount uses LocalFilesystem with contained: false', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         new Workspace({
@@ -2068,7 +2162,7 @@ Line 3 conclusion`;
       }
     });
 
-    it('should include mount path in warning for contained: false mount', () => {
+    it('should include mount path in warning for contained: false mount', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         new Workspace({
@@ -2082,7 +2176,7 @@ Line 3 conclusion`;
       }
     });
 
-    it('should not warn for contained: true LocalFilesystem in mounts', () => {
+    it('should not warn for contained: true LocalFilesystem in mounts', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         const workspace = new Workspace({
@@ -2096,6 +2190,127 @@ Line 3 conclusion`;
       } finally {
         warnSpy.mockRestore();
       }
+    });
+  });
+
+  // ===========================================================================
+  // Dynamic Filesystem (resolver function)
+  // ===========================================================================
+  describe('dynamic filesystem', () => {
+    it('should accept a filesystem resolver function', () => {
+      const resolver = ({ requestContext }: { requestContext: RequestContext }) => {
+        const role = requestContext.get('role') as string;
+        return new LocalFilesystem({ basePath: tempDir + '/' + role });
+      };
+      const workspace = new Workspace({ filesystem: resolver });
+
+      expect(workspace.hasFilesystemConfig()).toBe(true);
+      // Static getter returns undefined when using resolver
+      expect(workspace.filesystem).toBeUndefined();
+    });
+
+    it('should resolve different filesystems based on requestContext', async () => {
+      const dirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dyn-a-'));
+      const dirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dyn-b-'));
+      try {
+        await fs.writeFile(path.join(dirA, 'file.txt'), 'from A');
+        await fs.writeFile(path.join(dirB, 'file.txt'), 'from B');
+
+        const resolver = ({ requestContext }: { requestContext: RequestContext }) => {
+          const role = requestContext.get('role') as string;
+          return role === 'admin' ? new LocalFilesystem({ basePath: dirA }) : new LocalFilesystem({ basePath: dirB });
+        };
+        const workspace = new Workspace({ filesystem: resolver });
+
+        const adminCtx = new RequestContext([['role', 'admin']]);
+        const userCtx = new RequestContext([['role', 'user']]);
+
+        const adminFs = await workspace.resolveFilesystem({ requestContext: adminCtx });
+        const userFs = await workspace.resolveFilesystem({ requestContext: userCtx });
+
+        const adminContent = await adminFs!.readFile('file.txt', { encoding: 'utf-8' });
+        const userContent = await userFs!.readFile('file.txt', { encoding: 'utf-8' });
+
+        expect(adminContent).toBe('from A');
+        expect(userContent).toBe('from B');
+      } finally {
+        await fs.rm(dirA, { recursive: true, force: true });
+        await fs.rm(dirB, { recursive: true, force: true });
+      }
+    });
+
+    it('should support async resolver functions', async () => {
+      const resolver = async ({ requestContext: _requestContext }: { requestContext: RequestContext }) => {
+        // Simulate async work (e.g., looking up config)
+        await new Promise(resolve => setTimeout(resolve, 1));
+        return new LocalFilesystem({ basePath: tempDir });
+      };
+      const workspace = new Workspace({ filesystem: resolver });
+
+      const ctx = new RequestContext();
+      const resolved = await workspace.resolveFilesystem({ requestContext: ctx });
+
+      expect(resolved).toBeDefined();
+      expect(resolved!.provider).toBe('local');
+    });
+
+    it('should fall back to static filesystem in resolveFilesystem', async () => {
+      const staticFs = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem: staticFs });
+
+      const ctx = new RequestContext();
+      const resolved = await workspace.resolveFilesystem({ requestContext: ctx });
+
+      expect(resolved).toBe(staticFs);
+    });
+
+    it('should throw when using both filesystem resolver and mounts', () => {
+      const resolver = () => new LocalFilesystem({ basePath: tempDir });
+      expect(
+        () =>
+          new Workspace({
+            filesystem: resolver,
+            mounts: {
+              '/a': new LocalFilesystem({ basePath: tempDir }),
+            },
+          }),
+      ).toThrow('Cannot use both "filesystem" and "mounts"');
+    });
+
+    it('should throw when a class constructor is passed instead of an instance or resolver', () => {
+      expect(
+        () =>
+          new Workspace({
+            filesystem: LocalFilesystem as any,
+          }),
+      ).toThrow('class constructor');
+    });
+
+    it('should not throw NO_PROVIDERS when only filesystem resolver is provided', () => {
+      const resolver = () => new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem: resolver });
+
+      expect(workspace.hasFilesystemConfig()).toBe(true);
+      expect(workspace.status).toBe('pending');
+    });
+
+    it('should return undefined from resolveFilesystem when no filesystem configured', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      const ctx = new RequestContext();
+      const resolved = await workspace.resolveFilesystem({ requestContext: ctx });
+
+      expect(resolved).toBeUndefined();
+    });
+
+    it('should not propagate logger when using resolver', () => {
+      const resolver = () => new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem: resolver });
+
+      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      // Should not throw — no static filesystem instance to set logger on
+      expect(() => workspace.__setLogger(mockLogger)).not.toThrow();
     });
   });
 
@@ -2139,21 +2354,21 @@ Line 3 conclusion`;
   // LSP Initialization
   // ===========================================================================
   describe('LSP initialization', () => {
-    it('creates LSPManager when lsp:true and sandbox has processes', () => {
+    it('creates LSPManager when lsp:true and sandbox has processes', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox, lsp: true });
 
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
     });
 
-    it('does not create LSPManager when lsp is not configured', () => {
+    it('does not create LSPManager when lsp is not configured', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
 
       expect(workspace.lsp).toBeUndefined();
     });
 
-    it('does not create LSPManager when sandbox has no process manager', () => {
+    it('does not create LSPManager when sandbox has no process manager', async () => {
       const sandbox = {
         provider: 'mock',
         status: 'running' as const,
@@ -2166,14 +2381,14 @@ Line 3 conclusion`;
       expect(workspace.lsp).toBeUndefined();
     });
 
-    it('does not create LSPManager when no sandbox is provided', () => {
+    it('does not create LSPManager when no sandbox is provided', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem, lsp: true });
 
       expect(workspace.lsp).toBeUndefined();
     });
 
-    it('uses explicit root from LSPConfig', () => {
+    it('uses explicit root from LSPConfig', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox, lsp: { root: '/explicit/root' } });
 
@@ -2181,7 +2396,7 @@ Line 3 conclusion`;
       expect(workspace.lsp!.root).toBe('/explicit/root');
     });
 
-    it('resolves root via findProjectRoot when no explicit root', () => {
+    it('resolves root via findProjectRoot when no explicit root', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox, lsp: true });
 
@@ -2198,7 +2413,7 @@ Line 3 conclusion`;
       expect(hasMarker).toBe(true);
     });
 
-    it('passes LSPConfig root through to LSPManager', () => {
+    it('passes LSPConfig root through to LSPManager', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({
         sandbox,
@@ -2211,7 +2426,7 @@ Line 3 conclusion`;
       expect(workspace.lsp!.root).toBe(tempDir);
     });
 
-    it('treats lsp:true as empty LSPConfig', () => {
+    it('treats lsp:true as empty LSPConfig', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const ws1 = new Workspace({ sandbox, lsp: true });
       const ws2 = new Workspace({ sandbox, lsp: {} });

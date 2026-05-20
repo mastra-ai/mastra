@@ -1,0 +1,431 @@
+import type { GetScorerResponse } from '@mastra/client-js';
+import type { LightSpanRecord } from '@mastra/core/storage';
+import {
+  Button,
+  ButtonsGroup,
+  KeyValueList,
+  Section,
+  Sections,
+  SideDialog,
+  TextAndIcon,
+  getShortId,
+  Icon,
+  cn,
+  useSpanDetail,
+} from '@mastra/playground-ui';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import {
+  PanelLeftIcon,
+  HashIcon,
+  EyeIcon,
+  ChevronsLeftRightEllipsisIcon,
+  GaugeIcon,
+  CircleGaugeIcon,
+  ListTreeIcon,
+  SaveIcon,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import type { UISpan } from '../types';
+import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
+import { getSpanInfo, useTraceInfo } from './helpers';
+import { SpanDialog } from './span-dialog';
+import { SpanTabs } from './span-tabs';
+import { TraceAsItemDialog } from './trace-as-item-dialog';
+import { TraceTimeline } from './trace-timeline';
+import { TraceTimelineTools } from './trace-timeline-tools';
+import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { useLinkComponent } from '@/lib/framework';
+
+type TraceDialogProps = {
+  traceSpans?: LightSpanRecord[];
+  traceId?: string;
+  isOpen: boolean;
+  onClose?: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  isLoadingSpans?: boolean;
+  computeAgentsLink?: () => string;
+  computeWorkflowsLink?: () => string;
+  computeTraceLink: (traceId: string, spanId?: string, tab?: string) => string;
+  initialSpanId?: string;
+  initialSpanTab?: string;
+  initialScoreId?: string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
+};
+
+export function TraceDialog({
+  traceId,
+  traceSpans = [],
+  isOpen,
+  onClose,
+  onNext,
+  onPrevious,
+  isLoadingSpans,
+  computeTraceLink,
+  initialSpanId,
+  initialSpanTab,
+  initialScoreId,
+  scorers,
+  isLoadingScorers,
+}: TraceDialogProps) {
+  const { navigate, Link } = useLinkComponent();
+
+  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(Boolean(initialSpanId));
+  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
+  const [combinedView, setCombinedView] = useState<boolean>(false);
+  const [spanDialogDefaultTab, setSpanDialogDefaultTab] = useState(initialSpanTab || 'details');
+
+  // Derive root span ID from lightweight spans
+  const rootSpanId = useMemo(() => traceSpans.find(s => !s.parentSpanId)?.spanId, [traceSpans]);
+
+  // Lazy-load full root span details for trace header info
+  const { data: rootSpanDetail } = useSpanDetail(traceId, rootSpanId);
+  const traceDetails = rootSpanDetail?.span;
+
+  // Lazy-load full selected span details for SpanTabs/SpanDialog
+  const { data: selectedSpanDetail } = useSpanDetail(traceId, selectedSpanId);
+  const selectedSpan = selectedSpanDetail?.span;
+
+  const traceInfo = useTraceInfo(traceDetails);
+  const [spanScoresPage, setSpanScoresPage] = useState(0);
+  const [searchPhrase, setSearchPhrase] = useState<string>('');
+  const [fadedSpanTypes, setFadedSpanTypes] = useState<string[]>([]);
+  const [featuredSpanIds, setFeaturedSpanIds] = useState<string[]>([]);
+  const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+  const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (searchPhrase.trim() === '') {
+      setFeaturedSpanIds([]);
+      return;
+    }
+
+    const lowerCaseSearch = searchPhrase.toLowerCase();
+
+    const newFeaturedSpanIds = traceSpans
+      .filter(span => span.name.toLowerCase().includes(lowerCaseSearch))
+      .map(span => span.spanId);
+
+    setFeaturedSpanIds(newFeaturedSpanIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchPhrase]);
+
+  useEffect(() => {
+    if (initialSpanId) {
+      setSelectedSpanId(initialSpanId);
+      setDialogIsOpen(true);
+      return;
+    }
+
+    setSelectedSpanId(undefined);
+    setDialogIsOpen(false);
+  }, [initialSpanId]);
+
+  useEffect(() => {
+    // Reset span scores page when selected span changes
+    if (spanScoresPage > 0) {
+      setSpanScoresPage(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSpanId]);
+
+  const hierarchicalSpans = useMemo(() => {
+    return formatHierarchicalSpans(traceSpans);
+  }, [traceSpans]);
+
+  const flatSpans = useMemo(() => {
+    const flattenSpans = (spans: UISpan[]): UISpan[] => {
+      const result: UISpan[] = [];
+
+      const traverse = (span: UISpan) => {
+        result.push(span);
+        if (span.spans && span.spans.length > 0) {
+          span.spans.forEach(traverse);
+        }
+      };
+
+      spans.forEach(traverse);
+      return result;
+    };
+
+    return flattenSpans(hierarchicalSpans);
+  }, [hierarchicalSpans]);
+
+  const { data: spanScoresData, isLoading: isLoadingSpanScoresData } = useTraceSpanScores({
+    traceId: traceId,
+    spanId: selectedSpanId || flatSpans?.[0]?.id,
+    page: spanScoresPage,
+  });
+
+  const handleSpanClick = (id: string) => {
+    if (selectedSpanId === id) {
+      if (traceId) {
+        navigate(computeTraceLink(traceId));
+      }
+      setSelectedSpanId(undefined);
+      return;
+    }
+
+    setSelectedSpanId(id);
+    setSpanDialogDefaultTab('details');
+    setDialogIsOpen(true);
+
+    if (traceId) {
+      navigate(computeTraceLink(traceId, id));
+    }
+  };
+
+  const handleToScoring = () => {
+    setSelectedSpanId(hierarchicalSpans[0]?.id);
+    setSpanDialogDefaultTab('scores');
+
+    if (traceId) {
+      navigate(`${computeTraceLink(traceId, hierarchicalSpans?.[0]?.id)}&tab=scores`);
+    }
+  };
+
+  const handleToLastScore = () => {
+    setSelectedSpanId(hierarchicalSpans[0]?.id);
+    setSpanDialogDefaultTab('scores');
+
+    if (traceId) {
+      navigate(
+        `${computeTraceLink(
+          traceId,
+          hierarchicalSpans?.[0]?.id,
+        )}&tab=scores&scoreId=${spanScoresData?.scores?.[0]?.id}`,
+      );
+    }
+  };
+
+  const handleLegendClick = (type: string) => {
+    setFadedSpanTypes(prev => {
+      if (prev.includes(type)) {
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
+  };
+
+  const handleLegendReset = () => {
+    setFadedSpanTypes([]);
+  };
+
+  const selectedSpanInfo = getSpanInfo({ span: selectedSpan });
+
+  // Get visible spans (only those whose parent is expanded or parentSpanId is null)
+  const getVisibleSpans = () => {
+    const visibleSpans: UISpan[] = [];
+    const collectVisibleSpans = (spans: UISpan[], parentId?: string) => {
+      spans.forEach(span => {
+        const isVisible = !parentId || parentId === null || expandedSpanIds.includes(parentId);
+        if (isVisible) {
+          visibleSpans.push(span);
+          if (expandedSpanIds.includes(span.id) && span.spans) {
+            collectVisibleSpans(span.spans, span.id);
+          }
+        }
+      });
+    };
+    collectVisibleSpans(hierarchicalSpans);
+    return visibleSpans;
+  };
+
+  const toNextSpan = () => {
+    if (!selectedSpanId) return undefined;
+    const visibleSpans = getVisibleSpans();
+    const currentIndex = visibleSpans.findIndex(span => span.id === selectedSpanId);
+    if (currentIndex >= 0 && currentIndex < visibleSpans.length - 1) {
+      return () => setSelectedSpanId(visibleSpans[currentIndex + 1].id);
+    }
+
+    return undefined;
+  };
+
+  const toPreviousSpan = () => {
+    if (!selectedSpanId) return undefined;
+    const visibleSpans = getVisibleSpans();
+    const currentIndex = visibleSpans.findIndex(span => span.id === selectedSpanId);
+    if (currentIndex > 0) {
+      return () => setSelectedSpanId(visibleSpans[currentIndex - 1].id);
+    }
+    return undefined;
+  };
+
+  return (
+    <>
+      <SideDialog
+        dialogTitle="Observability Trace"
+        dialogDescription="View and analyze trace details"
+        isOpen={isOpen}
+        onClose={onClose}
+        level={1}
+      >
+        <SideDialog.Top>
+          <TextAndIcon>
+            <EyeIcon /> {getShortId(traceId)}
+          </TextAndIcon>
+          |
+          <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
+          <Button className="ml-auto mr-8" onClick={() => setDatasetDialogOpen(true)}>
+            <Icon>
+              <SaveIcon />
+            </Icon>
+            Save as Dataset Item
+          </Button>
+        </SideDialog.Top>
+
+        <div
+          className={cn('overflow-y-auto', {
+            'grid grid-rows-[2fr_3fr]': Boolean(selectedSpan && combinedView),
+          })}
+        >
+          <SideDialog.Content>
+            <SideDialog.Header>
+              <SideDialog.Heading>
+                <EyeIcon /> {traceDetails?.name}
+              </SideDialog.Heading>
+
+              <TextAndIcon>
+                <HashIcon /> {traceId}
+              </TextAndIcon>
+            </SideDialog.Header>
+
+            {(traceDetails || traceSpans.length > 0) && (
+              <Sections>
+                <div className="grid xl:grid-cols-[3fr_2fr] gap-4 items-start">
+                  <KeyValueList data={traceInfo} LinkComponent={Link} />
+                  <div className="bg-surface3 p-6 rounded-lg grid gap-4">
+                    <h4 className="text-ui-lg">
+                      <TextAndIcon>
+                        <GaugeIcon /> Evaluate trace
+                      </TextAndIcon>
+                    </h4>
+
+                    <ButtonsGroup className="w-full">
+                      <Button onClick={handleToScoring}>
+                        <Icon>
+                          <CircleGaugeIcon />
+                        </Icon>
+                        Scoring
+                      </Button>
+                      {spanScoresData?.scores?.[0] && (
+                        <Button onClick={handleToLastScore}>
+                          Last score: <b>{spanScoresData?.scores?.[0]?.score}</b>
+                        </Button>
+                      )}
+                    </ButtonsGroup>
+                  </div>
+                </div>
+
+                <Section>
+                  <Section.Header>
+                    <Section.Heading>
+                      <ListTreeIcon /> Timeline
+                    </Section.Heading>
+                  </Section.Header>
+
+                  <TraceTimelineTools
+                    spans={traceSpans}
+                    fadedTypes={fadedSpanTypes}
+                    onLegendClick={handleLegendClick}
+                    onLegendReset={handleLegendReset}
+                    searchPhrase={searchPhrase}
+                    onSearchPhraseChange={setSearchPhrase}
+                    traceId={traceId}
+                  />
+
+                  <TraceTimeline
+                    hierarchicalSpans={hierarchicalSpans}
+                    onSpanClick={handleSpanClick}
+                    selectedSpanId={selectedSpanId}
+                    isLoading={isLoadingSpans}
+                    fadedTypes={fadedSpanTypes}
+                    expandedSpanIds={expandedSpanIds}
+                    setExpandedSpanIds={setExpandedSpanIds}
+                    featuredSpanIds={featuredSpanIds}
+                  />
+                </Section>
+              </Sections>
+            )}
+          </SideDialog.Content>
+
+          {selectedSpan && combinedView && (
+            <div className="grid grid-rows-[auto_1fr] relative overflow-y-auto rounded-xl mx-8 mb-8 bg-surface4">
+              <SideDialog.Top>
+                <TextAndIcon>
+                  <ChevronsLeftRightEllipsisIcon /> {getShortId(selectedSpanId)}
+                </TextAndIcon>
+                |
+                <SideDialog.Nav onNext={toNextSpan()} onPrevious={toPreviousSpan()} />
+                <button className="ml-auto mr-8" onClick={() => setCombinedView(false)}>
+                  <PanelLeftIcon /> <VisuallyHidden>Switch to dialog view</VisuallyHidden>
+                </button>
+              </SideDialog.Top>
+
+              <div className={cn('h-full overflow-y-auto pb-8 pl-8')}>
+                <div className="overflow-y-auto pr-8 pt-8 h-full">
+                  <SideDialog.Header>
+                    <SideDialog.Heading>
+                      <EyeIcon />
+                      {selectedSpan?.name}
+                    </SideDialog.Heading>
+
+                    <TextAndIcon>
+                      <HashIcon /> {selectedSpanId}
+                    </TextAndIcon>
+                  </SideDialog.Header>
+
+                  <SpanTabs
+                    trace={traceDetails}
+                    span={selectedSpan}
+                    spanScoresData={spanScoresData}
+                    onSpanScoresPageChange={setSpanScoresPage}
+                    isLoadingSpanScoresData={isLoadingSpanScoresData}
+                    spanInfo={selectedSpanInfo}
+                    defaultActiveTab={spanDialogDefaultTab}
+                    initialScoreId={initialScoreId}
+                    computeTraceLink={computeTraceLink}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </SideDialog>
+
+      <TraceAsItemDialog
+        traceDetails={traceDetails}
+        traceId={traceId}
+        isOpen={datasetDialogOpen && isOpen}
+        onClose={() => setDatasetDialogOpen(false)}
+      />
+
+      {traceDetails && (
+        <SpanDialog
+          trace={traceDetails}
+          span={selectedSpan}
+          spanScoresData={spanScoresData}
+          onSpanScoresPageChange={setSpanScoresPage}
+          isLoadingSpanScoresData={isLoadingSpanScoresData}
+          isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
+          onClose={() => {
+            navigate(computeTraceLink(traceId || ''));
+            setDialogIsOpen(false);
+          }}
+          onNext={toNextSpan()}
+          onPrevious={toPreviousSpan()}
+          onViewToggle={() => setCombinedView(!combinedView)}
+          spanInfo={selectedSpanInfo}
+          defaultActiveTab={spanDialogDefaultTab}
+          initialScoreId={initialScoreId}
+          computeTraceLink={computeTraceLink}
+          scorers={scorers}
+          isLoadingScorers={isLoadingScorers}
+        />
+      )}
+    </>
+  );
+}

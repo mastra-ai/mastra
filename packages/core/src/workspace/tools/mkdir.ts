@@ -3,6 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const mkdirTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
@@ -16,14 +17,27 @@ export const mkdirTool = createTool({
       .describe('Whether to create parent directories if they do not exist'),
   }),
   execute: async ({ path, recursive }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
 
-    if (filesystem.readOnly) {
-      throw new WorkspaceReadOnlyError('mkdir');
-    }
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'mkdir',
+      input: { path, recursive },
+      attributes: { filesystemProvider: filesystem.provider },
+    });
 
-    await filesystem.mkdir(path, { recursive });
-    return `Created directory ${path}`;
+    try {
+      if (filesystem.readOnly) {
+        throw new WorkspaceReadOnlyError('mkdir');
+      }
+
+      await filesystem.mkdir(path, { recursive });
+      span.end({ success: true });
+      return `Created directory ${path}`;
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });

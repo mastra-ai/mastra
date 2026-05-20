@@ -1,5 +1,4 @@
-import { WorkflowsPage } from '@mastra/playground-ui';
-
+import { WorkflowsPage } from '@/domains/agents/components/agent-cms-pages/workflows-page';
 export default function CmsAgentWorkflowsPage() {
   return <WorkflowsPage />;
 }

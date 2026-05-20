@@ -535,6 +535,164 @@ describe('ToolSearchProcessor', () => {
       const toolKeys = Object.keys(result2.tools || {}).filter(k => k === 'weather');
       expect(toolKeys.length).toBe(1);
     });
+
+    it('should load multiple tools at once via toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+          email: createMockTool('email', 'Send email'),
+        },
+      });
+
+      const args = createMockArgs('thread-multi');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(expect.arrayContaining(['weather', 'calendar']));
+      expect(loadResult.loadedCount).toBe(2);
+      expect(loadResult.notFound).toBeUndefined();
+      expect(loadResult.alreadyLoaded).toBeUndefined();
+
+      // Verify both are actually loaded
+      const args2 = createMockArgs('thread-multi');
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeDefined();
+      expect(result2.tools?.calendar).toBeDefined();
+      expect(result2.tools?.email).toBeUndefined();
+    });
+
+    it('should return clear error for empty toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-empty');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolNames: [] }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).toBe('toolNames array must not be empty.');
+    });
+
+    it('should report not-found tools in multi-load response', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-multi');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'nonexistent', 'calendar'] }, undefined);
+
+      // Partial load (some found, some not): success=false since not all requested tools are available
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.loaded).toEqual(['weather']);
+      expect(loadResult.notFound).toEqual(['nonexistent', 'calendar']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
+
+    it('should report already-loaded tools in multi-load response', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args1 = createMockArgs('thread-multi');
+      const result1 = await processor.processInputStep(args1);
+      const loadTool1 = result1.tools?.load_tool;
+      await loadTool1!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Try loading weather again alongside calendar
+      const args2 = createMockArgs('thread-multi');
+      const result2 = await processor.processInputStep(args2);
+      const loadTool2 = result2.tools?.load_tool;
+
+      const loadResult = await loadTool2!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(['calendar']);
+      expect(loadResult.alreadyLoaded).toEqual(['weather']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
+
+    it('should return success=true when all requested tools are already loaded', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args1 = createMockArgs('thread-multi');
+      const result1 = await processor.processInputStep(args1);
+      const loadTool1 = result1.tools?.load_tool;
+      await loadTool1!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      // All already loaded — should be success even though nothing new was loaded
+      const args2 = createMockArgs('thread-multi');
+      const result2 = await processor.processInputStep(args2);
+      const loadTool2 = result2.tools?.load_tool;
+
+      const loadResult = await loadTool2!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toBeUndefined();
+      expect(loadResult.alreadyLoaded).toEqual(['weather', 'calendar']);
+      expect(loadResult.notFound).toBeUndefined();
+    });
+
+    it('should merge and deduplicate when both toolName and toolNames are provided', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args = createMockArgs('thread-merge');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      // toolName 'weather' should be merged with toolNames ['calendar']
+      const loadResult = await loadTool!.execute?.({ toolName: 'weather', toolNames: ['calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      // weather from toolName, calendar from toolNames — both deduplicated
+      expect(loadResult.loaded).toEqual(expect.arrayContaining(['weather', 'calendar']));
+      expect(loadResult.loadedCount).toBe(2);
+    });
+
+    it('should deduplicate duplicate names within toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-dedup');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      // Duplicate 'weather' entries should only load once
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'weather'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(['weather']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
   });
 
   describe('processInputStep integration', () => {

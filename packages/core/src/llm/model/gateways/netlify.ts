@@ -1,12 +1,11 @@
-import { createAnthropic } from '@ai-sdk/anthropic-v5';
-import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createAnthropic } from '@ai-sdk/anthropic-v6';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import { createOpenAI } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { MastraModelGateway } from './base.js';
-import type { ProviderConfig } from './base.js';
+import type { ProviderConfig, GatewayLanguageModel } from './base.js';
 import { MASTRA_USER_AGENT } from './constants.js';
 
 interface NetlifyProviderResponse {
@@ -185,7 +184,7 @@ export class NetlifyGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
+  }): Promise<GatewayLanguageModel> {
     const baseURL = await this.buildUrl(`${providerId}/${modelId}`);
 
     const mastraHeaders = { 'User-Agent': MASTRA_USER_AGENT, ...headers };

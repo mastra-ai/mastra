@@ -638,10 +638,3 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
     });
   });
 }
-
-declare module 'vitest' {
-  export interface ProvidedContext {
-    baseUrl: string;
-    port: number;
-  }
-}

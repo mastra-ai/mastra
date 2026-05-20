@@ -11,11 +11,29 @@ export interface CreateOpenAIWebSocketFetchOptions {
    * Authorization and OpenAI-Beta are managed internally.
    */
   headers?: Record<string, string>;
+  /**
+   * Convert an `api-key` request header into `Authorization: Bearer ...` for
+   * providers whose WebSocket endpoint authenticates API keys as bearer tokens.
+   */
+  apiKeyAsBearer?: boolean;
+  /**
+   * Move an `api-key` request header into the WebSocket URL query string for
+   * providers whose WebSocket endpoint authenticates API keys through a query
+   * parameter. Entra ID and OpenAI bearer-token auth should leave this disabled.
+   */
+  apiKeyQueryParam?: string | false;
+  /**
+   * Optional beta header sent when establishing the WebSocket connection.
+   * @default 'responses_websockets=2026-02-06'
+   */
+  betaHeader?: string | false;
 }
 
 export type OpenAIWebSocketFetch = ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) & {
   close(): void;
 };
+
+const TERMINAL_RESPONSE_EVENTS = new Set(['response.completed', 'response.failed', 'response.incomplete', 'error']);
 
 /**
  * Creates a `fetch` function that routes OpenAI Responses API streaming
@@ -23,17 +41,45 @@ export type OpenAIWebSocketFetch = ((input: RequestInfo | URL, init?: RequestIni
  */
 export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchOptions): OpenAIWebSocketFetch {
   const wsUrl = options?.url ?? 'wss://api.openai.com/v1/responses';
+  const betaHeader = options?.betaHeader === undefined ? 'responses_websockets=2026-02-06' : options.betaHeader;
+  const apiKeyQueryParam = options?.apiKeyQueryParam ?? false;
 
   let ws: WebSocket | null = null;
   let connecting: Promise<WebSocket> | null = null;
   let connectionKey: string | null = null;
+  let nextQueryCredentialId = 0;
+  const queryCredentialIds = new Map<string, string>();
   let busy = false;
 
-  function getConnection(authorization: string, headers: Record<string, string>): Promise<WebSocket> {
+  function getQueryCredentialCacheId(value?: string): string {
+    if (!value) return '';
+
+    const existing = queryCredentialIds.get(value);
+    if (existing) return existing;
+
+    const id = String(++nextQueryCredentialId);
+    queryCredentialIds.set(value, id);
+    return id;
+  }
+
+  function getConnection(
+    authorization: string,
+    headers: Record<string, string>,
+    signal?: AbortSignal | null,
+  ): Promise<WebSocket> {
+    if (signal?.aborted) {
+      return Promise.reject(getAbortError(signal));
+    }
+
     const normalizedHeaders = { ...normalizeHeaders(options?.headers), ...headers };
+    const apiKey = normalizedHeaders['api-key'];
     delete normalizedHeaders['authorization'];
     delete normalizedHeaders['openai-beta'];
-    const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders);
+    if (options?.apiKeyAsBearer || apiKeyQueryParam) {
+      delete normalizedHeaders['api-key'];
+    }
+    const queryCredential = apiKeyQueryParam ? `${apiKeyQueryParam}:${getQueryCredentialCacheId(apiKey)}` : '';
+    const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders, queryCredential);
 
     if (ws?.readyState === WebSocket.OPEN && connectionKey === nextConnectionKey) {
       return Promise.resolve(ws);
@@ -50,26 +96,54 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     connectionKey = nextConnectionKey;
 
     connecting = new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(wsUrl, {
+      let settled = false;
+      const socket = new WebSocket(getWebSocketUrl(wsUrl, apiKeyQueryParam, apiKey), {
         headers: {
           ...normalizedHeaders,
-          Authorization: authorization,
-          'OpenAI-Beta': 'responses_websockets=2026-02-06',
+          ...(authorization ? { Authorization: authorization } : {}),
+          ...(betaHeader ? { 'OpenAI-Beta': betaHeader } : {}),
         },
       });
 
+      function cleanupAbortListener() {
+        signal?.removeEventListener('abort', onAbort);
+      }
+
+      function rejectConnection(err: unknown, closeSocket = true) {
+        if (settled) return;
+        settled = true;
+        connecting = null;
+        connectionKey = null;
+        cleanupAbortListener();
+        if (closeSocket) socket.close();
+        reject(err);
+      }
+
+      function onAbort() {
+        rejectConnection(getAbortError(signal));
+      }
+
+      signal?.addEventListener('abort', onAbort, { once: true });
+
       socket.on('open', () => {
+        if (signal?.aborted) {
+          rejectConnection(getAbortError(signal));
+          return;
+        }
+        settled = true;
         ws = socket;
         connecting = null;
+        cleanupAbortListener();
         resolve(socket);
       });
 
       socket.on('error', err => {
-        if (connecting) {
-          connecting = null;
-          connectionKey = null;
-          reject(err);
-        }
+        rejectConnection(err, false);
+      });
+
+      socket.on('close', () => {
+        if (settled) return;
+        rejectConnection(new Error('WebSocket closed before the connection opened'), false);
       });
 
       socket.on('close', () => {
@@ -84,7 +158,7 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
   async function websocketFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url;
 
-    if (init?.method !== 'POST' || !url.endsWith('/responses')) {
+    if (init?.method !== 'POST' || !isResponsesUrl(url)) {
       return globalThis.fetch(input, init);
     }
 
@@ -100,33 +174,50 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     }
 
     // Prevent concurrent streams from sharing one WebSocket transport instance.
-    // In that case, fall back to HTTP streaming for the overlapping request.
+    // Only fall back to HTTP when the request does not depend on the socket's
+    // connection-local previous_response_id cache.
     if (busy) {
+      if (body.previous_response_id) {
+        throw new Error(
+          'Cannot start an overlapping WebSocket Responses continuation. Wait for the active stream to finish before sending previous_response_id.',
+        );
+      }
       return globalThis.fetch(input, init);
     }
 
     const headers = normalizeHeaders(init.headers);
-    const authorization = headers['authorization'] ?? '';
+    const authorization =
+      headers['authorization'] ?? (options?.apiKeyAsBearer && headers['api-key'] ? `Bearer ${headers['api-key']}` : '');
 
     // Acquire the busy lock before awaiting to prevent races
     busy = true;
     let connection: WebSocket;
     try {
-      connection = await getConnection(authorization, headers);
+      connection = await getConnection(authorization, headers, init?.signal);
     } catch (err) {
       busy = false;
       throw err;
     }
 
-    const { stream: _stream, ...requestBody } = body;
+    const { stream: _stream, background: _background, ...requestBody } = body;
     const encoder = new TextEncoder();
 
+    let cleanupActiveStream: ((options?: { closeSocket?: boolean }) => void) | undefined;
     const responseStream = new ReadableStream<Uint8Array>({
       start(controller) {
+        let cleanedUp = false;
+        let abortHandler: (() => void) | undefined;
+
         function cleanup({ closeSocket = false }: { closeSocket?: boolean } = {}) {
+          if (cleanedUp) return;
+          cleanedUp = true;
           connection.off('message', onMessage);
           connection.off('error', onError);
           connection.off('close', onClose);
+          if (abortHandler) {
+            init?.signal?.removeEventListener('abort', abortHandler);
+            abortHandler = undefined;
+          }
 
           if (closeSocket && ws === connection) {
             connection.close();
@@ -135,17 +226,20 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
           }
 
           busy = false;
+          cleanupActiveStream = undefined;
         }
+
+        cleanupActiveStream = cleanup;
 
         function onMessage(data: WebSocket.RawData) {
           const text = data.toString();
-          controller.enqueue(encoder.encode(`data: ${text}\n\n`));
+          controller.enqueue(encoder.encode(formatSSEData(text)));
 
           try {
             const event = JSON.parse(text);
-            if (event.type === 'response.completed' || event.type === 'error') {
+            if (isTerminalWebSocketEvent(event)) {
               controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              cleanup();
+              cleanup({ closeSocket: shouldReconnectAfterEvent(event) });
               controller.close();
             }
           } catch {
@@ -178,21 +272,21 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
             controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
             return;
           }
-          signal.addEventListener(
-            'abort',
-            () => {
-              cleanup({ closeSocket: true });
-              try {
-                controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-              } catch {
-                // already closed
-              }
-            },
-            { once: true },
-          );
+          abortHandler = () => {
+            cleanup({ closeSocket: true });
+            try {
+              controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+            } catch {
+              // already closed
+            }
+          };
+          signal.addEventListener('abort', abortHandler, { once: true });
         }
 
         connection.send(JSON.stringify({ type: 'response.create', ...requestBody }));
+      },
+      cancel() {
+        cleanupActiveStream?.({ closeSocket: true });
       },
     });
 
@@ -215,11 +309,60 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
   });
 }
 
-function buildConnectionKey(authorization: string, headers: Record<string, string>): string {
+function isResponsesUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.endsWith('/responses');
+  } catch {
+    return url.split('?')[0]?.endsWith('/responses') ?? false;
+  }
+}
+
+function getWebSocketUrl(url: string, apiKeyQueryParam: string | false, apiKey?: string): string {
+  if (!apiKeyQueryParam || !apiKey) return url;
+
+  const parsedUrl = new URL(url);
+  parsedUrl.searchParams.set(apiKeyQueryParam, apiKey);
+  return parsedUrl.toString();
+}
+
+function formatSSEData(text: string): string {
+  return `${text
+    .split(/\r?\n/)
+    .map(line => `data: ${line}`)
+    .join('\n')}\n\n`;
+}
+
+function buildConnectionKey(authorization: string, headers: Record<string, string>, queryCredential = ''): string {
   return JSON.stringify({
     authorization,
+    queryCredential,
     headers: Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)),
   });
+}
+
+function isTerminalWebSocketEvent(event: unknown): event is { type: string } {
+  return (
+    typeof event === 'object' &&
+    event !== null &&
+    'type' in event &&
+    typeof event.type === 'string' &&
+    TERMINAL_RESPONSE_EVENTS.has(event.type)
+  );
+}
+
+function shouldReconnectAfterEvent(event: unknown): boolean {
+  if (typeof event !== 'object' || event === null || !('error' in event)) return false;
+  const error = event.error;
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'websocket_connection_limit_reached'
+  );
+}
+
+function getAbortError(signal?: AbortSignal | null): unknown {
+  return signal?.reason ?? new DOMException('Aborted', 'AbortError');
 }
 
 function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {

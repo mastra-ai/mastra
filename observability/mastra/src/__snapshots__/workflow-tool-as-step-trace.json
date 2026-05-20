@@ -19,7 +19,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "a": 5,
@@ -47,7 +48,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "operation": "add",

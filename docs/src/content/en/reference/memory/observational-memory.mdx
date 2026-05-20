@@ -65,10 +65,33 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: "'thread'",
   },
   {
+    name: 'activateAfterIdle',
+    type: 'number | string | false | "auto"',
+    description:
+      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
+    isOptional: true,
+  },
+  {
+    name: 'activateOnProviderChange',
+    type: 'boolean',
+    description:
+      'Force buffered observations to activate when the actor provider or model changes. Reflections do not inherit this setting. Use `reflection.activateOnProviderChange` to opt reflections into provider-change activation.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'shareTokenBudget',
     type: 'boolean',
     description:
       'Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'temporalMarkers',
+    type: 'boolean',
+    description:
+      'Insert temporal-gap reminder markers before new user messages when the previous message in the thread is at least 10 minutes older. The marker is persisted in memory, emitted as an inline reminder event so clients can render it specially, and shown to the observer so it can anchor observations to when events occurred.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -110,6 +133,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
               'When `true`, the Observer suggests short thread titles and updates the thread title when the conversation topic meaningfully changes. This is opt-in and defaults to disabled.',
             isOptional: true,
             defaultValue: 'false',
+          },
+          {
+            name: 'observeAttachments',
+            type: 'boolean | string[]',
+            description:
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. `true` (default) forwards all attachments. `false` drops all attachments while keeping placeholders visible. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model. Tool-result attachments are filtered using the same rule.",
+            isOptional: true,
+            defaultValue: 'true',
           },
           {
             name: 'messageTokens',
@@ -170,6 +201,20 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
               'Controls how much of the message window to retain after activation. Accepts a ratio (0-1) or an absolute token count (≥ 1000). For example, `0.8` means: activate enough buffers to remove 80% of `messageTokens` and leave 20% as active message history. An absolute token count like `4000` targets a goal of keeping ~4k message tokens remaining after activation. Higher values remove more message history per activation when using a ratio. Higher values keep more message history when using a token count.',
             isOptional: true,
             defaultValue: '0.8',
+          },
+          {
+            name: 'activateAfterIdle',
+            type: 'number | string | false | "auto"',
+            description:
+              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations.',
+            isOptional: true,
+          },
+          {
+            name: 'activateOnProviderChange',
+            type: 'boolean',
+            description:
+              'Force buffered observations to activate when the actor provider or model changes. If unset, the top-level `activateOnProviderChange` value is used for observations.',
+            isOptional: true,
           },
           {
             name: 'blockAfter',
@@ -257,6 +302,21 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
               'Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.',
             isOptional: true,
             defaultValue: '0.5',
+          },
+          {
+            name: 'activateAfterIdle',
+            type: 'number | string | false | "auto"',
+            description:
+              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation.',
+            isOptional: true,
+          },
+          {
+            name: 'activateOnProviderChange',
+            type: 'boolean',
+            description:
+              'Force buffered reflections to activate when the actor provider or model changes. Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to opt reflections into provider-change activation.',
+            isOptional: true,
+            defaultValue: 'false',
           },
           {
             name: 'blockAfter',
@@ -1005,7 +1065,7 @@ const selector = new ModelByInputTokens({
 
 #### Behavior
 
-- Thresholds are sorted internally, so the order in the config object does not matter.
+- Thresholds are sorted internally, so the order in the config object doesn't matter.
 - `inputTokens ≤ smallest threshold` → uses that threshold's model
 - `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
 - OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly

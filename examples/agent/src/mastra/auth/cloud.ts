@@ -1,5 +1,5 @@
 /**
- * Mastra Cloud auth provider - OAuth SSO with PKCE.
+ * Mastra platform auth provider - OAuth SSO with PKCE.
  * Requires MASTRA_PROJECT_ID, MASTRA_CLOUD_URL, and MASTRA_CALLBACK_URL environment variables.
  */
 
@@ -31,6 +31,6 @@ export async function initCloud(): Promise<AuthResult> {
     },
   });
 
-  console.log('[Auth] Using Mastra Cloud authentication');
+  console.log('[Auth] Using the Mastra platform authentication');
   return { mastraAuth, rbacProvider };
 }

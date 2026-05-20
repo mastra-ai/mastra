@@ -1,15 +1,15 @@
-import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createCerebras } from '@ai-sdk/cerebras-v5';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v5';
 import { createDeepSeek } from '@ai-sdk/deepseek-v5';
-import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
-import { createGroq } from '@ai-sdk/groq-v5';
-import { createMistral } from '@ai-sdk/mistral-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
+import { createGroq } from '@ai-sdk/groq-v6';
+import { createMistral } from '@ai-sdk/mistral-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import { createPerplexity } from '@ai-sdk/perplexity-v5';
 import { createTogetherAI } from '@ai-sdk/togetherai-v5';
-import { createXai } from '@ai-sdk/xai-v5';
+import { createXai } from '@ai-sdk/xai-v6';
 import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
@@ -29,6 +29,33 @@ interface ModelsDevProviderInfo {
 
 interface ModelsDevResponse {
   [providerId: string]: ModelsDevProviderInfo;
+}
+
+function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; providerId: string }): string {
+  const fallbackEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+  if (!envVars?.length) return fallbackEnvVar;
+
+  const suffixPreferences = ['_API_TOKEN', '_API_KEY', '_TOKEN', '_KEY', '_PAT'];
+
+  for (const suffix of suffixPreferences) {
+    const preferredEnvVar = envVars.find(envVar => envVar.endsWith(suffix));
+    if (preferredEnvVar) return preferredEnvVar;
+  }
+
+  return envVars[0] || fallbackEnvVar;
+}
+
+function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
+  return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
+    const key = envVarName.trim();
+    const value = envVars?.[key] ?? process.env[key];
+
+    if (value === undefined || value === null) {
+      throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
+    }
+
+    return value;
+  });
 }
 
 // Provider-specific overrides for URL, npm package, and other config.
@@ -113,9 +140,13 @@ export class ModelsDevGateway extends MastraModelGateway {
           continue;
         }
 
-        // Get the API key env var from the provider info
-        // Convert hyphens to underscores for env var naming convention
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+        // Prefer auth-like env vars over identifiers already consumed by the URL template.
+        const apiKeyEnvVar =
+          PROVIDER_OVERRIDES[normalizedId]?.apiKeyEnvVar ||
+          selectApiKeyEnvVar({
+            envVars: providerInfo.env,
+            providerId: normalizedId,
+          });
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage
@@ -162,7 +193,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
-    return customBaseUrl || config.url;
+    return customBaseUrl || interpolateUrlTemplate(config.url, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {

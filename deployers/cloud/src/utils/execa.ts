@@ -1,12 +1,12 @@
 import { createRequire } from 'node:module';
-import { Transform } from 'node:stream';
+import { Writable } from 'node:stream';
 import { execa } from 'execa';
 import { PROJECT_ENV_VARS, PROJECT_ROOT } from './constants.js';
 import { logger } from './logger.js';
 
 export const createPinoStream = () => {
-  return new Transform({
-    transform(chunk, encoding, callback) {
+  return new Writable({
+    write(chunk, _encoding, callback) {
       // Convert Buffer/string to string and trim whitespace
       const line = chunk.toString().trim();
 
@@ -15,8 +15,7 @@ export const createPinoStream = () => {
         logger.info(line);
       }
 
-      // Pass through the original data
-      callback(null, chunk);
+      callback();
     },
   });
 };
@@ -37,20 +36,25 @@ export async function runWithExeca({
   try {
     const subprocess = execa(cmd, args, {
       cwd,
+      stdin: 'ignore',
       env: {
         ...process.env,
         ...env,
       },
     });
 
-    // Pipe stdout and stderr through the Pino stream
-    subprocess.stdout?.pipe(pinoStream);
-    subprocess.stderr?.pipe(pinoStream);
+    // Pipe stdout and stderr through the logging stream.
+    // { end: false } prevents the first stream to close from ending pinoStream
+    // while the other may still be writing.
+    subprocess.stdout?.pipe(pinoStream, { end: false });
+    subprocess.stderr?.pipe(pinoStream, { end: false });
 
     const { stdout, stderr, exitCode } = await subprocess;
+    pinoStream.end();
     return { stdout, stderr, success: exitCode === 0 };
   } catch (error) {
-    logger.error(`Process failed: ${error}`);
+    pinoStream.end();
+    logger.error('Process failed', { error });
     return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
   }
 }

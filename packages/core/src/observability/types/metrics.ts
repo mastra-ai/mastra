@@ -70,15 +70,22 @@ export interface CostContext {
  * Represents a single metric observation.
  * Must be JSON-serializable (Date serializes via toJSON()).
  *
- * Canonical correlation fields travel in `correlationContext` and canonical
+ * Descriptive correlation metadata travels in `correlationContext`.
+ * Signal identity stays on the top-level `traceId` / `spanId` fields.
  * pricing/model fields travel in `costContext`.
- *
- * Note: Histogram aggregation (bucket counts, sum, count) is computed at
- * the storage layer, not in the individual metric event.
  */
 export interface ExportedMetric {
+  /** Unique identifier for this metric event, generated at emission time */
+  metricId: string;
+
   /** When the metric was recorded */
   timestamp: Date;
+
+  /** Trace associated with this metric (undefined = not tied to a trace) */
+  traceId?: string;
+
+  /** Specific span associated with this metric */
+  spanId?: string;
 
   /** Metric name (e.g., mastra_agent_duration_ms) */
   name: string;

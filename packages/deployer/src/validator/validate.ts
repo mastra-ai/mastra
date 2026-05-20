@@ -31,7 +31,7 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
   return new Promise((resolve, reject) => {
     let validationError: ValidationArgs | null = null;
     const childProcess = nodeSpawn(command, args, {
-      // stdio: 'inherit',
+      stdio: ['ignore', 'ignore', 'pipe'],
       ...options,
     });
 

@@ -45,7 +45,7 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
   }),
-  skills: ['/skills'],
+  skills: ['skills'],
 })
 ```
 
@@ -164,6 +164,24 @@ const workspace = new Workspace({
 
 The agent receives the `execute_command` tool.
 
+### Dynamic filesystem (per-request)
+
+Pass a resolver function to `filesystem` to return a different filesystem per request. This is useful for multi-tenant applications or multi-role agents where each request needs a different storage root or different permissions.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: ({ requestContext }) => {
+    const role = requestContext.get('agent-role') || 'guest'
+    return new LocalFilesystem({
+      basePath: `/workspaces/${role}`,
+      readOnly: role !== 'admin',
+    })
+  },
+})
+```
+
+One workspace instance serves all requests. The resolver runs at tool execution time, so each request gets its own filesystem. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem) for details.
+
 ### Which pattern should I use?
 
 | Scenario | Pattern |
@@ -173,6 +191,7 @@ The agent receives the `execute_command` tool.
 | Multiple cloud providers in one sandbox | `mounts` + `sandbox` (one mount per provider) |
 | Agent reads/writes files, no command execution needed | `filesystem` only |
 | Agent runs commands, no file tools needed | `sandbox` only |
+| Multi-role or multi-tenant agent with per-request storage | `filesystem` with resolver function |
 
 ## Tool configuration
 
@@ -208,11 +227,39 @@ const workspace = new Workspace({
 
 | Option | Type | Description |
 | - | - | - |
-| `enabled` | `boolean` | Whether the tool is available (default: `true`) |
-| `requireApproval` | `boolean` | Whether the tool requires user approval before execution (default: `false`) |
-| `requireReadBeforeWrite` | `boolean` | For write tools: require reading the file first (default: `false`) |
+| `enabled` | `boolean \| (context) => boolean` | Whether the tool is available (default: `true`). When a function, evaluated at tool-listing time. |
+| `requireApproval` | `boolean \| (context) => boolean` | Whether the tool requires user approval before execution (default: `false`). When a function, evaluated at execution time with access to `args`. |
+| `requireReadBeforeWrite` | `boolean \| (context) => boolean` | For write tools: require reading the file first (default: `false`). When a function, evaluated at execution time with access to `args`. |
 | `name` | `string` | Custom name for the tool. Replaces the default `mastra_workspace_*` name. |
 | `maxOutputTokens` | `number` | Maximum tokens for tool output (default: `2000`). Output exceeding this limit is truncated using tiktoken. |
+
+### Dynamic tool configuration
+
+Tool options that accept functions receive a context object and return a boolean. This enables context-aware tool behavior.
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    // Dynamic enabled: disable command execution unless explicitly allowed
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      enabled: async ({ requestContext }) => {
+        return requestContext['allowExecution'] === 'true'
+      },
+    },
+
+    // Dynamic requireApproval: only require approval for protected paths
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: async ({ args }) => {
+        return (args.path as string).startsWith('/protected')
+      },
+      requireReadBeforeWrite: true,
+    },
+  },
+})
+```
+
+Functions for `enabled` receive `{ requestContext, workspace }`. Functions for `requireApproval` and `requireReadBeforeWrite` also receive `args` since they are evaluated when the tool is called.
 
 ### Tool name remapping
 

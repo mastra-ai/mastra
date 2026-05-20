@@ -24,7 +24,7 @@ You can pass a single string for basic prompts, an array of strings when providi
 
 A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
-```typescript {3,7}
+```typescript
 const testAgent = mastra.getAgent('testAgent')
 
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
@@ -37,6 +37,12 @@ for await (const chunk of stream.textStream) {
 :::info
 
 Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
+
+:::
+
+:::tip
+
+For agents that dispatch [background tasks](/docs/agents/background-tasks), use [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) to keep the stream open until those tasks complete and the agent has had a chance to respond to their results.
 
 :::
 
@@ -66,7 +72,7 @@ AI SDK v5 (and later) uses `LanguageModelV2` for the model providers. If you are
 
 For integration with AI SDK v5+, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
-```typescript {2,9-12}
+```typescript
 import { toAISdkV5Stream } from '@mastra/ai-sdk'
 
 const testAgent = mastra.getAgent('testAgent')
@@ -75,61 +81,15 @@ const stream = await testAgent.stream([{ role: 'user', content: 'Help me organiz
 
 // Convert to AI SDK v5+ compatible stream
 const aiSDKStream = toAISdkV5Stream(stream, { from: 'agent' })
-
-// Use with AI SDK v5+ methods
 ```
 
 For converting messages to AI SDK v5+ format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
-```typescript {1,4}
+```typescript
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
 
 const messages = [{ role: 'user', content: 'Hello' }]
 const aiSDKMessages = toAISdkV5Messages(messages)
-```
-
-### Using `Agent.network()`
-
-The `network()` method enables multi-agent collaboration by executing a network loop where multiple agents can work together to handle complex tasks. The routing agent delegates tasks to appropriate subagents, workflows, and tools based on the conversation context.
-
-> **Note**: This method is experimental and requires memory to be configured on the agent.
-
-```typescript {3,5-7}
-const testAgent = mastra.getAgent('testAgent')
-
-const networkStream = await testAgent.network('Help me organize my day')
-
-for await (const chunk of networkStream) {
-  console.log(chunk)
-}
-```
-
-:::info
-
-Visit [Agent.network()](/reference/agents/network) for more information.
-
-:::
-
-#### Network stream properties
-
-The network stream provides access to execution information:
-
-- **`networkStream.status`**: Promise resolving to the workflow execution status
-- **`networkStream.result`**: Promise resolving to the complete execution results
-- **`networkStream.usage`**: Promise resolving to token usage information
-
-```typescript {9-11}
-const testAgent = mastra.getAgent('testAgent')
-
-const networkStream = await testAgent.network('Research dolphins then write a report')
-
-for await (const chunk of networkStream) {
-  console.log(chunk)
-}
-
-console.log('Final status:', await networkStream.status)
-console.log('Final result:', await networkStream.result)
-console.log('Token usage:', await networkStream.usage)
 ```
 
 ## Streaming with workflows
@@ -140,7 +100,7 @@ Streaming from a workflow returns a sequence of structured events describing the
 
 The `stream()` method returns a `ReadableStream` of events directly.
 
-```typescript {3,9}
+```typescript
 const run = await testWorkflow.createRun()
 
 const stream = await run.stream({
@@ -190,5 +150,6 @@ A workflow stream provides access to various response properties:
 ## Related
 
 - [Streaming events](./events)
+- [Background tasks](/docs/agents/background-tasks)
 - [Using Agents](/docs/agents/overview)
 - [Workflows overview](../workflows/overview)

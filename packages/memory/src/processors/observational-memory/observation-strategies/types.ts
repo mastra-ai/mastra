@@ -34,6 +34,12 @@ export interface ObserverOutput {
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 
+/** Result returned from ObservationStrategy.run(). */
+export interface ObservationRunResult {
+  observed: boolean;
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+}
+
 /** Processed observation ready for persistence. */
 export interface ProcessedObservation {
   observations: string;

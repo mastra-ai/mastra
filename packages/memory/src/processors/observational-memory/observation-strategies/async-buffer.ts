@@ -1,7 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { createBufferingEndMarker, createBufferingFailedMarker } from '../markers';
+import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
 import { wrapInObservationGroup } from '../observation-groups';
@@ -24,6 +25,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     return false;
   }
   get needsReflection() {
+    return false;
+  }
+  get rethrowOnFailure() {
     return false;
   }
 
@@ -115,10 +119,37 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     });
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+
+    // Update thread title immediately — don't wait for activation.
+    const newTitle = processed.threadTitle?.trim();
+    if (newTitle && newTitle.length >= 3) {
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const oldTitle = thread.title?.trim();
+        if (newTitle !== oldTitle) {
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            threadTitle: processed.threadTitle,
+          });
+          await this.storage.updateThread({
+            id: threadId,
+            title: newTitle,
+            metadata: newMetadata,
+          });
+
+          const marker = createThreadUpdateMarker({
+            cycleId: this.cycleId,
+            threadId,
+            oldTitle,
+            newTitle,
+          });
+          await this.streamMarker(marker);
+        }
+      }
+    }
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
-    if (!processed.observations || !this.opts.writer) return;
+    if (!processed.observations) return;
 
     const { record, threadId, messages } = this.opts;
     const tokensBuffered = await this.tokenCounter.countMessagesAsync(messages);
@@ -137,13 +168,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       threadId,
       observations: processed.observations,
     });
-    void this.opts.writer.custom(endMarker).catch(() => {});
+    if (this.opts.writer) {
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void this.opts.writer.custom({ ...endMarker, transient: true }).catch(() => {});
+    }
     await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
   }
 
   async emitFailedMarkers(_cycleId: string, error: unknown) {
-    if (!this.opts.writer) return;
-
     const { record, threadId, messages } = this.opts;
     const tokensAttempted = await this.tokenCounter.countMessagesAsync(messages);
     const failedMarker = createBufferingFailedMarker({
@@ -155,7 +187,10 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       recordId: record.id,
       threadId,
     });
-    void this.opts.writer.custom(failedMarker).catch(() => {});
+    if (this.opts.writer) {
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void this.opts.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
+    }
     await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
   }
 }

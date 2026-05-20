@@ -14,6 +14,21 @@ import { listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
  */
 describe('Memory Schema Query Parsing', () => {
   describe('listMessagesQuerySchema', () => {
+    it('should allow omitted optional query params', () => {
+      const result = listMessagesQuerySchema.safeParse({
+        page: 0,
+        perPage: 20,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toBeUndefined();
+        expect(result.data.include).toBeUndefined();
+        expect(result.data.filter).toBeUndefined();
+        expect(result.data.includeSystemReminders).toBeUndefined();
+      }
+    });
+
     describe('orderBy parameter parsing', () => {
       it('should parse orderBy when passed as an object', () => {
         const result = listMessagesQuerySchema.safeParse({
@@ -251,6 +266,19 @@ describe('Memory Schema Query Parsing', () => {
   });
 
   describe('listThreadsQuerySchema', () => {
+    it('should allow omitted optional query params', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.metadata).toBeUndefined();
+        expect(result.data.orderBy).toBeUndefined();
+      }
+    });
+
     describe('orderBy parameter parsing', () => {
       it('should parse orderBy when passed as an object', () => {
         const result = listThreadsQuerySchema.safeParse({
@@ -441,6 +469,120 @@ describe('Memory Schema Query Parsing', () => {
           expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'DESC' });
         }
       });
+    });
+  });
+
+  /**
+   * Regression tests for legacy bare-string `orderBy` query parameters used by
+   * `@mastra/client-js` < 1.18 (e.g. mobile clients pinned to 1.4.x).
+   *
+   * Prior to v1.31.0 (PR #15969) the inner object of the `orderBy` preprocess
+   * was `.optional()`, so the legacy shape was silently coerced to "no
+   * ordering". #15969 moved the `.optional()` outside the preprocess, which
+   * regressed those callers into a hard 400 with
+   * `expected object, received undefined`.
+   *
+   * The fix is two-part:
+   *   1. Restore `inner.optional()` so non-JSON `orderBy` values don't trip
+   *      Zod's invalid_type.
+   *   2. Add a back-compat preprocess on `listThreadsQuerySchema` that fuses
+   *      `?orderBy=<field>&sortDirection=<dir>` into the current
+   *      `{ orderBy: { field, direction } }` shape, so legacy clients keep
+   *      their ordering intent instead of silently losing it.
+   */
+  describe('Legacy bare-string orderBy compatibility (client-js < 1.18)', () => {
+    it('listThreadsQuerySchema fuses bare-string orderBy + sortDirection into the object shape', () => {
+      // Exact regression report: ?orderBy=updatedAt&sortDirection=DESC.
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+        orderBy: 'updatedAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toEqual({ field: 'updatedAt', direction: 'DESC' });
+      }
+    });
+
+    it('listThreadsQuerySchema accepts bare-string orderBy without sortDirection', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+        orderBy: 'createdAt',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toEqual({ field: 'createdAt' });
+      }
+    });
+
+    it('listThreadsQuerySchema drops the legacy sortDirection key from the parsed output', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+        orderBy: 'updatedAt',
+        sortDirection: 'ASC',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).not.toHaveProperty('sortDirection');
+      }
+    });
+
+    it('listThreadsQuerySchema still accepts the current JSON-stringified orderBy shape', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+        orderBy: JSON.stringify({ field: 'updatedAt', direction: 'DESC' }),
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toEqual({ field: 'updatedAt', direction: 'DESC' });
+      }
+    });
+
+    it('listThreadsQuerySchema still accepts the current object orderBy shape (post bracket-notation reconstruction)', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toEqual({ field: 'updatedAt', direction: 'DESC' });
+      }
+    });
+
+    it('listMessagesQuerySchema accepts a bare-string orderBy (treated as no ordering)', () => {
+      // listMessagesQuerySchema has no legacy compat shim because client-js < 1.18
+      // already JSON.stringify'd orderBy for messages. Bare strings just fall
+      // through to "no ordering" so we don't 400 unexpected callers.
+      const result = listMessagesQuerySchema.safeParse({
+        page: 0,
+        perPage: 40,
+        orderBy: 'createdAt',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toBeUndefined();
+      }
+    });
+
+    it('listThreadsQuerySchema still rejects a JSON-object orderBy with an unknown field', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+        orderBy: JSON.stringify({ field: 'bogus', direction: 'DESC' }),
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 });

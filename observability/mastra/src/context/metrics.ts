@@ -6,6 +6,7 @@
  * CorrelationContext and metadata are snapshotted at construction time.
  */
 
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   MetricsContext,
   Counter,
@@ -23,6 +24,12 @@ import type { CardinalityFilter } from '../metrics/cardinality';
 
 /** Configuration for creating a MetricsContextImpl. */
 export interface MetricsContextConfig {
+  /** Top-level trace identity for emitted metric events */
+  traceId?: string;
+
+  /** Top-level span identity for emitted metric events */
+  spanId?: string;
+
   /** Canonical correlation context derived from the current span */
   correlationContext?: CorrelationContext;
 
@@ -41,6 +48,8 @@ export interface MetricsContextConfig {
  * ObservabilityBus.emit() after validation and cardinality filtering.
  */
 export class MetricsContextImpl implements MetricsContext {
+  private traceId?: string;
+  private spanId?: string;
   private correlationContext?: CorrelationContext;
   private metadata?: Record<string, unknown>;
   private cardinalityFilter: CardinalityFilter;
@@ -52,6 +61,8 @@ export class MetricsContextImpl implements MetricsContext {
    */
   constructor(config: MetricsContextConfig) {
     this.correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
+    this.traceId = config.traceId ?? this.correlationContext?.traceId;
+    this.spanId = config.spanId ?? this.correlationContext?.spanId;
     this.metadata = config.metadata ? structuredClone(config.metadata) : undefined;
     this.cardinalityFilter = config.cardinalityFilter;
     this.observabilityBus = config.observabilityBus;
@@ -67,7 +78,10 @@ export class MetricsContextImpl implements MetricsContext {
     const costContext = options?.costContext ? cloneCostContext(options.costContext) : undefined;
 
     const exportedMetric: ExportedMetric = {
+      metricId: generateSignalId(),
       timestamp: new Date(),
+      traceId: this.traceId,
+      spanId: this.spanId,
       name,
       value,
       labels: filteredLabels,

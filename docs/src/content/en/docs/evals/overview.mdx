@@ -99,13 +99,13 @@ export const contentWorkflow = createWorkflow({ ... })
 
 In addition to live evaluations, you can use scorers to evaluate historical traces from your agent interactions and workflows. This is particularly useful for analyzing past performance, debugging issues, or running batch evaluations.
 
-:::info[Observability Required]
+:::note[Observability required]
 
 To score traces, you must first configure observability in your Mastra instance to collect trace data. See [Tracing documentation](../observability/tracing/overview) for setup instructions.
 
 :::
 
-### Scoring traces with Studio
+## Studio
 
 To score traces, you first need to register your scorers with your Mastra instance:
 
@@ -118,16 +118,15 @@ const mastra = new Mastra({
 })
 ```
 
-Once registered, you can score traces interactively within Studio under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
+Once registered, you can score traces interactively within Studio under the **Observability** section. Open Studio to manage scorers, review scores, and run experiments.
 
-## Testing scorers locally
-
-Mastra provides a CLI command `mastra dev` to test your scorers. Studio includes a scorers section where you can run individual scorers against test inputs and view detailed results.
-
-For more details, see [Studio](/docs/getting-started/studio) docs.
+- **Scorers list**: Browse all registered scorers with their description, and the number of agents and workflows each scorer is attached to.
+- **Score results**: Select a scorer to see a paginated list of every score it has produced. Click a row to open the detail panel, which shows the score value, reason, input, output, and the prompts used by the judge. From this panel, save any result as a dataset item for future experiments.
+- **Agent Evaluate tab**: Open the Evaluate tab on any agent to attach or detach scorers, create or edit stored scorers inline, manage datasets, and run experiments. Experiment results display per-item scores alongside pass/fail status and version tags.
+- **Trace scoring**: In the Observability section, run a scorer against any historical trace or span to evaluate past interactions. Filter scores by agent or workflow.
 
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/evals/custom-scorers) guide
 - Explore built-in scorers in the [Built-in Scorers](/docs/evals/built-in-scorers) section
-- Test scorers with [Studio](/docs/getting-started/studio)
+- Test scorers with [Studio](/docs/studio/overview)

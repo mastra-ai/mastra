@@ -306,12 +306,29 @@ describe('Metric Schemas', () => {
       });
       expect(args.percentiles).toHaveLength(3);
     });
+
+    it('getMetricPercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getMetricPercentilesArgsSchema.parse({
+          name: 'test',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
+    });
   });
 
   describe('Discovery schemas', () => {
     it('getMetricNamesArgsSchema validates', () => {
       const args = getMetricNamesArgsSchema.parse({ prefix: 'mastra_', limit: 100 });
       expect(args.prefix).toBe('mastra_');
+    });
+
+    it('getMetricNamesArgsSchema coerces limit from string', () => {
+      // Query params arrive as strings; the schema must coerce so HTTP callers
+      // do not have to pre-parse numeric values.
+      const args = getMetricNamesArgsSchema.parse({ prefix: 'mastra_', limit: '25' });
+      expect(args.limit).toBe(25);
     });
 
     it('getMetricLabelKeysArgsSchema validates', () => {
@@ -322,6 +339,15 @@ describe('Metric Schemas', () => {
     it('getMetricLabelValuesArgsSchema validates', () => {
       const args = getMetricLabelValuesArgsSchema.parse({ metricName: 'test', labelKey: 'agent' });
       expect(args.labelKey).toBe('agent');
+    });
+
+    it('getMetricLabelValuesArgsSchema coerces limit from string', () => {
+      const args = getMetricLabelValuesArgsSchema.parse({
+        metricName: 'test',
+        labelKey: 'agent',
+        limit: '50',
+      });
+      expect(args.limit).toBe(50);
     });
 
     it('getEntityTypesArgsSchema validates', () => {

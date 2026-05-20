@@ -5,11 +5,18 @@
  * metadata) is snapshotted at construction time.
  */
 
+import { generateSignalId } from '@mastra/core/observability';
 import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext } from '@mastra/core/observability';
 
 import type { ObservabilityBus } from '../bus';
 
 export interface LoggerContextConfig {
+  /** Top-level trace identity for emitted log events */
+  traceId?: string;
+
+  /** Top-level span identity for emitted log events */
+  spanId?: string;
+
   /** Canonical correlation context for log correlation */
   correlationContext?: CorrelationContext;
 
@@ -40,9 +47,13 @@ export class LoggerContextImpl implements LoggerContext {
    * mutations after construction do not affect emitted logs.
    */
   constructor(config: LoggerContextConfig) {
+    const correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
+
     this.config = {
       ...config,
-      correlationContext: config.correlationContext ? { ...config.correlationContext } : undefined,
+      traceId: config.traceId ?? correlationContext?.traceId,
+      spanId: config.spanId ?? correlationContext?.spanId,
+      correlationContext,
       metadata: config.metadata ? structuredClone(config.metadata) : undefined,
     };
   }
@@ -76,16 +87,19 @@ export class LoggerContextImpl implements LoggerContext {
    * Build an ExportedLog, check against the minimum level, and emit it through the bus.
    */
   private log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
-    const minLevel = this.config.minLevel ?? 'debug';
+    const minLevel = this.config.minLevel ?? 'warn';
     if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[minLevel]) {
       return;
     }
 
     const exportedLog: ExportedLog = {
+      logId: generateSignalId(),
       timestamp: new Date(),
       level,
       message,
       data,
+      traceId: this.config.traceId,
+      spanId: this.config.spanId,
       correlationContext: this.config.correlationContext,
       metadata: this.config.metadata,
     };

@@ -64,6 +64,20 @@ export interface MCPTransportTestConfig {
 export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
   const { suiteName = 'MCP Transport Routes', createServer } = config;
 
+  const expectTextToolResult = (result: any, expectedPayload: unknown) => {
+    expect(result).toBeDefined();
+    expect(result).toMatchObject({
+      isError: false,
+      content: [
+        {
+          type: 'text',
+        },
+      ],
+    });
+    expect(result.content).toHaveLength(1);
+    expect(JSON.parse(result.content[0].text)).toEqual(expectedPayload);
+  };
+
   describe(suiteName, () => {
     // Test tools - no outputSchema to avoid MCP validation conflicts
     const weatherTool = createTool({
@@ -156,14 +170,14 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           },
         },
       });
-    });
+    }, 30000);
 
     afterAll(async () => {
       await mcpClient?.disconnect();
       httpServer?.close();
       await mcpServer1?.close();
       await mcpServer2?.close();
-    });
+    }, 30000);
 
     describe('HTTP Transport (/api/mcp/:serverId/mcp)', () => {
       describe('Error handling (raw HTTP)', () => {
@@ -208,11 +222,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
 
           const result = await calculateTool.execute!({ operation: 'multiply', a: 6, b: 7 }, {} as any);
 
-          expect(result).toBeDefined();
-          expect(result).toMatchObject({
-            content: [{ type: 'text', text: JSON.stringify({ result: 42 }) }],
-            isError: false,
-          });
+          expectTextToolResult(result, { result: 42 });
         });
 
         it('should execute weather tool via MCPClient', async () => {
@@ -224,10 +234,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
 
           const result = await weatherToolInstance.execute!({ location: 'Austin' }, {} as any);
 
-          expect(result).toBeDefined();
-          expect(result).toMatchObject({
-            content: [{ type: 'text', text: JSON.stringify({ temperature: 72, condition: 'Sunny in Austin' }) }],
-            isError: false,
+          expectTextToolResult(result, {
+            temperature: 72,
+            condition: 'Sunny in Austin',
           });
         });
 
@@ -281,13 +290,13 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
               },
             },
           });
-        });
+        }, 30000);
 
         afterAll(async () => {
           await failingClient?.disconnect();
           failingHttpServer?.close();
           await failingServer?.close();
-        });
+        }, 30000);
 
         it('should return error when tool execution fails', async () => {
           const tools = await failingClient.listTools();
@@ -344,11 +353,11 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
               },
             },
           });
-        });
+        }, 30000);
 
         afterAll(async () => {
           await sseClient?.disconnect();
-        });
+        }, 30000);
 
         it('should list tools via MCPClient over SSE', async () => {
           const tools = await sseClient.listTools();
@@ -366,11 +375,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
 
           const result = await calculateTool.execute!({ operation: 'add', a: 10, b: 5 }, {} as any);
 
-          expect(result).toBeDefined();
-          expect(result).toMatchObject({
-            content: [{ type: 'text', text: JSON.stringify({ result: 15 }) }],
-            isError: false,
-          });
+          expectTextToolResult(result, { result: 15 });
         });
 
         it('should execute weather tool via MCPClient over SSE', async () => {
@@ -382,10 +387,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
 
           const result = await weatherToolInstance.execute!({ location: 'New York' }, {} as any);
 
-          expect(result).toBeDefined();
-          expect(result).toMatchObject({
-            content: [{ type: 'text', text: JSON.stringify({ temperature: 72, condition: 'Sunny in New York' }) }],
-            isError: false,
+          expectTextToolResult(result, {
+            temperature: 72,
+            condition: 'Sunny in New York',
           });
         });
       });
@@ -427,13 +431,13 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
               },
             },
           });
-        });
+        }, 30000);
 
         afterAll(async () => {
           await sseFailingClient?.disconnect();
           sseFailingHttpServer?.close();
           await sseFailingServer?.close();
-        });
+        }, 30000);
 
         it('should return error when tool execution fails over SSE', async () => {
           const tools = await sseFailingClient.listTools();

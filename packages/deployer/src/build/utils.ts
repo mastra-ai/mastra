@@ -271,8 +271,8 @@ export interface StudioInjectionConfig {
   templates: string;
   telemetryDisabled: string;
   requestContextPresets: string;
-  themeToggle: string;
   experimentalUI: string;
+  agentSignals: string;
   autoDetectUrl?: string;
 }
 
@@ -296,8 +296,8 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   html = html.replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
   html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
   html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
-  html = html.replace(`'%%MASTRA_THEME_TOGGLE%%'`, config.themeToggle);
   html = html.replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
+  html = html.replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
   if (config.autoDetectUrl) {
     html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }

@@ -68,6 +68,14 @@ const processor = new TokenLimiterProcessor({
             isOptional: true,
             default: "'cumulative'",
           },
+          {
+            name: 'trimMode',
+            type: "'best-fit' | 'contiguous'",
+            description:
+              "Controls how messages are trimmed when exceeding the token limit: 'best-fit' keeps as many messages as possible (may create gaps), 'contiguous' stops at the first message that does not fit, ensuring a continuous suffix of conversation history",
+            isOptional: true,
+            default: "'best-fit'",
+          },
         ],
       },
     ],

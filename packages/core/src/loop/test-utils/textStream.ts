@@ -1,7 +1,6 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
-import { createMessageListWithUserMessage } from './utils';
+import { createMessageListWithUserMessage, expectPromptWithoutMastraCreatedAt } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
 import type { loop } from '../loop';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
@@ -11,7 +10,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should send text deltas', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         models: [
@@ -20,12 +19,10 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             maxRetries: 0,
             model: new MockLanguageModelV2({
               doStream: async ({ prompt }) => {
-                console.dir({ prompt }, { depth: null });
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
-                    content: [{ type: 'text', text: 'test-input' }],
-                    // providerOptions: undefined,
+                    content: [{ type: 'text', text: 'test-input', providerOptions: undefined }],
                   },
                 ]);
 
@@ -51,7 +48,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         agentId: 'agent-id',
       });
 
-      expect(await convertAsyncIterableToArray(result.textStream)).toStrictEqual(['Hello', ', ', 'world!']);
+      expect(await result.text).toStrictEqual('Hello, world!');
     });
   });
 }

@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -14,6 +15,7 @@ import {
   parseObserverOutput,
   parseMultiThreadObserverOutput,
 } from './observer-agent';
+import { withRetry } from './retry';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
 import type { ResolvedObservationConfig } from './types';
@@ -31,26 +33,53 @@ type ObservationModelResolver = (inputTokens: number) => {
  * Runs the Observer agent for extracting observations from messages.
  * Handles single-thread and multi-thread modes, degenerate detection, and retry logic.
  */
+export interface ObserverExchange {
+  systemPrompt: string;
+  observerMessages: Array<{ role: string; content: unknown }>;
+  rawOutput: string;
+  parsedResult: {
+    observations: string;
+    currentTask?: string;
+    suggestedContinuation?: string;
+    threadTitle?: string;
+    degenerate?: boolean;
+  };
+  model: string;
+  inputTokens: number;
+  isMultiThread: boolean;
+  retriedDueToDegenerate: boolean;
+}
+
 export class ObserverRunner {
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly observedMessageIds: Set<string>;
   private readonly resolveModel: ObservationModelResolver;
   private readonly tokenCounter: TokenCounter;
+  private mastra?: Mastra;
+
+  /** Captured prompt/response from the last observer call (for repro capture). */
+  lastExchange?: ObserverExchange;
 
   constructor(opts: {
     observationConfig: ResolvedObservationConfig;
     observedMessageIds: Set<string>;
     resolveModel: ObservationModelResolver;
     tokenCounter: TokenCounter;
+    mastra?: Mastra;
   }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
     this.resolveModel = opts.resolveModel;
     this.tokenCounter = opts.tokenCounter;
+    this.mastra = opts.mastra;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
   }
 
   private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
-    return new Agent({
+    const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
       instructions: buildObserverSystemPrompt(
@@ -60,6 +89,10 @@ export class ObserverRunner {
       ),
       model,
     });
+    if (this.mastra) {
+      agent.__registerMastra(this.mastra);
+    }
+    return agent;
   }
 
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
@@ -109,53 +142,83 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
         }),
       },
-      buildObserverHistoryMessage(messagesToObserve),
+      buildObserverHistoryMessage(messagesToObserve, {
+        attachmentFilter: this.observationConfig.observeAttachments,
+      }),
     ];
 
     const doGenerate = async () => {
-      return withOmTracingSpan({
-        phase: 'observer',
-        model: resolvedModel.model,
-        inputTokens,
-        requestContext: options?.requestContext,
-        observabilityContext: options?.observabilityContext,
-        metadata: {
-          omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
-          omThreadTitleEnabled: this.observationConfig.threadTitle,
-          omSkipContinuationHints: options?.skipContinuationHints ?? false,
-          omWasTruncated: options?.wasTruncated ?? false,
-          ...(resolvedModel.selectedThreshold !== undefined
-            ? { omSelectedThreshold: resolvedModel.selectedThreshold }
-            : {}),
-          ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
-          ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
-        },
-        callback: childObservabilityContext =>
-          this.withAbortCheck(async () => {
-            const streamResult = await agent.stream(observerMessages, {
-              modelSettings: { ...this.observationConfig.modelSettings },
-              providerOptions: this.observationConfig.providerOptions as any,
-              ...(abortSignal ? { abortSignal } : {}),
-              ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-              ...childObservabilityContext,
-            });
-            return streamResult.getFullOutput();
-          }, abortSignal),
-      });
+      return withRetry(
+        () =>
+          withOmTracingSpan({
+            phase: 'observer',
+            model: resolvedModel.model,
+            inputTokens,
+            requestContext: options?.requestContext,
+            observabilityContext: options?.observabilityContext,
+            metadata: {
+              omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
+              omThreadTitleEnabled: this.observationConfig.threadTitle,
+              omSkipContinuationHints: options?.skipContinuationHints ?? false,
+              omWasTruncated: options?.wasTruncated ?? false,
+              ...(resolvedModel.selectedThreshold !== undefined
+                ? { omSelectedThreshold: resolvedModel.selectedThreshold }
+                : {}),
+              ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
+              ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
+            },
+            callback: childObservabilityContext =>
+              this.withAbortCheck(async () => {
+                const streamResult = await agent.stream(observerMessages, {
+                  modelSettings: { ...this.observationConfig.modelSettings },
+                  providerOptions: this.observationConfig.providerOptions as any,
+                  ...(abortSignal ? { abortSignal } : {}),
+                  ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+                  ...childObservabilityContext,
+                });
+                return streamResult.getFullOutput();
+              }, abortSignal),
+          }),
+        { label: 'observer', abortSignal },
+      );
     };
 
     let result = await doGenerate();
     let parsed = parseObserverOutput(result.text);
+    let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
       parsed = parseObserverOutput(result.text);
+      retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
         throw new Error('Observer produced degenerate output after retry');
       }
     }
+
+    const systemPrompt = buildObserverSystemPrompt(
+      false,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
+    this.lastExchange = {
+      systemPrompt,
+      observerMessages,
+      rawOutput: result.text,
+      parsedResult: {
+        observations: parsed.observations,
+        currentTask: parsed.currentTask,
+        suggestedContinuation: parsed.suggestedContinuation,
+        threadTitle: parsed.threadTitle,
+        degenerate: parsed.degenerate,
+      },
+      model: String(resolvedModel.model),
+      inputTokens,
+      isMultiThread: false,
+      retriedDueToDegenerate,
+    };
 
     const usage = result.totalUsage ?? result.usage;
 
@@ -207,7 +270,9 @@ export class ObserverRunner {
           this.observationConfig.threadTitle,
         ),
       },
-      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
+      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
+        attachmentFilter: this.observationConfig.observeAttachments,
+      }),
     ];
 
     // Mark all messages as observed
@@ -218,48 +283,79 @@ export class ObserverRunner {
     }
 
     const doGenerate = async () => {
-      return withOmTracingSpan({
-        phase: 'observer-multi-thread',
-        model: resolvedModel.model,
-        inputTokens,
-        requestContext,
-        observabilityContext,
-        metadata: {
-          omThreadCount: threadOrder.length,
-          omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
-          omThreadTitleEnabled: this.observationConfig.threadTitle,
-          ...(resolvedModel.selectedThreshold !== undefined
-            ? { omSelectedThreshold: resolvedModel.selectedThreshold }
-            : {}),
-          ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
-          ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
-        },
-        callback: childObservabilityContext =>
-          this.withAbortCheck(async () => {
-            const streamResult = await agent.stream(observerMessages, {
-              modelSettings: { ...this.observationConfig.modelSettings },
-              providerOptions: this.observationConfig.providerOptions as any,
-              ...(abortSignal ? { abortSignal } : {}),
-              ...(requestContext ? { requestContext } : {}),
-              ...childObservabilityContext,
-            });
-            return streamResult.getFullOutput();
-          }, abortSignal),
-      });
+      return withRetry(
+        () =>
+          withOmTracingSpan({
+            phase: 'observer-multi-thread',
+            model: resolvedModel.model,
+            inputTokens,
+            requestContext,
+            observabilityContext,
+            metadata: {
+              omThreadCount: threadOrder.length,
+              omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
+              omThreadTitleEnabled: this.observationConfig.threadTitle,
+              ...(resolvedModel.selectedThreshold !== undefined
+                ? { omSelectedThreshold: resolvedModel.selectedThreshold }
+                : {}),
+              ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
+              ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
+            },
+            callback: childObservabilityContext =>
+              this.withAbortCheck(async () => {
+                const streamResult = await agent.stream(observerMessages, {
+                  modelSettings: { ...this.observationConfig.modelSettings },
+                  providerOptions: this.observationConfig.providerOptions as any,
+                  ...(abortSignal ? { abortSignal } : {}),
+                  ...(requestContext ? { requestContext } : {}),
+                  ...childObservabilityContext,
+                });
+                return streamResult.getFullOutput();
+              }, abortSignal),
+          }),
+        { label: 'observer-multi-thread', abortSignal },
+      );
     };
 
     let result = await doGenerate();
     let parsed = parseMultiThreadObserverOutput(result.text);
+    let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
       parsed = parseMultiThreadObserverOutput(result.text);
+      retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
         throw new Error('Multi-thread observer produced degenerate output after retry');
       }
     }
+
+    const systemPrompt = buildObserverSystemPrompt(
+      true,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
+    this.lastExchange = {
+      systemPrompt,
+      observerMessages,
+      rawOutput: result.text,
+      parsedResult: {
+        observations: Array.from(parsed.threads.values())
+          .map(t => t.observations)
+          .join('\n'),
+        threadTitle: Array.from(parsed.threads.values())
+          .map(t => t.threadTitle)
+          .filter(Boolean)
+          .join(', '),
+        degenerate: parsed.degenerate,
+      },
+      model: String(resolvedModel.model),
+      inputTokens,
+      isMultiThread: true,
+      retriedDueToDegenerate,
+    };
 
     const results = new Map<
       string,

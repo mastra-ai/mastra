@@ -4,8 +4,12 @@ import { z } from 'zod/v4';
 export enum EntityType {
   /** Agent/Model execution */
   AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
+  /** Scorer definition/execution */
+  SCORER = 'scorer',
+  /** RAG ingestion pipeline execution */
+  RAG_INGESTION = 'rag_ingestion',
+  /** Trajectory evaluation target */
+  TRAJECTORY = 'trajectory',
   /** Input Processor */
   INPUT_PROCESSOR = 'input_processor',
   /** Input Step Processor */
@@ -20,6 +24,8 @@ export enum EntityType {
   TOOL = 'tool',
   /** Workflow */
   WORKFLOW_RUN = 'workflow_run',
+  /** Memory */
+  MEMORY = 'memory',
 }
 
 /**
@@ -61,6 +67,111 @@ export const paginationInfoSchema = z.object({
   hasMore: z.boolean().describe('True if more pages are available'),
 });
 
+/** Opaque cursor used to resume incremental polling for observability list endpoints. */
+export const deltaCursorSchema = z.string().min(1).describe('Opaque cursor value for incremental polling');
+
+/** Public delta cursor type used across observability list endpoints. */
+export type DeltaCursor = z.output<typeof deltaCursorSchema>;
+
+/** Explicit list mode selector for observability list endpoints. */
+export const listModeSchema = z
+  .enum(['page', 'delta'])
+  .describe("List mode: 'page' | 'delta', defaults to 'page' when omitted.");
+
+/** Max number of updates returned from a delta poll window. */
+export const deltaLimitSchema = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(100)
+  .optional()
+  .describe('Maximum number of updates to return in one delta poll');
+
+/** Default page-mode pagination used to preserve legacy list arg behavior. */
+export const defaultPaginationArgs = {
+  page: 0,
+  perPage: 10,
+} as const satisfies z.output<typeof paginationArgsSchema>;
+
+/** Default number of updates returned when delta mode does not specify a limit. */
+export const defaultDeltaLimit = 10;
+
+type ObservabilityListModeValue<TFilters, TOrderBy> = {
+  mode?: z.output<typeof listModeSchema>;
+  filters?: TFilters;
+  pagination?: { page: number; perPage: number };
+  orderBy?: TOrderBy;
+  after?: DeltaCursor;
+  limit?: number;
+};
+
+type ObservabilityListDefaults<TOrderBy> = {
+  orderBy: TOrderBy;
+  pagination?: { page: number; perPage: number };
+  limit?: number;
+};
+
+type NormalizedObservabilityListArgs<TFilters, TOrderBy> = {
+  mode: 'page' | 'delta';
+  filters: TFilters | undefined;
+  pagination: { page: number; perPage: number };
+  orderBy: TOrderBy;
+  after: DeltaCursor | undefined;
+  limit: number;
+};
+
+/**
+ * Enforces the shared page-vs-delta parameter rules for observability list endpoints.
+ * Keeps validation centralized while allowing endpoints to keep their own filters and orderBy schemas.
+ */
+export function refineObservabilityListMode<TFilters, TOrderBy>(
+  value: ObservabilityListModeValue<TFilters, TOrderBy>,
+  ctx: z.core.$RefinementCtx,
+) {
+  if (value.mode === 'delta') {
+    if (value.pagination !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['pagination'], message: 'pagination is not allowed in delta mode' });
+    }
+    if (value.orderBy !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['orderBy'], message: 'orderBy is not allowed in delta mode' });
+    }
+    return;
+  }
+
+  if (value.after !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['after'], message: 'after is only allowed in delta mode' });
+  }
+  if (value.limit !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['limit'], message: 'limit is only allowed in delta mode' });
+  }
+}
+
+/**
+ * Normalizes observability list args into the legacy-friendly shape expected by existing stores.
+ * Page mode remains the default, and pagination/orderBy/limit are always populated.
+ */
+export function normalizeObservabilityListArgs<TFilters, TOrderBy>(
+  value: ObservabilityListModeValue<TFilters, TOrderBy>,
+  defaults: ObservabilityListDefaults<TOrderBy>,
+): NormalizedObservabilityListArgs<TFilters, TOrderBy> {
+  return {
+    mode: value.mode === 'delta' ? 'delta' : 'page',
+    filters: value.filters,
+    pagination: value.pagination ?? defaults.pagination ?? defaultPaginationArgs,
+    orderBy: value.orderBy ?? defaults.orderBy,
+    after: value.after,
+    limit: value.limit ?? defaults.limit ?? defaultDeltaLimit,
+  };
+}
+
+/** Metadata returned for a delta poll window. */
+export const deltaInfoSchema = z
+  .object({
+    limit: z.number().describe('Maximum number of updates requested for this delta poll'),
+    hasMore: z.boolean().describe('True when more matching updates remain after this response'),
+  })
+  .describe('Incremental polling metadata');
+
 /**
  * Date range for filtering by time
  * Uses z.coerce to handle ISO string → Date conversion from query params
@@ -84,6 +195,52 @@ export const dateRangeSchema = z
 export type DateRange = z.input<typeof dateRangeSchema>;
 
 export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direction: 'ASC' | 'DESC'");
+
+/** Aggregation type schema shared across OLAP-style observability queries. */
+export const aggregationTypeSchema = z
+  .enum(['sum', 'avg', 'min', 'max', 'count', 'count_distinct', 'last'])
+  .describe('Aggregation function');
+export type AggregationType = z.infer<typeof aggregationTypeSchema>;
+
+/** Aggregation interval schema shared across OLAP-style observability queries. */
+export const aggregationIntervalSchema = z.enum(['1m', '5m', '15m', '1h', '1d']).describe('Time bucket interval');
+export type AggregationInterval = z.infer<typeof aggregationIntervalSchema>;
+
+/** Compare period for aggregate queries with period-over-period comparison. */
+export const comparePeriodSchema = z
+  .enum(['previous_period', 'previous_day', 'previous_week'])
+  .describe('Comparison period for aggregate queries');
+export type ComparePeriod = z.infer<typeof comparePeriodSchema>;
+
+/** Shared groupBy schema for OLAP-style breakdown and time-series queries. */
+export const groupBySchema = z.array(z.string()).min(1).describe('Fields to group by');
+export type GroupBy = z.infer<typeof groupBySchema>;
+
+/** Shared percentiles schema for percentile queries. */
+export const percentilesSchema = z.array(z.number().min(0).max(1)).min(1).describe('Percentile values (0-1)');
+export type Percentiles = z.infer<typeof percentilesSchema>;
+
+/** Shared fields for aggregate OLAP responses across observability signals. */
+export const aggregateResponseFields = {
+  value: z.number().nullable().describe('Aggregated value'),
+  previousValue: z.number().nullable().optional().describe('Value from comparison period'),
+  changePercent: z.number().nullable().optional().describe('Percentage change from comparison period'),
+} as const;
+
+/** Shared field for OLAP breakdown dimension values. */
+export const dimensionsField = z.record(z.string(), z.string().nullable()).describe('Dimension values for this group');
+
+/** Shared field for non-null OLAP aggregated values. */
+export const aggregatedValueField = z.number().describe('Aggregated value');
+
+/** Shared field for OLAP bucket timestamps. */
+export const bucketTimestampField = z.date().describe('Bucket timestamp');
+
+/** Shared field for percentile identifiers in OLAP responses. */
+export const percentileField = z.number().describe('Percentile value');
+
+/** Shared field for percentile values within a time bucket. */
+export const percentileBucketValueField = z.number().describe('Percentile value at this bucket');
 
 export const entityTypeField = z
   .nativeEnum(EntityType)
@@ -110,6 +267,7 @@ export const requestIdField = z.string().describe('HTTP request ID for log corre
 export const environmentField = z.string().describe(`Environment (e.g., "production" | "staging" | "development")`);
 
 export const sourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
+export const executionSourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
 
 export const serviceNameField = z.string().describe('Name of the service');
 
@@ -122,6 +280,15 @@ export const parentEntityNameField = z.string().describe('Name of the parent ent
 export const rootEntityTypeField = z.nativeEnum(EntityType).describe('Entity type of the root entity');
 export const rootEntityIdField = z.string().describe('ID of the root entity');
 export const rootEntityNameField = z.string().describe('Name of the root entity');
+
+// Entity versioning
+export const entityVersionIdField = z
+  .string()
+  .describe('Version ID of the entity that produced this signal (e.g., agent version, workflow version)');
+export const parentEntityVersionIdField = z
+  .string()
+  .describe('Version ID of the parent entity that produced this signal');
+export const rootEntityVersionIdField = z.string().describe('Version ID of the root entity that produced this signal');
 
 // Experimentation
 export const experimentIdField = z.string().describe('Experiment or eval run identifier');
@@ -139,10 +306,11 @@ export const metadataField = z.record(z.string(), z.unknown()).describe('User-de
 export const tagsField = z.array(z.string()).describe('Labels for filtering');
 
 /**
- * Context fields shared across observability signals (metrics, logs).
- * All fields are nullish — each signal uses them as optional context.
+ * Base context fields shared across tracing and non-tracing observability records.
+ * Source/provenance is intentionally excluded because tracing uses `source`
+ * while signals use `executionSource`.
  */
-export const contextFields = {
+const contextFieldsBase = {
   // Entity identification
   entityType: entityTypeField.nullish(),
   entityId: entityIdField.nullish(),
@@ -171,12 +339,35 @@ export const contextFields = {
 
   // Deployment context
   environment: environmentField.nullish(),
-  source: sourceField.nullish(),
   serviceName: serviceNameField.nullish(),
   scope: scopeField.nullish(),
 
+  // Entity versioning
+  entityVersionId: entityVersionIdField.nullish(),
+  parentEntityVersionId: parentEntityVersionIdField.nullish(),
+  rootEntityVersionId: rootEntityVersionIdField.nullish(),
+
   // Experimentation
   experimentId: experimentIdField.nullish(),
+} as const;
+
+/**
+ * Context fields shared across observability signals other than spans (metrics, logs, scores, feedback).
+ * These use `executionSource` to avoid colliding with signal-specific provenance fields.
+ */
+export const contextFields = {
+  ...contextFieldsBase,
+  executionSource: executionSourceField.nullish(),
+  tags: tagsField.nullish(),
+} as const;
+
+/**
+ * Context fields used by tracing/span records.
+ * Tracing continues to expose execution provenance as `source`.
+ */
+export const spanContextFields = {
+  ...contextFieldsBase,
+  source: sourceField.nullish(),
 } as const;
 
 /**
@@ -189,18 +380,14 @@ export const commonFilterFields = {
   spanId: z.string().optional().describe('Filter by span ID'),
   entityType: entityTypeField.optional(),
   entityName: entityNameField.optional(),
+  entityVersionId: entityVersionIdField.optional(),
+  parentEntityVersionId: parentEntityVersionIdField.optional(),
+  rootEntityVersionId: rootEntityVersionIdField.optional(),
   userId: userIdField.optional(),
   organizationId: organizationIdField.optional(),
   experimentId: experimentIdField.optional(),
   serviceName: serviceNameField.optional(),
   environment: environmentField.optional(),
-} as const;
-
-/**
- * Additional filters shared by observability signals that carry correlation context.
- * Logs and metrics should generally expose this same context filter surface.
- */
-export const observabilitySignalFilterFields = {
   parentEntityType: parentEntityTypeField.optional(),
   parentEntityName: parentEntityNameField.optional(),
   rootEntityType: rootEntityTypeField.optional(),
@@ -210,7 +397,7 @@ export const observabilitySignalFilterFields = {
   sessionId: sessionIdField.optional(),
   threadId: threadIdField.optional(),
   requestId: requestIdField.optional(),
-  source: sourceField.optional(),
+  executionSource: executionSourceField.optional(),
   tags: z.array(z.string()).optional().describe('Filter by tags (must have all specified tags)'),
 } as const;
 

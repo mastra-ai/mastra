@@ -36,6 +36,7 @@ export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,
   ObserveHooks,
+  ObserveHookUsage,
   ObservationConfig,
   ReflectionConfig,
   ObserverResult,

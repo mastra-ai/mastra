@@ -268,7 +268,7 @@ For more information about authentication providers, see the [Auth documentation
 
 ## Continue generation after client disconnect
 
-Built-in streaming helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) forward the incoming request's `AbortSignal` to `agent.stream()`. That is the right default when a browser disconnect should cancel the model call.
+Built-in streaming helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) forward the incoming request's `AbortSignal` to `agent.stream()`. That's the right default when a browser disconnect should cancel the model call.
 
 If you want the server to keep generating and persist the final response even after the client disconnects, build a custom route around the underlying `MastraModelOutput`. Start the agent stream without forwarding `c.req.raw.signal`, then call `consumeStream()` in the background so generation continues server-side.
 
@@ -328,6 +328,6 @@ Use this pattern only when you intentionally want work to continue after the HTT
 
 ## Related
 
-- [registerApiRoute() Reference](/reference/server/register-api-route) - Full API reference
-- [Server Middleware](/docs/server/middleware) - Global middleware configuration
-- [Mastra Server](/docs/server/mastra-server) - Server configuration options
+- [registerApiRoute() Reference](/reference/server/register-api-route): Full API reference
+- [Server Middleware](/docs/server/middleware): Global middleware configuration
+- [Mastra Server](/docs/server/mastra-server): Server configuration options

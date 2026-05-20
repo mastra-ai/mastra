@@ -8,6 +8,35 @@
 const HTTP_NO_RETRY_STATUSES = [400, 401, 403, 404];
 
 /**
+ * Check if error is a 401 Unauthorized response.
+ * Indicates the user's session has expired or token is invalid.
+ * Handles both direct status property and client-js error message format.
+ */
+export function is401UnauthorizedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  // Check for status property (direct response or wrapped)
+  if ('status' in error && (error as { status: number }).status === 401) {
+    return true;
+  }
+
+  // Check for statusCode property (some HTTP clients)
+  if ('statusCode' in error && (error as { statusCode: number }).statusCode === 401) {
+    return true;
+  }
+
+  // Check error message for client-js pattern: "HTTP error! status: 401"
+  if ('message' in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return /\bstatus:\s*401\b/.test(message);
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if error is a 403 Forbidden response.
  * Handles both direct status property and client-js error message format.
  */
@@ -26,11 +55,27 @@ export function is403ForbiddenError(error: unknown): boolean {
 
   // Check error message for client-js pattern: "HTTP error! status: 403"
   if ('message' in error) {
-    const message = (error as { message: string }).message;
-    return message.includes('status: 403');
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return /\bstatus:\s*403\b/.test(message);
+    }
   }
 
   return false;
+}
+
+/**
+ * Check if an error came from a storage provider that does not implement `listBranches`.
+ *
+ * The server's `handleError` strips the original MastraError's `code`/`id` before serializing,
+ * so we can't match on the ID `OBSERVABILITY_STORAGE_LIST_BRANCHES_NOT_IMPLEMENTED` directly —
+ * we match on the message text from `core/.../observability/base.ts` instead.
+ */
+export function isBranchesNotSupportedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('message' in error)) return false;
+  const message = (error as { message: unknown }).message;
+  if (typeof message !== 'string') return false;
+  return message.includes('does not support listing trace branches');
 }
 
 /**
@@ -54,8 +99,10 @@ export function isNonRetryableError(error: unknown): boolean {
 
   // Check error message for client-js pattern
   if ('message' in error) {
-    const message = (error as { message: string }).message;
-    return HTTP_NO_RETRY_STATUSES.some(code => message.includes(`status: ${code}`));
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return HTTP_NO_RETRY_STATUSES.some(code => new RegExp(`\\bstatus:\\s*${code}\\b`).test(message));
+    }
   }
 
   return false;

@@ -1,0 +1,142 @@
+---
+title: "Browser overview"
+description: "Give agents browser control through SDK providers, CLI tools, or cloud browser services."
+packages:
+  - "@mastra/core"
+  - "@mastra/agent-browser"
+  - "@mastra/stagehand"
+  - "@mastra/browser-viewer"
+---
+
+# Browser overview
+
+Browser support enables agents to navigate websites, interact with page elements, fill forms, and extract data. Mastra provides browser capabilities through SDK providers that wrap browser automation libraries and a CLI provider for agents that drive browsers through command-line tools.
+
+Mastra supports two SDK providers and one CLI provider:
+
+- [**AgentBrowser**](/docs/browser/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
+- [**Stagehand**](/docs/browser/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
+- [**BrowserViewer**](/docs/browser/browser-viewer): A CLI provider that launches Chrome and injects CDP URLs into CLI tools like agent-browser, browser-use, and browse. Best for workspace agents that drive browsers through shell commands.
+
+## When to use browser
+
+Use browser when your agent needs to:
+
+- Navigate websites and interact with page elements
+- Fill out forms and submit data
+- Extract structured data from web pages
+- Automate multi-step web workflows
+- Take actions that require a real browser (JavaScript rendering, authentication flows)
+
+## How it works
+
+When you assign a browser to an agent, Mastra includes the provider's tools in the agent's toolset. The agent uses these tools to control the browser: navigating to URLs, selecting elements, typing text, and reading page content.
+
+Each provider offers a different set of tools optimized for its approach.
+
+## Quickstart
+
+Install your provider of choice, for this example you'll use the AgentBrowser provider.
+
+```bash npm2yarn
+npm install @mastra/agent-browser
+```
+
+Create a new browser instance:
+
+```typescript title="src/mastra/browsers.ts"
+import { AgentBrowser } from '@mastra/agent-browser'
+
+export const browser = new AgentBrowser({
+  headless: false,
+})
+```
+
+Assign the browser to an agent:
+
+```typescript title="src/mastra/agents/web-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { browser } from '../browsers'
+
+export const webAgent = new Agent({
+  id: 'web-agent',
+  name: 'Web Agent',
+  description: 'A web automation assistant that can navigate websites and complete tasks.',
+  model: 'openai/gpt-5.4',
+  browser,
+  instructions:
+    'You are a web automation assistant. Use browser tools to navigate websites and complete tasks.',
+})
+```
+
+The agent automatically receives all browser tools from the provider.
+
+## Cloud providers
+
+Both SDK providers support connecting to cloud browser services instead of launching a local browser.
+
+### Browserbase (Stagehand native)
+
+Stagehand has native Browserbase integration:
+
+```typescript
+import { StagehandBrowser } from '@mastra/stagehand'
+
+const browser = new StagehandBrowser({
+  env: 'BROWSERBASE',
+  apiKey: process.env.BROWSERBASE_API_KEY,
+  projectId: process.env.BROWSERBASE_PROJECT_ID,
+})
+```
+
+### CDP URL (any provider)
+
+Connect to any browser exposing a Chrome DevTools Protocol (CDP) endpoint:
+
+```typescript
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  cdpUrl: process.env.BROWSER_CDP_URL,
+  headless: true,
+})
+```
+
+This works with any [CDP-compatible](https://chromedevtools.github.io/devtools-protocol/) browser service.
+
+## Screencast
+
+Browser providers stream a live video feed of the browser to the Mastra Studio UI. This lets you watch the agent interact with pages in real-time.
+
+Screencast requires WebSocket support. Install these packages in your project:
+
+```bash npm2yarn
+npm install ws @hono/node-ws
+```
+
+:::note
+
+These packages are not included by default because they are incompatible with serverless environments like Cloudflare Workers. If they are not installed, screencast is disabled but all other browser functionality works normally.
+
+:::
+
+Screencast is enabled by default and can be configured:
+
+```typescript
+const browser = new AgentBrowser({
+  screencast: {
+    enabled: true,
+    format: 'jpeg',
+    quality: 80,
+    maxWidth: 1280,
+    maxHeight: 720,
+  },
+})
+```
+
+## Next steps
+
+- [AgentBrowser](/docs/browser/agent-browser)
+- [Stagehand](/docs/browser/stagehand)
+- [BrowserViewer](/docs/browser/browser-viewer)
+- [MastraBrowser reference](/reference/browser/mastra-browser)

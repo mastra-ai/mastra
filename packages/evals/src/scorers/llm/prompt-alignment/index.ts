@@ -1,4 +1,3 @@
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
@@ -8,6 +7,7 @@ import {
   getCombinedSystemPrompt,
   roundToTwoDecimals,
 } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { PROMPT_ALIGNMENT_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface PromptAlignmentOptions {
@@ -80,7 +80,7 @@ export function createPromptAlignmentScorerLLM({
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'prompt-alignment-scorer',
     name: 'Prompt Alignment (LLM)',
     description: 'Evaluates how well the agent response aligns with the intent and requirements of the user prompt',
@@ -104,8 +104,8 @@ export function createPromptAlignmentScorerLLM({
         if (evaluationMode === 'system' && !systemPrompt) {
           throw new Error('System prompt is required for system prompt alignment scoring');
         }
-        if (evaluationMode === 'both' && (!userPrompt || !systemPrompt)) {
-          throw new Error('Both user and system prompts are required for combined alignment scoring');
+        if (evaluationMode === 'both' && !userPrompt && !systemPrompt) {
+          throw new Error('A user or system prompt is required for combined alignment scoring');
         }
         if (!agentResponse) {
           throw new Error('Agent response is required for prompt alignment scoring');

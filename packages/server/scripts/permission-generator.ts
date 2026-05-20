@@ -21,30 +21,58 @@ export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/ee/interfac
 
 /** Descriptions for actions (used for TSDoc comments in autocomplete) */
 const ACTION_DESCRIPTIONS: Record<string, string> = {
+  create: 'Create',
   delete: 'Delete',
   execute: 'Execute',
+  publish: 'Publish, activate, or restore',
   read: 'View',
+  share: 'Change visibility/audience',
   write: 'Create and modify',
 };
+
+/**
+ * Permission actions that are valid for role definitions even when no current
+ * server route derives them directly.
+ */
+const ADDITIONAL_ACTIONS = ['share'];
 
 /** Descriptions for resources (used for TSDoc comments in autocomplete) */
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   a2a: 'agent-to-agent communication',
   'agent-builder': 'agent builder',
   agents: 'agents',
+  'background-tasks': 'background tasks',
   logs: 'logs',
   mcp: 'MCP servers',
   memory: 'memory and threads',
   observability: 'traces and spans',
   processors: 'processors',
   scores: 'evaluation scores',
+  stored: 'all stored resource families',
   'stored-agents': 'stored agents',
+  'stored-mcp-clients': 'stored MCP clients',
+  'stored-prompt-blocks': 'stored prompt blocks',
+  'stored-scorers': 'stored scorers',
+  'stored-skills': 'stored skills',
+  'stored-workspaces': 'stored workspaces',
   system: 'system info',
   tools: 'tools',
   vector: 'vector stores',
   workflows: 'workflows',
   workspaces: 'workspaces',
 };
+
+/**
+ * Compound permission patterns supported by the RBAC matcher.
+ */
+const ADDITIONAL_PERMISSION_PATTERNS = [
+  'stored:*',
+  'stored:read',
+  'stored:write',
+  'stored:delete',
+  'stored-agents:share',
+  'stored-skills:share',
+];
 
 /**
  * Generates a human-readable description for a permission pattern.
@@ -72,6 +100,10 @@ function getPermissionDescription(pattern: string): string {
   return `${actionDesc} ${resourceDesc}`;
 }
 
+function getPermissionConstantName(permission: string): string {
+  return permission.replace(/[:-]/g, '_').toUpperCase();
+}
+
 export interface PermissionData {
   resources: string[];
   actions: string[];
@@ -90,17 +122,20 @@ export function derivePermissionData(): PermissionData {
   for (const route of SERVER_ROUTES) {
     const permission = getEffectivePermission(route);
     if (permission) {
-      const [resource, action] = permission.split(':');
-      if (resource && action) {
-        resourceSet.add(resource);
-        actionSet.add(action);
-        permissionSet.add(permission);
+      const perms = Array.isArray(permission) ? permission : [permission];
+      for (const perm of perms) {
+        const [resource, action] = perm.split(':');
+        if (resource && action) {
+          resourceSet.add(resource);
+          actionSet.add(action);
+          permissionSet.add(perm);
+        }
       }
     }
   }
 
   const resources = [...resourceSet].sort();
-  const actions = [...actionSet].sort();
+  const actions = [...new Set([...actionSet, ...ADDITIONAL_ACTIONS])].sort();
   const permissions = [...permissionSet].sort();
 
   return { resources, actions, permissions };
@@ -118,6 +153,7 @@ export function generatePermissionFileContent(data: PermissionData): string {
     ...actions.map(a => `*:${a}`), // Action wildcards
     ...resources.map(r => `${r}:*`), // Resource wildcards
     ...permissions, // Specific permissions
+    ...ADDITIONAL_PERMISSION_PATTERNS, // Compound aliases
   ];
 
   // Generate the PERMISSION_PATTERNS object entries with TSDoc comments
@@ -125,6 +161,14 @@ export function generatePermissionFileContent(data: PermissionData): string {
     .map(pattern => {
       const desc = getPermissionDescription(pattern);
       return `  /** ${desc} */\n  '${pattern}': '${pattern}'`;
+    })
+    .join(',\n');
+
+  const fgaPermissionEntries = permissions
+    .map(permission => {
+      const name = getPermissionConstantName(permission);
+      const desc = getPermissionDescription(permission);
+      return `  /** ${desc} */\n  ${name}: '${permission}'`;
     })
     .join(',\n');
 
@@ -195,6 +239,27 @@ ${permissions.map(p => `  '${p}',`).join('\n')}
  * Specific permission type (e.g., 'agents:read', 'workflows:execute').
  */
 export type Permission = (typeof PERMISSIONS)[number];
+
+/**
+ * Type-safe constants for Mastra-owned FGA permissions.
+ *
+ * These values are generated from server routes and can be used wherever
+ * Mastra checks or maps FGA permissions.
+ */
+export const MastraFGAPermissions = {
+${fgaPermissionEntries},
+} as const satisfies Record<string, Permission>;
+
+/**
+ * Mastra-owned FGA permission values.
+ */
+export type MastraFGAPermission = (typeof MastraFGAPermissions)[keyof typeof MastraFGAPermissions];
+
+/**
+ * FGA permission input accepted by public config and provider APIs.
+ * Keeps autocomplete for Mastra-owned permissions while allowing custom provider strings.
+ */
+export type MastraFGAPermissionInput = MastraFGAPermission | (string & {});
 
 /**
  * Type-safe role mapping configuration.

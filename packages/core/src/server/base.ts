@@ -27,7 +27,6 @@ export abstract class MastraServerBase<TApp = unknown> extends MastraBase {
   constructor({ app, name }: { app: TApp; name?: string }) {
     super({ component: RegisteredLogger.SERVER, name: name ?? 'Server' });
     this.#app = app;
-    this.logger.debug(`Server app set`);
   }
 
   /**

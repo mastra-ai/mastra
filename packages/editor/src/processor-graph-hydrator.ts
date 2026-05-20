@@ -166,13 +166,13 @@ function buildWorkflow(
           const subWorkflow = buildWorkflow(branchEntries, `${workflowId}-parallel-branch-${branchIdx}`, ctx);
           return subWorkflow;
         })
-        .filter(Boolean);
+        .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
       if (branchSteps.length > 0) {
-        workflow = workflow.parallel(branchSteps);
+        workflow = workflow.parallel(branchSteps as any);
         // After parallel, outputs are keyed by step ID: { [stepId]: ProcessorStepOutput }
         // Map back to a flat ProcessorStepOutput for downstream steps / processor runner
-        workflow = workflow.map(mergeBranchOutputs);
+        workflow = workflow.map(mergeBranchOutputs as any);
         hasSteps = true;
       }
     } else if (entry.type === 'conditional') {

@@ -1,0 +1,35 @@
+Memory is already enabled on the Theme Park agent. In this lesson, you'll look under the hood at what that actually means: why the model is still stateless between calls, and what Mastra is doing to make follow-ups work.
+
+You'll trace a real follow-up prompt in Studio to see exactly what context the agent received, and look at `lastMessages`: the setting that controls how much recent conversation history gets included per call. Mastra persists messages to storage, then re-includes them on later turns so the model has what it needs.
+
+This matters because memory is not magic. What you're really doing is context engineering: deciding what the model gets to see for each call. Understanding that makes it much easier to reason about agent behavior and debug it when something feels off.
+
+> "The model is still stateless. Mastra stores context, then includes it again in later calls."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Memory overview](/docs/memory/overview)
+- [Memory storage](/docs/memory/storage)
+- [Message history](/docs/memory/message-history)
+- [Observability](/docs/studio/observability)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates

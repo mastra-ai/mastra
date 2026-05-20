@@ -35,6 +35,7 @@ export class CompositeVersionedSkillSource implements SkillSource {
   readonly #sources: Map<string, VersionedSkillSource> = new Map();
   readonly #fallback?: SkillSource;
   readonly #fallbackSkills: Set<string>;
+  readonly #maxVersionCreatedAt: Date;
 
   constructor(
     entries: VersionedSkillEntry[],
@@ -46,22 +47,47 @@ export class CompositeVersionedSkillSource implements SkillSource {
       fallbackSkills?: string[];
     },
   ) {
+    let maxTime = 0;
     for (const entry of entries) {
       this.#sources.set(entry.dirName, new VersionedSkillSource(entry.tree, blobStore, entry.versionCreatedAt));
+      const t = entry.versionCreatedAt.getTime();
+      if (t > maxTime) maxTime = t;
     }
+    this.#maxVersionCreatedAt = maxTime > 0 ? new Date(maxTime) : new Date(0);
     this.#fallback = options?.fallback;
     this.#fallbackSkills = new Set(options?.fallbackSkills ?? []);
   }
 
   #normalizePath(path: string): string {
-    return path.replace(/^[./\\]+|[/\\]+$/g, '');
+    // Strip any leading '.', '/', '\' and any trailing '/', '\' without
+    // using a regex to avoid polynomial backtracking on attacker-crafted
+    // paths like many leading slashes or dots.
+    let start = 0;
+    while (start < path.length) {
+      const c = path.charCodeAt(start);
+      if (c === 46 /* '.' */ || c === 47 /* '/' */ || c === 92 /* '\' */) {
+        start++;
+      } else {
+        break;
+      }
+    }
+    let end = path.length;
+    while (end > start) {
+      const c = path.charCodeAt(end - 1);
+      if (c === 47 /* '/' */ || c === 92 /* '\' */) {
+        end--;
+      } else {
+        break;
+      }
+    }
+    return start === 0 && end === path.length ? path : path.slice(start, end);
   }
 
   /**
    * Route a path to the correct source.
    * Returns the source and the remaining path within that source.
    */
-  #routePath(path: string): { source: SkillSource; subPath: string } | null {
+  #routePath(path: string): { source: SkillSource; subPath: string; mountDir: string } | null {
     const normalized = this.#normalizePath(path);
 
     // Root: handled by this source directly
@@ -73,18 +99,18 @@ export class CompositeVersionedSkillSource implements SkillSource {
 
     // Check if this skill should use the fallback source
     if (this.#fallbackSkills.has(skillDir) && this.#fallback) {
-      return { source: this.#fallback, subPath: normalized };
+      return { source: this.#fallback, subPath: normalized, mountDir: '' };
     }
 
     // Check if this skill has a versioned source
     const versionedSource = this.#sources.get(skillDir);
     if (versionedSource) {
-      return { source: versionedSource, subPath };
+      return { source: versionedSource, subPath, mountDir: skillDir };
     }
 
     // Try the fallback for unknown paths
     if (this.#fallback) {
-      return { source: this.#fallback, subPath: normalized };
+      return { source: this.#fallback, subPath: normalized, mountDir: '' };
     }
 
     return null;
@@ -111,8 +137,8 @@ export class CompositeVersionedSkillSource implements SkillSource {
         name: '.',
         type: 'directory',
         size: 0,
-        createdAt: new Date(),
-        modifiedAt: new Date(),
+        createdAt: this.#maxVersionCreatedAt,
+        modifiedAt: this.#maxVersionCreatedAt,
       };
     }
 
@@ -163,5 +189,18 @@ export class CompositeVersionedSkillSource implements SkillSource {
     }
 
     return route.source.readdir(route.subPath);
+  }
+
+  async realpath(path: string): Promise<string> {
+    const normalized = this.#normalizePath(path);
+    if (normalized === '') return '';
+
+    const route = this.#routePath(path);
+    if (!route) {
+      throw new Error(`Path not found in composite skill source: ${path}`);
+    }
+
+    const realSubPath = route.source.realpath ? await route.source.realpath(route.subPath) : route.subPath;
+    return [route.mountDir, realSubPath].filter(Boolean).join('/');
   }
 }

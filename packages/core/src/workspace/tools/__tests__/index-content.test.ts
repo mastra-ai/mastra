@@ -24,7 +24,7 @@ describe('workspace_index', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.SEARCH.INDEX].execute(
       {
