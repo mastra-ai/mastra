@@ -68,10 +68,13 @@ export default function Metrics() {
   // derive their window from the preset alone.
   const customRange = useMemo<DateRange | undefined>(() => {
     if (preset !== 'custom') return undefined;
-    const fromRaw = searchParams.get(DATE_FROM_PARAM);
-    const toRaw = searchParams.get(DATE_TO_PARAM);
-    const from = fromRaw ? new Date(fromRaw) : undefined;
-    const to = toRaw ? new Date(toRaw) : undefined;
+    const parseBound = (raw: string | null) => {
+      if (!raw) return undefined;
+      const date = new Date(raw);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    };
+    const from = parseBound(searchParams.get(DATE_FROM_PARAM));
+    const to = parseBound(searchParams.get(DATE_TO_PARAM));
     if (!from && !to) return undefined;
     return { from, to };
     // eslint-disable-next-line react-hooks/exhaustive-deps
