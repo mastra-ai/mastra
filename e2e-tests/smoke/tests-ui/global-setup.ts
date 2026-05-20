@@ -6,14 +6,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectDir = join(__dirname, '..');
 
 /**
- * Delete stale SQLite database files so every run starts fresh.
+ * Delete stale database files (LibSQL + DuckDB) so every run starts fresh.
  */
 async function cleanDatabase() {
-  const suffixes = ['', '-journal', '-shm', '-wal'];
   const dirs = [projectDir, join(projectDir, '.mastra', 'output')];
   for (const dir of dirs) {
-    for (const suffix of suffixes) {
+    for (const suffix of ['', '-journal', '-shm', '-wal']) {
       await rm(join(dir, `test.db${suffix}`), { force: true }).catch(() => {});
+    }
+    for (const suffix of ['', '.wal']) {
+      await rm(join(dir, `mastra.duckdb${suffix}`), { force: true }).catch(() => {});
     }
   }
 }
