@@ -468,11 +468,9 @@ export function MastraRuntimeProvider({
   const queryClient = useQueryClient();
 
   // Check if OM is enabled from the agent's memory config.
-  // The config value can be `true`, `false`, `undefined`, or an object with/without `.enabled`.
   const { data: memoryConfigData } = useMemoryConfig(agentId);
   const omConfig = memoryConfigData?.config?.observationalMemory;
-  const isOMEnabled =
-    omConfig === true || (typeof omConfig === 'object' && omConfig !== null && omConfig.enabled !== false);
+  const isOMEnabled = omConfig?.enabled === true;
   const {
     setIsObservingFromStream,
     setIsReflectingFromStream,

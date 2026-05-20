@@ -38,8 +38,10 @@ export class ObservationStep {
   /**
    * Prepare this step for agent generation.
    *
-   * For step 0: activates buffered chunks, checks reflection, builds system message, filters observed.
-   * For step > 0: checks thresholds, triggers buffer/observe, saves previous messages,
+   * For step 0: activates buffered chunks, checks reflection, checks thresholds, triggers
+   * buffer/observe (when above threshold), persists the new user input before observation,
+   * builds system message, filters observed.
+   * For step > 0: checks thresholds, triggers buffer/observe, saves previous step's messages,
    * builds system message, filters observed.
    */
   async prepare(): Promise<StepContext> {
@@ -135,7 +137,7 @@ export class ObservationStep {
 
       // Seal, rotate, and persist candidates SYNCHRONOUSLY before the fire-and-forget
       // buffer call. The beforeBuffer callback inside buffer() only runs deep in its
-      // async chain (after multiple awaits). Meanwhile, the step > 0 save below drains
+      // async chain (after multiple awaits). Meanwhile, the save block below drains
       // response messages synchronously. If sealing/rotation happens after that drain,
       // the sealed messages get re-added as memory (unsealed) and all new content keeps
       // appending to the same assistant message — producing the "mega-message" bug.
@@ -184,9 +186,11 @@ export class ObservationStep {
       buffered = true;
     }
 
-    // ── Step > 0: Save messages + threshold observation ──────
-    if (this.stepNumber > 0) {
-      // Save messages from previous step
+    // ── Save messages from previous step (or new user input on step 0
+    // when we're about to observe — needed so the input survives the cleanup
+    // that runs after observation, matching the step > 0 invariant) ──
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+    if (this.stepNumber > 0 || willObserveNow) {
       const newInput = messageList.clear.input.db();
       const newOutput = messageList.clear.response.db();
       const messagesToSave = [...newInput, ...newOutput];
@@ -196,44 +200,48 @@ export class ObservationStep {
           messageList.add(msg, 'memory');
         }
       }
+    }
 
-      // Threshold observation (step > 0 only, skip if tool calls pending)
-      if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
-        const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation();
-        observerExchange = obsResult.observerExchange;
-        if (obsResult.succeeded) {
-          observed = true;
-          didThresholdCleanup = true;
+    // ── Threshold observation (all steps, skip if tool calls pending) ──
+    // Previously gated to step > 0. Removed because the activation path on step 0
+    // already removes messages with the same retention-floor contract, and the
+    // step 0 dead zone caused observations to never fire for single-turn requests
+    // with messages above threshold (no tool calls → turn ends at step 0).
+    if (willObserveNow) {
+      const preObsGeneration = this.turn.record.generationCount;
+      const obsResult = await this.runThresholdObservation();
+      observerExchange = obsResult.observerExchange;
+      if (obsResult.succeeded) {
+        observed = true;
+        didThresholdCleanup = true;
 
-          // Cleanup after observation
-          const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
-          const minRemaining = resolveRetentionFloor(
-            om.getObservationConfig().bufferActivation ?? 1,
-            statusSnapshot.threshold,
-          );
+        // Cleanup after observation
+        const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+        const minRemaining = resolveRetentionFloor(
+          om.getObservationConfig().bufferActivation ?? 1,
+          statusSnapshot.threshold,
+        );
 
-          await om.cleanupMessages({
+        await om.cleanupMessages({
+          threadId,
+          resourceId,
+          messages: messageList,
+          observedMessageIds: observedIds,
+          retentionFloor: minRemaining,
+        });
+
+        if (statusSnapshot.asyncObservationEnabled) {
+          await om.resetBufferingState({
             threadId,
             resourceId,
-            messages: messageList,
-            observedMessageIds: observedIds,
-            retentionFloor: minRemaining,
+            recordId: obsResult.record.id,
+            activatedMessageIds: obsResult.activatedMessageIds,
           });
+        }
 
-          if (statusSnapshot.asyncObservationEnabled) {
-            await om.resetBufferingState({
-              threadId,
-              resourceId,
-              recordId: obsResult.record.id,
-              activatedMessageIds: obsResult.activatedMessageIds,
-            });
-          }
-
-          await this.turn.refreshRecord();
-          if (this.turn.record.generationCount > preObsGeneration) {
-            reflected = true;
-          }
+        await this.turn.refreshRecord();
+        if (this.turn.record.generationCount > preObsGeneration) {
+          reflected = true;
         }
       }
 

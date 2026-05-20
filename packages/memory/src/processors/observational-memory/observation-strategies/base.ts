@@ -6,6 +6,7 @@ import xxhash from 'xxhash-wasm';
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
+import { createSyntheticMarkerMessage } from '../observational-memory';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
 import { getMaxThreshold } from '../thresholds';
@@ -326,9 +327,20 @@ export abstract class ObservationStrategy {
   // ── Marker persistence ──────────────────────────────────────
 
   /**
-   * Persist a marker to the last assistant message in storage.
-   * Fetches messages directly from the DB so it works even when
-   * no MessageList is available (e.g. async buffering ops).
+   * Persist an OM lifecycle marker to storage on an assistant-role message.
+   *
+   * Prefers appending to the most recent existing assistant message (real or
+   * synthetic). If none exists yet — e.g. on step 0 of the very first turn,
+   * before the agent has produced any output — creates a new synthetic
+   * assistant message via {@link createSyntheticMarkerMessage} whose only
+   * purpose is to carry OM marker parts.
+   *
+   * Marker parts are NEVER attached to user messages: that would mutate the
+   * stored shape of user-authored content and force every consumer to handle
+   * `data-om-*` parts on `role: 'user'`.
+   *
+   * Fetches messages directly from the DB so it works even when no
+   * MessageList is available (e.g. async buffering ops).
    */
   protected async persistMarkerToStorage(
     marker: { type: string; data: unknown },
@@ -342,23 +354,25 @@ export abstract class ObservationStrategy {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const messages = result?.messages ?? [];
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
+      const hasParts = (m: any) => m?.content?.parts && Array.isArray(m.content.parts);
+      const target = messages.find(msg => msg?.role === 'assistant' && hasParts(msg));
+
+      const targetMessage = target ?? createSyntheticMarkerMessage(threadId, resourceId);
+
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        targetMessage.content.parts.some(
+          (p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId,
+        );
+      if (!alreadyPresent) {
+        targetMessage.content.parts.push(marker as any);
       }
+      await this.messageHistory.persistMessages({
+        messages: [targetMessage],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }

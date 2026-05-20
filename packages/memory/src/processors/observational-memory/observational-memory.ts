@@ -21,6 +21,52 @@ import {
 } from './constants';
 
 /**
+ * Sentinel metadata key marking a stored message as a runtime-owned synthetic
+ * message rather than agent/user-authored content. Currently only emitted by
+ * OM marker persistence on step 0 of the very first turn, when no real
+ * assistant message exists yet to attach lifecycle markers to.
+ *
+ * Consumers should:
+ *  - filter these messages out of LLM context (they have no content the model
+ *    needs to see), and
+ *  - render them as marker-only entries (not as empty assistant chat bubbles).
+ */
+export const SYNTHETIC_MARKER_METADATA = {
+  mastraSynthetic: true as const,
+  reason: 'observational-memory-marker' as const,
+};
+
+/**
+ * Build a brand-new assistant message that exists solely to carry OM lifecycle
+ * marker parts in storage. Used by persistMarkerToStorage when observation
+ * fires on step 0 of the very first turn, before any real assistant message
+ * exists yet.
+ */
+export function createSyntheticMarkerMessage(threadId: string, resourceId?: string): MastraDBMessage {
+  return {
+    id: `om-marker-${crypto.randomUUID()}`,
+    role: 'assistant',
+    createdAt: new Date(),
+    threadId,
+    resourceId,
+    content: {
+      format: 2,
+      parts: [],
+      metadata: { ...SYNTHETIC_MARKER_METADATA },
+    },
+  };
+}
+
+/**
+ * Returns true if the message is a runtime-owned synthetic marker message
+ * (see SYNTHETIC_MARKER_METADATA). These should be excluded from LLM context
+ * and rendered as marker-only entries instead of as empty assistant bubbles.
+ */
+export function isSyntheticMarkerMessage(msg: MastraDBMessage | undefined): boolean {
+  return msg?.content?.metadata?.mastraSynthetic === true;
+}
+
+/**
  * Returns the parts from the latest step of a message (after the last step-start marker).
  * If no step-start marker exists, returns all parts.
  */
@@ -1130,7 +1176,22 @@ export class ObservationalMemory {
   }
 
   /**
-   * Persist a marker to the last assistant message in storage.
+   * Persist an OM lifecycle marker to storage on an assistant-role message.
+   *
+   * Prefers appending to the most recent existing assistant message (real or
+   * synthetic). If none exists yet — e.g. on step 0 of the very first turn,
+   * before the agent has produced any output — creates a new synthetic
+   * assistant message whose only purpose is to carry OM marker parts. The
+   * synthetic message is flagged via `content.metadata.mastraSynthetic` so
+   * downstream consumers (MessageHistory recall, renderers) can recognise it
+   * as runtime-owned metadata rather than agent-authored content.
+   *
+   * Marker parts are NEVER attached to user messages: that would mutate the
+   * stored shape of user-authored content and force every consumer to handle
+   * `data-om-*` parts on `role: 'user'` (assistant-ui refuses to render
+   * tool-call parts on user messages, and other clients/storage consumers
+   * would acquire a new special case).
+   *
    * Unlike persistMarkerToMessage, this fetches messages directly from the DB
    * so it works even when no MessageList is available (e.g. async buffering ops).
    * @internal Used by observation strategies. Do not call directly.
@@ -1147,25 +1208,26 @@ export class ObservationalMemory {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const messages = result?.messages ?? [];
-      // Find the last assistant message
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          // Only push if the marker isn't already in the parts array.
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
+      const hasParts = (m: any) => m?.content?.parts && Array.isArray(m.content.parts);
+      const target = messages.find(msg => msg?.role === 'assistant' && hasParts(msg));
+
+      const targetMessage = target ?? createSyntheticMarkerMessage(threadId, resourceId);
+
+      // Only push if the marker isn't already in the parts array.
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        targetMessage.content.parts.some(
+          (p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId,
+        );
+      if (!alreadyPresent) {
+        targetMessage.content.parts.push(marker as any);
       }
+      await this.messageHistory.persistMessages({
+        messages: [targetMessage],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
