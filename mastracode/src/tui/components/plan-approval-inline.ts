@@ -7,7 +7,7 @@
 import {
   Box,
   Container,
-  getEditorKeybindings,
+  getKeybindings,
   Input,
   Markdown,
   SelectList,
@@ -75,7 +75,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     }
   }
 
-  constructor(options: PlanApprovalInlineOptions, _ui: TUI) {
+  constructor(
+    options: PlanApprovalInlineOptions,
+    private ui: TUI,
+  ) {
     super();
     this.planTitle = options.title;
     this.planContent = options.plan;
@@ -262,6 +265,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(
       new Text(theme.fg('dim', 'Enter to submit feedback  Esc to reject without feedback'), 0, 0),
     );
+    this.ui.requestRender(true);
   }
 
   private showResult(status: string, isApproved: boolean, feedback?: string): void {
@@ -279,8 +283,8 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     if (this.resolved) return;
 
     if (this.mode === 'feedback' && this.feedbackInput) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.handleReject();
         return;
       }

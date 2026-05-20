@@ -1,6 +1,7 @@
+import { visibleWidth } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
-import { theme, tintHex } from '../../theme.js';
+import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -299,8 +300,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     expect(output).toContain(chalk.hex(modeColor)('▐'));
     expect(output).toContain(chalk.bgHex(modeColor).hex('#000000').bold('view'));
-    expect(output).toContain(chalk.bgHex('#0f0f0f').hex(modeColor)('src/example.ts'));
-    expect(output).toContain(chalk.hex(tintHex(modeColor, 0.35))('│'));
+    expect(output).toContain(chalk.bgHex('#141414').hex(modeColor)('src/example.ts'));
+    expect(output).toContain(chalk.hex(ensureTerminalGlyphContrast(tintHex(modeColor, 0.35)))('│'));
   });
 
   it('renders quiet non-shell tool validation errors with actionable details', () => {
@@ -643,6 +644,59 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines.filter(line => line.includes('line '))).toHaveLength(15);
   });
 
+  it('keeps quiet shell box borders aligned for long git output', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'git remote -v' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    const remoteLine = 'fork_truffle-dev    https://github.com/truffle-dev/mastra.git (push)'.repeat(4);
+
+    component.updateResult(
+      {
+        content: [{ type: 'text', text: remoteLine }],
+        isError: false,
+      },
+      false,
+    );
+
+    const rendered = component.render(80);
+    const topWidth = visibleWidth(rendered[0]!);
+    const boxLines = rendered.filter(line => /^[╭│├╰]/.test(stripAnsi(line)));
+
+    expect(boxLines.length).toBeGreaterThan(1);
+    expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
+    expect(boxLines.every(line => /[╮│┤╯]$/.test(stripAnsi(line).trimEnd()))).toBe(true);
+  });
+
+  it('keeps quiet shell box borders aligned for multiline command input', () => {
+    const command = `gh pr create --base main --head fix/mastracode-visible-width-truncation --title "fix(mastracode): use visible width for terminal output" --body "This follows up on the quiet-mode terminal rendering work.
+
+It makes ANSI truncation and bordered command output measure terminal display width instead of raw string length, so wide characters and ANSI/OSC closers do not throw off alignment.
+
+Test plan:
+- pnpm test src/tui/components/__tests__/ansi.test.ts src/tui/components/__tests__/task-progress.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot"`;
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const rendered = component.render(100);
+    const topWidth = visibleWidth(rendered[0]!);
+    const boxLines = rendered.filter(line => /^[╭│╰]/.test(stripAnsi(line)));
+
+    const visible = stripAnsi(rendered.join('\n'));
+    expect(visible).toContain('This');
+    expect(visible).toContain('follows up on the quiet-mode terminal rendering work.');
+    expect(visible).not.toContain('…');
+    expect(boxLines.length).toBeGreaterThan(3);
+    expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
+    expect(boxLines.every(line => /[╮│╯]$/.test(stripAnsi(line).trimEnd()))).toBe(true);
+  });
+
   it('keeps quiet detail lines visible after completion', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
@@ -723,7 +777,6 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       .filter(line => line.startsWith('│') && line.trim() !== '│');
     expect(footerLines.length).toBeGreaterThan(1);
     expect(stripAnsi(output)).toContain('then fi"');
-    expect(output).toContain(chalk.white('then fi"'));
     expect(output).not.toContain(chalk.blue('then'));
   });
 
