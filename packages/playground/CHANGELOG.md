@@ -1,5 +1,11 @@
 # @internal/playground
 
+## 1.9.4-alpha.9
+
+### Patch Changes
+
+- Removed the unused Primitives and Observability overview pages from the studio. These pages only showed links that already exist in the sidebar, so they were redundant and no longer reachable from the navigation. Also fixed extra padding around the Request Context page content. ([#16813](https://github.com/mastra-ai/mastra/pull/16813))
+
 ## 1.9.4-alpha.8
 
 ### Patch Changes
