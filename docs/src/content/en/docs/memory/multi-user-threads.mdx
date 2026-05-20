@@ -36,10 +36,21 @@ export type Speaker = {
   role: string
 }
 
+function escapeAttr(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 export function asUserTurn(speaker: Speaker, text: string) {
+  const id = escapeAttr(speaker.id)
+  const name = escapeAttr(speaker.name)
+  const role = escapeAttr(speaker.role)
   return {
     role: 'user' as const,
-    content: `<turn author_id="${speaker.id}" author_name="${speaker.name}" functional_role="${speaker.role}">
+    content: `<turn author_id="${id}" author_name="${name}" functional_role="${role}">
 ${text}
 </turn>`,
   }
