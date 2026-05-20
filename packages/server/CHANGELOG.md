@@ -1,5 +1,49 @@
 # @mastra/server
 
+## 1.36.0-alpha.7
+
+### Patch Changes
+
+- Widened `BrowserStreamConfig.getToolset` to support async lookup. Existing synchronous implementations continue to work — the type now accepts `MastraBrowser | undefined` or `Promise<MastraBrowser | undefined>`. ([#16778](https://github.com/mastra-ai/mastra/pull/16778))
+
+  This unblocks server-adapter implementations that need to resolve agents asynchronously (for example, hydrating stored agents from storage on first browser-stream connection).
+
+  ```ts
+  import { setupBrowserStream } from '@mastra/server';
+
+  await setupBrowserStream(app, {
+    getToolset: async agentId => {
+      const agent = await resolveAgent(agentId);
+      return agent?.browser;
+    },
+    apiPrefix,
+  });
+  ```
+
+- Updated dependencies [[`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0)]:
+  - @mastra/core@1.36.0-alpha.7
+
+## 1.36.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337)]:
+  - @mastra/core@1.36.0-alpha.6
+
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+
+## 1.36.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+
 ## 1.36.0-alpha.3
 
 ### Minor Changes

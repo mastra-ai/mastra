@@ -18,6 +18,7 @@ import {
 import type { Component, Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface PlanApprovalInlineOptions {
   planId: string;
@@ -80,7 +81,6 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.planContent = options.plan;
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
-    this.addChild(new Spacer(1));
     this.activate(options);
   }
 
@@ -111,6 +111,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.mode = 'select';
     this.resolved = false;
     this.renderSelectable();
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'plan';
   }
 
   updateArgs(args: unknown): void {
@@ -299,6 +303,10 @@ export interface PlanResultOptions {
 }
 
 export class PlanResultComponent extends Container {
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'plan';
+  }
+
   constructor(options: PlanResultOptions) {
     super();
 
@@ -319,7 +327,5 @@ export class PlanResultComponent extends Container {
       contentBox.addChild(new Text(theme.fg('warning', `Requested changes: ${options.feedback}`), 0, 0));
       contentBox.addChild(new Spacer(1));
     }
-
-    this.addChild(new Spacer(1));
   }
 }

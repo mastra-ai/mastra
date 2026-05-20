@@ -3,6 +3,7 @@ import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
@@ -262,10 +263,28 @@ describe('addUserMessage', () => {
 
     expect(state.pendingSignalMessageComponentsById.has('pending-signal-1')).toBe(true);
     expect(state.messageComponentsById.has('user-2')).toBe(true);
-    expect(state.chatContainer.children).toEqual([
-      state.messageComponentsById.get('user-2'),
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(state.chatContainer.children[0]).toBe(state.messageComponentsById.get('user-2'));
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children[2]).toBe(
       state.pendingSignalMessageComponentsById.get('pending-signal-1')?.component,
-    ]);
+    );
+  });
+
+  it('uses the same spacing for pending and confirmed user messages', () => {
+    const state = createState();
+
+    addUserMessage(state, createUserMessage('first', 'user-1'));
+    addPendingUserMessage(state, 'pending-signal-1', 'continue with this');
+
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+
+    addUserMessage(state, createUserMessage('continue with this', 'pending-signal-1'));
+
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children[2]).toBeInstanceOf(UserMessageComponent);
   });
 
   it('replaces a pending signal with the echoed user message once the stream is settled', () => {
@@ -324,6 +343,7 @@ describe('renderExistingMessages subagents', () => {
       ],
     };
     const state = createState();
+    state.quietMode = true;
     state.harness = {
       listMessages: vi.fn().mockResolvedValue([message]),
       getDisplayState: () => ({ isRunning: false }),
@@ -339,5 +359,6 @@ describe('renderExistingMessages subagents', () => {
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('subagent fork openai/gpt-5.5');
+    expect(rendered).toContain('summary text');
   });
 });

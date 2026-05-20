@@ -1,5 +1,68 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0)]:
+  - @mastra/core@1.36.0-alpha.7
+  - @mastra/react@0.4.0-alpha.7
+  - @mastra/client-js@1.20.0-alpha.7
+
+## 29.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337)]:
+  - @mastra/core@1.36.0-alpha.6
+  - @mastra/client-js@1.20.0-alpha.6
+  - @mastra/react@0.4.0-alpha.6
+
+## 29.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+  - @mastra/client-js@1.20.0-alpha.5
+  - @mastra/react@0.4.0-alpha.5
+
+## 29.0.0-alpha.4
+
+### Minor Changes
+
+- Refreshed Button + Card design system tokens. ([#16769](https://github.com/mastra-ai/mastra/pull/16769))
+
+  **Button variants (breaking)**: consolidated to `default`, `primary`, `outline`, `ghost`. The `cta`, `contrast`, and unused `link` variants have been removed. `primary` now uses a high-contrast `neutral6` fill instead of `surface4`, so it reads clearly as the form submit action in both themes.
+
+  ```tsx
+  // Before
+  <Button variant="cta">Save</Button>
+  <Button variant="contrast">Done</Button>
+  <Button variant="link">Open</Button>
+
+  // After
+  <Button variant="primary">Save</Button>     // cta → primary (no brand green; theme-aware high contrast)
+  <Button variant="primary">Done</Button>     // contrast → primary (same recipe, renamed)
+  <Button as="a" href="…" variant="ghost">Open</Button>  // link → ghost (or plain <a> for inline text links)
+  ```
+
+  **New tokens**: `--surface-overlay-soft` and `--surface-overlay-strong` — alpha overlays of the opposite-theme color, used by `SectionCard` header strip and `DashboardCard` fill so cards read consistently on any surface.
+
+  **Other**:
+  - DashboardCard radius reduced to `rounded-xl` and padding tightened to `px-4 py-3` for better grid density.
+  - SectionCard wrapper no longer fills its background — header strip + border carry definition.
+  - Dark `surface2` / `surface3` darkened slightly (16.84% → 16%, 19.13% → 18%) so the main frame reads as a distinct surface.
+  - Dark `border1` / `border2` alphas bumped (6% → 7%, 10% → 11%) for closer dark/light parity.
+  - Removed deprecated `--section-card-*` tokens and their `@utility` blocks.
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/client-js@1.20.0-alpha.4
+  - @mastra/react@0.4.0-alpha.4
+
 ## 29.0.0-alpha.3
 
 ### Minor Changes
