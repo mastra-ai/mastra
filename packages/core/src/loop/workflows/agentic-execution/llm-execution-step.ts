@@ -724,6 +724,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
               processorStates,
+              sendDataPartSignal: _internal?.sendDataPartSignal,
             });
 
             try {
@@ -984,6 +985,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
             processorStates,
+            sendDataPartSignal: _internal?.sendDataPartSignal,
           });
           const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
             ? {
@@ -1342,6 +1344,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 logger: logger || new ConsoleLogger({ level: 'error' }),
                 agentName: agentId || 'unknown',
                 processorStates,
+                sendDataPartSignal: _internal?.sendDataPartSignal,
               });
 
               const currentRetryCount = inputData.processorRetryCount || 0;
@@ -1482,6 +1485,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
           processorStates,
+          sendDataPartSignal: _internal?.sendDataPartSignal,
         });
 
         const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
@@ -1604,6 +1608,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
           processorStates,
+          sendDataPartSignal: _internal?.sendDataPartSignal,
         });
 
         try {

@@ -8,14 +8,17 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal } from './signals';
+import { createSignal, dataPartSignalToDBMessage } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
+  DataPartSignalInput,
   SendAgentSignalOptions,
   SendAgentSignalResult,
+  SendDataPartSignalOptions,
+  SendDataPartSignalResult,
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -72,7 +75,8 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'stream-part'; runId: string; part: unknown; sourceId: string }
   | { type: 'run-completed'; runId: string }
   | { type: 'run-aborted'; runId: string }
-  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string };
+  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string }
+  | { type: 'data-part-signal'; part: DataPartSignalInput; sourceId: string };
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -490,6 +494,7 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     const seenRunIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
+    const pendingDataParts: DataPartSignalInput[] = [];
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
       string,
@@ -599,6 +604,12 @@ export class AgentThreadStreamRuntime {
         state.pendingSignalsByThread.set(key, queue);
         return;
       }
+      if (data.type === 'data-part-signal') {
+        if (data.sourceId === this.#id) return;
+        pendingDataParts.push(data.part);
+        wake();
+        return;
+      }
       if (data.type === 'run-completed' || data.type === 'run-aborted') {
         if (state.activeThreadRunIds.get(key) === data.runId) {
           state.activeThreadRunIds.delete(key);
@@ -638,7 +649,11 @@ export class AgentThreadStreamRuntime {
       unsubscribe,
       stream: (async function* () {
         try {
-          while (!done || pendingRuns.length > 0) {
+          while (!done || pendingRuns.length > 0 || pendingDataParts.length > 0) {
+            // Yield any standalone data-part signals that arrived outside a run
+            while (pendingDataParts.length > 0) {
+              yield pendingDataParts.shift()! as any;
+            }
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
@@ -646,6 +661,10 @@ export class AgentThreadStreamRuntime {
             const run = pendingRuns.shift()!;
             for await (const part of run.output.fullStream) {
               yield part as any;
+              // Also drain data-part signals that arrived during the run
+              while (pendingDataParts.length > 0) {
+                yield pendingDataParts.shift()! as any;
+              }
               if (done) break;
             }
           }
@@ -817,6 +836,47 @@ export class AgentThreadStreamRuntime {
       });
 
     return { accepted: true, runId, signal };
+  }
+
+  /**
+   * Send a data-part signal to a thread. Data-part signals are:
+   * - Always persisted to storage
+   * - Always streamed to any subscriber
+   * - Never seen by the LLM
+   * - Never wake the agent (never start a new run)
+   */
+  sendDataPartSignal(
+    agent: Agent<any, any, any, any>,
+    dataPart: DataPartSignalInput,
+    target: SendDataPartSignalOptions,
+    pubsub?: PubSub,
+  ): SendDataPartSignalResult {
+    const key = this.#threadKey(target.resourceId, target.threadId);
+
+    // Broadcast to subscribers so active UIs see the data part in real-time
+    this.#publish(pubsub, key, {
+      type: 'data-part-signal',
+      part: dataPart,
+      sourceId: this.#getSourceId(),
+    });
+
+    // Persist to storage
+    const persisted = this.#persistDataPartSignal(agent, dataPart, target.resourceId, target.threadId);
+    void persisted.catch(() => {});
+
+    return { accepted: true, persisted };
+  }
+
+  async #persistDataPartSignal(
+    agent: Agent<any, any, any, any>,
+    dataPart: DataPartSignalInput,
+    resourceId: string,
+    threadId: string,
+  ) {
+    const memory = await agent.getMemory();
+    if (!memory) return;
+    const dbMessage = dataPartSignalToDBMessage(dataPart, { threadId, resourceId });
+    await memory.saveMessages({ messages: [dbMessage] });
   }
 }
 

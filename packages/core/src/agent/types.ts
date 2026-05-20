@@ -127,6 +127,38 @@ export interface SendAgentSignalResult {
   persisted?: Promise<void>;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ *
+ * A data-part signal that is streamed to subscribers but never seen by the LLM.
+ * Useful for sending status/progress updates from background agents (e.g. OM)
+ * to the UI without waking the main agent.
+ */
+export type DataPartSignalInput = {
+  type: `data-${string}`;
+  data: unknown;
+};
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ *
+ * Options for sending a data-part signal to a thread.
+ * Data-part signals always persist and never wake the agent.
+ */
+export type SendDataPartSignalOptions = {
+  resourceId: string;
+  threadId: string;
+};
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SendDataPartSignalResult {
+  accepted: true;
+  /** Resolves when the data part has been persisted to storage. */
+  persisted: Promise<void>;
+}
+
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
   readonly fullStream: ReadableStream<any>;

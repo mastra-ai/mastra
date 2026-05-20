@@ -504,3 +504,41 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
 export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal {
   return createSignal(part.data);
 }
+
+/**
+ * Returns true when a signal type represents a data-part signal (prefixed with `data-`).
+ * Data-part signals are streamed to subscribers but never included in the LLM prompt.
+ */
+export function isDataPartSignalType(type: string): boolean {
+  return type.startsWith('data-');
+}
+
+/**
+ * Create a DB message for a data-part signal.
+ * These are persisted to storage but excluded from LLM prompts.
+ */
+export function dataPartSignalToDBMessage(
+  dataPart: { type: `data-${string}`; data: unknown },
+  options: { threadId: string; resourceId: string },
+): MastraDBMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: 'signal',
+    createdAt: new Date(),
+    threadId: options.threadId,
+    resourceId: options.resourceId,
+    type: dataPart.type,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: '' }],
+      metadata: {
+        signal: {
+          id: crypto.randomUUID(),
+          type: dataPart.type,
+          createdAt: new Date().toISOString(),
+          metadata: { dataPartPayload: dataPart.data },
+        },
+      },
+    },
+  };
+}

@@ -2889,6 +2889,8 @@ ${formattedMessages}
      *  before lastBufferedBoundary is set. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
+    /** Reliable data-part emitter that works even when the stream is idle. */
+    sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     /** Called with the final candidate messages after cursor filtering, before the observer runs.
@@ -3023,10 +3025,13 @@ ${formattedMessages}
       });
       await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
 
-      // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
+      // Emit buffering start marker: prefer sendDataPartSignal (reliable even when idle),
+      // fall back to writer.custom() for inline delivery.
       const writer = opts.writer;
-      if (writer) {
-        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      const sendDataPartSignal = opts.sendDataPartSignal;
+      if (sendDataPartSignal) {
+        void sendDataPartSignal(startMarker).catch(() => {});
+      } else if (writer) {
         void writer.custom({ ...startMarker, transient: true }).catch(() => {});
       }
 
@@ -3039,6 +3044,7 @@ ${formattedMessages}
         cycleId,
         startedAt,
         writer,
+        sendDataPartSignal,
         requestContext,
         observabilityContext,
       }).run();
