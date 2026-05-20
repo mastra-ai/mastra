@@ -578,6 +578,7 @@ describe('InworldRealtimeVoice', () => {
       v.waitForOpen = () => Promise.resolve();
       const promise = v.connect();
       const { instance } = getLastInstance();
+      // Mock WS starts in OPEN — fire error after the listener attaches.
       setImmediate(() => instance.emit('error', new Error('boom')));
       await expect(promise).rejects.toThrow(/boom/);
     });
@@ -589,6 +590,32 @@ describe('InworldRealtimeVoice', () => {
       const { instance } = getLastInstance();
       setImmediate(() => instance.emit('close', 1011, Buffer.from('server error')));
       await expect(promise).rejects.toThrow(/closed during handshake/i);
+    });
+
+    it('should NOT reject ready from waitForSessionCreated on a pre-open WS error', async () => {
+      // Pre-open transport failures are owned by waitForOpen(). The session
+      // promise must not pre-attach transport listeners — otherwise a pre-open
+      // error rejects BOTH promises and surfaces as an unhandled rejection
+      // because connect() only awaits the open one on that path.
+      wsConfig.initialReadyState = 0; // CONNECTING
+      const v = new InworldRealtimeVoice({ apiKey: 'k', connectTimeoutMs: 30_000 });
+      // Drive the real path of both helpers and capture any unhandled rejection.
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const promise = v.connect();
+        const { instance } = getLastInstance();
+        setImmediate(() => instance.emit('error', new Error('preopen-boom')));
+        await expect(promise).rejects.toThrow(/preopen-boom|failed to open/i);
+        // Flush the microtask + macrotask queues so any unhandled rejection has
+        // time to be reported.
+        await new Promise(r => setImmediate(r));
+        await new Promise(r => setTimeout(r, 0));
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
     });
 
     it('should emit an error event (not crash) on a malformed inbound frame', async () => {

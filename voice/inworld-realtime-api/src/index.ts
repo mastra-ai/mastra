@@ -404,18 +404,24 @@ export class InworldRealtimeVoice extends MastraVoice {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = this.ws;
+      let transportAttached = false;
       const cleanup = () => {
         clearTimeout(timer);
         this.client.removeListener('session.updated', onUpdated);
-        ws?.removeListener('close', onClose);
-        ws?.removeListener('error', onError);
+        ws?.removeListener('open', onOpen);
+        if (transportAttached) {
+          ws?.removeListener('close', onClose);
+          ws?.removeListener('error', onError);
+        }
       };
       const onUpdated = () => {
         cleanup();
         resolve();
       };
-      // If the socket closes or errors after open but before the ack, fail
-      // immediately instead of sitting until `timeoutMs` expires.
+      // Only listen for close/error AFTER the socket is open. `waitForOpen()`
+      // owns pre-open transport failures; attaching here too would double-reject
+      // (and surface unhandled rejections, since `connect()` only awaits the
+      // open promise on that path).
       const onClose = (code?: number, reason?: Buffer) => {
         cleanup();
         reject(
@@ -428,9 +434,20 @@ export class InworldRealtimeVoice extends MastraVoice {
         cleanup();
         reject(err);
       };
+      const attachTransport = () => {
+        if (transportAttached) return;
+        transportAttached = true;
+        ws?.once('close', onClose);
+        ws?.once('error', onError);
+      };
+      const onOpen = () => attachTransport();
+
       this.client.once('session.updated', onUpdated);
-      ws?.once('close', onClose);
-      ws?.once('error', onError);
+      if (ws && ws.readyState === ws.OPEN) {
+        attachTransport();
+      } else {
+        ws?.once('open', onOpen);
+      }
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error(`Inworld realtime session handshake timed out after ${timeoutMs}ms`));
