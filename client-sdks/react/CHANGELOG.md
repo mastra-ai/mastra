@@ -1,5 +1,36 @@
 # @mastra/react
 
+## 0.4.0-alpha.7
+
+### Minor Changes
+
+- Added `clientTools` option to `useChat`'s `generate`/`stream` calls for forwarding browser-side tools to the agent on each invocation. ([#16778](https://github.com/mastra-ai/mastra/pull/16778))
+
+  ```tsx
+  import { useChat } from '@mastra/react';
+
+  const { generate } = useChat({ agentId: 'my-agent' });
+
+  await generate({
+    messages: [{ role: 'user', content: 'Show a toast that says hi' }],
+    clientTools: {
+      showToast: {
+        description: 'Show a toast to the user',
+        inputSchema: z.object({ message: z.string() }),
+        execute: ({ message }) => toast(message),
+      },
+    },
+  });
+  ```
+
+  Client tools are forwarded as-is to the underlying `agent.generate()` and `agent.stream()` calls.
+
+### Patch Changes
+
+- Updated dependencies [[`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0)]:
+  - @mastra/core@1.36.0-alpha.7
+  - @mastra/client-js@1.20.0-alpha.7
+
 ## 0.4.0-alpha.6
 
 ### Patch Changes
