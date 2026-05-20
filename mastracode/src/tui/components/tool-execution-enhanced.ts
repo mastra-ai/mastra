@@ -122,6 +122,14 @@ function isWebSearchTool(name: string): boolean {
   return name === 'web_search' || /^web_search_\d+$/.test(name);
 }
 
+function isBrowserTool(name: string): boolean {
+  return name.startsWith('browser_');
+}
+
+function isSkillTool(name: string): boolean {
+  return name === 'skill' || name === 'skill_search' || name === 'skill_read';
+}
+
 /**
  * Extract the actual content from tool result text.
  */
@@ -340,10 +348,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private limitQuietShellLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || lines.length <= 9) {
+    if (this.quietDisplayMode !== 'quiet' || lines.length <= 15) {
       return lines;
     }
-    return lines.slice(-9);
+    return lines.slice(-15);
   }
 
   /**
@@ -357,11 +365,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.updateBgColor();
     this.contentBox.clear();
 
-    if (
-      this.quietDisplayMode === 'quiet' &&
-      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
-      !(this.result && !this.isPartial && this.isErrorResult())
-    ) {
+    if (this.quietDisplayMode === 'quiet' && this.toolName !== MC_TOOLS.EXECUTE_COMMAND) {
       this.renderCompactTool();
       return;
     }
@@ -516,11 +520,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const toolLabel = this.getCompactToolLabel();
     const toolLabelColor = this.getCompactToolLabelColor();
     const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
+    const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
     const firstLine = this.compactToolContinuation
-      ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
+      ? summary
+        ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
+        : this.compactToolPreviousSummary
+          ? `${this.getCompactContinuationIndent()}${this.formatEmptyCompactContinuationLine()}${status}`
+          : `${this.getCompactContinuationIndent()}${this.formatCompactToolHeader(toolLabel, toolLabelColor, '')}${status}`
       : `${this.formatCompactToolHeader(toolLabel, toolLabelColor, summary)}${status}`;
 
-    const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
     if (detailLines.length === 0) return [firstLine];
     const previewLines = this.shouldCloseQuietPreview() ? [...detailLines, this.getQuietPreviewCapLine()] : detailLines;
     if (this.compactToolHasFollowingContinuation) previewLines.push(this.getQuietPreviewSpacerLine());
@@ -588,7 +596,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private getQuietActivePreview(): string {
+    if (this.isErrorResult()) return this.formatQuietErrorPreview();
     if (isWebSearchTool(this.toolName)) return this.formatQuietWebSearchPreview();
+    if (isBrowserTool(this.toolName)) return this.formatQuietBrowserPreview();
+    if (isSkillTool(this.toolName)) return this.formatQuietSkillPreview();
+    if (this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT) return this.formatQuietProcessOutputPreview();
+    if (this.toolName === MC_TOOLS.FILE_STAT) return this.formatQuietFileStatPreview();
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
@@ -605,12 +618,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         return this.formatSearchDetail();
       case MC_TOOLS.LSP_INSPECT:
         return this.getFirstLineArg('match', 80);
-      default: {
-        const preview =
-          this.formatArgsPreview(1, 120).join(' ').replace(/\s+/g, ' ').trim() ||
-          this.stripAnsi(this.formatArgsSummary()).trim();
-        return preview === this.getCompactToolSummary() ? '' : preview;
-      }
+      default:
+        return this.formatQuietGenericResultPreview();
     }
   }
 
@@ -619,6 +628,17 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       this.getMultilinePreview('new_str', Number.POSITIVE_INFINITY, false) ||
       this.getMultilinePreview('new_string', Number.POSITIVE_INFINITY, false)
     );
+  }
+
+  private formatQuietErrorPreview(): string {
+    const outputLines = this.stripAnsi(this.getFormattedOutput())
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+    if (outputLines.some(line => line.startsWith('Validation error:') || line.startsWith('Parameter:'))) {
+      return outputLines.join(' — ');
+    }
+    return outputLines.slice(0, 2).join('\n');
   }
 
   private formatQuietViewPreview(): string {
@@ -646,6 +666,111 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (!this.result) return '';
 
     return this.stripAnsi(this.formatWebSearchResults())
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('\n');
+  }
+
+  private formatQuietBrowserPreview(): string {
+    if (!this.result || !['browser_snapshot', 'browser_evaluate'].includes(this.toolName)) return '';
+    const output = this.unwrapBrowserToolOutput(this.getFormattedOutput());
+    return this.stripAnsi(output)
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('\n');
+  }
+
+  private unwrapBrowserToolOutput(output: string): string {
+    try {
+      const parsed = JSON.parse(output) as unknown;
+      if (typeof parsed !== 'object' || parsed === null) return output;
+      const record = parsed as Record<string, unknown>;
+      if (this.toolName === 'browser_evaluate' && record.result !== undefined) {
+        return this.formatBrowserEvaluateResult(record.result);
+      }
+      if (this.toolName === 'browser_snapshot' && typeof record.snapshot === 'string') return record.snapshot;
+      if (typeof record.error === 'string') return record.error;
+      return '';
+    } catch {
+      return output;
+    }
+  }
+
+  private formatBrowserEvaluateResult(result: unknown): string {
+    if (typeof result === 'string') return result;
+    if (typeof result !== 'object' || result === null) return String(result);
+    if (Array.isArray(result)) return `[${result.length} items]`;
+
+    return Object.entries(result as Record<string, unknown>)
+      .slice(0, 3)
+      .map(([key, value]) => `${key}: ${this.formatCompactBrowserValue(value)}`)
+      .join('\n');
+  }
+
+  private formatCompactBrowserValue(value: unknown): string {
+    if (typeof value === 'string') return value === '' ? '""' : value;
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return `[${value.length} items]`;
+    if (typeof value === 'object') return '{…}';
+    return String(value);
+  }
+
+  private formatQuietProcessOutputPreview(): string {
+    if (!this.result) return '';
+    return this.stripAnsi(this.getFormattedOutput())
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('\n');
+  }
+
+  private formatQuietFileStatPreview(): string {
+    if (!this.result) return '';
+    const output = this.stripAnsi(this.getFormattedOutput()).trim();
+    return output.replace(/^\S+\s+/, '').replace(/\s+/g, ' ');
+  }
+
+  private formatQuietGenericResultPreview(): string {
+    if (!this.result || this.isPartial) return '';
+    const output = this.stripAnsi(this.getFormattedOutput()).trim();
+    if (!output) return '';
+
+    const compactJson = this.formatCompactJsonResult(output);
+    const preview = compactJson || output;
+    const argsSummary = this.stripAnsi(this.formatArgsSummary()).trim();
+    if (argsSummary && preview === argsSummary) return '';
+
+    return preview
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('\n');
+  }
+
+  private formatCompactJsonResult(output: string): string {
+    try {
+      const parsed = JSON.parse(output) as unknown;
+      if (typeof parsed !== 'object' || parsed === null) return String(parsed);
+      if (Array.isArray(parsed)) return `[${parsed.length} items]`;
+      return Object.entries(parsed as Record<string, unknown>)
+        .slice(0, 3)
+        .map(([key, value]) => `${key}: ${this.formatCompactBrowserValue(value)}`)
+        .join('\n');
+    } catch {
+      return '';
+    }
+  }
+
+  private formatQuietSkillPreview(): string {
+    if (!this.result || this.toolName !== 'skill_search') return '';
+    return this.stripAnsi(this.getFormattedOutput())
       .split('\n')
       .map(line => line.trim())
       .filter(Boolean)
@@ -685,6 +810,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     return '  ';
   }
 
+  private formatEmptyCompactContinuationLine(): string {
+    const railColor = this.getQuietToolRailColor();
+    const isStreamingContinuation = !this.isComplete() && this.quietPreviewLineLimit > 0;
+    if (isStreamingContinuation) return `${chalk.hex(this.getCompactToolAccentColor(this.getCompactToolLabelColor()))('●')}${chalk.hex(railColor)('─')}`;
+    return chalk.hex(railColor)(this.compactToolHasFollowingContinuation ? '├─' : '╰─');
+  }
+
   private formatCompactContinuationLine(summary: string): string {
     const lineMatch = summary.match(/^─+/);
     const linePrefix = lineMatch?.[0] ?? '';
@@ -696,8 +828,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsBg = this.getCompactToolArgsBg(toolLabelColor);
     const argsColor = this.getCompactToolArgsColor(toolLabelColor);
     const railColor = this.getQuietToolRailColor();
-    const branch = hasFollowing
-      ? `${hasPreview ? chalk.hex(color)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
+    const isStreamingContinuation = this.compactToolContinuation && !this.isComplete() && this.quietPreviewLineLimit > 0;
+    const branch = hasFollowing || isStreamingContinuation
+      ? `${hasPreview || isStreamingContinuation ? chalk.hex(color)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
       : chalk.hex(railColor)(`╰─${separator}${linePrefix}`);
     const continuationSummary = ` ${summary.slice(linePrefix.length)}`;
     const trail = continuationSummary ? chalk.hex(argsBg)('▌') : '';
@@ -716,12 +849,27 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private getCompactContinuationSummary(): string {
     const summary = this.getCompactToolSummary();
     const previousSummary = this.compactToolPreviousSummary;
+    if (!summary) return '';
     if (!previousSummary) return this.isComplete() ? summary : '';
+
+    if (previousSummary.startsWith(`${summary}:`)) {
+      const dirnameStart = this.getImmediateDirnameStart(summary);
+      if (dirnameStart !== undefined) {
+        return `${this.formatSharedPrefixPlaceholder(summary, dirnameStart)}${summary.slice(dirnameStart)}`;
+      }
+    }
 
     const sharedPrefixLength = this.getSharedPrefixLength(previousSummary, summary);
     if (sharedPrefixLength === 0) return summary;
 
-    return `${this.formatSharedPrefixPlaceholder(summary, sharedPrefixLength)}${summary.slice(sharedPrefixLength)}`;
+    const visibleRemainder = summary.slice(sharedPrefixLength);
+    if (!visibleRemainder && this.hasCompletePathSegment(summary)) {
+      const dirnameStart = this.getImmediateDirnameStart(summary);
+      if (dirnameStart !== undefined) {
+        return `${this.formatSharedPrefixPlaceholder(summary, dirnameStart)}${summary.slice(dirnameStart)}`;
+      }
+    }
+    return `${this.formatSharedPrefixPlaceholder(summary, sharedPrefixLength)}${visibleRemainder}`;
   }
 
   private getImmediateDirnameStart(summary: string): number | undefined {
@@ -731,6 +879,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (filenameSlashIndex < 0) return undefined;
     const dirnameSlashIndex = path.lastIndexOf('/', filenameSlashIndex - 1);
     return dirnameSlashIndex >= 0 ? dirnameSlashIndex : filenameSlashIndex;
+  }
+
+  private hasCompletePathSegment(summary: string): boolean {
+    const pathEnd = summary.indexOf(':');
+    const path = pathEnd >= 0 ? summary.slice(0, pathEnd) : summary;
+    const lastSegment = path.slice(path.lastIndexOf('/') + 1);
+    return lastSegment.length > 0 && (pathEnd >= 0 || lastSegment.includes('.'));
   }
 
   private formatSharedPrefixPlaceholder(summary: string, sharedPrefixLength: number): string {
@@ -774,6 +929,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
   private getCompactToolSummary(): string {
     if (isWebSearchTool(this.toolName)) return this.formatWebSearchSummary();
+    if (isBrowserTool(this.toolName)) return this.formatBrowserSummary();
+    if (isSkillTool(this.toolName)) return this.formatSkillSummary();
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
@@ -788,6 +945,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case MC_TOOLS.FILE_STAT:
       case MC_TOOLS.MKDIR:
         return this.getFirstStringArg('path');
+      case MC_TOOLS.AST_SMART_EDIT:
+        return this.getFirstStringArg('path') || this.getFirstStringArg('targetName');
       case MC_TOOLS.SEARCH_CONTENT:
         return this.formatSearchSummary();
       case MC_TOOLS.LSP_INSPECT:
@@ -797,8 +956,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         return this.getFirstStringArg('pid');
       case 'skill':
         return this.getFirstStringArg('name');
+      case 'subagent':
+        return this.formatSubagentSummary();
       default:
-        return this.formatArgsSummary().trim();
+        return this.formatPlainArgsSummary().trim();
     }
   }
 
@@ -816,6 +977,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         return 'list';
       case MC_TOOLS.SEARCH_CONTENT:
         return 'grep';
+      case MC_TOOLS.DELETE_FILE:
+        return 'delete';
+      case MC_TOOLS.FILE_STAT:
+        return 'stat';
+      case MC_TOOLS.MKDIR:
+        return 'mkdir';
+      case MC_TOOLS.GET_PROCESS_OUTPUT:
+        return 'process';
+      case MC_TOOLS.KILL_PROCESS:
+        return 'kill';
+      case MC_TOOLS.AST_SMART_EDIT:
+        return 'ast_edit';
       default:
         return this.toolName;
     }
@@ -864,6 +1037,69 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const action = argsObj?.action as Record<string, unknown> | undefined;
     const query = argsObj?.query ? String(argsObj.query) : action?.query ? String(action.query) : '';
     return query ? `"${query}"` : '';
+  }
+
+  private formatBrowserSummary(): string {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const first = (...keys: string[]) => keys.map(key => argsObj?.[key]).find(value => value !== undefined && value !== null);
+    const quote = (value: unknown) => (typeof value === 'string' ? `"${value}"` : String(value));
+
+    switch (this.toolName) {
+      case 'browser_goto':
+        return this.getFirstStringArg('url');
+      case 'browser_snapshot': {
+        const interactiveOnly = first('interactiveOnly');
+        const maxDepth = first('maxDepth');
+        return [interactiveOnly !== undefined ? `interactive=${interactiveOnly}` : '', maxDepth !== undefined ? `depth=${maxDepth}` : '']
+          .filter(Boolean)
+          .join(' ');
+      }
+      case 'browser_click':
+        return [this.getFirstStringArg('ref'), first('button') ? `button=${first('button')}` : '', first('clickCount') ? `x${first('clickCount')}` : '']
+          .filter(Boolean)
+          .join(' ');
+      case 'browser_type':
+        return [this.getFirstStringArg('ref'), this.getFirstStringArg('text') ? quote(this.getFirstStringArg('text')) : '']
+          .filter(Boolean)
+          .join(' ');
+      case 'browser_press':
+        return this.getFirstStringArg('key');
+      case 'browser_select':
+        return [this.getFirstStringArg('ref'), first('value', 'label', 'index') !== undefined ? quote(first('value', 'label', 'index')) : '']
+          .filter(Boolean)
+          .join(' ');
+      case 'browser_scroll':
+        return [this.getFirstStringArg('direction'), first('amount') !== undefined ? `${first('amount')}px` : '', this.getFirstStringArg('ref')]
+          .filter(Boolean)
+          .join(' ');
+      case 'browser_wait':
+        return [this.getFirstStringArg('ref'), this.getFirstStringArg('state')].filter(Boolean).join(' ');
+      case 'browser_tabs':
+        return [this.getFirstStringArg('action'), this.getFirstStringArg('url')].filter(Boolean).join(' ');
+      case 'browser_evaluate':
+        return this.getFirstLineArg('script', 80);
+      default:
+        return this.formatPlainArgsSummary().trim();
+    }
+  }
+
+  private formatSubagentSummary(): string {
+    const agentType = this.getFirstStringArg('agentType');
+    const task = this.getFirstLineArg('task', 80);
+    return [agentType, task].filter(Boolean).join(' ');
+  }
+
+  private formatSkillSummary(): string {
+    switch (this.toolName) {
+      case 'skill':
+        return this.getFirstStringArg('name');
+      case 'skill_search':
+        return this.getFirstStringArg('query');
+      case 'skill_read':
+        return [this.getFirstStringArg('skillName'), this.getFirstStringArg('path')].filter(Boolean).join(' ');
+      default:
+        return '';
+    }
   }
 
   private formatSearchDetail(): string {
@@ -1052,14 +1288,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         return lines.length ? lines : [''];
       };
 
-      this.contentBox.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, 0, 0));
-
       const displayOutput = outputLines.map(line => renderLine(line)).join('\n');
-      if (displayOutput.trim()) {
-        this.contentBox.addChild(new Text(displayOutput, 0, 0));
-      }
+      const hasOutput = displayOutput.trim() !== '';
 
-      this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
+      this.contentBox.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, 0, 0));
+      if (hasOutput) {
+        this.contentBox.addChild(new Text(displayOutput, 0, 0));
+        this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
+      }
       const footerWrapWidth = Math.max(1, contentWidth - 2);
       const footerLines = wrapFooter(command, footerWrapWidth);
       const footerSuffixWidth = this.stripAnsi(footerSuffix).length;
@@ -2133,6 +2369,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       lines.push(line);
     }
     return lines;
+  }
+
+  private formatPlainArgsSummary(): string {
+    return this.stripAnsi(this.formatArgsSummary());
   }
 
   /**

@@ -317,11 +317,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('Tool validation failed: ask_user');
-    expect(output).toContain('Parameter: question');
-    expect(output).toContain('Required parameter is missing');
-    expect(output).toContain('Make sure to provide a "question" parameter');
-    expect(output).not.toMatch(/^ask_user .*✗$/m);
+    expect(output).toContain('ask_user');
+    expect(output).toContain('✗');
+    expect(output).toContain('Validation error: missing required parameter "question"');
+    expect(output).not.toContain('╭──');
   });
 
   it('renders quiet non-shell tool errors through detailed renderers', () => {
@@ -335,10 +334,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.updateResult({ content: [{ type: 'text', text: 'The specified text was not found.' }], isError: false });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('╭──');
-    expect(output).toContain('edit src/example.ts');
+    expect(output).toContain('edit');
+    expect(output).toContain('src/example.ts');
     expect(output).toContain('✗');
-    expect(output).not.toMatch(/^edit .*✗$/m);
+    expect(output).toContain('The specified text was not found.');
+    expect(output).not.toContain('╭──');
   });
 
   it('renders quiet edit tools with line ranges from the tool result', () => {
@@ -618,7 +618,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('limits quiet shell output to nine content lines', () => {
+  it('limits quiet shell output to fifteen content lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },
@@ -628,7 +628,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     component.updateResult(
       {
-        content: [{ type: 'text', text: Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n') }],
+        content: [{ type: 'text', text: Array.from({ length: 16 }, (_, i) => `line ${i + 1}`).join('\n') }],
         isError: false,
       },
       false,
@@ -638,9 +638,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const lines = output.split('\n');
     expect(output).toContain(theme.fg('success', ' ✓'));
     expect(output).toContain('line 2');
-    expect(output).toContain('line 10');
+    expect(output).toContain('line 16');
     expect(lines.some(line => line.includes('line 1 ') || line.includes('line 1│'))).toBe(false);
-    expect(lines.filter(line => line.includes('line '))).toHaveLength(9);
+    expect(lines.filter(line => line.includes('line '))).toHaveLength(15);
   });
 
   it('keeps quiet detail lines visible after completion', () => {
@@ -669,8 +669,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
 
     const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
     expect(output).toContain('\u001b[93m$');
     expect(output).not.toContain('⟶');
+    expect(visible).not.toContain('├');
+    expect(visible.split('\n')).toHaveLength(3);
   });
 
   it('wraps long quiet shell commands in the footer instead of truncating them', () => {
@@ -689,6 +692,225 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(footerLines.length).toBeGreaterThan(1);
     expect(footerLines[0]).toContain('│ $ pnpm');
     expect(footerLines[1]).toMatch(/^│   \S/);
+  });
+
+  it('shows same-file continuation paths while edit args are still streaming', () => {
+    const first = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'packages/app/src/example.ts', old_string: 'a', new_string: 'b' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    first.updateResult({ content: [{ type: 'text', text: 'Edited packages/app/src/example.ts (lines 4-4)' }], isError: false }, false);
+
+    const second = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'packages/app/src/example.ts', old_string: 'b', new_string: 'c' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    second.setCompactToolContinuation(true, 'packages/app/src/example.ts:4-4');
+
+    const visible = stripAnsi(second.render(100).join('\n'));
+    expect(visible).toContain('src/example.ts');
+    expect(visible).toMatch(/●─+ \/src\/example\.ts/);
+    expect(visible).not.toMatch(/^\s*[●├─ ]+$/m);
+
+    second.updateResult({ content: [{ type: 'text', text: 'Replaced 1 occurrence in packages/app/src/example.ts (lines 8-8)' }], isError: false }, false);
+    second.setCompactToolContinuation(true, 'packages/app/src/example.ts:4-4');
+    const completedVisible = stripAnsi(second.render(100).join('\n'));
+    expect(completedVisible).toContain('src/example.ts:8-8');
+    expect(completedVisible).toMatch(/●─+ \/src\/example\.ts:8-8/);
+  });
+
+  it('keeps same-file continuation connector geometry when both edits have line ranges', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts', new_string: 'const suffix = true;' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'Replaced 1 occurrence in /tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts (lines 38-43)' }], isError: false }, false);
+    component.setCompactToolContinuation(
+      true,
+      '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts:26-29',
+    );
+
+    const visible = stripAnsi(component.render(220).join('\n'));
+    expect(visible).toContain('/components/payment-metho');
+    expect(visible).toMatch(/●─+ \/components\/payment-metho/);
+  });
+
+  it('renders standalone incomplete continuations with a tool label instead of a blank call', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      {},
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true);
+
+    const visible = stripAnsi(component.render(100).join('\n'));
+    expect(visible).toContain('edit');
+    expect(visible.trim()).not.toBe('');
+  });
+
+  it('renders grouped empty continuations as a dot instead of flashing the tool label', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      {},
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true, '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts:26-29');
+
+    const firstLine = stripAnsi(component.render(120)[0] ?? '');
+    expect(firstLine).toContain('●─');
+    expect(firstLine).not.toContain('edit');
+  });
+
+  it('does not render connector-only continuation headers when summaries fully overlap', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'mastracode/src/tui/handlers/tool.ts', new_string: 'reconcileToolBoundaries(ctx);' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true, 'mastracode/src/tui/handlers/tool.ts');
+
+    const lines = stripAnsi(component.render(120).join('\n')).split('\n');
+    expect(lines[0]).toContain('/handlers/tool.ts');
+    expect(lines[0]).not.toMatch(/^\s*[●╰├─ ]+▌?\s*$/);
+  });
+
+  it('renders quiet non-shell failures in compact style with error detail', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'src/example.ts', old_string: 'missing', new_string: 'replacement' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'Error: missing replacement' }], isError: true }, false);
+
+    const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
+    expect(visible).toContain('edit');
+    expect(visible).toContain('src/example.ts');
+    expect(visible).toContain('✗');
+    expect(visible).toContain('Error: missing replacement');
+    expect(visible).not.toContain('╭──');
+  });
+
+  it('renders browser tools without duplicating args as preview lines', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'browser_goto',
+      { url: 'https://example.com' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'navigated' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(100).join('\n'));
+    expect(visible).toContain('browser_goto');
+    expect(visible).toContain('https://example.com');
+    expect(visible.split('https://example.com')).toHaveLength(2);
+    expect(visible).not.toContain('url=');
+  });
+
+  it('unwraps browser evaluate and snapshot results instead of showing success JSON', () => {
+    const evaluate = new ToolExecutionComponentEnhanced(
+      'browser_evaluate',
+      { script: 'document.title' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    evaluate.updateResult(
+      { content: [{ type: 'text', text: '{"success":true,"result":{"title":"","url":"about:blank"}}' }], isError: false },
+      false,
+    );
+
+    const snapshot = new ToolExecutionComponentEnhanced(
+      'browser_snapshot',
+      { interactiveOnly: false, maxDepth: 3 },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    snapshot.updateResult({ content: [{ type: 'text', text: '{"success":true,"snapshot":"- button Demo"}' }], isError: false }, false);
+
+    const output = stripAnsi(`${evaluate.render(120).join('\n')}\n${snapshot.render(120).join('\n')}`);
+    expect(output).toContain('title: ""');
+    expect(output).toContain('url: about:blank');
+    expect(output).toContain('- button Demo');
+    expect(output).not.toContain('"success"');
+    expect(output).not.toContain('{');
+  });
+
+  it('renders process file stat and generic result previews', () => {
+    const processOutput = new ToolExecutionComponentEnhanced(
+      'get_process_output',
+      { pid: '1234' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    processOutput.updateResult({ content: [{ type: 'text', text: 'quiet-process-demo-1\nquiet-process-demo-2' }], isError: false }, false);
+
+    const stat = new ToolExecutionComponentEnhanced(
+      'file_stat',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    stat.updateResult({ content: [{ type: 'text', text: 'src/example.ts Type: file Size: 123 bytes Modified: today' }], isError: false }, false);
+
+    const generic = new ToolExecutionComponentEnhanced(
+      'custom_tool',
+      { file: 'src/example.ts', line: 1 },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    generic.updateResult({ content: [{ type: 'text', text: '{"action":"exit","count":2}' }], isError: false }, false);
+
+    const visible = stripAnsi(`${processOutput.render(120).join('\n')}\n${stat.render(120).join('\n')}\n${generic.render(120).join('\n')}`);
+    expect(visible).toContain('process');
+    expect(visible).toContain('1234');
+    expect(visible).toContain('quiet-process-demo-1');
+    expect(visible).toContain('stat');
+    expect(visible).toContain('Type: file Size: 123 bytes Modified: today');
+    expect(visible).toContain('custom_tool');
+    expect(visible).toContain('action: exit');
+    expect(visible).toContain('count: 2');
+  });
+
+  it('uses the active continuation dot while a continuation is still streaming', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolContinuation(true, 'src/other.ts');
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('●─');
+    expect(visible).not.toContain('╰─');
+  });
+
+  it('renders deliberate browser skill workspace and process summaries', () => {
+    const cases: Array<[string, Record<string, unknown>, string[]]> = [
+      ['browser_type', { ref: 'e12', text: 'hello' }, ['browser_type', 'e12', '"hello"']],
+      ['skill_read', { skillName: 'mastra-docs', path: 'references/style.md' }, ['skill_read', 'mastra-docs references/style.md']],
+      ['file_stat', { path: 'src/example.ts' }, ['stat', 'src/example.ts']],
+      ['get_process_output', { pid: '1234' }, ['process', '1234']],
+      ['ast_smart_edit', { path: 'src/example.ts', transform: 'rename' }, ['ast_edit', 'src/example.ts']],
+    ];
+
+    for (const [toolName, args, expectedParts] of cases) {
+      const component = new ToolExecutionComponentEnhanced(toolName, args, { quietDisplayMode: 'quiet', collapsedByDefault: true }, ui);
+      const visible = stripAnsi(component.render(120).join('\n'));
+      for (const expected of expectedParts) expect(visible).toContain(expected);
+      expect(visible).not.toContain('path=');
+      expect(visible).not.toContain('pid=');
+    }
   });
 });
 
