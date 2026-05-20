@@ -2,7 +2,7 @@ import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
@@ -40,9 +40,13 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
   // 3. NOT currently viewing browser in sidebar
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded') && !isInSidebar;
 
-  const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} hasModelList={hasModelList} />;
-  };
+  const WrappedAssistantMessage = useMemo(
+    () =>
+      function AssistantMessageWrapper(props: MessagePrimitive.Root.Props) {
+        return <AssistantMessage {...props} hasModelList={hasModelList} />;
+      },
+    [hasModelList],
+  );
 
   return (
     <ThreadWrapper>
