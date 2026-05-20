@@ -460,13 +460,16 @@ function multipleInProgressError(tasks: TaskItemSnapshot[]): TaskToolResult {
   };
 }
 
-function demoteExtraInProgress(tasks: TaskItemSnapshot[]): TaskItemSnapshot[] {
+function demoteExtraInProgress(tasks: TaskItemSnapshot[], preferredIndex?: number): TaskItemSnapshot[] {
   const inProgressIndices = tasks.reduce<number[]>((acc, t, i) => {
     if (t.status === 'in_progress') acc.push(i);
     return acc;
   }, []);
   if (inProgressIndices.length <= 1) return tasks;
-  const keepIndex = inProgressIndices[inProgressIndices.length - 1]!;
+  const keepIndex =
+    preferredIndex !== undefined && inProgressIndices.includes(preferredIndex)
+      ? preferredIndex
+      : inProgressIndices[inProgressIndices.length - 1]!;
   return tasks.map((t, i) =>
     t.status === 'in_progress' && i !== keepIndex ? { ...t, status: 'pending' as const } : t,
   );
@@ -645,6 +648,7 @@ Usage:
                 }
               : task,
           ),
+          taskIndex,
         );
 
         return {

@@ -581,6 +581,38 @@ describe('taskUpdateTool', () => {
       { id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
     ]);
   });
+
+  it('preserves the explicitly updated earlier task when setting it to in_progress', async () => {
+    const initialTasks = [
+      {
+        id: 'investigate',
+        content: 'Investigate issue',
+        status: 'pending' as const,
+        activeForm: 'Investigating issue',
+      },
+      {
+        id: 'tests',
+        content: 'Write tests',
+        status: 'in_progress' as const,
+        activeForm: 'Writing tests',
+      },
+    ];
+    const ctx = createTaskContext(initialTasks);
+
+    const result = await (taskUpdateTool as any).execute(
+      {
+        id: 'investigate',
+        status: 'in_progress',
+      },
+      { requestContext: ctx.requestContext },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(ctx.state.tasks).toEqual([
+      { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },
+      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+    ]);
+  });
 });
 
 describe('taskCompleteTool', () => {
