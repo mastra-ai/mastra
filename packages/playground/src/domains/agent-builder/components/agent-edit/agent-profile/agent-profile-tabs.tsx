@@ -36,16 +36,18 @@ export const AgentProfileTabs = ({
   const tabContentClassName = 'h-full min-h-0';
   const isEditable = !disabled;
 
+  const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
+
   return (
     <div
       className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] border-t border-border1 overflow-hidden"
       data-testid="agent-profile-tabs"
     >
-      <Tabs defaultTab="instructions" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+      <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <TabList variant="line" sticky className="px-2">
-          <Tab value="instructions">Instructions</Tab>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
+          <Tab value="instructions">Instructions</Tab>
           {skillsTabEnabled && <Tab value="skills">Skills</Tab>}
         </TabList>
 
@@ -56,15 +58,15 @@ export const AgentProfileTabs = ({
             </TabContent>
           )}
 
-          <TabContent value="instructions" className={tabContentClassName}>
-            <Instructions editable={isEditable} fallbackPrompt={fallbackInstructions} />
-          </TabContent>
-
           {toolsTabEnabled && (
             <TabContent value="tools" className={tabContentClassName}>
               <Tools availableAgentTools={availableAgentTools} editable={isEditable} />
             </TabContent>
           )}
+
+          <TabContent value="instructions" className={tabContentClassName}>
+            <Instructions editable={isEditable} fallbackPrompt={fallbackInstructions} />
+          </TabContent>
 
           {skillsTabEnabled && (
             <TabContent value="skills" className={tabContentClassName}>

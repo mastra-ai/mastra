@@ -133,8 +133,6 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
 // eslint-disable-next-line react-refresh/only-export-components
 export const useWizard = (): WizardContextValue => {
   const ctx = useContext(WizardContext);
-  if (!ctx) {
-    throw new Error('useWizard must be used inside <WizardProvider>');
-  }
-  return ctx;
+
+  return ctx ?? { step: 'end', next: () => {}, steps: [] };
 };

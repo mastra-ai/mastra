@@ -33,40 +33,36 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   };
 
   return (
-    <div className="flex items-center justify-center" style={{ viewTransitionName: 'agent-avatar' }}>
-      <div className="origin-center scale-150">
-        <div className="rounded-full bg-surface3 p-1">
-          {interactive ? (
-            <>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={disabled}
-                className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label="Upload avatar"
-                data-testid="agent-configure-avatar-trigger"
-              >
-                <Avatar src={draftAvatarUrl} name={draftName} size="lg" interactive />
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity">
-                  <Plus className="h-5 w-5 text-neutral5" />
-                </span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarFile}
-                className="hidden"
-                data-testid="agent-configure-avatar-input"
-              />
-            </>
-          ) : (
-            <div data-testid="agent-configure-avatar-display">
-              <Avatar src={draftAvatarUrl} name={draftName} size="lg" />
-            </div>
-          )}
+    <div className="rounded-full bg-surface3 p-1 scale-125" style={{ viewTransitionName: 'agent-avatar' }}>
+      {interactive ? (
+        <>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Upload avatar"
+            data-testid="agent-configure-avatar-trigger"
+          >
+            <Avatar src={draftAvatarUrl} name={draftName} size="lg" interactive />
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity">
+              <Plus className="h-5 w-5 text-neutral5" />
+            </span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarFile}
+            className="hidden"
+            data-testid="agent-configure-avatar-input"
+          />
+        </>
+      ) : (
+        <div data-testid="agent-configure-avatar-display">
+          <Avatar src={draftAvatarUrl} name={draftName} size="lg" />
         </div>
-      </div>
+      )}
     </div>
   );
 };
