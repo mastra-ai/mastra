@@ -1030,21 +1030,7 @@ export class HarnessLibSQL extends HarnessStorage {
              kind, primitive_type, element_type, renderer_json, schema_id, metadata_json, object_json,
              created_at, data_b64)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT DO UPDATE SET
-              name = excluded.name,
-              mime_type = excluded.mime_type,
-              size_bytes = excluded.size_bytes,
-              sha256 = excluded.sha256,
-              source = excluded.source,
-              kind = excluded.kind,
-              primitive_type = excluded.primitive_type,
-              element_type = excluded.element_type,
-              renderer_json = excluded.renderer_json,
-              schema_id = excluded.schema_id,
-              metadata_json = excluded.metadata_json,
-              object_json = excluded.object_json,
-              created_at = excluded.created_at,
-              data_b64 = excluded.data_b64`,
+            ON CONFLICT(harness_name, session_id, attachment_id) DO NOTHING`,
       args: [
         namespace,
         sessionId,
@@ -1065,7 +1051,16 @@ export class HarnessLibSQL extends HarnessStorage {
         dataB64,
       ],
     });
-    return { attachmentId, bytes, sha256 };
+    const row = (
+      await this.#client.execute({
+        sql: `SELECT attachment_id, size_bytes, sha256
+              FROM ${TABLE_HARNESS_ATTACHMENTS}
+              WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
+        args: [namespace, sessionId, attachmentId],
+      })
+    ).rows[0];
+    if (!row) throw new Error(`Failed to save attachment "${attachmentId}"`);
+    return { attachmentId: String(row.attachment_id), bytes: Number(row.size_bytes), sha256: String(row.sha256) };
   }
 
   async loadAttachment({

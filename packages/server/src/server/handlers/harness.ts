@@ -1,5 +1,13 @@
+import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { request as httpRequest } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage, RequestOptions } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { isIP } from 'node:net';
+
 import { parseHarnessEventId } from '@mastra/core/harness/v1';
 import type {
+  AttachmentRef,
   GoalOptions,
   GoalState,
   HarnessMessage,
@@ -20,6 +28,9 @@ import type { StatusCode } from '../http-exception';
 import {
   createHarnessSessionBodySchema,
   createHarnessSessionResponseSchema,
+  harnessAttachmentPathParams,
+  harnessAttachmentUploadBodySchema,
+  harnessAttachmentUploadResponseSchema,
   harnessGoalBodySchema,
   harnessGoalResponseSchema,
   harnessInboxPathParams,
@@ -51,6 +62,32 @@ import { enforceThreadAccess, getEffectiveResourceId } from './utils';
 
 type SessionLifecycleStatus = 'active' | 'closing' | 'closed';
 type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+type UrlAttachmentInput = {
+  kind: 'url';
+  url: string;
+  name: string;
+  mimeType?: string;
+  sha256?: string;
+  metadata?: Record<string, unknown>;
+};
+type RefAttachmentInput = Omit<AttachmentRef, 'kind'> & {
+  kind: 'ref';
+  attachmentKind?: AttachmentRef['kind'];
+};
+type WireAttachmentInput = AttachmentRef | RefAttachmentInput | UrlAttachmentInput;
+type HarnessFilePolicy = {
+  maxInlineBytes: number;
+  maxUrlBytes: number;
+  urlFetchTimeoutMs: number;
+  maxUrlRedirects: number;
+  allowPrivateNetworkUrls: boolean;
+  allowedUrlMimeTypes?: readonly string[];
+};
+type UrlIngestionTarget = {
+  hostname: string;
+  hostHeader: string;
+  servername?: string;
+};
 
 type HarnessSessionListItem = {
   sessionId: string;
@@ -197,6 +234,18 @@ type HarnessLike = {
       limit: number;
     }): Promise<Array<{ event: HarnessEvent; sequence: number }>>;
   }>;
+  attachments: {
+    upload(opts: unknown): Promise<AttachmentRef>;
+    delete(opts: { sessionId: string; resourceId?: string; attachmentId: string }): Promise<void>;
+  };
+  getFileConfig?(): {
+    maxUrlBytes?: number;
+    maxInlineBytes?: number;
+    urlFetchTimeoutMs?: number;
+    maxUrlRedirects?: number;
+    allowPrivateNetworkUrls?: boolean;
+    allowedUrlMimeTypes?: readonly string[];
+  };
   listSessions(opts: {
     resourceId: string;
     includeClosed?: boolean;
@@ -235,8 +284,14 @@ type CreateHarnessSessionBody = {
   modeId?: string;
   modelId?: string;
 };
-type MessageAdmissionBody = Parameters<HarnessSessionLike['admitMessage']>[0];
-type QueueAdmissionBody = Parameters<HarnessSessionLike['admitQueue']>[0];
+type MessageAdmissionBody = Omit<Parameters<HarnessSessionLike['admitMessage']>[0], 'attachments'> & {
+  attachments?: WireAttachmentInput[];
+  files?: WireAttachmentInput[];
+};
+type QueueAdmissionBody = Omit<Parameters<HarnessSessionLike['admitQueue']>[0], 'attachments'> & {
+  attachments?: WireAttachmentInput[];
+  files?: WireAttachmentInput[];
+};
 type OperationLookupResponse =
   | { status: 'pending'; source: 'message' | 'queue'; runId?: string }
   | { status: 'completed'; source: 'message' | 'queue'; runId?: string; result: unknown }
@@ -257,6 +312,11 @@ type MastraStorageLike = {
 
 const DEFAULT_LIST_LIMIT = 50;
 const SNAPSHOT_MESSAGE_LIMIT = 50;
+const DEFAULT_INLINE_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+const DEFAULT_URL_INGESTION_MAX_BYTES = 50 * 1024 * 1024;
+const DEFAULT_URL_INGESTION_TIMEOUT_MS = 30_000;
+const DEFAULT_URL_INGESTION_MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function toHarnessErrorBody(
   code: string,
@@ -437,6 +497,34 @@ function objectRequestBody(requestBody: unknown, label: string): Record<string, 
   return { ...(requestBody as Record<string, unknown>) };
 }
 
+function optionalRecordField(
+  body: Record<string, unknown>,
+  field: string,
+  label: string,
+): Record<string, unknown> | undefined {
+  const value = body[field];
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} "${field}" must be an object`, {
+      field,
+      reason: 'invalid',
+    });
+  }
+  return { ...(value as Record<string, unknown>) };
+}
+
+function optionalStringField(body: Record<string, unknown>, field: string, label: string): string | undefined {
+  const value = body[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} "${field}" is invalid`, {
+      field,
+      reason: 'invalid',
+    });
+  }
+  return value;
+}
+
 function requiredStringField(body: Record<string, unknown>, field: string, label: string): string {
   const value = body[field];
   if (typeof value !== 'string' || value.length === 0) {
@@ -446,6 +534,131 @@ function requiredStringField(body: Record<string, unknown>, field: string, label
     });
   }
   return value;
+}
+
+function isUint8ArrayLike(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array;
+}
+
+function binaryUploadField(value: unknown): Uint8Array | undefined {
+  if (value === undefined) return undefined;
+  if (isUint8ArrayLike(value)) return new Uint8Array(value);
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
+  }
+  return undefined;
+}
+
+function jsonUploadFieldBytes(value: unknown, field: string, label: string): number {
+  try {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new Error('not JSON-serializable');
+    return Buffer.byteLength(encoded);
+  } catch {
+    throwHarnessHttpError(400, 'harness.validation', `${label} "${field}" must be JSON-serializable`, {
+      field,
+      reason: 'invalid',
+    });
+  }
+}
+
+function assertInlineUploadBytes(bytes: number, policy: HarnessFilePolicy): void {
+  if (bytes <= policy.maxInlineBytes) return;
+  throwHarnessHttpError(400, 'harness.attachment_unavailable', 'Attachment exceeds the configured byte limit', {
+    reason: 'too_large',
+    maxBytes: policy.maxInlineBytes,
+  });
+}
+
+function uploadOptionsFromBody(
+  body: Record<string, unknown>,
+  sessionId: string,
+  resourceId: string,
+  policy: HarnessFilePolicy,
+): unknown {
+  const label = 'Attachment upload';
+  const kind = body.kind ?? 'file';
+  const metadata = optionalRecordField(body, 'metadata', label);
+  if (kind === 'primitive') {
+    if (!Object.prototype.hasOwnProperty.call(body, 'value')) {
+      throwHarnessHttpError(400, 'harness.validation', `${label} requires "value"`, {
+        field: 'value',
+        reason: 'required',
+      });
+    }
+    assertInlineUploadBytes(jsonUploadFieldBytes(body.value, 'value', label), policy);
+    return {
+      sessionId,
+      resourceId,
+      kind,
+      name: requiredStringField(body, 'name', label),
+      primitiveType: requiredStringField(body, 'primitiveType', label),
+      value: body.value,
+      ...(optionalStringField(body, 'mimeType', label)
+        ? { mimeType: optionalStringField(body, 'mimeType', label) }
+        : {}),
+      ...(metadata ? { metadata } : {}),
+    };
+  }
+  if (kind === 'element') {
+    if (!Object.prototype.hasOwnProperty.call(body, 'payload')) {
+      throwHarnessHttpError(400, 'harness.validation', `${label} requires "payload"`, {
+        field: 'payload',
+        reason: 'required',
+      });
+    }
+    assertInlineUploadBytes(jsonUploadFieldBytes(body.payload, 'payload', label), policy);
+    return {
+      sessionId,
+      resourceId,
+      kind,
+      name: requiredStringField(body, 'name', label),
+      elementType: requiredStringField(body, 'elementType', label),
+      payload: body.payload,
+      ...(optionalRecordField(body, 'renderer', label)
+        ? { renderer: optionalRecordField(body, 'renderer', label) }
+        : {}),
+      ...(optionalStringField(body, 'schemaId', label)
+        ? { schemaId: optionalStringField(body, 'schemaId', label) }
+        : {}),
+      ...(optionalStringField(body, 'mimeType', label)
+        ? { mimeType: optionalStringField(body, 'mimeType', label) }
+        : {}),
+      ...(metadata ? { metadata } : {}),
+    };
+  }
+  if (kind !== 'file') {
+    throwHarnessHttpError(400, 'harness.validation', `${label} kind is invalid`, {
+      field: 'kind',
+      reason: 'invalid',
+    });
+  }
+
+  const data =
+    binaryUploadField(body.file) ??
+    binaryUploadField(body.data) ??
+    binaryUploadField(body.payload) ??
+    (typeof body.dataBase64 === 'string' ? Buffer.from(body.dataBase64, 'base64') : undefined);
+  if (!data) {
+    throwHarnessHttpError(400, 'harness.validation', `${label} requires binary "file", "data", or "payload"`, {
+      field: 'file',
+      reason: 'required',
+    });
+  }
+  assertInlineUploadBytes(data.byteLength, policy);
+  return {
+    sessionId,
+    resourceId,
+    kind: 'file',
+    data,
+    filename: optionalStringField(body, 'filename', label) ?? optionalStringField(body, 'name', label) ?? 'attachment',
+    contentType:
+      optionalStringField(body, 'contentType', label) ??
+      optionalStringField(body, 'mimeType', label) ??
+      'application/octet-stream',
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 function requiredPermissionPolicy(body: Record<string, unknown>, label: string): 'allow' | 'ask' | 'deny' {
@@ -543,6 +756,485 @@ function getAuthResourceId(requestContext: RequestContext): string {
     });
   }
   return resourceId;
+}
+
+function isUrlAttachmentInput(attachment: WireAttachmentInput): attachment is UrlAttachmentInput {
+  return (
+    !!attachment &&
+    typeof attachment === 'object' &&
+    (attachment as { kind?: unknown }).kind === 'url' &&
+    typeof (attachment as { url?: unknown }).url === 'string'
+  );
+}
+
+function isRefAttachmentInput(attachment: WireAttachmentInput): attachment is RefAttachmentInput {
+  return !!attachment && typeof attachment === 'object' && (attachment as { kind?: unknown }).kind === 'ref';
+}
+
+function filePolicyForHarness(harness: HarnessLike): HarnessFilePolicy {
+  const config = harness.getFileConfig?.() ?? {};
+  return {
+    maxInlineBytes: config.maxInlineBytes ?? DEFAULT_INLINE_ATTACHMENT_MAX_BYTES,
+    maxUrlBytes: config.maxUrlBytes ?? DEFAULT_URL_INGESTION_MAX_BYTES,
+    urlFetchTimeoutMs: config.urlFetchTimeoutMs ?? DEFAULT_URL_INGESTION_TIMEOUT_MS,
+    maxUrlRedirects: config.maxUrlRedirects ?? DEFAULT_URL_INGESTION_MAX_REDIRECTS,
+    allowPrivateNetworkUrls: config.allowPrivateNetworkUrls ?? false,
+    ...(config.allowedUrlMimeTypes ? { allowedUrlMimeTypes: config.allowedUrlMimeTypes } : {}),
+  };
+}
+
+function isPrivateIpv4Address(address: string): boolean {
+  const parts = address.split('.').map(part => Number.parseInt(part, 10));
+  const [a, b] = parts;
+  if (a === 10 || a === 127 || a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b !== undefined && b >= 64 && b <= 127) return true;
+  if (a !== undefined && a >= 224) return true;
+  return false;
+}
+
+function normalizeUrlHostname(hostname: string): string {
+  const lower = hostname.toLowerCase();
+  return lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower;
+}
+
+function ipv4FromMappedIpv6(address: string): string | undefined {
+  if (!address.startsWith('::ffff:')) return undefined;
+  const tail = address.slice('::ffff:'.length);
+  if (isIP(tail) === 4) return tail;
+  const hextets = tail.split(':');
+  if (hextets.length !== 2) return undefined;
+  const words = hextets.map(part => Number.parseInt(part, 16));
+  if (words.some(word => !Number.isInteger(word) || word < 0 || word > 0xffff)) return undefined;
+  return `${words[0]! >> 8}.${words[0]! & 0xff}.${words[1]! >> 8}.${words[1]! & 0xff}`;
+}
+
+function isIpv6LinkLocalAddress(address: string): boolean {
+  const firstHextet = Number.parseInt(address.split(':', 1)[0] ?? '', 16);
+  return Number.isInteger(firstHextet) && firstHextet >= 0xfe80 && firstHextet <= 0xfebf;
+}
+
+function isPrivateIpAddress(address: string): boolean {
+  const normalized = normalizeUrlHostname(address);
+  if (isIP(normalized) === 4) {
+    return isPrivateIpv4Address(normalized);
+  }
+  if (isIP(normalized) === 6) {
+    const lower = normalized.toLowerCase();
+    const mappedIpv4 = ipv4FromMappedIpv6(lower);
+    if (mappedIpv4) return isPrivateIpv4Address(mappedIpv4);
+    return (
+      lower === '::' ||
+      lower === '::1' ||
+      lower.startsWith('fc') ||
+      lower.startsWith('fd') ||
+      isIpv6LinkLocalAddress(lower) ||
+      lower.startsWith('ff')
+    );
+  }
+  return false;
+}
+
+function throwUrlIngestionAborted(url: URL): never {
+  throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment fetch timed out', {
+    reason: 'fetch_timeout',
+    url: url.toString(),
+  });
+}
+
+async function abortableLookup(hostname: string, url: URL, signal: AbortSignal) {
+  if (signal.aborted) throwUrlIngestionAborted(url);
+  let abort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    abort = () => {
+      try {
+        throwUrlIngestionAborted(url);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    signal.addEventListener('abort', abort, { once: true });
+  });
+  try {
+    return await Promise.race([lookup(hostname, { all: true }), aborted]);
+  } finally {
+    if (abort) signal.removeEventListener('abort', abort);
+  }
+}
+
+async function resolveUrlIngestionTargets(
+  url: URL,
+  policy: HarnessFilePolicy,
+  signal: AbortSignal,
+): Promise<UrlIngestionTarget[]> {
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachments must use http or https', {
+      reason: 'unsupported_url',
+      url: url.toString(),
+    });
+  }
+  const hostname = normalizeUrlHostname(url.hostname);
+  if (policy.allowPrivateNetworkUrls) {
+    return [{ hostname, hostHeader: url.host, ...(url.protocol === 'https:' ? { servername: hostname } : {}) }];
+  }
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname === 'metadata.google.internal'
+  ) {
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment target is not allowed', {
+      reason: 'network_target_blocked',
+      host: hostname,
+    });
+  }
+  if (isPrivateIpAddress(hostname)) {
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment target is not allowed', {
+      reason: 'network_target_blocked',
+      host: hostname,
+    });
+  }
+  if (isIP(hostname)) {
+    return [{ hostname, hostHeader: url.host, ...(url.protocol === 'https:' ? { servername: hostname } : {}) }];
+  }
+  try {
+    const addresses = await abortableLookup(hostname, url, signal);
+    if (addresses.some(entry => isPrivateIpAddress(entry.address))) {
+      throwHarnessHttpError(
+        400,
+        'harness.attachment_unavailable',
+        'URL attachment target resolves to a private address',
+        {
+          reason: 'network_target_blocked',
+          host: hostname,
+        },
+      );
+    }
+    const targets = addresses.map(entry => ({
+      hostname: entry.address,
+      hostHeader: url.host,
+      ...(url.protocol === 'https:' ? { servername: hostname } : {}),
+    }));
+    if (targets.length > 0) {
+      return targets;
+    }
+  } catch (error) {
+    if (error instanceof HTTPException) throw error;
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment target could not be resolved', {
+      reason: 'not_found',
+      host: hostname,
+    });
+  }
+  throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment target could not be resolved', {
+    reason: 'not_found',
+    host: hostname,
+  });
+}
+
+function makeUrlIngestionSignal(
+  policy: HarnessFilePolicy,
+  parentSignal?: AbortSignal,
+): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), policy.urlFetchTimeoutMs);
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener('abort', abort, { once: true });
+  if (parentSignal?.aborted) controller.abort();
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', abort);
+    },
+  };
+}
+
+function compatibleMimeType(declared: string | undefined, received: string | null): boolean {
+  if (!declared || !received) return true;
+  const declaredBase = declared.split(';', 1)[0]?.trim().toLowerCase();
+  const receivedBase = received.split(';', 1)[0]?.trim().toLowerCase();
+  return !!declaredBase && !!receivedBase && declaredBase === receivedBase;
+}
+
+function matchesAllowedMimeType(mimeType: string, allowed: string): boolean {
+  const mime = mimeType.split(';', 1)[0]?.trim().toLowerCase();
+  const pattern = allowed.trim().toLowerCase();
+  if (!mime || !pattern) return false;
+  if (pattern.endsWith('/*')) return mime.startsWith(`${pattern.slice(0, -1)}`);
+  return mime === pattern;
+}
+
+function assertAllowedUrlMimeType(mimeType: string, policy: HarnessFilePolicy, url: string): void {
+  if (!policy.allowedUrlMimeTypes || policy.allowedUrlMimeTypes.length === 0) return;
+  if (policy.allowedUrlMimeTypes.some(pattern => matchesAllowedMimeType(mimeType, pattern))) return;
+  throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment MIME type is blocked by policy', {
+    reason: 'blocked_by_policy',
+    url,
+    mimeType,
+    allowedUrlMimeTypes: policy.allowedUrlMimeTypes,
+  });
+}
+
+function headerValue(headers: IncomingHttpHeaders, name: string): string | null {
+  const value = headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+async function readIncomingBytes(
+  response: IncomingMessage,
+  url: string,
+  policy: HarnessFilePolicy,
+): Promise<Uint8Array> {
+  const contentLength = headerValue(response.headers, 'content-length');
+  if (contentLength !== null && Number(contentLength) > policy.maxUrlBytes) {
+    response.destroy();
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment exceeds the configured byte limit', {
+      reason: 'too_large',
+      url,
+      maxBytes: policy.maxUrlBytes,
+    });
+  }
+
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for await (const chunk of response) {
+    const value = typeof chunk === 'string' ? Buffer.from(chunk) : new Uint8Array(chunk);
+    bytes += value.byteLength;
+    if (bytes > policy.maxUrlBytes) {
+      response.destroy();
+      throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment exceeds the configured byte limit', {
+        reason: 'too_large',
+        url,
+        maxBytes: policy.maxUrlBytes,
+      });
+    }
+    chunks.push(value);
+  }
+  const data = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return data;
+}
+
+async function requestUrlAttachmentBytes(
+  url: URL,
+  target: UrlIngestionTarget,
+  input: UrlAttachmentInput,
+  policy: HarnessFilePolicy,
+  signal: AbortSignal,
+): Promise<{ status: number; headers: IncomingHttpHeaders; data: Uint8Array }> {
+  if (signal.aborted) throwUrlIngestionAborted(url);
+  const client = url.protocol === 'https:' ? httpsRequest : httpRequest;
+  const options: RequestOptions = {
+    protocol: url.protocol,
+    hostname: target.hostname,
+    port: url.port || undefined,
+    path: `${url.pathname}${url.search}`,
+    method: 'GET',
+    headers: {
+      host: target.hostHeader,
+      ...(input.mimeType ? { accept: input.mimeType } : {}),
+    },
+    ...(target.servername ? { servername: target.servername } : {}),
+  };
+  return await new Promise((resolve, reject) => {
+    const req = client(options, response => {
+      const status = response.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        const headers = response.headers;
+        response.destroy();
+        resolve({ status, headers, data: new Uint8Array() });
+        return;
+      }
+      readIncomingBytes(response, url.toString(), policy)
+        .then(data => resolve({ status, headers: response.headers, data }))
+        .catch(reject);
+    });
+    const abort = () => req.destroy(new Error('aborted'));
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    req.on('error', reject);
+    req.on('close', () => signal.removeEventListener('abort', abort));
+    req.end();
+  });
+}
+
+async function fetchUrlAttachmentBytes(
+  input: UrlAttachmentInput,
+  policy: HarnessFilePolicy,
+  abortSignal?: AbortSignal,
+): Promise<{ data: Uint8Array; mimeType: string; sha256: string }> {
+  let current = new URL(input.url);
+  const { signal, cleanup } = makeUrlIngestionSignal(policy, abortSignal);
+  try {
+    for (let redirect = 0; redirect <= policy.maxUrlRedirects; redirect += 1) {
+      const targets = await resolveUrlIngestionTargets(current, policy, signal);
+      let response: Awaited<ReturnType<typeof requestUrlAttachmentBytes>> | undefined;
+      let fetchError: unknown;
+      for (const target of targets) {
+        try {
+          response = await requestUrlAttachmentBytes(current, target, input, policy, signal);
+          break;
+        } catch (error) {
+          if (error instanceof HTTPException) throw error;
+          if (signal.aborted) throwUrlIngestionAborted(current);
+          fetchError = error;
+        }
+      }
+      if (!response) {
+        if (fetchError) throw fetchError;
+        throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment target could not be resolved', {
+          reason: 'not_found',
+          url: current.toString(),
+        });
+      }
+      if (REDIRECT_STATUSES.has(response.status)) {
+        const location = headerValue(response.headers, 'location');
+        if (!location || redirect === policy.maxUrlRedirects) {
+          throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment exceeded redirect policy', {
+            reason: 'redirect_limit_exceeded',
+            url: current.toString(),
+            maxRedirects: policy.maxUrlRedirects,
+          });
+        }
+        current = new URL(location, current);
+        continue;
+      }
+      if (response.status < 200 || response.status >= 300) {
+        throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment could not be fetched', {
+          reason: 'not_found',
+          url: current.toString(),
+          status: response.status,
+        });
+      }
+      const responseMimeType = headerValue(response.headers, 'content-type');
+      if (!compatibleMimeType(input.mimeType, responseMimeType)) {
+        throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment MIME type does not match', {
+          reason: 'mime_mismatch',
+          url: current.toString(),
+          declaredMimeType: input.mimeType,
+          responseMimeType,
+        });
+      }
+      const mimeType = input.mimeType ?? responseMimeType?.split(';', 1)[0]?.trim() ?? 'application/octet-stream';
+      assertAllowedUrlMimeType(mimeType, policy, current.toString());
+      const data = response.data;
+      const sha256 = createHash('sha256').update(data).digest('hex');
+      if (input.sha256 && input.sha256 !== sha256) {
+        throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment digest does not match', {
+          reason: 'digest_mismatch',
+          url: current.toString(),
+          expectedSha256: input.sha256,
+          actualSha256: sha256,
+        });
+      }
+      return {
+        data,
+        mimeType,
+        sha256,
+      };
+    }
+  } catch (error) {
+    if (error instanceof HTTPException) throw error;
+    throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment could not be fetched', {
+      reason: signal.aborted ? 'fetch_timeout' : 'not_found',
+      url: current.toString(),
+    });
+  } finally {
+    cleanup();
+  }
+  throwHarnessHttpError(400, 'harness.attachment_unavailable', 'URL attachment exceeded redirect policy', {
+    reason: 'redirect_limit_exceeded',
+    url: current.toString(),
+  });
+}
+
+function deterministicUrlAttachmentId(
+  operationKind: 'message' | 'queue',
+  sessionId: string,
+  admissionId: string,
+  index: number,
+): string {
+  const digest = createHash('sha256')
+    .update(`harness-url-attachment\0${operationKind}\0${sessionId}\0${admissionId}\0${index}`)
+    .digest('hex');
+  return `attachment-url-${digest.slice(0, 40)}`;
+}
+
+async function normalizeAdmissionAttachments(
+  harness: HarnessLike,
+  operationKind: 'message' | 'queue',
+  sessionId: string,
+  resourceId: string,
+  body: MessageAdmissionBody | QueueAdmissionBody,
+  abortSignal?: AbortSignal,
+): Promise<AttachmentRef[] | undefined> {
+  if (body.files !== undefined && body.attachments !== undefined) {
+    throwHarnessHttpError(400, 'harness.validation', 'Use either "attachments" or "files", not both', {
+      field: 'attachments',
+      reason: 'exclusive',
+    });
+  }
+  const attachments = body.files ?? body.attachments;
+  if (!attachments) return undefined;
+  const policy = filePolicyForHarness(harness);
+  const normalized: AttachmentRef[] = [];
+  for (let index = 0; index < attachments.length; index += 1) {
+    const attachment = attachments[index]!;
+    if (isRefAttachmentInput(attachment)) {
+      const { kind: _kind, attachmentKind, ...ref } = attachment;
+      normalized.push({ ...ref, ...(attachmentKind ? { kind: attachmentKind } : {}) });
+      continue;
+    }
+    if (!isUrlAttachmentInput(attachment)) {
+      normalized.push(attachment as AttachmentRef);
+      continue;
+    }
+    const fetched = await fetchUrlAttachmentBytes(attachment, policy, abortSignal);
+    const ref = await harness.attachments.upload({
+      sessionId,
+      resourceId,
+      kind: 'file',
+      data: fetched.data,
+      filename: attachment.name,
+      contentType: fetched.mimeType,
+      attachmentId: deterministicUrlAttachmentId(operationKind, sessionId, body.admissionId, index),
+      source: 'url',
+      ...(attachment.metadata ? { metadata: attachment.metadata } : {}),
+    });
+    normalized.push(ref);
+  }
+  return normalized;
+}
+
+async function normalizeMessageAdmissionBody(
+  harness: HarnessLike,
+  sessionId: string,
+  resourceId: string,
+  body: MessageAdmissionBody,
+  abortSignal?: AbortSignal,
+): Promise<Parameters<HarnessSessionLike['admitMessage']>[0]> {
+  const { files: _files, attachments: _attachments, ...rest } = body;
+  const attachments = await normalizeAdmissionAttachments(harness, 'message', sessionId, resourceId, body, abortSignal);
+  return { ...rest, ...(attachments ? { attachments } : {}) };
+}
+
+async function normalizeQueueAdmissionBody(
+  harness: HarnessLike,
+  sessionId: string,
+  resourceId: string,
+  body: QueueAdmissionBody,
+  abortSignal?: AbortSignal,
+): Promise<Parameters<HarnessSessionLike['admitQueue']>[0]> {
+  const { files: _files, attachments: _attachments, ...rest } = body;
+  const attachments = await normalizeAdmissionAttachments(harness, 'queue', sessionId, resourceId, body, abortSignal);
+  return { ...rest, ...(attachments ? { attachments } : {}) };
 }
 
 function resolveHarness(mastra: { getHarness(name: string): HarnessLike }, name: string): HarnessLike {
@@ -724,6 +1416,13 @@ function mapHarnessError(error: unknown): never {
       sessionId: harnessErrorString(error, 'sessionId'),
       reason: harnessErrorString(error, 'reason'),
       ...(attachmentId !== undefined ? { attachmentId } : {}),
+    });
+  }
+  if (name === 'HarnessAttachmentInUseError') {
+    throwHarnessHttpError(409, 'harness.attachment_in_use', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      attachmentId: harnessErrorString(error, 'attachmentId'),
+      references: harnessErrorProp(error, 'references'),
     });
   }
   if (name === 'HarnessInboxItemNotFoundError') {
@@ -1182,6 +1881,59 @@ export const GET_HARNESS_SESSION_ROUTE = createRoute({
   },
 });
 
+export const POST_HARNESS_ATTACHMENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/attachments',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessAttachmentUploadBodySchema,
+  responseSchema: harnessAttachmentUploadResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Upload a Harness session attachment',
+  description: 'Stores a session-scoped attachment and returns its durable Harness attachment reference.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Attachment upload');
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      return await harness.attachments.upload(
+        uploadOptionsFromBody(body, pathSessionId, resourceId, filePolicyForHarness(harness)),
+      );
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const DELETE_HARNESS_ATTACHMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/harness/:name/sessions/:sessionId/attachments/:attachmentId',
+  responseType: 'datastream-response',
+  pathParamSchema: harnessAttachmentPathParams,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Delete an unused Harness session attachment',
+  description: 'Deletes an unused pre-uploaded attachment, preserving guarded-delete reference checks.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, attachmentId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const pathAttachmentId = stringPathParam(requestPathParams, attachmentId, 'attachmentId');
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      await harness.attachments.delete({ sessionId: pathSessionId, resourceId, attachmentId: pathAttachmentId });
+      return new Response(null, { status: 204 });
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
 export const POST_HARNESS_MESSAGE_ROUTE = createRoute({
   method: 'POST',
   path: '/harness/:name/sessions/:sessionId/messages',
@@ -1195,14 +1947,16 @@ export const POST_HARNESS_MESSAGE_ROUTE = createRoute({
   summary: 'Admit a Harness session message',
   description: 'Admits a retry-safe message turn and returns the durable signal identity.',
   tags: ['Harness'],
-  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams, abortSignal }) => {
     try {
       const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
       const body = objectRequestBody(requestBody, 'Message admission') as MessageAdmissionBody;
       const resourceId = getAuthResourceId(requestContext);
       const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
       const session = await harness.session({ sessionId: pathSessionId, resourceId });
-      return await session.admitMessage(body);
+      return await session.admitMessage(
+        await normalizeMessageAdmissionBody(harness, pathSessionId, resourceId, body, abortSignal),
+      );
     } catch (error) {
       return mapHarnessError(error);
     }
@@ -1222,14 +1976,16 @@ export const POST_HARNESS_QUEUE_ROUTE = createRoute({
   summary: 'Admit a Harness queued turn',
   description: 'Appends a retry-safe queued turn and returns the durable queued item identity.',
   tags: ['Harness'],
-  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams, abortSignal }) => {
     try {
       const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
       const body = objectRequestBody(requestBody, 'Queue admission') as QueueAdmissionBody;
       const resourceId = getAuthResourceId(requestContext);
       const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
       const session = await harness.session({ sessionId: pathSessionId, resourceId });
-      return await session.admitQueue(body);
+      return await session.admitQueue(
+        await normalizeQueueAdmissionBody(harness, pathSessionId, resourceId, body, abortSignal),
+      );
     } catch (error) {
       return mapHarnessError(error);
     }

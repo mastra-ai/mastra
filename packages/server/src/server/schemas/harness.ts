@@ -30,6 +30,10 @@ export const harnessSessionPathParams = harnessNamePathParams.extend({
   sessionId: z.string().min(1).describe('Harness session id'),
 });
 
+export const harnessAttachmentPathParams = harnessSessionPathParams.extend({
+  attachmentId: z.string().min(1).describe('Harness attachment id'),
+});
+
 export const harnessInboxPathParams = harnessSessionPathParams.extend({
   itemId: z.string().min(1).describe('Pending inbox item id'),
 });
@@ -181,12 +185,60 @@ const attachmentRefSchema = z
     mimeType: z.string().min(1).optional(),
     primitiveType: z.string().min(1).optional(),
     elementType: z.string().min(1).optional(),
-    renderer: jsonRecordSchema.optional(),
+    renderer: z.unknown().optional(),
     schemaId: z.string().min(1).optional(),
     metadata: jsonRecordSchema.optional(),
-    object: jsonRecordSchema.optional(),
+    object: z.unknown().optional(),
   })
   .strict();
+
+const urlAttachmentSchema = z
+  .object({
+    kind: z.literal('url'),
+    url: z.string().url(),
+    name: z.string().min(1),
+    mimeType: z.string().min(1).optional(),
+    sha256: z.string().min(1).optional(),
+    metadata: jsonRecordSchema.optional(),
+  })
+  .strict();
+
+const refAttachmentSchema = attachmentRefSchema
+  .omit({ kind: true })
+  .extend({
+    kind: z.literal('ref'),
+    attachmentKind: z.enum(['file', 'primitive', 'element']).optional(),
+  })
+  .strict();
+
+const wireAttachmentSchema = z.union([attachmentRefSchema, refAttachmentSchema, urlAttachmentSchema]);
+
+const admissionAttachmentsSchema = z.object({
+  attachments: z.array(wireAttachmentSchema).optional(),
+  files: z.array(wireAttachmentSchema).optional(),
+});
+
+export const harnessAttachmentUploadBodySchema = z
+  .object({
+    kind: z.enum(['file', 'primitive', 'element']).optional(),
+    file: z.unknown().optional(),
+    data: z.unknown().optional(),
+    payload: z.unknown().optional(),
+    dataBase64: z.string().optional(),
+    filename: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    contentType: z.string().min(1).optional(),
+    mimeType: z.string().min(1).optional(),
+    primitiveType: z.string().min(1).optional(),
+    value: z.unknown().optional(),
+    elementType: z.string().min(1).optional(),
+    renderer: z.unknown().optional(),
+    schemaId: z.string().min(1).optional(),
+    metadata: jsonRecordSchema.optional(),
+  })
+  .strict();
+
+export const harnessAttachmentUploadResponseSchema = attachmentRefSchema;
 
 export const harnessMessageAdmissionBodySchema = z
   .object({
@@ -194,9 +246,14 @@ export const harnessMessageAdmissionBodySchema = z
     admissionId: z.string().min(1),
     mode: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
-    attachments: z.array(attachmentRefSchema).optional(),
+    attachments: admissionAttachmentsSchema.shape.attachments,
+    files: admissionAttachmentsSchema.shape.files,
   })
-  .strict();
+  .strict()
+  .refine(body => body.attachments === undefined || body.files === undefined, {
+    message: 'Use either "attachments" or "files", not both',
+    path: ['attachments'],
+  });
 
 export const harnessMessageAdmissionResponseSchema = z.object({
   accepted: z.literal(true),
@@ -212,9 +269,14 @@ export const harnessQueueAdmissionBodySchema = z
     mode: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     yolo: z.boolean().optional(),
-    attachments: z.array(attachmentRefSchema).optional(),
+    attachments: admissionAttachmentsSchema.shape.attachments,
+    files: admissionAttachmentsSchema.shape.files,
   })
-  .strict();
+  .strict()
+  .refine(body => body.attachments === undefined || body.files === undefined, {
+    message: 'Use either "attachments" or "files", not both',
+    path: ['attachments'],
+  });
 
 export const harnessQueueAdmissionResponseSchema = z.object({
   accepted: z.literal(true),

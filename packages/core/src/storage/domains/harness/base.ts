@@ -547,7 +547,9 @@ export abstract class HarnessStorage extends StorageDomain {
   // -------------------------------------------------------------------------
 
   /**
-   * Persist an attachment's bytes and index row.
+   * Persist an attachment's bytes and index row. Attachment IDs are immutable:
+   * when the row already exists, adapters return the existing row's size and
+   * digest without overwriting bytes or metadata.
    *
    * Adapters MAY delegate the bytes to a blob store but the index row
    * (filename, mime type, size, digest, source, owning session) must be

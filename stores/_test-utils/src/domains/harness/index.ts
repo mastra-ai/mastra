@@ -1165,9 +1165,9 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         expect(b?.name).toBe('b.txt');
       });
 
-      it('upserts on duplicate (session_id, attachment_id)', async () => {
+      it('does not overwrite duplicate (session_id, attachment_id)', async () => {
         if (!harness) return;
-        await harness.saveAttachment({
+        const saved = await harness.saveAttachment({
           sessionId: 'session-1',
           attachmentId: 'a1',
           name: 'first.txt',
@@ -1184,9 +1184,55 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           data: new Uint8Array([2, 3]),
         });
 
+        await expect(
+          harness.saveAttachment({
+            sessionId: 'session-1',
+            attachmentId: 'a1',
+            name: 'third.txt',
+            mimeType: 'text/plain',
+            source: 'preupload',
+            data: new Uint8Array([4, 5]),
+          }),
+        ).resolves.toEqual(saved);
+
         const loaded = await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' });
-        expect(loaded?.name).toBe('second.txt');
-        expect(Array.from(loaded?.data ?? [])).toEqual([2, 3]);
+        expect(loaded?.name).toBe('first.txt');
+        expect(Array.from(loaded?.data ?? [])).toEqual([1]);
+      });
+
+      it('isolates duplicate attachment ids by harness namespace', async () => {
+        if (!harness) return;
+        await harness.saveAttachment({
+          sessionId: 'session-1',
+          attachmentId: 'a1',
+          harnessName: 'harness-a',
+          name: 'a.txt',
+          mimeType: 'text/plain',
+          source: 'preupload',
+          data: new Uint8Array([1]),
+        });
+        await harness.saveAttachment({
+          sessionId: 'session-1',
+          attachmentId: 'a1',
+          harnessName: 'harness-b',
+          name: 'b.txt',
+          mimeType: 'text/plain',
+          source: 'preupload',
+          data: new Uint8Array([2]),
+        });
+
+        const a = await harness.loadAttachment({
+          harnessName: 'harness-a',
+          sessionId: 'session-1',
+          attachmentId: 'a1',
+        });
+        const b = await harness.loadAttachment({
+          harnessName: 'harness-b',
+          sessionId: 'session-1',
+          attachmentId: 'a1',
+        });
+        expect(a?.name).toBe('a.txt');
+        expect(b?.name).toBe('b.txt');
       });
 
       it('preserves arbitrary binary content (non-UTF8 bytes)', async () => {

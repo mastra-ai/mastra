@@ -168,9 +168,7 @@ export class HarnessStateConflictError extends Error {
     public readonly attemptedVersion: number,
     public readonly currentVersion: number,
   ) {
-    super(
-      `State update for session "${sessionId}" expected version ${attemptedVersion} but found ${currentVersion}`,
-    );
+    super(`State update for session "${sessionId}" expected version ${attemptedVersion} but found ${currentVersion}`);
   }
 }
 
@@ -185,7 +183,17 @@ export class HarnessAttachmentInUseError extends Error {
   }
 }
 
-export type HarnessAttachmentUnavailableReason = 'not_found' | 'digest_mismatch' | 'bytes_mismatch';
+export type HarnessAttachmentUnavailableReason =
+  | 'not_found'
+  | 'digest_mismatch'
+  | 'bytes_mismatch'
+  | 'unsupported_url'
+  | 'redirect_limit_exceeded'
+  | 'network_target_blocked'
+  | 'fetch_timeout'
+  | 'too_large'
+  | 'mime_mismatch'
+  | 'blocked_by_policy';
 
 export class HarnessAttachmentUnavailableError extends Error {
   readonly name = 'HarnessAttachmentUnavailableError';

@@ -1,5 +1,13 @@
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
 import type { SessionDisplayState, SessionRecord } from '@mastra/core/harness/v1';
-import { HarnessAttachmentUnavailableError, HarnessInboxResponseConflictError } from '@mastra/core/harness/v1';
+import {
+  HarnessAttachmentInUseError,
+  HarnessAttachmentUnavailableError,
+  HarnessInboxResponseConflictError,
+} from '@mastra/core/harness/v1';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,6 +18,7 @@ import { HARNESS_ROUTES } from '../server-adapter/routes/harness';
 import {
   CLOSE_HARNESS_SESSION_ROUTE,
   CREATE_HARNESS_SESSION_ROUTE,
+  DELETE_HARNESS_ATTACHMENT_ROUTE,
   DELETE_HARNESS_GOAL_ROUTE,
   GET_HARNESS_GOAL_ROUTE,
   GET_HARNESS_MESSAGE_RESULT_ROUTE,
@@ -23,6 +32,7 @@ import {
   PATCH_HARNESS_PERMISSIONS_ROUTE,
   PATCH_HARNESS_STATE_ROUTE,
   PAUSE_HARNESS_GOAL_ROUTE,
+  POST_HARNESS_ATTACHMENT_ROUTE,
   POST_HARNESS_MESSAGE_ROUTE,
   POST_HARNESS_QUEUE_ROUTE,
   PUT_HARNESS_GOAL_ROUTE,
@@ -119,11 +129,32 @@ async function expectHarnessHttpError(promise: Promise<unknown>, status: number,
   }
 }
 
+async function withUrlServer(
+  handler: (request: IncomingMessage, response: ServerResponse) => void,
+  run: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const server = createServer(handler);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address() as AddressInfo;
+  try {
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close(error => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+}
+
 describe('Harness server routes', () => {
   it('registers Harness routes as authenticated Harness client routes', () => {
     expect(HARNESS_ROUTES).toContain(LIST_HARNESS_SESSIONS_ROUTE);
     expect(HARNESS_ROUTES).toContain(CREATE_HARNESS_SESSION_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_SESSION_ROUTE);
+    expect(HARNESS_ROUTES).toContain(POST_HARNESS_ATTACHMENT_ROUTE);
+    expect(HARNESS_ROUTES).toContain(DELETE_HARNESS_ATTACHMENT_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_MESSAGE_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_QUEUE_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_MESSAGE_RESULT_ROUTE);
@@ -147,6 +178,10 @@ describe('Harness server routes', () => {
     expect(CREATE_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_SESSION_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(POST_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
+    expect(POST_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
+    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_MESSAGE_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_MESSAGE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_QUEUE_ROUTE.requiresAuth).toBe(true);
@@ -586,6 +621,234 @@ describe('Harness server routes', () => {
     await expect(response.json()).resolves.toEqual({ view: 'open' });
   });
 
+  it('uploads file, primitive, and element attachments through the authenticated session scope', async () => {
+    const uploadedRef = {
+      attachmentId: 'attachment-1',
+      resourceId: 'resource-1',
+      ownerSessionId: 'session-1',
+      bytes: 5,
+      sha256: 'sha',
+      source: 'preupload',
+      kind: 'file',
+      name: 'note.txt',
+      mimeType: 'text/plain',
+    };
+    const harness = {
+      attachments: {
+        upload: vi.fn(async () => uploadedRef),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      POST_HARNESS_ATTACHMENT_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'query-code',
+          sessionId: 'query-session',
+          requestPathParams: { name: 'code', sessionId: 'session-1' },
+          requestBody: {
+            file: Buffer.from('hello'),
+            filename: 'note.txt',
+            contentType: 'text/plain',
+            metadata: { source: 'test' },
+          },
+        }),
+      ),
+    ).resolves.toEqual(uploadedRef);
+    await POST_HARNESS_ATTACHMENT_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        requestBody: {
+          kind: 'primitive',
+          name: 'selection',
+          primitiveType: 'selection',
+          value: { text: 'quoted' },
+          metadata: { provider: 'r2-compatible' },
+        },
+      }),
+    );
+    await POST_HARNESS_ATTACHMENT_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        requestBody: {
+          kind: 'element',
+          name: 'chart',
+          elementType: 'chart',
+          payload: { series: [1, 2] },
+          renderer: { component: 'chart' },
+          schemaId: 'chart.v1',
+          metadata: { bucket: 'cloudflare-r2' },
+        },
+      }),
+    );
+
+    expect(mastra.getHarness).toHaveBeenCalledWith('code');
+    expect(harness.attachments.upload).toHaveBeenNthCalledWith(1, {
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      kind: 'file',
+      data: new Uint8Array(Buffer.from('hello')),
+      filename: 'note.txt',
+      contentType: 'text/plain',
+      metadata: { source: 'test' },
+    });
+    expect(harness.attachments.upload).toHaveBeenNthCalledWith(2, {
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      kind: 'primitive',
+      name: 'selection',
+      primitiveType: 'selection',
+      value: { text: 'quoted' },
+      metadata: { provider: 'r2-compatible' },
+    });
+    expect(harness.attachments.upload).toHaveBeenNthCalledWith(3, {
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      kind: 'element',
+      name: 'chart',
+      elementType: 'chart',
+      payload: { series: [1, 2] },
+      renderer: { component: 'chart' },
+      schemaId: 'chart.v1',
+      metadata: { bucket: 'cloudflare-r2' },
+    });
+  });
+
+  it('enforces Harness inline attachment byte policy before upload', async () => {
+    const harness = {
+      getFileConfig: vi.fn(() => ({ maxInlineBytes: 4 })),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      POST_HARNESS_ATTACHMENT_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            file: Buffer.from('hello'),
+            filename: 'note.txt',
+            contentType: 'text/plain',
+          },
+        }),
+      ),
+      400,
+      'harness.attachment_unavailable',
+    );
+
+    expect(harness.getFileConfig).toHaveBeenCalled();
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+  });
+
+  it('enforces Harness inline attachment byte policy for primitives and elements before upload', async () => {
+    const harness = {
+      getFileConfig: vi.fn(() => ({ maxInlineBytes: 4 })),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      POST_HARNESS_ATTACHMENT_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            kind: 'primitive',
+            name: 'selection',
+            primitiveType: 'selection',
+            value: { text: 'quoted' },
+          },
+        }),
+      ),
+      400,
+      'harness.attachment_unavailable',
+    );
+    await expectHarnessHttpError(
+      POST_HARNESS_ATTACHMENT_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            kind: 'element',
+            name: 'chart',
+            elementType: 'chart',
+            payload: { series: [1, 2] },
+          },
+        }),
+      ),
+      400,
+      'harness.attachment_unavailable',
+    );
+
+    expect(harness.getFileConfig).toHaveBeenCalledTimes(2);
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+  });
+
+  it('deletes unused attachments through guarded Harness attachment delete', async () => {
+    const harness = {
+      attachments: {
+        delete: vi.fn(async () => undefined),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await DELETE_HARNESS_ATTACHMENT_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'query-code',
+        sessionId: 'query-session',
+        attachmentId: 'query-attachment',
+        requestPathParams: { name: 'code', sessionId: 'session-1', attachmentId: 'attachment-1' },
+      }),
+    );
+
+    expect(response.status).toBe(204);
+    expect(harness.attachments.delete).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      attachmentId: 'attachment-1',
+    });
+  });
+
+  it('maps guarded attachment delete conflicts to 409', async () => {
+    const harness = {
+      attachments: {
+        delete: vi.fn(async () => {
+          throw new HarnessAttachmentInUseError('session-1', 'attachment-1', [
+            { source: 'message', sourceId: 'signal-1' },
+          ]);
+        }),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      DELETE_HARNESS_ATTACHMENT_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          attachmentId: 'attachment-1',
+        }),
+      ),
+      409,
+      'harness.attachment_in_use',
+    );
+  });
+
   it('admits a message without awaiting its eventual result', async () => {
     const session = {
       admitMessage: vi.fn(async () => ({
@@ -620,6 +883,492 @@ describe('Harness server routes', () => {
       mode: 'default',
     });
     expect(result).toEqual({ accepted: true, signalId: 'signal-1', runId: 'run-1', duplicate: false });
+  });
+
+  it('ingests URL message files into Harness-owned refs before admission', async () => {
+    let requestHeaders: IncomingHttpHeaders | undefined;
+    const uploadedRef = {
+      attachmentId: 'attachment-url-1',
+      resourceId: 'resource-1',
+      ownerSessionId: 'session-1',
+      bytes: 9,
+      sha256: 'stored-sha',
+      source: 'url',
+      kind: 'file',
+      name: 'remote.txt',
+      mimeType: 'text/plain',
+    };
+    const session = {
+      admitMessage: vi.fn(async () => ({
+        accepted: true as const,
+        signalId: 'signal-1',
+        duplicate: false,
+      })),
+    };
+    const harness = {
+      getFileConfig: vi.fn(() => ({ allowPrivateNetworkUrls: true })),
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(async () => uploadedRef),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await withUrlServer(
+      (request, response) => {
+        requestHeaders = request.headers;
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('url-bytes');
+      },
+      async baseUrl => {
+        await expect(
+          POST_HARNESS_MESSAGE_ROUTE.handler(
+            makeParams({
+              mastra,
+              name: 'code',
+              sessionId: 'session-1',
+              requestBody: {
+                content: 'hello',
+                admissionId: 'admission-1',
+                files: [
+                  {
+                    kind: 'url',
+                    url: `${baseUrl}/remote.txt`,
+                    name: 'remote.txt',
+                    mimeType: 'text/plain',
+                    metadata: { provider: 'cloudflare-r2-compatible' },
+                  },
+                ],
+              },
+            }),
+          ),
+        ).resolves.toEqual({ accepted: true, signalId: 'signal-1', duplicate: false });
+      },
+    );
+
+    expect(requestHeaders?.accept).toBe('text/plain');
+    expect(requestHeaders?.authorization).toBeUndefined();
+    expect(requestHeaders?.cookie).toBeUndefined();
+    expect(harness.getFileConfig).toHaveBeenCalled();
+    expect(harness.attachments.upload).toHaveBeenCalledTimes(1);
+    const uploaded = harness.attachments.upload.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(uploaded).toMatchObject({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      kind: 'file',
+      data: new Uint8Array(Buffer.from('url-bytes')),
+      filename: 'remote.txt',
+      contentType: 'text/plain',
+      source: 'url',
+      metadata: { provider: 'cloudflare-r2-compatible' },
+    });
+    expect(uploaded.attachmentId).toMatch(/^attachment-url-/);
+    expect(session.admitMessage).toHaveBeenCalledWith({
+      content: 'hello',
+      admissionId: 'admission-1',
+      attachments: [uploadedRef],
+    });
+  });
+
+  it('uses stable URL attachment ids for admission retries', async () => {
+    const session = {
+      admitMessage: vi.fn(async () => ({
+        accepted: true as const,
+        signalId: 'signal-1',
+        duplicate: false,
+      })),
+    };
+    const harness = {
+      getFileConfig: vi.fn(() => ({ allowPrivateNetworkUrls: true })),
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(async (opts: any) => ({
+          attachmentId: opts.attachmentId,
+          resourceId: 'resource-1',
+          ownerSessionId: 'session-1',
+          bytes: 9,
+          sha256: 'stored-sha',
+          source: 'url',
+          kind: 'file',
+          name: opts.filename,
+          mimeType: opts.contentType,
+        })),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await withUrlServer(
+      (_request, response) => {
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('url-bytes');
+      },
+      async baseUrl => {
+        const requestBody = {
+          content: 'hello',
+          admissionId: 'admission-1',
+          files: [{ kind: 'url', url: `${baseUrl}/remote.txt`, name: 'remote.txt', mimeType: 'text/plain' }],
+        };
+        await POST_HARNESS_MESSAGE_ROUTE.handler(
+          makeParams({ mastra, name: 'code', sessionId: 'session-1', requestBody }),
+        );
+        await POST_HARNESS_MESSAGE_ROUTE.handler(
+          makeParams({ mastra, name: 'code', sessionId: 'session-1', requestBody }),
+        );
+      },
+    );
+
+    const firstId = harness.attachments.upload.mock.calls[0]?.[0].attachmentId;
+    const secondId = harness.attachments.upload.mock.calls[1]?.[0].attachmentId;
+    expect(firstId).toMatch(/^attachment-url-/);
+    expect(secondId).toBe(firstId);
+  });
+
+  it('does not buffer redirect bodies before following URL attachment redirects', async () => {
+    const session = {
+      admitMessage: vi.fn(async () => ({
+        accepted: true as const,
+        signalId: 'signal-1',
+        duplicate: false,
+      })),
+    };
+    const harness = {
+      getFileConfig: vi.fn(() => ({ allowPrivateNetworkUrls: true, maxUrlBytes: 4 })),
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(async (opts: any) => ({
+          attachmentId: opts.attachmentId,
+          resourceId: 'resource-1',
+          ownerSessionId: 'session-1',
+          bytes: opts.data.byteLength,
+          sha256: 'stored-sha',
+          source: 'url',
+          kind: 'file',
+          name: opts.filename,
+          mimeType: opts.contentType,
+        })),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await withUrlServer(
+      (request, response) => {
+        if (request.url === '/redirect') {
+          response.writeHead(302, { location: '/remote.txt', 'content-type': 'text/plain' });
+          response.end('too-large-for-policy');
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('ok');
+      },
+      async baseUrl => {
+        await expect(
+          POST_HARNESS_MESSAGE_ROUTE.handler(
+            makeParams({
+              mastra,
+              name: 'code',
+              sessionId: 'session-1',
+              requestBody: {
+                content: 'hello',
+                admissionId: 'admission-1',
+                files: [{ kind: 'url', url: `${baseUrl}/redirect`, name: 'remote.txt', mimeType: 'text/plain' }],
+              },
+            }),
+          ),
+        ).resolves.toEqual({ accepted: true, signalId: 'signal-1', duplicate: false });
+      },
+    );
+
+    expect(harness.attachments.upload).toHaveBeenCalledTimes(1);
+    expect(harness.attachments.upload.mock.calls[0]?.[0].data).toEqual(new Uint8Array(Buffer.from('ok')));
+  });
+
+  it('normalizes spec ref attachments before message admission', async () => {
+    const session = {
+      admitMessage: vi.fn(async () => ({
+        accepted: true as const,
+        signalId: 'signal-1',
+        duplicate: false,
+      })),
+    };
+    const harness = {
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      POST_HARNESS_MESSAGE_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            content: 'hello',
+            admissionId: 'admission-1',
+            files: [
+              {
+                kind: 'ref',
+                attachmentKind: 'element',
+                attachmentId: 'attachment-1',
+                resourceId: 'resource-1',
+                ownerSessionId: 'session-1',
+                bytes: 128,
+                sha256: 'sha',
+                source: 'preupload',
+                name: 'chart',
+                elementType: 'chart',
+              },
+            ],
+          },
+        }),
+      ),
+    ).resolves.toEqual({ accepted: true, signalId: 'signal-1', duplicate: false });
+
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitMessage).toHaveBeenCalledWith({
+      content: 'hello',
+      admissionId: 'admission-1',
+      attachments: [
+        {
+          kind: 'element',
+          attachmentId: 'attachment-1',
+          resourceId: 'resource-1',
+          ownerSessionId: 'session-1',
+          bytes: 128,
+          sha256: 'sha',
+          source: 'preupload',
+          name: 'chart',
+          elementType: 'chart',
+        },
+      ],
+    });
+  });
+
+  it('rejects direct handler calls that provide both files and attachments', async () => {
+    const session = {
+      admitMessage: vi.fn(),
+    };
+    const harness = {
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      POST_HARNESS_MESSAGE_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            content: 'hello',
+            admissionId: 'admission-1',
+            files: [{ attachmentId: 'attachment-1', resourceId: 'resource-1' }],
+            attachments: [{ attachmentId: 'attachment-2', resourceId: 'resource-1' }],
+          },
+        }),
+      ),
+      400,
+      'harness.validation',
+    );
+
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported URL attachments before upload or durable admission', async () => {
+    const session = {
+      admitMessage: vi.fn(),
+    };
+    const harness = {
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      POST_HARNESS_MESSAGE_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            content: 'hello',
+            admissionId: 'admission-1',
+            attachments: [{ kind: 'url', url: 'file:///tmp/secret', name: 'secret.txt' }],
+          },
+        }),
+      ),
+      400,
+      'harness.attachment_unavailable',
+    );
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitMessage).not.toHaveBeenCalled();
+  });
+
+  it('blocks private IPv6 URL attachment targets before upload or admission', async () => {
+    const session = {
+      admitMessage: vi.fn(),
+    };
+    const harness = {
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      POST_HARNESS_MESSAGE_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            content: 'hello',
+            admissionId: 'admission-1',
+            files: [{ kind: 'url', url: 'http://[fe90::1]/secret.txt', name: 'secret.txt' }],
+          },
+        }),
+      ),
+      400,
+      'harness.attachment_unavailable',
+    );
+
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitMessage).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when URL attachment host resolution fails', async () => {
+    const session = {
+      admitMessage: vi.fn(),
+    };
+    const harness = {
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      POST_HARNESS_MESSAGE_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          requestBody: {
+            content: 'hello',
+            admissionId: 'admission-1',
+            files: [{ kind: 'url', url: 'http://host-does-not-exist.invalid/secret.txt', name: 'secret.txt' }],
+          },
+        }),
+      ),
+      400,
+      'harness.attachment_unavailable',
+    );
+
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitMessage).not.toHaveBeenCalled();
+  });
+
+  it('enforces Harness URL attachment byte policy before upload or admission', async () => {
+    const session = {
+      admitMessage: vi.fn(),
+    };
+    const harness = {
+      getFileConfig: vi.fn(() => ({ allowPrivateNetworkUrls: true, maxUrlBytes: 4 })),
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await withUrlServer(
+      (_request, response) => {
+        response.writeHead(200, { 'content-length': '9', 'content-type': 'text/plain' });
+        response.end('url-bytes');
+      },
+      async baseUrl => {
+        await expectHarnessHttpError(
+          POST_HARNESS_MESSAGE_ROUTE.handler(
+            makeParams({
+              mastra,
+              name: 'code',
+              sessionId: 'session-1',
+              requestBody: {
+                content: 'hello',
+                admissionId: 'admission-1',
+                files: [{ kind: 'url', url: `${baseUrl}/remote.txt`, name: 'remote.txt' }],
+              },
+            }),
+          ),
+          400,
+          'harness.attachment_unavailable',
+        );
+      },
+    );
+
+    expect(harness.getFileConfig).toHaveBeenCalled();
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects URL digest mismatches before upload or queue admission', async () => {
+    const session = {
+      admitQueue: vi.fn(),
+    };
+    const harness = {
+      getFileConfig: vi.fn(() => ({ allowPrivateNetworkUrls: true })),
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await withUrlServer(
+      (_request, response) => {
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('url-bytes');
+      },
+      async baseUrl => {
+        await expectHarnessHttpError(
+          POST_HARNESS_QUEUE_ROUTE.handler(
+            makeParams({
+              mastra,
+              name: 'code',
+              sessionId: 'session-1',
+              requestBody: {
+                content: 'next',
+                admissionId: 'admission-queue-1',
+                attachments: [
+                  {
+                    kind: 'url',
+                    url: `${baseUrl}/remote.txt`,
+                    name: 'remote.txt',
+                    mimeType: 'text/plain',
+                    sha256: 'not-the-digest',
+                  },
+                ],
+              },
+            }),
+          ),
+          400,
+          'harness.attachment_unavailable',
+        );
+      },
+    );
+
+    expect(harness.attachments.upload).not.toHaveBeenCalled();
+    expect(session.admitQueue).not.toHaveBeenCalled();
   });
 
   it('rejects mutation payloads supplied only through flattened query params', async () => {

@@ -29,6 +29,8 @@ import type {
   SessionSummary,
   TokenUsage,
   HarnessStorage,
+  AttachmentSource,
+  AttachmentRecord,
   AttachmentSemanticMetadata,
   JsonValue,
   HarnessRowErrorCode,
@@ -58,6 +60,7 @@ import type { Workspace } from '../../workspace';
 import { HarnessChannelRegistry } from './channel-registry';
 import {
   HarnessAttachmentInUseError,
+  HarnessAttachmentUnavailableError,
   HarnessConfigError,
   HarnessModelNotFoundError,
   HarnessSessionClosedError,
@@ -82,6 +85,7 @@ import type {
   HarnessChannelBinding,
   HarnessChannelConfig,
   HarnessConfig,
+  HarnessFileConfig,
   HarnessMode,
   HarnessSkill,
   ModelAuthStatus,
@@ -253,6 +257,36 @@ function canonicalAttachmentJson(value: JsonValue): string {
     .join(',')}}`;
 }
 
+function optionalAttachmentJsonMatches(current: JsonValue | undefined, next: JsonValue | undefined): boolean {
+  if (current === undefined && next === undefined) return true;
+  if (current === undefined || next === undefined) return false;
+  return canonicalAttachmentJson(current) === canonicalAttachmentJson(next);
+}
+
+function attachmentSemanticMatches(current: AttachmentSemanticMetadata, next: AttachmentSemanticMetadata): boolean {
+  return (
+    current.kind === next.kind &&
+    current.primitiveType === next.primitiveType &&
+    current.elementType === next.elementType &&
+    current.schemaId === next.schemaId &&
+    optionalAttachmentJsonMatches(current.renderer as JsonValue | undefined, next.renderer as JsonValue | undefined) &&
+    optionalAttachmentJsonMatches(current.metadata as JsonValue | undefined, next.metadata as JsonValue | undefined) &&
+    optionalAttachmentJsonMatches(current.object as JsonValue | undefined, next.object as JsonValue | undefined)
+  );
+}
+
+function attachmentSemanticFromRecord(record: AttachmentRecord): AttachmentSemanticMetadata {
+  return {
+    ...(record.kind ? { kind: record.kind } : {}),
+    ...(record.primitiveType ? { primitiveType: record.primitiveType } : {}),
+    ...(record.elementType ? { elementType: record.elementType } : {}),
+    ...(record.renderer ? { renderer: record.renderer } : {}),
+    ...(record.schemaId ? { schemaId: record.schemaId } : {}),
+    ...(record.metadata ? { metadata: record.metadata } : {}),
+    ...(record.object ? { object: record.object } : {}),
+  };
+}
+
 function encodeAttachmentJson(value: JsonValue): Uint8Array {
   return new TextEncoder().encode(canonicalAttachmentJson(value));
 }
@@ -330,6 +364,7 @@ export class Harness {
   private readonly _leaseTtlMs: number;
   private readonly _maxQueueDepth: number;
   private readonly _closeTimeoutMs: number;
+  private readonly _fileConfig: Readonly<HarnessFileConfig>;
   private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
   private readonly _subagentMaxDepth: number;
   private readonly _goalDefaults: { defaultJudgeModel?: string; defaultMaxTurns: number };
@@ -370,6 +405,32 @@ export class Harness {
         `must be a positive integer no greater than ${MAX_CLOSE_TIMEOUT_MS}`,
       );
     }
+    const normalizedFileConfig: HarnessFileConfig = {
+      ...(config.files ?? {}),
+      ...(config.files?.allowedUrlMimeTypes
+        ? { allowedUrlMimeTypes: Object.freeze([...config.files.allowedUrlMimeTypes]) }
+        : {}),
+    };
+    if (
+      normalizedFileConfig.allowPrivateNetworkUrls !== undefined &&
+      typeof normalizedFileConfig.allowPrivateNetworkUrls !== 'boolean'
+    ) {
+      throw new HarnessConfigError('files.allowPrivateNetworkUrls', 'must be a boolean');
+    }
+    for (const [key, value] of Object.entries(normalizedFileConfig)) {
+      if (key === 'allowPrivateNetworkUrls' || key === 'allowedUrlMimeTypes') continue;
+      if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 0)) {
+        throw new HarnessConfigError(`files.${key}`, 'must be a non-negative integer');
+      }
+    }
+    if (
+      normalizedFileConfig.allowedUrlMimeTypes !== undefined &&
+      (!Array.isArray(normalizedFileConfig.allowedUrlMimeTypes) ||
+        normalizedFileConfig.allowedUrlMimeTypes.some(value => typeof value !== 'string' || value.length === 0))
+    ) {
+      throw new HarnessConfigError('files.allowedUrlMimeTypes', 'must be an array of non-empty strings');
+    }
+    this._fileConfig = Object.freeze(normalizedFileConfig);
 
     // Subagent registry. Shape validation up front (uniqueness, mutual
     // exclusion of tool overlays); agent-existence resolution happens at
@@ -1634,7 +1695,7 @@ export class Harness {
       return { epoch: state.epoch, nextSequence: state.newestSequence + 1 };
     } catch (err) {
       if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) return undefined;
-      throw new HarnessStorageError(record.id, 'load event replay state', err);
+      throw new HarnessStorageError(record.id, 'load', err);
     }
   }
 
@@ -2892,6 +2953,15 @@ export class Harness {
     },
   };
 
+  getFileConfig(): Readonly<HarnessFileConfig> {
+    return Object.freeze({
+      ...this._fileConfig,
+      ...(this._fileConfig.allowedUrlMimeTypes
+        ? { allowedUrlMimeTypes: Object.freeze([...this._fileConfig.allowedUrlMimeTypes]) }
+        : {}),
+    });
+  }
+
   attachments = {
     upload: async (opts: AttachmentUploadOptions): Promise<AttachmentRef> => {
       const storage = this._requireStorage('attachments.upload()');
@@ -2946,27 +3016,85 @@ export class Harness {
           },
         };
       }
-      const attachmentId = `attachment-${randomUUID()}`;
+      const internalOpts = opts as { attachmentId?: unknown; source?: AttachmentSource };
+      const source = internalOpts.source === 'url' ? 'url' : 'preupload';
+      if (
+        internalOpts.attachmentId !== undefined &&
+        (typeof internalOpts.attachmentId !== 'string' || internalOpts.attachmentId.length === 0)
+      ) {
+        throw new HarnessValidationError('attachments.upload().attachmentId', 'must be a non-empty string');
+      }
+      const attachmentId = internalOpts.attachmentId ?? `attachment-${randomUUID()}`;
+      const sha256 = createHash('sha256').update(upload.data).digest('hex');
+      const existing = await storage.getAttachmentRecord({
+        harnessName: session.getRecord().harnessName,
+        sessionId: session.id,
+        attachmentId,
+      });
+      if (existing) {
+        const existingSemantic = attachmentSemanticFromRecord(existing);
+        if (
+          existing.name !== upload.name ||
+          existing.mimeType !== upload.mimeType ||
+          existing.bytes !== upload.data.byteLength ||
+          existing.sha256 !== sha256 ||
+          existing.source !== source ||
+          !attachmentSemanticMatches(existingSemantic, upload.semantic)
+        ) {
+          throw new HarnessAttachmentUnavailableError(session.id, 'digest_mismatch', attachmentId);
+        }
+        return {
+          attachmentId: existing.attachmentId,
+          resourceId: session.resourceId,
+          ownerSessionId: session.id,
+          bytes: existing.bytes,
+          sha256: existing.sha256,
+          source: existing.source,
+          name: existing.name,
+          mimeType: existing.mimeType,
+          ...existingSemantic,
+        };
+      }
       const saved = await storage.saveAttachment({
         harnessName: session.getRecord().harnessName,
         sessionId: session.id,
         attachmentId,
         name: upload.name,
         mimeType: upload.mimeType,
-        source: 'preupload',
+        source,
         data: upload.data,
         semantic: upload.semantic,
       });
+      const savedRecord = await storage.getAttachmentRecord({
+        harnessName: session.getRecord().harnessName,
+        sessionId: session.id,
+        attachmentId,
+      });
+      const savedSemantic = savedRecord ? attachmentSemanticFromRecord(savedRecord) : undefined;
+      if (
+        !savedRecord ||
+        savedRecord.name !== upload.name ||
+        savedRecord.mimeType !== upload.mimeType ||
+        saved.bytes !== upload.data.byteLength ||
+        saved.sha256 !== sha256 ||
+        savedRecord.source !== source ||
+        savedRecord.bytes !== upload.data.byteLength ||
+        savedRecord.sha256 !== sha256 ||
+        !savedSemantic ||
+        !attachmentSemanticMatches(savedSemantic, upload.semantic)
+      ) {
+        throw new HarnessAttachmentUnavailableError(session.id, 'digest_mismatch', attachmentId);
+      }
       return {
-        attachmentId: saved.attachmentId,
+        attachmentId: savedRecord.attachmentId,
         resourceId: session.resourceId,
         ownerSessionId: session.id,
-        bytes: saved.bytes,
-        sha256: saved.sha256,
-        source: 'preupload',
+        bytes: savedRecord.bytes,
+        sha256: savedRecord.sha256,
+        source,
         name: upload.name,
         mimeType: upload.mimeType,
-        ...upload.semantic,
+        ...savedSemantic,
       };
     },
     delete: async (opts: AttachmentDeleteOptions): Promise<void> => {

@@ -75,6 +75,58 @@ describe('Harness.attachments', () => {
     ).resolves.toBeNull();
   });
 
+  it('reuses matching internal URL attachment ids without overwriting existing bytes', async () => {
+    const { harness, storage } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const uploadWithInternalUrlId = harness.attachments.upload as typeof harness.attachments.upload &
+      ((
+        opts: Parameters<typeof harness.attachments.upload>[0] & { attachmentId: string; source: 'url' },
+      ) => ReturnType<typeof harness.attachments.upload>);
+
+    const first = await uploadWithInternalUrlId({
+      sessionId: session.id,
+      attachmentId: 'attachment-url-stable',
+      source: 'url',
+      data: new Uint8Array([1, 2, 3]),
+      filename: 'remote.bin',
+      contentType: 'application/octet-stream',
+    });
+    const retry = await uploadWithInternalUrlId({
+      sessionId: session.id,
+      attachmentId: 'attachment-url-stable',
+      source: 'url',
+      data: new Uint8Array([1, 2, 3]),
+      filename: 'remote.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    expect(retry).toEqual(first);
+    await expect(
+      uploadWithInternalUrlId({
+        sessionId: session.id,
+        attachmentId: 'attachment-url-stable',
+        source: 'url',
+        data: new Uint8Array([9]),
+        filename: 'remote.bin',
+        contentType: 'application/octet-stream',
+      }),
+    ).rejects.toMatchObject({ reason: 'digest_mismatch', attachmentId: 'attachment-url-stable' });
+
+    const loaded = await storage.loadAttachment({ sessionId: session.id, attachmentId: 'attachment-url-stable' });
+    expect(Array.from(loaded!.data)).toEqual([1, 2, 3]);
+  });
+
+  it('keeps file config immutable from caller-owned MIME arrays', async () => {
+    const allowedUrlMimeTypes = ['text/plain'];
+    const { harness } = setupHarness({ files: { allowedUrlMimeTypes } });
+
+    allowedUrlMimeTypes.push('image/png');
+    const exposed = harness.getFileConfig().allowedUrlMimeTypes as string[];
+
+    expect(() => exposed.push('application/json')).toThrow(TypeError);
+    expect(harness.getFileConfig().allowedUrlMimeTypes).toEqual(['text/plain']);
+  });
+
   it('uploads primitive attachments as canonical bytes with semantic metadata', async () => {
     const { harness, storage } = setupHarness();
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });

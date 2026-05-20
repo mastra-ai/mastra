@@ -197,6 +197,8 @@ export const PERMISSION_PATTERNS = {
   'experiments:read': 'experiments:read',
   /** Delete harness */
   'harness:delete': 'harness:delete',
+  /** Execute harness */
+  'harness:execute': 'harness:execute',
   /** View harness */
   'harness:read': 'harness:read',
   /** Create and modify harness */
@@ -364,6 +366,7 @@ export const PERMISSIONS = [
   'embedders:read',
   'experiments:read',
   'harness:delete',
+  'harness:execute',
   'harness:read',
   'harness:write',
   'infrastructure:read',
@@ -485,6 +488,8 @@ export const MastraFGAPermissions = {
   EXPERIMENTS_READ: 'experiments:read',
   /** Delete harness */
   HARNESS_DELETE: 'harness:delete',
+  /** Execute harness */
+  HARNESS_EXECUTE: 'harness:execute',
   /** View harness */
   HARNESS_READ: 'harness:read',
   /** Create and modify harness */

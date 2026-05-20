@@ -530,6 +530,10 @@ export class InMemoryHarness extends HarnessStorage {
   }: SaveAttachmentInput): Promise<SaveAttachmentResult> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
     const key = attachmentKey(namespace, sessionId, attachmentId);
+    const existing = this.db.harnessAttachmentRecords.get(key);
+    if (existing) {
+      return { attachmentId: existing.attachmentId, bytes: existing.bytes, sha256: existing.sha256 };
+    }
     const bytes = data.byteLength;
     const sha256 = sha256Hex(data);
     const record: AttachmentRecord = {

@@ -341,6 +341,16 @@ export interface HarnessChannelBinding {
   durableId: string;
 }
 
+export interface HarnessFileConfig {
+  maxInlineBytes?: number;
+  maxUrlBytes?: number;
+  urlFetchTimeoutMs?: number;
+  maxUrlRedirects?: number;
+  stagedAttachmentRetentionMs?: number;
+  allowPrivateNetworkUrls?: boolean;
+  allowedUrlMimeTypes?: readonly string[];
+}
+
 // ---------------------------------------------------------------------------
 // HarnessSkill (§4.6).
 //
@@ -559,6 +569,13 @@ export interface HarnessConfigCommon {
      */
     closeTimeoutMs?: number;
   };
+
+  /**
+   * Attachment ingress policy for inline, URL-ingested, and staged remote
+   * attachments. Defaults are enforced by server/SDK consumers when a field is
+   * omitted.
+   */
+  files?: HarnessFileConfig;
 
   /**
    * Subagent type registry (§9). When `types` is non-empty, the harness

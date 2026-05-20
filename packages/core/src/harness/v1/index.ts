@@ -52,6 +52,7 @@ export type {
 export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
 
 export {
+  HarnessAttachmentInUseError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
   HarnessAdmissionConflictError,

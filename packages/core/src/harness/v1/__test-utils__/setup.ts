@@ -6,7 +6,7 @@
  * (multi-agent, transitions, multiple modes) accepts overrides.
  */
 
-import { InMemoryHarness } from '../../../storage/domains/harness/inmemory';
+import type { InMemoryHarness } from '../../../storage/domains/harness/inmemory';
 import { InMemoryStore } from '../../../storage/mock';
 import { Harness } from '../harness';
 import type { HarnessConfig, HarnessMode } from '../types';
@@ -38,6 +38,8 @@ export interface HarnessTestSetupOptions {
   skills?: HarnessConfig['skills'];
   /** Optional model auth-status resolver (§9). */
   modelAuthStatusResolver?: HarnessConfig['modelAuthStatusResolver'];
+  /** Optional attachment ingress policy (§13.7). */
+  files?: HarnessConfig['files'];
 }
 
 export interface HarnessTestSetup {
@@ -56,7 +58,8 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
   const agents = opts.agents ?? { default: new MockAgent({ id: 'default' }) };
   const modes: HarnessMode[] = opts.modes ?? [{ id: 'default', agentId: 'default' }];
   const compositeStorage = new InMemoryStore();
-  const storage = (opts.sessions?.storage as InMemoryHarness | undefined) ?? (compositeStorage.stores.harness as InMemoryHarness);
+  const storage =
+    (opts.sessions?.storage as InMemoryHarness | undefined) ?? (compositeStorage.stores.harness as InMemoryHarness);
   compositeStorage.stores.harness = storage;
   const { storage: _sessionStorage, ...sessionOverrides } = opts.sessions ?? {};
   const harness = new Harness({
@@ -73,6 +76,7 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     ...(opts.models ? { models: opts.models } : {}),
     ...(opts.skills ? { skills: opts.skills } : {}),
     ...(opts.modelAuthStatusResolver ? { modelAuthStatusResolver: opts.modelAuthStatusResolver } : {}),
+    ...(opts.files ? { files: opts.files } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;
   return { harness, agent: firstAgent, agents, storage };
