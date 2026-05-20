@@ -20,8 +20,8 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
+import { createStep } from '../../../workflows/evented';
 import type { SuspendOptions } from '../../../workflows/step';
-import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -613,7 +613,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;

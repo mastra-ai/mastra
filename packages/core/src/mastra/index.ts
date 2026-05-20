@@ -39,6 +39,7 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import { InMemoryStore } from '../storage';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
@@ -1016,11 +1017,13 @@ export class Mastra<
 
     this.#idGenerator = config?.idGenerator;
 
-    let storage = config?.storage;
-
-    if (storage) {
-      storage = augmentWithInit(storage);
-    }
+    // Default to an in-memory store when none is configured. The evented
+    // workflow engine uses storage as the source of truth for cross-branch
+    // coordination in parallel/foreach steps, so a missing store would cause
+    // parallel branches to silently fail to aggregate. In-memory is the safe
+    // default for `new Mastra({})` / tests; production callers always override.
+    let storage = config?.storage ?? new InMemoryStore();
+    storage = augmentWithInit(storage);
 
     // Validate and assign observability instance
     if (config?.observability) {
@@ -2298,20 +2301,52 @@ export class Mastra<
     return workflow;
   }
 
-  __registerInternalWorkflow(workflow: Workflow) {
+  /**
+   * Register a workflow under an internal-only registry.
+   *
+   * - Without `runId`: stored at the bare `${id}` slot. Used by single-instance
+   *   internal workflows (background tasks, score-traces) that are looked up
+   *   without a runId.
+   * - With `runId`: stored *only* at `${id}:${runId}`. Concurrent or nested
+   *   invocations that share a workflow id (e.g. a parent and a sub-agent both
+   *   registering their `agentic-loop`) each get their own closure-bound
+   *   instance keyed by run, and the bare `${id}` slot is never overwritten by
+   *   a run-scoped registration — so a run-scoped lookup can never resolve a
+   *   *different* run's instance via an id scan.
+   */
+  __registerInternalWorkflow(workflow: Workflow, runId?: string) {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
     });
-    this.#internalMastraWorkflows[workflow.id] = workflow;
+    if (runId) {
+      this.#internalMastraWorkflows[`${workflow.id}:${runId}`] = workflow;
+    } else {
+      this.#internalMastraWorkflows[workflow.id] = workflow;
+    }
   }
 
-  __hasInternalWorkflow(id: string): boolean {
-    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  /**
+   * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
+   * so single-instance callers (background tasks, score-traces) continue to resolve.
+   */
+  __unregisterInternalWorkflow(id: string, runId: string) {
+    delete this.#internalMastraWorkflows[`${id}:${runId}`];
   }
 
-  __getInternalWorkflow(id: string): Workflow {
-    const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
+  __hasInternalWorkflow(id: string, runId?: string): boolean {
+    if (runId) {
+      // Only the exact run-scoped entry or the genuinely-unscoped slot — never
+      // another run's `${id}:${otherRunId}` registration.
+      return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
+    }
+    return !!this.#internalMastraWorkflows[id];
+  }
+
+  __getInternalWorkflow(id: string, runId?: string): Workflow {
+    const workflow = runId
+      ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
+      : this.#internalMastraWorkflows[id];
     if (!workflow) {
       throw new MastraError({
         id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',

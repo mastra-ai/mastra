@@ -2,7 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { IsTaskCompleteRunResult, MastraDBMessage } from '../../../agent';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createStep } from '../../../workflows/workflow';
+import { createStep } from '../../../workflows/evented';
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
 import type { OuterLLMRun } from '../../types';

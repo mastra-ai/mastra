@@ -422,6 +422,7 @@ export type SkippableTest =
   | 'resumeWithLabel'
   | 'resumeWithState'
   | 'resumeNested'
+  | 'resumeNestedWithLabel'
   | 'resumeParallelMulti'
   | 'resumeAutoDetect'
   | 'resumeBranchingStatus'

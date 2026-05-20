@@ -15025,6 +15025,7 @@ createWorkflowTestSuite({
     resumeWithLabel: false, // Testing - uses label instead of step
     resumeWithState: true, // requestContext bug #4442 - request context not preserved during resume
     resumeNested: true, // Nested step path resume not supported on Inngest
+    resumeNestedWithLabel: true, // same as resumeNested
     resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
     resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property
     resumeBranchingStatus: true, // Inngest branching + suspend behavior differs (returns 'failed' not 'suspended')
