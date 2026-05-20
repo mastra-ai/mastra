@@ -3356,6 +3356,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-flash-free',
     'gemini-3-flash',
     'gemini-3.1-pro',
+    'gemini-3.5-flash',
     'glm-5',
     'glm-5.1',
     'gpt-5',
