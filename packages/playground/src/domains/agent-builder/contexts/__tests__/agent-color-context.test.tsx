@@ -74,10 +74,10 @@ describe('AgentColorProvider', () => {
     const { getByTestId } = render(<Harness initialName="  Support agent  " observed={observed} />);
     const consumer = getByTestId('consumer');
     expect(consumer.getAttribute('data-bg')).toBe(stringToColor('Support agent'));
-    expect(consumer.getAttribute('data-fg')).toBe(stringToColor('Support agent', 25));
-    // Background uses lightness 75%, foreground uses lightness 25%.
-    expect(consumer.getAttribute('data-bg')).toMatch(/hsl\(-?\d+, 100%, 75%\)/);
-    expect(consumer.getAttribute('data-fg')).toMatch(/hsl\(-?\d+, 100%, 25%\)/);
+    expect(consumer.getAttribute('data-fg')).toBe(stringToColor('Support agent', 20));
+    // Background uses lightness 90%, foreground uses lightness 20%.
+    expect(consumer.getAttribute('data-bg')).toMatch(/hsl\(-?\d+, 100%, 90%\)/);
+    expect(consumer.getAttribute('data-fg')).toMatch(/hsl\(-?\d+, 100%, 20%\)/);
   });
 
   it('updates the consumer when the form name changes', () => {

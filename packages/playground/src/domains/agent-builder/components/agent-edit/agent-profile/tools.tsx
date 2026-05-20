@@ -1,5 +1,5 @@
 import { Searchbar, Txt, cn } from '@mastra/playground-ui';
-import { Bot, Check, Workflow, Wrench } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -29,9 +29,9 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
   const visibleTools = getVisibleTools(availableAgentTools, search);
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-4" data-testid="tools-card-picker">
-      <div data-testid="tools-card-picker-search" className="shrink-0">
-        <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools..." size="sm" debounceMs={0} />
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 pt-2" data-testid="tools-card-picker">
+      <div data-testid="tools-card-picker-search" className="shrink-0 max-w-[30ch]">
+        <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools..." size="lg" debounceMs={0} />
       </div>
 
       {visibleTools.length === 0 ? (
@@ -43,7 +43,7 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
           }
         />
       ) : (
-        <div className="grid min-h-0 grid-cols-1 gap-1.5 lg:gap-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
           {visibleTools.map(item => (
             <ToolItem key={`${item.type}__${item.id}`} item={item} editable={editable} onToggle={toggle} />
           ))}
@@ -60,21 +60,20 @@ interface ToolItemProps {
 }
 
 const ToolItem = ({ item, editable, onToggle }: ToolItemProps) => {
-  let Icon = item.type === 'agent' ? Bot : item.type === 'workflow' ? Workflow : Wrench;
   const agentColor = useAgentColor();
   const hasAgentColor = agentColor !== null;
   const useAgentColors = item.isChecked && hasAgentColor;
 
   const containerStyle: CSSProperties | undefined = hasAgentColor
     ? {
-        ['--agent-color-fg' as string]: agentColor.foreground,
-        ...(item.isChecked ? { borderColor: agentColor.foreground } : null),
+        ['--agent-color-bg' as string]: agentColor.background,
+        ...(item.isChecked ? { borderColor: agentColor.background } : null),
       }
     : undefined;
 
   const checkStyle: CSSProperties | undefined = useAgentColors
     ? {
-        borderColor: agentColor.foreground,
+        borderColor: agentColor.background,
         backgroundColor: agentColor.background,
         color: agentColor.foreground,
       }
@@ -91,10 +90,11 @@ const ToolItem = ({ item, editable, onToggle }: ToolItemProps) => {
       data-testid={`tool-card-${item.type}-${item.id}`}
       style={containerStyle}
       className={cn(
-        'flex items-center gap-3 rounded-md border bg-surface3 px-3 py-2.5 text-left transition-colors',
+        'flex items-center gap-3 rounded-lg border bg-surface3 p-4 text-left transition-colors cursor-pointer active:opacity-90',
         hasAgentColor
-          ? 'focus-visible:!border-[var(--agent-color-fg)] focus-visible:outline-none'
-          : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
+          ? 'focus-visible:!border-[var(--agent-color-bg)] focus-visible:outline-none'
+          : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
+        hasAgentColor && 'hover:bg-surface4',
         item.isChecked
           ? useAgentColors
             ? 'bg-surface4'
@@ -103,17 +103,14 @@ const ToolItem = ({ item, editable, onToggle }: ToolItemProps) => {
         !editable && 'cursor-not-allowed opacity-60',
       )}
     >
-      <Icon className="h-5 w-5 shrink-0 text-neutral3" aria-hidden />
-
       <div className="flex min-w-0 flex-1 flex-col">
-        <Txt variant="ui-sm" className="truncate font-medium text-neutral6">
+        <Txt variant="ui-md" className="truncate font-medium text-neutral6">
           {item.name}
         </Txt>
-        {item.description && (
-          <Txt variant="ui-xs" className="truncate text-neutral3" title={item.description}>
-            {item.description}
-          </Txt>
-        )}
+
+        <Txt variant="ui-sm" className="truncate text-neutral3">
+          {item.description || 'No description provided'}
+        </Txt>
       </div>
 
       <span
@@ -142,7 +139,7 @@ interface ToolListEmptyStateProps {
 const ToolListEmptyState = ({ details }: ToolListEmptyStateProps) => {
   return (
     <div className="flex min-h-0 items-center justify-center px-3 py-6">
-      <Txt variant="ui-sm" className="text-neutral3">
+      <Txt variant="ui-md" className="text-neutral3">
         {details}
       </Txt>
     </div>

@@ -1,7 +1,8 @@
 import { IconButton, Skeleton, StatusBadge } from '@mastra/playground-ui';
 import { RefreshCwIcon } from 'lucide-react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../contexts/agent-color-context';
+import { useWizard } from '../../contexts/wizard-context';
 import type { WorkspaceMode } from '../../layouts/types';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 
@@ -30,11 +31,15 @@ export const AgentBuilderTitle = ({
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' });
   const agentColor = useAgentColor();
+  const formState = useFormState();
+  const { step } = useWizard();
 
   const displayName = name && name.trim() ? name : 'Untitled';
   const badge = mode ? MODE_BADGE[mode] : null;
   const toggleLabel = mode === 'test' ? 'Switch to Edit mode' : 'Switch to View mode';
   const badgeStyle = agentColor ? { backgroundColor: agentColor.background, color: agentColor.foreground } : undefined;
+
+  const isReady = step !== 'initial' || (formState.dirtyFields.name && formState.dirtyFields.description);
 
   return (
     <div className={className} data-testid="agent-builder-title">
@@ -51,7 +56,7 @@ export const AgentBuilderTitle = ({
             variant={badge.variant}
             size="lg"
             className="hidden sm:inline-flex h-form-sm"
-            style={badgeStyle}
+            style={isReady && mode === 'build' ? badgeStyle : undefined}
             data-testid={badge.testId}
           >
             {badge.label}
