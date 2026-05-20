@@ -1620,6 +1620,73 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('skips queued cached notifications that were already claimed before pending delivery', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'comment-thread',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'CodeRabbit comment',
+        subjectType: 'PullRequest',
+        reason: 'comment',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        latestCommentUrl: 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/1',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        commentAuthor: 'coderabbitai[bot]',
+        commentBody: 'already delivered comment',
+        commentHtmlUrl: 'https://github.com/mastra-ai/mastra/pull/123#discussion_r1',
+      },
+    ]);
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[0] === 'api' && args[1] === 'user') return { stdout: 'TylerBarnes\n' };
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await github.poll();
+    await store.claimNotificationDelivery({
+      accountKey: 'account-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      notificationId: 'comment-thread',
+      notificationUpdatedAt: 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/1',
+    });
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect((sendSignal.mock.calls as any[])[0]?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+
+    await github.deliverPendingNotifications(context);
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    github.destroy();
+  });
+
   it('claims queued cached PR state delivery only after the pending notification is delivered', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');

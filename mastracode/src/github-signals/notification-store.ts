@@ -368,6 +368,39 @@ export class GithubNotificationStore {
     return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
   }
 
+  async hasNotificationDelivery(input: {
+    accountKey: string;
+    resourceId: string;
+    threadId: string;
+    repo: string;
+    prNumber: number;
+    notificationId: string;
+    notificationUpdatedAt: string;
+  }): Promise<boolean> {
+    await this.init();
+    const result = await this.#execute({
+      sql: `SELECT 1 FROM github_notification_deliveries
+        WHERE account_key = ?
+          AND resource_id = ?
+          AND thread_id = ?
+          AND repo = ?
+          AND pr_number = ?
+          AND notification_id = ?
+          AND notification_updated_at = ?
+        LIMIT 1`,
+      args: [
+        input.accountKey,
+        input.resourceId,
+        input.threadId,
+        input.repo,
+        input.prNumber,
+        input.notificationId,
+        input.notificationUpdatedAt,
+      ],
+    });
+    return result.rows.length > 0;
+  }
+
   async claimNotificationDelivery(input: {
     accountKey: string;
     resourceId: string;

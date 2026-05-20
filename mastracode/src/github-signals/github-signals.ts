@@ -1632,10 +1632,8 @@ export class GithubSignals {
     for (const [key, bucket] of buckets) {
       const registeredAgent = this.#agents.get(bucket.subscription.agentId);
       if (!registeredAgent) continue;
-      for (const pending of bucket.notifications) {
-        await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
-      }
-      await this.#acknowledgePendingDelivery(bucket);
+      const delivered = await this.#sendPendingNotifications(registeredAgent, bucket);
+      await this.#acknowledgePendingDelivery(bucket, delivered);
       this.#pendingNotifications.delete(key);
     }
 
@@ -1652,8 +1650,21 @@ export class GithubSignals {
     });
   }
 
-  async #acknowledgePendingDelivery(bucket: PendingGithubNotificationBucket) {
+  async #sendPendingNotifications(registeredAgent: RegisteredGithubAgent, bucket: PendingGithubNotificationBucket) {
+    const delivered: PendingGithubNotification[] = [];
     for (const pending of bucket.notifications) {
+      if (await this.#hasNotificationDelivery(pending.deliveryClaim)) continue;
+      await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
+      delivered.push(pending);
+    }
+    return delivered;
+  }
+
+  async #acknowledgePendingDelivery(
+    bucket: PendingGithubNotificationBucket,
+    deliveredNotifications: PendingGithubNotification[],
+  ) {
+    for (const pending of deliveredNotifications) {
       await this.#claimNotificationDelivery(pending.deliveryClaim);
     }
 
@@ -1663,6 +1674,11 @@ export class GithubSignals {
     this.#activeSubscriptions.set(acknowledgedSubscription.key, acknowledgedSubscription);
     bucket.subscription = { ...acknowledgedSubscription };
     await acknowledgedSubscription.persistence?.update(acknowledgedSubscription);
+  }
+
+  async #hasNotificationDelivery(deliveryClaim: PendingGithubDeliveryClaim | undefined) {
+    if (!deliveryClaim) return false;
+    return (await this.#notificationPoller?.store.hasNotificationDelivery(deliveryClaim)) ?? false;
   }
 
   async #claimNotificationDelivery(deliveryClaim: PendingGithubDeliveryClaim | undefined) {
@@ -1679,10 +1695,8 @@ export class GithubSignals {
     for (const [key, bucket] of expired) {
       const registeredAgent = this.#agents.get(bucket.subscription.agentId);
       if (!registeredAgent) continue;
-      for (const pending of bucket.notifications) {
-        await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
-      }
-      await this.#acknowledgePendingDelivery(bucket);
+      const delivered = await this.#sendPendingNotifications(registeredAgent, bucket);
+      await this.#acknowledgePendingDelivery(bucket, delivered);
       this.#pendingNotifications.delete(key);
     }
   }
