@@ -47,14 +47,20 @@ ContextMenuContent.displayName = 'ContextMenuContent';
 type ContextMenuItemProps = ContextMenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: 'default' | 'destructive';
+  /** Alias for `onClick`, kept for parity with `DropdownMenu.Item`. */
+  onSelect?: ContextMenuPrimitive.Item.Props['onClick'];
 };
 
 const ContextMenuItem = React.forwardRef<HTMLDivElement, ContextMenuItemProps>(
-  ({ className, inset, variant = 'default', ...props }, ref) => (
+  ({ className, inset, variant = 'default', onSelect, onClick, ...props }, ref) => (
     <ContextMenuPrimitive.Item
       ref={ref}
       data-inset={inset ? '' : undefined}
       data-variant={variant}
+      onClick={event => {
+        onClick?.(event);
+        onSelect?.(event);
+      }}
       className={cn(
         itemClass,
         inset && 'pl-8',

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ContextMenu } from './context-menu';
 
@@ -48,5 +48,35 @@ describe('ContextMenu', () => {
         </ContextMenu>,
       ),
     ).not.toThrow();
+  });
+
+  it('fires the onSelect handler when an item is clicked', () => {
+    const onSelect = vi.fn();
+    render(
+      <ContextMenu defaultOpen>
+        <ContextMenu.Trigger>Right click here</ContextMenu.Trigger>
+        <ContextMenu.Content>
+          <ContextMenu.Item onSelect={onSelect}>Run action</ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>,
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires the onClick handler when an item is clicked', () => {
+    const onClick = vi.fn();
+    render(
+      <ContextMenu defaultOpen>
+        <ContextMenu.Trigger>Right click here</ContextMenu.Trigger>
+        <ContextMenu.Content>
+          <ContextMenu.Item onClick={onClick}>Run action</ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>,
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

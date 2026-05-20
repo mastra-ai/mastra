@@ -116,14 +116,20 @@ DropdownMenuContent.displayName = 'DropdownMenuContent';
 type DropdownMenuItemProps = MenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: 'default' | 'destructive';
+  /** Alias for `onClick`, kept for compatibility with the previous Radix API. */
+  onSelect?: MenuPrimitive.Item.Props['onClick'];
 };
 
 const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>(
-  ({ className, inset, variant = 'default', ...props }, ref) => (
+  ({ className, inset, variant = 'default', onSelect, onClick, ...props }, ref) => (
     <MenuPrimitive.Item
       ref={ref}
       data-inset={inset ? '' : undefined}
       data-variant={variant}
+      onClick={event => {
+        onClick?.(event);
+        onSelect?.(event);
+      }}
       className={cn(
         itemClass,
         inset && 'pl-8',

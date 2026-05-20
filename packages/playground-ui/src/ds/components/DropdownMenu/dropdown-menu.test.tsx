@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenu } from './dropdown-menu';
 
@@ -48,5 +48,35 @@ describe('DropdownMenu', () => {
         </DropdownMenu>,
       ),
     ).not.toThrow();
+  });
+
+  it('fires the onSelect handler when an item is clicked', () => {
+    const onSelect = vi.fn();
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.Item onSelect={onSelect}>Run action</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires the onClick handler when an item is clicked', () => {
+    const onClick = vi.fn();
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.Item onClick={onClick}>Run action</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });
