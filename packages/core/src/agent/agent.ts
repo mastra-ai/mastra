@@ -5763,24 +5763,23 @@ export class Agent<
     // consume them. startWorkers is idempotent.
     await effectiveMastra.startWorkers();
     // Register as internal so the evented engine's event processor can resolve
-    // `execution-workflow` by id via __hasInternalWorkflow/getWorkflowById.
-    // First call (no runId) wires `workflow.mastra` so `createRun` has the pubsub
-    // it needs; second call (with run.runId) scopes the registration so concurrent
-    // or nested agent invocations don't clobber each other in the global id-keyed
-    // registry. __registerInternalWorkflow also calls __registerMastra under the hood.
-    effectiveMastra.__registerInternalWorkflow(executionWorkflow as any);
-
-    const run = await executionWorkflow.createRun();
-    effectiveMastra.__registerInternalWorkflow(executionWorkflow as any, run.runId);
+    // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
+    // We pick the runId up front and register run-scoped (not unscoped), so
+    // concurrent or nested agent invocations never resolve each other's
+    // closure-bound instance. __registerInternalWorkflow also calls
+    // __registerMastra under the hood, which wires the pubsub `createRun` needs.
+    const executionRunId = randomUUID();
+    effectiveMastra.__registerInternalWorkflow(executionWorkflow as any, executionRunId);
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     try {
+      const run = await executionWorkflow.createRun({ runId: executionRunId });
       const result = await run.start({ ...observabilityContext });
       return result;
     } finally {
       // Prepare-stream is single-shot per #execute call — no resume path that
       // would need the registration to outlive this scope, so always unregister.
-      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, run.runId);
+      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
     }
   }
 

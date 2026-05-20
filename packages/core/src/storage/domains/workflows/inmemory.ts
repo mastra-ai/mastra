@@ -24,16 +24,16 @@ import { WorkflowsStorage } from './base';
  *   `undefined` values, breaking snapshot assertions that include them.
  * - `Error` instances (e.g. tool execution failures, AssertionErrors from
  *   inside `tool.execute`) — JSON strips `message`/`name`/`stack` (non-
- *   enumerable) and the canonical `getErrorFromUnknown` `toJSON` shim
- *   doesn't apply to subclasses we don't construct ourselves
- *   (`assert.AssertionError`, third-party Errors, ...). `structuredClone`
- *   isn't enough either — it preserves the Error type but drops
- *   subclass-specific enumerable props (`actual`, `expected`, `operator`).
+ *   enumerable). `structuredClone` isn't enough either — it preserves the
+ *   Error type but drops subclass-specific enumerable props (`actual`,
+ *   `expected`, `operator`).
  *
- * The custom walk below preserves all three. Errors are flattened to plain
- * objects (carrying `message` plus enumerable own props) so downstream
- * consumers and snapshot serializers see the full payload — losing Error
- * identity is fine here because the values are only ever read, never thrown.
+ * The custom walk below preserves all of that. It also handles builtins with
+ * internal slots explicitly — `Map`, `Set`, `RegExp`, `URL`, `ArrayBuffer`,
+ * typed arrays, and `DataView` — because cloning them via `Object.create(proto)`
+ * would produce a value that passes `instanceof` but whose methods throw (the
+ * internal slots were never initialized). Null-prototype dictionaries keep
+ * their null prototype.
  */
 function cloneRunData<T>(value: T): T {
   return deepCloneForRun(value, new WeakMap()) as T;
@@ -46,6 +46,46 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
 
   if (value instanceof Date) {
     return new Date(value.getTime());
+  }
+
+  if (value instanceof RegExp) {
+    return new RegExp(value.source, value.flags);
+  }
+
+  if (value instanceof URL) {
+    return new URL(value.href);
+  }
+
+  if (value instanceof Map) {
+    const out = new Map();
+    seen.set(value, out);
+    for (const [k, v] of value) {
+      out.set(deepCloneForRun(k, seen), deepCloneForRun(v, seen));
+    }
+    return out;
+  }
+
+  if (value instanceof Set) {
+    const out = new Set();
+    seen.set(value, out);
+    for (const v of value) {
+      out.add(deepCloneForRun(v, seen));
+    }
+    return out;
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return value.slice(0);
+  }
+
+  // Typed arrays and DataView — `Object.create(proto)` would yield a shell with
+  // no backing buffer, so rebuild against a fresh copy of the underlying bytes.
+  if (ArrayBuffer.isView(value)) {
+    if (value instanceof DataView) {
+      return new DataView(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
+    }
+    const typed = value as unknown as Uint8Array;
+    return new (typed.constructor as Uint8ArrayConstructor)(typed);
   }
 
   if (value instanceof Error) {
@@ -106,11 +146,16 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
 
   // Preserve the prototype so class instances stay recognizable to consumers
   // (e.g. `DefaultStepResult` in the agent loop, anything that uses `instanceof`
-  // or Vitest's snapshot serializer which prints the class name). For plain
-  // objects whose prototype is `Object.prototype`, this is equivalent to `{}`.
+  // or Vitest's snapshot serializer which prints the class name) and so
+  // null-prototype dictionaries (`Object.create(null)`) keep their null proto
+  // rather than silently becoming plain `{}`. Builtins with internal slots
+  // (Map/Set/RegExp/typed arrays/Date/Error) are handled explicitly above, so
+  // the only objects reaching here are plain objects and plain data-holder
+  // class instances — `Object.create(proto)` + an own-property copy reproduces
+  // those faithfully.
   const proto = Object.getPrototypeOf(value);
   const out: Record<string, unknown> =
-    proto === null || proto === Object.prototype ? {} : (Object.create(proto) as Record<string, unknown>);
+    proto === Object.prototype ? {} : (Object.create(proto) as Record<string, unknown>);
   seen.set(value, out);
   // `Object.keys` includes keys whose value is `undefined`, so explicitly-undefined
   // properties are preserved (unlike a JSON round-trip).

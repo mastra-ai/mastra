@@ -56,5 +56,5 @@ Guidelines:
 - If you don't include "_background", the tool's default configuration is used.
 - When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.
 
-IMPORTANT: "_background" field is always an object. The fields in _background field should inside the _background object, not outside of it.`;
+IMPORTANT: "_background" field is always an object. The fields in the _background field should be inside the _background object, not outside of it.`;
 }
