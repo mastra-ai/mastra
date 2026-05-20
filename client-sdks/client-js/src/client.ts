@@ -89,6 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  RemoteHarness,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -237,6 +238,13 @@ export class MastraClient extends BaseResource {
    */
   public getAgent(agentId: string, version?: AgentVersionIdentifier) {
     return new Agent(this.options, agentId, version);
+  }
+
+  /**
+   * Gets a Harness resource by registration name. Single-harness servers use "default".
+   */
+  public getHarness(name = 'default') {
+    return new RemoteHarness(this.options, name);
   }
 
   /**

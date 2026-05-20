@@ -151,6 +151,12 @@ You can also pass `requestContext` as a `Record<string, any>`.
     description: 'Retrieves a specific workflow instance by ID.',
   },
   {
+    name: "getHarness(name = 'default')",
+    type: 'RemoteHarness',
+    description:
+      'Retrieves a Harness v1 client resource by registration name, defaulting to `default` when omitted. Use it to create or load remote sessions, subscribe to session events, and recover durable message or queue results.',
+  },
+  {
     name: 'responses',
     type: 'Responses',
     description:

@@ -2,6 +2,43 @@ export * from './client';
 export * from './types';
 export * from './tools';
 export type {
+  AttachmentRef,
+  CreateHarnessSessionBody,
+  CreateHarnessSessionResponse,
+  Goal,
+  GoalBody,
+  GoalResponse,
+  HarnessSessionSnapshot,
+  HarnessSessionSummary,
+  InboxResponseBody,
+  InboxResponseResult,
+  MessageAdmissionBody,
+  MessageAdmissionResponse,
+  MessageOperationResult,
+  PermissionsBody,
+  PermissionsResponse,
+  QueueAdmissionBody,
+  QueueAdmissionResponse,
+  QueueOperationResult,
+  RemoteHarnessAgentResult,
+  RemoteHarnessEventListener,
+  RemoteHarnessEventUnsubscribe,
+  RemoteHarnessListSessionsOptions,
+  RemoteHarnessSessionOptions,
+  RemoteHarnessStatePatchOptions,
+  RemoteHarnessSubscriptionOptions,
+  RemoteSessionMessageOptions,
+  RemoteSessionOperationOptions,
+  RemoteSessionQueueOptions,
+} from './resources/harness';
+export {
+  RemoteHarness,
+  RemoteHarnessOperationError,
+  RemoteHarnessStateVersionError,
+  RemoteHarnessUnsupportedError,
+  RemoteSession,
+} from './resources/harness';
+export type {
   ChannelPlatformInfo,
   ChannelInstallationInfo,
   ChannelConnectOAuth,

@@ -77653,7 +77653,6 @@ export type PostHarnessNameSessions_Body = {
         | string
         | {
             fresh: true;
-            [x: string]: never;
           }
       )
     | undefined;
@@ -77661,7 +77660,6 @@ export type PostHarnessNameSessions_Body = {
   origin?: 'top-level' | undefined;
   modeId?: string | undefined;
   modelId?: string | undefined;
-  [x: string]: never;
 };
 
 type PostHarnessNameSessions_Response_Auxiliary_10 =
@@ -77927,6 +77925,845 @@ export interface GetHarnessNameSessionsSessionId_RouteContract {
   body: never;
   request: GetHarnessNameSessionsSessionId_Request;
   response: GetHarnessNameSessionsSessionId_Response;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/messages
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdMessages_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+type PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2[]
+  | {
+      [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+    };
+
+export type PostHarnessNameSessionsSessionIdMessages_Body = {
+  content: string;
+  admissionId: string;
+  mode?: string | undefined;
+  model?: string | undefined;
+  attachments?:
+    | {
+        attachmentId: string;
+        resourceId: string;
+        ownerSessionId?: string | undefined;
+        bytes?: number | undefined;
+        sha256?: string | undefined;
+        source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+        kind?: ('file' | 'primitive' | 'element') | undefined;
+        name?: string | undefined;
+        mimeType?: string | undefined;
+        primitiveType?: string | undefined;
+        elementType?: string | undefined;
+        renderer?:
+          | {
+              [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+            }
+          | undefined;
+        schemaId?: string | undefined;
+        metadata?:
+          | {
+              [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+            }
+          | undefined;
+        object?:
+          | {
+              [key: string]: PostHarnessNameSessionsSessionIdMessages_Body_Auxiliary_2;
+            }
+          | undefined;
+      }[]
+    | undefined;
+};
+
+export type PostHarnessNameSessionsSessionIdMessages_Response = {
+  accepted: true;
+  signalId: string;
+  runId?: string | undefined;
+  duplicate: boolean;
+};
+
+export type PostHarnessNameSessionsSessionIdMessages_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdMessages_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdMessages_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessNameSessionsSessionIdMessages_Body extends never
+      ? {}
+      : {} extends PostHarnessNameSessionsSessionIdMessages_Body
+        ? { body?: PostHarnessNameSessionsSessionIdMessages_Body }
+        : { body: PostHarnessNameSessionsSessionIdMessages_Body })
+>;
+
+export interface PostHarnessNameSessionsSessionIdMessages_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdMessages_PathParams;
+  queryParams: never;
+  body: PostHarnessNameSessionsSessionIdMessages_Body;
+  request: PostHarnessNameSessionsSessionIdMessages_Request;
+  response: PostHarnessNameSessionsSessionIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/queue
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdQueue_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+type PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2[]
+  | {
+      [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+    };
+
+export type PostHarnessNameSessionsSessionIdQueue_Body = {
+  content: string;
+  admissionId: string;
+  mode?: string | undefined;
+  model?: string | undefined;
+  yolo?: boolean | undefined;
+  attachments?:
+    | {
+        attachmentId: string;
+        resourceId: string;
+        ownerSessionId?: string | undefined;
+        bytes?: number | undefined;
+        sha256?: string | undefined;
+        source?: ('inline' | 'preupload' | 'url' | 'provider') | undefined;
+        kind?: ('file' | 'primitive' | 'element') | undefined;
+        name?: string | undefined;
+        mimeType?: string | undefined;
+        primitiveType?: string | undefined;
+        elementType?: string | undefined;
+        renderer?:
+          | {
+              [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+            }
+          | undefined;
+        schemaId?: string | undefined;
+        metadata?:
+          | {
+              [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+            }
+          | undefined;
+        object?:
+          | {
+              [key: string]: PostHarnessNameSessionsSessionIdQueue_Body_Auxiliary_2;
+            }
+          | undefined;
+      }[]
+    | undefined;
+};
+
+export type PostHarnessNameSessionsSessionIdQueue_Response = {
+  accepted: true;
+  queuedItemId: string;
+  duplicate: boolean;
+};
+
+export type PostHarnessNameSessionsSessionIdQueue_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdQueue_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdQueue_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessNameSessionsSessionIdQueue_Body extends never
+      ? {}
+      : {} extends PostHarnessNameSessionsSessionIdQueue_Body
+        ? { body?: PostHarnessNameSessionsSessionIdQueue_Body }
+        : { body: PostHarnessNameSessionsSessionIdQueue_Body })
+>;
+
+export interface PostHarnessNameSessionsSessionIdQueue_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdQueue_PathParams;
+  queryParams: never;
+  body: PostHarnessNameSessionsSessionIdQueue_Body;
+  request: PostHarnessNameSessionsSessionIdQueue_Request;
+  response: PostHarnessNameSessionsSessionIdQueue_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/message-results/:signalId
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdMessageResultsSignalId_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+  /** Message signal id */
+  signalId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdMessageResultsSignalId_Response =
+  | {
+      status: 'pending';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+    }
+  | {
+      status: 'completed';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+      result: unknown;
+    }
+  | {
+      status: 'failed';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+      error: {
+        code: string;
+        message: string;
+      };
+    }
+  | {
+      status: 'expired';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+      expiredAt?: number | undefined;
+    }
+  | {
+      status: 'not_found';
+      source: 'message' | 'queue';
+    };
+
+export type GetHarnessNameSessionsSessionIdMessageResultsSignalId_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdMessageResultsSignalId_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdMessageResultsSignalId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdMessageResultsSignalId_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdMessageResultsSignalId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdMessageResultsSignalId_Request;
+  response: GetHarnessNameSessionsSessionIdMessageResultsSignalId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+  /** Queued item id */
+  queuedItemId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_Response =
+  | {
+      status: 'pending';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+    }
+  | {
+      status: 'completed';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+      result: unknown;
+    }
+  | {
+      status: 'failed';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+      error: {
+        code: string;
+        message: string;
+      };
+    }
+  | {
+      status: 'expired';
+      source: 'message' | 'queue';
+      runId?: string | undefined;
+      expiredAt?: number | undefined;
+    }
+  | {
+      status: 'not_found';
+      source: 'message' | 'queue';
+    };
+
+export type GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_Request;
+  response: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/events
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdEvents_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdEvents_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdEvents_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdEvents_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdEvents_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdEvents_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdEvents_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/state
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdState_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdState_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdState_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdState_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdState_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdState_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdState_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: PATCH /harness/:name/sessions/:sessionId/state
+// ============================================================================
+export type PatchHarnessNameSessionsSessionIdState_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+type PatchHarnessNameSessionsSessionIdState_Body_Auxiliary_0 =
+  | string
+  | number
+  | boolean
+  | null
+  | PatchHarnessNameSessionsSessionIdState_Body_Auxiliary_0[]
+  | {
+      [key: string]: PatchHarnessNameSessionsSessionIdState_Body_Auxiliary_0;
+    };
+
+export type PatchHarnessNameSessionsSessionIdState_Body = {
+  [key: string]: PatchHarnessNameSessionsSessionIdState_Body_Auxiliary_0;
+};
+
+export type PatchHarnessNameSessionsSessionIdState_Request = Simplify<
+  (PatchHarnessNameSessionsSessionIdState_PathParams extends never
+    ? {}
+    : { params: PatchHarnessNameSessionsSessionIdState_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchHarnessNameSessionsSessionIdState_Body extends never
+      ? {}
+      : {} extends PatchHarnessNameSessionsSessionIdState_Body
+        ? { body?: PatchHarnessNameSessionsSessionIdState_Body }
+        : { body: PatchHarnessNameSessionsSessionIdState_Body })
+>;
+
+export interface PatchHarnessNameSessionsSessionIdState_RouteContract {
+  pathParams: PatchHarnessNameSessionsSessionIdState_PathParams;
+  queryParams: never;
+  body: PatchHarnessNameSessionsSessionIdState_Body;
+  request: PatchHarnessNameSessionsSessionIdState_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: PATCH /harness/:name/sessions/:sessionId/mode
+// ============================================================================
+export type PatchHarnessNameSessionsSessionIdMode_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdMode_Body = {
+  mode: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdMode_Response = {
+  modeId: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdMode_Request = Simplify<
+  (PatchHarnessNameSessionsSessionIdMode_PathParams extends never
+    ? {}
+    : { params: PatchHarnessNameSessionsSessionIdMode_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchHarnessNameSessionsSessionIdMode_Body extends never
+      ? {}
+      : {} extends PatchHarnessNameSessionsSessionIdMode_Body
+        ? { body?: PatchHarnessNameSessionsSessionIdMode_Body }
+        : { body: PatchHarnessNameSessionsSessionIdMode_Body })
+>;
+
+export interface PatchHarnessNameSessionsSessionIdMode_RouteContract {
+  pathParams: PatchHarnessNameSessionsSessionIdMode_PathParams;
+  queryParams: never;
+  body: PatchHarnessNameSessionsSessionIdMode_Body;
+  request: PatchHarnessNameSessionsSessionIdMode_Request;
+  response: PatchHarnessNameSessionsSessionIdMode_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /harness/:name/sessions/:sessionId/model
+// ============================================================================
+export type PatchHarnessNameSessionsSessionIdModel_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdModel_Body = {
+  model: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdModel_Response = {
+  modelId: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdModel_Request = Simplify<
+  (PatchHarnessNameSessionsSessionIdModel_PathParams extends never
+    ? {}
+    : { params: PatchHarnessNameSessionsSessionIdModel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchHarnessNameSessionsSessionIdModel_Body extends never
+      ? {}
+      : {} extends PatchHarnessNameSessionsSessionIdModel_Body
+        ? { body?: PatchHarnessNameSessionsSessionIdModel_Body }
+        : { body: PatchHarnessNameSessionsSessionIdModel_Body })
+>;
+
+export interface PatchHarnessNameSessionsSessionIdModel_RouteContract {
+  pathParams: PatchHarnessNameSessionsSessionIdModel_PathParams;
+  queryParams: never;
+  body: PatchHarnessNameSessionsSessionIdModel_Body;
+  request: PatchHarnessNameSessionsSessionIdModel_Request;
+  response: PatchHarnessNameSessionsSessionIdModel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /harness/:name/sessions/:sessionId/permissions
+// ============================================================================
+export type PatchHarnessNameSessionsSessionIdPermissions_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type PatchHarnessNameSessionsSessionIdPermissions_Body =
+  | {
+      action: 'grantCategory';
+      category: string;
+    }
+  | {
+      action: 'grantTool';
+      toolName: string;
+    }
+  | {
+      action: 'revokeCategory';
+      category: string;
+    }
+  | {
+      action: 'revokeTool';
+      toolName: string;
+    }
+  | {
+      action: 'setPolicy';
+      category?: string | undefined;
+      toolName?: string | undefined;
+      policy: 'allow' | 'ask' | 'deny';
+    };
+
+export type PatchHarnessNameSessionsSessionIdPermissions_Response = {
+  grants: {
+    categories: string[];
+    tools: string[];
+  };
+  rules: {
+    categories: {
+      [key: string]: 'allow' | 'ask' | 'deny';
+    };
+    tools: {
+      [key: string]: 'allow' | 'ask' | 'deny';
+    };
+  };
+};
+
+export type PatchHarnessNameSessionsSessionIdPermissions_Request = Simplify<
+  (PatchHarnessNameSessionsSessionIdPermissions_PathParams extends never
+    ? {}
+    : { params: PatchHarnessNameSessionsSessionIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchHarnessNameSessionsSessionIdPermissions_Body extends never
+      ? {}
+      : {} extends PatchHarnessNameSessionsSessionIdPermissions_Body
+        ? { body?: PatchHarnessNameSessionsSessionIdPermissions_Body }
+        : { body: PatchHarnessNameSessionsSessionIdPermissions_Body })
+>;
+
+export interface PatchHarnessNameSessionsSessionIdPermissions_RouteContract {
+  pathParams: PatchHarnessNameSessionsSessionIdPermissions_PathParams;
+  queryParams: never;
+  body: PatchHarnessNameSessionsSessionIdPermissions_Body;
+  request: PatchHarnessNameSessionsSessionIdPermissions_Request;
+  response: PatchHarnessNameSessionsSessionIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/inbox/:itemId
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdInboxItemId_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+  /** Pending inbox item id */
+  itemId: string;
+};
+
+type PostHarnessNameSessionsSessionIdInboxItemId_Body_Auxiliary_2 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessionsSessionIdInboxItemId_Body_Auxiliary_2[]
+  | {
+      [key: string]: PostHarnessNameSessionsSessionIdInboxItemId_Body_Auxiliary_2;
+    };
+
+export type PostHarnessNameSessionsSessionIdInboxItemId_Body =
+  | {
+      kind: 'tool-approval';
+      approved: boolean;
+      reason?: string | undefined;
+      responseId: string;
+    }
+  | {
+      kind: 'tool-suspension';
+      resumeData: PostHarnessNameSessionsSessionIdInboxItemId_Body_Auxiliary_2;
+      responseId: string;
+    }
+  | {
+      kind: 'question';
+      answer: PostHarnessNameSessionsSessionIdInboxItemId_Body_Auxiliary_2;
+      responseId: string;
+    }
+  | {
+      kind: 'plan-approval';
+      approved: boolean;
+      revision?: string | undefined;
+      responseId: string;
+      transitionToMode?: string | undefined;
+    };
+
+export type PostHarnessNameSessionsSessionIdInboxItemId_Response = {
+  itemId: string;
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  status: 'accepted' | 'applied';
+  responseId: string;
+  duplicate: boolean;
+};
+
+export type PostHarnessNameSessionsSessionIdInboxItemId_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdInboxItemId_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdInboxItemId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessNameSessionsSessionIdInboxItemId_Body extends never
+      ? {}
+      : {} extends PostHarnessNameSessionsSessionIdInboxItemId_Body
+        ? { body?: PostHarnessNameSessionsSessionIdInboxItemId_Body }
+        : { body: PostHarnessNameSessionsSessionIdInboxItemId_Body })
+>;
+
+export interface PostHarnessNameSessionsSessionIdInboxItemId_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdInboxItemId_PathParams;
+  queryParams: never;
+  body: PostHarnessNameSessionsSessionIdInboxItemId_Body;
+  request: PostHarnessNameSessionsSessionIdInboxItemId_Request;
+  response: PostHarnessNameSessionsSessionIdInboxItemId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /harness/:name/sessions/:sessionId/goal
+// ============================================================================
+export type PutHarnessNameSessionsSessionIdGoal_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type PutHarnessNameSessionsSessionIdGoal_Body = {
+  objective: string;
+  judgeModel?: string | undefined;
+  maxTurns?: number | undefined;
+  kickoff?: boolean | undefined;
+};
+
+export type PutHarnessNameSessionsSessionIdGoal_Response = {
+  goal: {
+    id: string;
+    objective: string;
+    status: 'active' | 'paused' | 'done';
+    turnsUsed: number;
+    maxTurns: number;
+    judgeModelId: string;
+    createdAt: number;
+    lastDecision?:
+      | {
+          decision: 'done' | 'continue' | 'waiting';
+          reason: string;
+          judgedAt: number;
+        }
+      | undefined;
+  } | null;
+};
+
+export type PutHarnessNameSessionsSessionIdGoal_Request = Simplify<
+  (PutHarnessNameSessionsSessionIdGoal_PathParams extends never
+    ? {}
+    : { params: PutHarnessNameSessionsSessionIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutHarnessNameSessionsSessionIdGoal_Body extends never
+      ? {}
+      : {} extends PutHarnessNameSessionsSessionIdGoal_Body
+        ? { body?: PutHarnessNameSessionsSessionIdGoal_Body }
+        : { body: PutHarnessNameSessionsSessionIdGoal_Body })
+>;
+
+export interface PutHarnessNameSessionsSessionIdGoal_RouteContract {
+  pathParams: PutHarnessNameSessionsSessionIdGoal_PathParams;
+  queryParams: never;
+  body: PutHarnessNameSessionsSessionIdGoal_Body;
+  request: PutHarnessNameSessionsSessionIdGoal_Request;
+  response: PutHarnessNameSessionsSessionIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/goal
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdGoal_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdGoal_Response = {
+  goal: {
+    id: string;
+    objective: string;
+    status: 'active' | 'paused' | 'done';
+    turnsUsed: number;
+    maxTurns: number;
+    judgeModelId: string;
+    createdAt: number;
+    lastDecision?:
+      | {
+          decision: 'done' | 'continue' | 'waiting';
+          reason: string;
+          judgedAt: number;
+        }
+      | undefined;
+  } | null;
+};
+
+export type GetHarnessNameSessionsSessionIdGoal_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdGoal_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdGoal_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdGoal_Request;
+  response: GetHarnessNameSessionsSessionIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/goal/pause
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdGoalPause_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type PostHarnessNameSessionsSessionIdGoalPause_Response = {
+  goal: {
+    id: string;
+    objective: string;
+    status: 'active' | 'paused' | 'done';
+    turnsUsed: number;
+    maxTurns: number;
+    judgeModelId: string;
+    createdAt: number;
+    lastDecision?:
+      | {
+          decision: 'done' | 'continue' | 'waiting';
+          reason: string;
+          judgedAt: number;
+        }
+      | undefined;
+  } | null;
+};
+
+export type PostHarnessNameSessionsSessionIdGoalPause_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdGoalPause_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdGoalPause_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostHarnessNameSessionsSessionIdGoalPause_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdGoalPause_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostHarnessNameSessionsSessionIdGoalPause_Request;
+  response: PostHarnessNameSessionsSessionIdGoalPause_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/goal/resume
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdGoalResume_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type PostHarnessNameSessionsSessionIdGoalResume_Response = {
+  goal: {
+    id: string;
+    objective: string;
+    status: 'active' | 'paused' | 'done';
+    turnsUsed: number;
+    maxTurns: number;
+    judgeModelId: string;
+    createdAt: number;
+    lastDecision?:
+      | {
+          decision: 'done' | 'continue' | 'waiting';
+          reason: string;
+          judgedAt: number;
+        }
+      | undefined;
+  } | null;
+};
+
+export type PostHarnessNameSessionsSessionIdGoalResume_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdGoalResume_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdGoalResume_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostHarnessNameSessionsSessionIdGoalResume_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdGoalResume_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostHarnessNameSessionsSessionIdGoalResume_Request;
+  response: PostHarnessNameSessionsSessionIdGoalResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /harness/:name/sessions/:sessionId/goal
+// ============================================================================
+export type DeleteHarnessNameSessionsSessionIdGoal_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type DeleteHarnessNameSessionsSessionIdGoal_Request = Simplify<
+  (DeleteHarnessNameSessionsSessionIdGoal_PathParams extends never
+    ? {}
+    : { params: DeleteHarnessNameSessionsSessionIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteHarnessNameSessionsSessionIdGoal_RouteContract {
+  pathParams: DeleteHarnessNameSessionsSessionIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteHarnessNameSessionsSessionIdGoal_Request;
+  response: unknown;
   responseType: 'datastream-response';
 }
 
@@ -78428,6 +79265,22 @@ export interface RouteTypes {
   'GET /harness/:name/sessions': GetHarnessNameSessions_RouteContract;
   'POST /harness/:name/sessions': PostHarnessNameSessions_RouteContract;
   'GET /harness/:name/sessions/:sessionId': GetHarnessNameSessionsSessionId_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/messages': PostHarnessNameSessionsSessionIdMessages_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/queue': PostHarnessNameSessionsSessionIdQueue_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/message-results/:signalId': GetHarnessNameSessionsSessionIdMessageResultsSignalId_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result': GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/events': GetHarnessNameSessionsSessionIdEvents_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/state': GetHarnessNameSessionsSessionIdState_RouteContract;
+  'PATCH /harness/:name/sessions/:sessionId/state': PatchHarnessNameSessionsSessionIdState_RouteContract;
+  'PATCH /harness/:name/sessions/:sessionId/mode': PatchHarnessNameSessionsSessionIdMode_RouteContract;
+  'PATCH /harness/:name/sessions/:sessionId/model': PatchHarnessNameSessionsSessionIdModel_RouteContract;
+  'PATCH /harness/:name/sessions/:sessionId/permissions': PatchHarnessNameSessionsSessionIdPermissions_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/inbox/:itemId': PostHarnessNameSessionsSessionIdInboxItemId_RouteContract;
+  'PUT /harness/:name/sessions/:sessionId/goal': PutHarnessNameSessionsSessionIdGoal_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/goal': GetHarnessNameSessionsSessionIdGoal_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/goal/pause': PostHarnessNameSessionsSessionIdGoalPause_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/goal/resume': PostHarnessNameSessionsSessionIdGoalResume_RouteContract;
+  'DELETE /harness/:name/sessions/:sessionId/goal': DeleteHarnessNameSessionsSessionIdGoal_RouteContract;
   'DELETE /harness/:name/sessions/:sessionId': DeleteHarnessNameSessionsSessionId_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
@@ -78690,6 +79543,48 @@ export interface Client {
   '/harness/:name/sessions/:sessionId': {
     DELETE: DeleteHarnessNameSessionsSessionId_RouteContract;
     GET: GetHarnessNameSessionsSessionId_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/events': {
+    GET: GetHarnessNameSessionsSessionIdEvents_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/goal': {
+    DELETE: DeleteHarnessNameSessionsSessionIdGoal_RouteContract;
+    GET: GetHarnessNameSessionsSessionIdGoal_RouteContract;
+    PUT: PutHarnessNameSessionsSessionIdGoal_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/goal/pause': {
+    POST: PostHarnessNameSessionsSessionIdGoalPause_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/goal/resume': {
+    POST: PostHarnessNameSessionsSessionIdGoalResume_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/inbox/:itemId': {
+    POST: PostHarnessNameSessionsSessionIdInboxItemId_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/message-results/:signalId': {
+    GET: GetHarnessNameSessionsSessionIdMessageResultsSignalId_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/messages': {
+    POST: PostHarnessNameSessionsSessionIdMessages_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/mode': {
+    PATCH: PatchHarnessNameSessionsSessionIdMode_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/model': {
+    PATCH: PatchHarnessNameSessionsSessionIdModel_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/permissions': {
+    PATCH: PatchHarnessNameSessionsSessionIdPermissions_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/queue': {
+    POST: PostHarnessNameSessionsSessionIdQueue_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/queue/:queuedItemId/result': {
+    GET: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/state': {
+    GET: GetHarnessNameSessionsSessionIdState_RouteContract;
+    PATCH: PatchHarnessNameSessionsSessionIdState_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

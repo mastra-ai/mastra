@@ -61,12 +61,16 @@ function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: bo
   });
 
   const auxiliaryDeclarations = [...auxiliaryTypeStore.definitions.values()]
-    .map(definition => printNode(definition.node))
+    .map(definition => stripImpossibleNeverIndexSignatures(printNode(definition.node)))
     .join('\n\n');
 
-  const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${printNode(node)};`;
+  const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${stripImpossibleNeverIndexSignatures(printNode(node))};`;
 
   return auxiliaryDeclarations ? `${auxiliaryDeclarations}\n\n${aliasDeclaration}` : aliasDeclaration;
+}
+
+function stripImpossibleNeverIndexSignatures(typeScript: string): string {
+  return typeScript.replace(/^\s*\[x: string\]: never;\n/gm, '');
 }
 
 function getRoutePart(

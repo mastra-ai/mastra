@@ -57,8 +57,33 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 - **[Vectors](/reference/client-js/vectors)**: Use vector embeddings for semantic search.
 - **[Responses](/reference/client-js/responses)**: Use Mastra Agents as a Responses API with an OpenAI-compatible, agent-backed interface. This API is currently experimental.
 - **[Conversations](/reference/client-js/conversations)**: Work with the stored conversation threads and item history behind Mastra Agents as a Responses API. This API is currently experimental.
+- **Harness**: Create remote Harness sessions, reconnect to session events, and settle durable message or queue operations.
 - **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
 - **[Telemetry](/reference/client-js/telemetry)**: View app performance and trace activity.
+
+## Harness sessions
+
+Use `getHarness()` when your server registers Harness v1 routes and your client needs reconnectable sessions with durable operation recovery.
+
+```typescript
+import { mastraClient } from 'lib/mastra-client'
+
+const harness = mastraClient.getHarness('default')
+const session = await harness.session({ threadId: { fresh: true } })
+
+const unsubscribe = session.subscribe(event => {
+  console.log(event.type)
+})
+
+const result = await session.message({
+  content: 'Summarize the workspace status',
+  admissionId: 'workspace-summary-1',
+})
+
+unsubscribe()
+```
+
+`message()` and `queue()` submit work once, then resolve through the server result lookup endpoints. Pass a stable `admissionId` when the caller needs to recover from an interrupted request without admitting duplicate work.
 
 ## Generating responses
 
