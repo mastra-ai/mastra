@@ -21,6 +21,7 @@ export type {
   MastraToolApproval,
   MastraToolInvocation,
   MastraToolInvocationPart,
+  MastraPartVisibility,
   UIMessageV4Part,
   MessageSource,
   MemoryInfo,
@@ -33,6 +34,7 @@ export type { AIV6Type, AIV5Type, AIV4Type, CoreMessageV4, UIMessageV4 } from '.
 // Utility exports
 export { convertMessages } from './utils/convert-messages';
 export type { OutputFormat } from './utils/convert-messages';
+export { filterMessagesByVisibility, isVisiblePart } from './utils/visibility';
 
 // Conversion exports
 export {

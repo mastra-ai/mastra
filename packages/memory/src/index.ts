@@ -2,7 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, filterMessagesByVisibility } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
@@ -357,6 +357,35 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       includeSystemReminders?: boolean;
       threadId: string;
+      /**
+       * Filter parts by visibility tier before returning.
+       *
+       * - `'all'` (default): returns every part — used by the agent loop and
+       *   any in-process consumer that needs the LLM's full context.
+       * - `'ui'`: returns only parts whose visibility is not `'llm'` — i.e.
+       *   anything intended to be visible to the user. Used by UI-facing
+       *   endpoints (HTTP message lists, search) so processors can flag chunks
+       *   `visibility: 'llm'` and have them automatically hidden from the UI
+       *   while still being persisted and replayed to the model.
+       *
+       * **This is a UI presentation flag, not a redaction or privacy
+       * boundary.** Parts marked `visibility: 'llm'` are still persisted in
+       * storage and still returned to the agent loop / model on the next
+       * recall — the `'ui'` tier only suppresses them from the message slice
+       * we hand back to the UI. Do not use it for sensitive data handling.
+       *
+       * Pagination semantics with `visibility: 'ui'`:
+       *
+       * - When called with explicit numeric pagination and no semantic recall
+       *   (`vectorSearchString`), the visibility filter is applied before
+       *   slicing, so `total` / `hasMore` describe the visible result set and
+       *   pages are full until the last page.
+       * - When called with `vectorSearchString` (semantic search) or
+       *   `perPage: false`, the visibility filter is applied post-fetch.
+       *   `total` / `hasMore` describe the raw fetched set (search results
+       *   are bounded by `topK` + `messageRange`, not by `perPage`).
+       */
+      visibility?: 'all' | 'ui';
       observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
@@ -377,6 +406,7 @@ export class Memory extends MastraMemory {
       vectorSearchString,
       includeSystemReminders,
       filter,
+      visibility,
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
@@ -510,12 +540,29 @@ export class Memory extends MastraMemory {
       // include results are returned (not the full message history)
       const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
 
+      // For UI-tier visibility with explicit numeric pagination and no semantic
+      // recall driving the page, we need to filter the full thread before
+      // applying pagination — otherwise pages can come back short or empty
+      // when `visibility: 'llm'` parts are concentrated in the queried slice,
+      // and `total`/`hasMore` would describe the raw set instead of the visible
+      // set. The semantic-recall path keeps the post-filter behavior because
+      // its result set is bounded by topK + messageRange, not by `perPage`.
+      const useFullScanForVisibility =
+        visibility === 'ui' &&
+        !vectorSearchString &&
+        typeof effectivePerPage === 'number' &&
+        effectivePerPage > 0 &&
+        !historyDisabledByConfig;
+
       const paginatedResult = await memoryStore.listMessages({
         threadId,
         resourceId,
-        perPage: effectivePerPage,
-        page,
-        orderBy: effectiveOrderBy,
+        // Fetch the full thread so visibility filtering happens before
+        // pagination. `effectiveOrderBy` is recomputed below so the unpaged
+        // fetch doesn't apply DESC-and-reverse semantics meant for paged calls.
+        perPage: useFullScanForVisibility ? false : effectivePerPage,
+        page: useFullScanForVisibility ? undefined : page,
+        orderBy: useFullScanForVisibility ? orderBy : effectiveOrderBy,
         filter,
         ...(vectorResults?.length
           ? {
@@ -534,15 +581,62 @@ export class Memory extends MastraMemory {
             }
           : {}),
       });
-      // Reverse to restore chronological order if we queried DESC to get newest messages
-      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+      // Reverse to restore chronological order if we queried DESC to get newest messages.
+      // The full-scan visibility path doesn't need this — `MessageList` sorts to
+      // chronological order regardless of input direction, and we slice the
+      // visible page below.
+      const rawMessages =
+        !useFullScanForVisibility && shouldGetNewestAndReverse
+          ? paginatedResult.messages.reverse()
+          : paginatedResult.messages;
 
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
-      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+      let messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
 
-      const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
+      let total = paginatedResult.total;
+      let resultPage = paginatedResult.page;
+      let resultPerPage: number | false = paginatedResult.perPage;
+      let hasMore = paginatedResult.hasMore;
+
+      // `visibility: 'ui'` strips parts marked `visibility: 'llm'` so UI-facing
+      // callers (HTTP handlers, frontend chat history) don't surface
+      // processor-hidden content. This is a UI presentation flag, not a
+      // redaction or privacy boundary — the agent loop and in-process
+      // consumers still see the full set when calling `recall` without a
+      // `visibility` arg (default `'all'`).
+      if (visibility === 'ui') {
+        // `filterMessagesByVisibility` defaults to the UI-tier view, which is
+        // what we want: keep parts whose visibility is undefined or `'all'`,
+        // drop those marked `'llm'`-only.
+        const visibleMessages = filterMessagesByVisibility(messages);
+
+        if (useFullScanForVisibility) {
+          // Paginate over the visible set so `total`/`hasMore` describe what
+          // the caller will actually render.
+          const totalVisible = visibleMessages.length;
+          const pageNum = page ?? 0;
+          const requestedPerPage = effectivePerPage;
+          const sliceFromEnd = effectiveOrderBy?.direction === 'DESC';
+
+          const startIdx = sliceFromEnd
+            ? Math.max(0, totalVisible - (pageNum + 1) * requestedPerPage)
+            : pageNum * requestedPerPage;
+          const endIdx = sliceFromEnd
+            ? Math.max(0, totalVisible - pageNum * requestedPerPage)
+            : Math.min(totalVisible, startIdx + requestedPerPage);
+
+          messages = visibleMessages.slice(startIdx, endIdx);
+          total = totalVisible;
+          resultPage = pageNum;
+          resultPerPage = requestedPerPage;
+          hasMore = sliceFromEnd ? startIdx > 0 : endIdx < totalVisible;
+        } else {
+          messages = visibleMessages;
+        }
+      }
+
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
 
       span?.end({

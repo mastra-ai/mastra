@@ -4,6 +4,7 @@
 export type {
   // Core Types
   ChunkType,
+  ChunkVisibility,
   TypedChunkType,
   MastraFinishReason,
   ProviderMetadata,

@@ -33,6 +33,7 @@ import type {
   MastraDBMessage,
   MastraMessagePart,
   MastraMessageV1,
+  MastraPartVisibility,
   MessageSource,
   MemoryInfo,
   UIMessageWithMetadata,
@@ -1055,6 +1056,16 @@ export class MessageList {
                 } as AIV5Type.ProviderMetadata)
               : undefined;
 
+          // Merge visibility conservatively — if either the existing part or
+          // the incoming patch is `'llm'`-only, the merged part stays
+          // `'llm'`-only. Otherwise prefer the incoming flag.
+          const originalVisibility = (originalPart as { visibility?: MastraPartVisibility }).visibility;
+          const incomingVisibility = (inputPart as { visibility?: MastraPartVisibility }).visibility;
+          const mergedVisibility: MastraPartVisibility | undefined =
+            originalVisibility === 'llm' || incomingVisibility === 'llm'
+              ? 'llm'
+              : (incomingVisibility ?? originalVisibility);
+
           msg.content.parts[i] = {
             ...inputPart,
             toolInvocation: {
@@ -1066,6 +1077,7 @@ export class MessageList {
               ? { providerExecuted: originalPart.providerExecuted }
               : {}),
             ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
+            ...(mergedVisibility ? { visibility: mergedVisibility } : {}),
           };
           this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
           this.updateLastCreatedAt(msg);
