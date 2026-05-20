@@ -13,6 +13,7 @@
  */
 export const RESOURCES = [
   'a2a',
+  'agent-builder',
   'agents',
   'auth',
   'background-tasks',
@@ -30,6 +31,7 @@ export const RESOURCES = [
   'processors',
   'schedules',
   'scores',
+  'stored',
   'stored-agents',
   'stored-mcp-clients',
   'stored-prompt-blocks',
@@ -89,6 +91,8 @@ export const PERMISSION_PATTERNS = {
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
+  /** Full access to agent builder */
+  'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
   /** Full access to auth */

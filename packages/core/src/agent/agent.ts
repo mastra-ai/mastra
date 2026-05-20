@@ -33,7 +33,6 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -929,11 +928,19 @@ export class Agent<
   /**
    * Enforces the request-context and FGA boundary shared by fresh and resumed agent execution.
    */
-  async #assertAgentExecutionPreflight(requestContext?: RequestContext) {
+  async #assertAgentExecutionPreflight(
+    requestContext?: RequestContext,
+    options?: {
+      authorize?: boolean;
+      memory?: AgentExecutionOptionsBase<any>['memory'];
+      runId?: string;
+      snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+    },
+  ) {
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user');
-      const { checkFGA, FGADeniedError } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+      const { FGADeniedError } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
       if (!user) {
         throw new FGADeniedError(
           { id: 'unknown' },
@@ -944,11 +951,15 @@ export class Agent<
 
       await this.#validateRequestContext(requestContext);
 
-      await checkFGA({
-        fgaProvider,
-        user,
-        resource: { type: 'agent', id: this.id },
-        permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      if (options?.authorize === false) {
+        return;
+      }
+
+      await this.#requireAgentExecutionFGA({
+        requestContext,
+        memory: options?.memory,
+        runId: options?.runId,
+        snapshotMemoryInfo: options?.snapshotMemoryInfo,
       });
       return;
     }
@@ -990,7 +1001,6 @@ export class Agent<
         throw mastraError;
       }
 
-      const pubsub = this.getPubSub();
       Object.entries(agents || {}).forEach(([_agentName, agent]) => {
         if (this.#mastra) {
           agent.__registerMastra?.(this.#mastra);
@@ -5509,18 +5519,26 @@ export class Agent<
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
-  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+  async #loadAgenticLoopSnapshotOrThrow({
+    runId,
+    method,
+    workflowName = 'agentic-loop',
+  }: {
+    runId: string;
+    method: string;
+    workflowName?: string;
+  }) {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     let workflowRun: { resourceId?: unknown; snapshot?: unknown } | null | undefined;
     if (typeof workflowsStore?.getWorkflowRunById === 'function') {
-      workflowRun = await workflowsStore.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
+      workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
     }
     const workflowRunSnapshot =
       workflowRun?.snapshot && typeof workflowRun.snapshot === 'object' ? workflowRun.snapshot : undefined;
     const existingSnapshot =
       workflowRunSnapshot ??
       (await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: 'agentic-loop',
+        workflowName,
         runId,
       }));
 
@@ -6233,31 +6251,59 @@ export class Agent<
     options?: MultiPrimitiveExecutionOptions<OUTPUT>,
   ): Promise<MastraAgentNetworkStream<OUTPUT>>;
   async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const explicitRequestContext = options?.requestContext;
+    const requestContextForDefaults = explicitRequestContext || new RequestContext();
+    if (explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(explicitRequestContext, { authorize: false });
+    }
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextForDefaults });
     const mergedOptions = {
       ...defaultNetworkOptions,
       ...options,
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
-
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    const requestContextToUse = explicitRequestContext || mergedOptions.requestContext || requestContextForDefaults;
+    if (!explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { authorize: false });
+    }
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
     const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const hasFga = Boolean(this.#mastra?.getServer()?.fga);
 
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
+    const memoryThreadId =
+      typeof mergedOptions?.memory?.thread === 'string'
         ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+        : mergedOptions?.memory?.thread?.id;
+    const threadId = hasFga ? threadIdFromContext : threadIdFromContext || memoryThreadId;
+    const resourceId = hasFga ? resourceIdFromContext : resourceIdFromContext || mergedOptions?.memory?.resource;
+
+    if (hasFga && !resourceId) {
+      throw new MastraError({
+        id: 'AGENT_NETWORK_OWNER_UNVERIFIED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" network() requires a verified resource id when FGA is configured.`,
+        details: {
+          agentName: this.name,
+        },
+      });
+    }
+
+    const runId = hasFga
+      ? this.#mastra?.generateId() || randomUUID()
+      : mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    await this.#requireAgentExecutionFGA({
+      requestContext: requestContextToUse,
+      memory: mergedOptions?.memory,
+      runId,
+    });
 
     return await networkLoop<OUTPUT>({
       networkName: this.name,
@@ -6310,16 +6356,61 @@ export class Agent<
    */
   async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     const runId = options.runId;
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const explicitRequestContext = options.requestContext;
+    const requestContextForDefaults = explicitRequestContext || new RequestContext();
+    if (explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(explicitRequestContext, { authorize: false });
+    }
+    const isNetworkToolApprovalResume =
+      (options as { __mastraNetworkToolApprovalResume?: boolean }).__mastraNetworkToolApprovalResume === true;
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextForDefaults });
     const mergedOptions = {
       ...defaultNetworkOptions,
       ...options,
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
+    let requestContextToUse = explicitRequestContext || mergedOptions.requestContext || requestContextForDefaults;
+    if (!explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { authorize: false });
+    }
+    if (isNetworkToolApprovalResume) {
+      requestContextToUse = new RequestContext(requestContextToUse.entries());
+      requestContextToUse.set('__mastra_networkToolApprovalResume', true);
+    }
+    const hasFga = Boolean(this.#mastra?.getServer()?.fga);
+    const trustedResourceId = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    if (hasFga && !trustedResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_OWNER_UNVERIFIED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" resumeNetwork() requires a matching resource id to resume runId "${runId}".`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+    await this.#requireAgentExecutionFGA({
+      requestContext: requestContextToUse,
+      memory: mergedOptions?.memory,
+      runId,
+    });
+    const { resourceId: runResourceId } = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeNetwork',
+      workflowName: 'agent-loop-main-workflow',
+    });
+    this.#assertAgenticLoopResumeOwnership({
+      method: 'resumeNetwork',
+      runId,
+      runResourceId,
+      requestContext: requestContextToUse,
+      options: { memory: mergedOptions?.memory },
+    });
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
@@ -6327,12 +6418,12 @@ export class Agent<
     const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
+    const memoryThreadId =
+      typeof mergedOptions?.memory?.thread === 'string'
         ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+        : mergedOptions?.memory?.thread?.id;
+    const threadId = hasFga ? threadIdFromContext : threadIdFromContext || memoryThreadId;
+    const resourceId = hasFga ? resourceIdFromContext : resourceIdFromContext || mergedOptions?.memory?.resource;
 
     return await networkLoop({
       networkName: this.name,
@@ -6377,9 +6468,9 @@ export class Agent<
    * ```
    */
   async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    const requestContext = new RequestContext(options.requestContext?.entries());
-    requestContext.set('__mastra_networkToolApprovalResume', true);
-    return this.resumeNetwork({ approved: true }, { ...options, requestContext });
+    const resumeOptions = { ...options } as typeof options & { __mastraNetworkToolApprovalResume: true };
+    resumeOptions.__mastraNetworkToolApprovalResume = true;
+    return this.resumeNetwork({ approved: true }, resumeOptions);
   }
 
   /**
@@ -6398,9 +6489,9 @@ export class Agent<
    * ```
    */
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    const requestContext = new RequestContext(options.requestContext?.entries());
-    requestContext.set('__mastra_networkToolApprovalResume', true);
-    return this.resumeNetwork({ approved: false }, { ...options, requestContext });
+    const resumeOptions = { ...options } as typeof options & { __mastraNetworkToolApprovalResume: true };
+    resumeOptions.__mastraNetworkToolApprovalResume = true;
+    return this.resumeNetwork({ approved: false }, resumeOptions);
   }
 
   async generate<
@@ -6433,7 +6524,7 @@ export class Agent<
   ): Promise<FullOutput<OUTPUT>> {
     const requestContextToUse = options?.requestContext;
     if (requestContextToUse) {
-      await this.#assertAgentExecutionPreflight(requestContextToUse);
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { authorize: false });
     }
 
     const defaultOptions = await this.getDefaultOptions({
@@ -6446,7 +6537,7 @@ export class Agent<
     if (requestContextToUse) {
       mergedOptions.requestContext = requestContextToUse;
     } else {
-      await this.#assertAgentExecutionPreflight(mergedOptions.requestContext);
+      await this.#assertAgentExecutionPreflight(mergedOptions.requestContext, { authorize: false });
     }
 
     await this.#requireAgentExecutionFGA(mergedOptions);
@@ -6781,12 +6872,18 @@ export class Agent<
 
     try {
       if (!skipExecutionPreflight && requestContextToUse) {
-        await this.#assertAgentExecutionPreflight(requestContextToUse);
+        await this.#assertAgentExecutionPreflight(requestContextToUse, {
+          memory: streamOptionsWithRunId.memory,
+          runId: streamOptionsWithRunId.runId,
+        });
         preflightedRequestContext = requestContextToUse;
         hasPreflightedRequestContext = true;
         reserveAdmittedRun();
       } else if (!skipExecutionPreflight && staticDefaultOptions) {
-        await this.#assertAgentExecutionPreflight(staticDefaultOptions.requestContext);
+        await this.#assertAgentExecutionPreflight(staticDefaultOptions.requestContext, {
+          memory: staticDefaultOptions.memory,
+          runId: streamOptionsWithRunId.runId,
+        });
         preflightedRequestContext = staticDefaultOptions.requestContext;
         hasPreflightedRequestContext = true;
         reserveAdmittedRun();
@@ -6807,7 +6904,10 @@ export class Agent<
         hasExecutionPreflight &&
         (!hasPreflightedRequestContext || mergedOptions.requestContext !== preflightedRequestContext)
       ) {
-        await this.#assertAgentExecutionPreflight(mergedOptions.requestContext);
+        await this.#assertAgentExecutionPreflight(mergedOptions.requestContext, {
+          memory: mergedOptions.memory,
+          runId: mergedOptions.runId,
+        });
       }
 
       const mergedThreadTarget = this.#getThreadTarget(mergedOptions);
@@ -7129,7 +7229,10 @@ export class Agent<
       _pubsub: pubsub,
     };
     if (streamOptionsWithPubSub.requestContext) {
-      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext);
+      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext, {
+        memory: streamOptionsWithPubSub.memory,
+        runId: streamOptionsWithPubSub.runId,
+      });
       streamOptionsWithPubSub = {
         ...streamOptionsWithPubSub,
         [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
@@ -7138,10 +7241,17 @@ export class Agent<
       const defaultOptions = await this.getDefaultOptions({
         requestContext: streamOptionsWithPubSub.requestContext,
       });
-      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
+      const preflightOptions = deepMerge(
+        defaultOptions as Record<string, unknown>,
+        streamOptionsWithPubSub as Record<string, unknown>,
+      ) as AgentExecutionOptionsBase<any> & { requestContext?: RequestContext; runId?: string };
+      await this.#assertAgentExecutionPreflight(preflightOptions.requestContext, {
+        memory: preflightOptions.memory,
+        runId: preflightOptions.runId,
+      });
       streamOptionsWithPubSub = {
         ...streamOptionsWithPubSub,
-        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: defaultOptions,
+        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: preflightOptions as AgentExecutionOptions<any>,
         [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
       };
     }
@@ -7226,16 +7336,26 @@ export class Agent<
     };
     if (streamOptionsWithPubSub.requestContext) {
       // Preflight before idle-wrapper setup, which can resolve defaults and memory before delegating to resumeStream().
-      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext);
+      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext, {
+        memory: streamOptionsWithPubSub.memory,
+        runId: streamOptionsWithPubSub.runId,
+      });
     } else {
       const defaultOptions = await this.getDefaultOptions({
         requestContext: streamOptionsWithPubSub.requestContext,
       });
-      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
+      const preflightOptions = deepMerge(
+        defaultOptions as Record<string, unknown>,
+        streamOptionsWithPubSub as Record<string, unknown>,
+      ) as AgentExecutionOptionsBase<any> & { requestContext?: RequestContext; runId?: string };
+      await this.#assertAgentExecutionPreflight(preflightOptions.requestContext, {
+        memory: preflightOptions.memory,
+        runId: preflightOptions.runId,
+      });
       streamOptionsWithPubSub = {
         ...streamOptionsWithPubSub,
         _pubsub: pubsub,
-        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: defaultOptions,
+        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: preflightOptions as AgentExecutionOptions<TOutput>,
         [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
       };
     }
@@ -7306,12 +7426,18 @@ export class Agent<
     if (!streamOptionsWithPubSub?.[SKIP_AGENT_EXECUTION_PREFLIGHT]) {
       if (requestContextToUse) {
         // Keep explicit-context resume preflight before snapshot loading/reservation so denied callers cannot touch persisted runs.
-        await this.#assertAgentExecutionPreflight(requestContextToUse);
+        await this.#assertAgentExecutionPreflight(requestContextToUse, {
+          memory: streamOptionsWithPubSub.memory,
+          runId,
+        });
       } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
         defaultOptions = (await this.getDefaultOptions({
           requestContext: requestContextToUse,
         })) as AgentExecutionOptions<TOutput>;
-        await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
+        await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, {
+          memory: defaultOptions.memory,
+          runId,
+        });
       }
     }
     const { resourceId: runResourceId, snapshot: existingSnapshot } = await this.#loadAgenticLoopSnapshotOrThrow({
@@ -7334,7 +7460,10 @@ export class Agent<
       !preflightedDefaultOptions &&
       (this.#requestContextSchema || this.#mastra?.getServer()?.fga)
     ) {
-      await this.#assertAgentExecutionPreflight(ownershipOptions.requestContext);
+      await this.#assertAgentExecutionPreflight(ownershipOptions.requestContext, {
+        memory: ownershipOptions.memory,
+        runId,
+      });
     }
     this.#assertAgenticLoopResumeOwnership({
       method: 'resumeStream',
@@ -7663,12 +7792,15 @@ export class Agent<
     let defaultOptions: AgentExecutionOptions<TOutput> | undefined;
     if (requestContextToUse) {
       // Keep explicit-context resume preflight before snapshot loading/model resolution so denied callers cannot touch persisted runs.
-      await this.#assertAgentExecutionPreflight(requestContextToUse);
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { memory: options?.memory, runId: options?.runId });
     } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
       defaultOptions = (await this.getDefaultOptions({
         requestContext: requestContextToUse,
       })) as AgentExecutionOptions<TOutput>;
-      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
+      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, {
+        memory: defaultOptions.memory,
+        runId: options?.runId,
+      });
     }
 
     const runId = options?.runId ?? '';

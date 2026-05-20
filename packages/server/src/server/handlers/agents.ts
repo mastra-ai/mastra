@@ -2392,6 +2392,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       const streamResult = await agent.network(messages, {
         ...params,
+        requestContext,
       });
 
       return streamResult;
@@ -2431,6 +2432,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
+        requestContext,
       });
 
       return streamResult;
@@ -2470,6 +2472,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,
+        requestContext,
       });
 
       return streamResult;

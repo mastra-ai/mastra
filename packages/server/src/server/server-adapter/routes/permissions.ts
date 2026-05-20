@@ -30,6 +30,7 @@ const METHOD_TO_ACTION: Record<string, string> = {
 const EXECUTE_PATTERNS = [
   '/generate',
   '/stream',
+  '/agents/:agentId/network',
   '/execute',
   '/start',
   '/resume',

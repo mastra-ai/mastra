@@ -18,6 +18,9 @@ import {
   GET_AGENT_BY_ID_ROUTE,
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
+  STREAM_NETWORK_ROUTE,
+  APPROVE_NETWORK_TOOL_CALL_ROUTE,
+  DECLINE_NETWORK_TOOL_CALL_ROUTE,
   RESUME_STREAM_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
@@ -791,6 +794,65 @@ describe('Agent Routes Authorization', () => {
       // Verify requestContext was passed through
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-value');
+    });
+
+    it('STREAM_NETWORK_ROUTE should pass requestContext to agent.network()', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('custom-key', 'network-value');
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'network').mockImplementation(async (_messages, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await STREAM_NETWORK_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+      } as any);
+
+      expect(capturedOptions.requestContext).toBe(requestContext);
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('network-value');
+      expect(capturedOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+    });
+
+    it('network tool-call routes should pass requestContext to approval helpers', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('custom-key', 'network-tool-value');
+
+      let capturedApproveOptions: any;
+      let capturedDeclineOptions: any;
+      vi.spyOn(mockAgent, 'approveNetworkToolCall').mockImplementation(async options => {
+        capturedApproveOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+      vi.spyOn(mockAgent, 'declineNetworkToolCall').mockImplementation(async options => {
+        capturedDeclineOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await APPROVE_NETWORK_TOOL_CALL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'network-run-id',
+      } as any);
+      await DECLINE_NETWORK_TOOL_CALL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'network-run-id',
+      } as any);
+
+      expect(capturedApproveOptions.requestContext).toBe(requestContext);
+      expect(capturedDeclineOptions.requestContext).toBe(requestContext);
+      expect(capturedApproveOptions.requestContext.get('custom-key')).toBe('network-tool-value');
+      expect(capturedDeclineOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
     });
   });
 

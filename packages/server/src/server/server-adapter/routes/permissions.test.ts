@@ -636,6 +636,10 @@ describe('real route scenarios', () => {
       expect(derivePermission({ path: '/agents/:agentId/stream', method: 'POST' })).toBe('agents:execute');
     });
 
+    it('POST /agents/:agentId/network → agents:execute', () => {
+      expect(derivePermission({ path: '/agents/:agentId/network', method: 'POST' })).toBe('agents:execute');
+    });
+
     it('POST /agents/:agentId/approve-tool-call → agents:execute', () => {
       expect(derivePermission({ path: '/agents/:agentId/approve-tool-call', method: 'POST' })).toBe('agents:execute');
     });
@@ -722,6 +726,14 @@ describe('real route scenarios', () => {
 
     it('POST /memory/threads → memory:write', () => {
       expect(derivePermission({ path: '/memory/threads', method: 'POST' })).toBe('memory:write');
+    });
+
+    it('POST /memory/network/threads → memory:write', () => {
+      expect(derivePermission({ path: '/memory/network/threads', method: 'POST' })).toBe('memory:write');
+    });
+
+    it('POST /memory/network/save-messages → memory:write', () => {
+      expect(derivePermission({ path: '/memory/network/save-messages', method: 'POST' })).toBe('memory:write');
     });
 
     it('DELETE /memory/threads/:threadId → memory:delete', () => {

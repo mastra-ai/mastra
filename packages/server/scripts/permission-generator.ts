@@ -115,6 +115,12 @@ const COMPATIBILITY_PERMISSIONS = [
 ] as const;
 
 /**
+ * Additional wildcard permission patterns supported by the RBAC matcher
+ * that are not derived from compatibility permissions or server routes.
+ */
+const ADDITIONAL_PERMISSION_PATTERNS = ['stored:*'];
+
+/**
  * Generates a human-readable description for a permission pattern.
  */
 function getPermissionDescription(pattern: string): string {
@@ -204,9 +210,10 @@ export function generatePermissionFileContent(data: PermissionData): string {
     ...permissions, // Specific permissions
     ...ADDITIONAL_PERMISSION_PATTERNS, // Compound aliases
   ];
+  const uniquePatterns = [...new Set(allPatterns)];
 
   // Generate the PERMISSION_PATTERNS object entries with TSDoc comments
-  const patternEntries = allPatterns
+  const patternEntries = uniquePatterns
     .map(pattern => {
       const desc = getPermissionDescription(pattern);
       return `  /** ${desc} */\n  '${pattern}': '${pattern}'`;

@@ -121,6 +121,29 @@ function expectNoResumeOwnerError(error: unknown) {
   }
 }
 
+function expectAgentExecutionRequire(
+  fgaProvider: IFGAProvider,
+  user: unknown,
+  options: { requestContext?: unknown; resourceId?: string; runId?: string } = {},
+) {
+  expect(fgaProvider.require).toHaveBeenCalledWith(
+    user,
+    expect.objectContaining({
+      resource: { type: 'agent', id: 'test-agent' },
+      permission: 'agents:execute',
+      context: expect.objectContaining({
+        requestContext: options.requestContext ?? expect.any(RequestContext),
+        resourceId: options.resourceId,
+        metadata: expect.objectContaining({
+          agentId: 'test-agent',
+          agentName: 'test-agent',
+          ...(options.runId === undefined ? {} : { runId: options.runId }),
+        }),
+      }),
+    }),
+  );
+}
+
 describe('Agent FGA checks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,6 +159,7 @@ describe('Agent FGA checks', () => {
 
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
 
       try {
         await agent.generate('test', { requestContext: requestContext as any });
@@ -145,7 +169,15 @@ describe('Agent FGA checks', () => {
 
       expect(fgaProvider.require).toHaveBeenCalledWith(
         { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        expect.objectContaining({
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext,
+            resourceId: 'resource-a',
+            metadata: expect.objectContaining({ agentId: 'test-agent', agentName: 'test-agent' }),
+          }),
+        }),
       );
     });
 
@@ -228,6 +260,7 @@ describe('Agent FGA checks', () => {
       const mastra = createMockMastra(fgaProvider);
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
 
       const agent = new Agent({
         id: 'test-agent',
@@ -246,7 +279,15 @@ describe('Agent FGA checks', () => {
 
       expect(fgaProvider.require).toHaveBeenCalledWith(
         { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        expect.objectContaining({
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext: expect.any(RequestContext),
+            resourceId: 'resource-a',
+            metadata: expect.objectContaining({ agentId: 'test-agent', agentName: 'test-agent' }),
+          }),
+        }),
       );
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
     });
@@ -302,6 +343,40 @@ describe('Agent FGA checks', () => {
       expect(getMemory).not.toHaveBeenCalled();
       expect(fgaProvider.require).not.toHaveBeenCalled();
     });
+
+    it('should authorize merged streamUntilIdle options when caller memory overrides defaults', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: {} as any,
+        defaultOptions: {
+          requestContext: requestContext as any,
+          memory: { resource: 'default-resource', thread: 'default-thread' },
+        },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      try {
+        await agent.streamUntilIdle('test', {
+          memory: { resource: 'caller-resource', thread: 'caller-thread' },
+        });
+      } catch {
+        // Expected to fail due to no real model.
+      }
+
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+      expectAgentExecutionRequire(
+        fgaProvider,
+        { id: 'default-user', organizationMembershipId: 'default-om' },
+        { resourceId: 'caller-resource' },
+      );
+    });
   });
 
   describe('stream()', () => {
@@ -321,10 +396,7 @@ describe('Agent FGA checks', () => {
         // Expected to fail due to no real model
       }
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'user-1', organizationMembershipId: 'om-1' }, { requestContext });
     });
 
     it('should throw FGADeniedError when FGA check fails in stream', async () => {
@@ -386,10 +458,7 @@ describe('Agent FGA checks', () => {
         // Expected to fail due to no real model.
       }
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'default-user', organizationMembershipId: 'default-om' });
     });
 
     it('should reject default request contexts without users when FGA is configured', async () => {
@@ -445,10 +514,7 @@ describe('Agent FGA checks', () => {
 
       await agent.generateLegacy('test', { requestContext: requestContext as any });
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'user-1', organizationMembershipId: 'om-1' }, { requestContext });
     });
 
     it('should fail closed when FGA is configured and no user is present in requestContext', async () => {
@@ -550,9 +616,10 @@ describe('Agent FGA checks', () => {
 
       await agent.generateLegacy('test', { requestContext: explicitRequestContext as any });
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
+      expectAgentExecutionRequire(
+        fgaProvider,
         { id: 'explicit-user', organizationMembershipId: 'explicit-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        { requestContext: explicitRequestContext },
       );
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
     });
@@ -574,10 +641,7 @@ describe('Agent FGA checks', () => {
 
       await agent.generateLegacy('test');
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'default-user', organizationMembershipId: 'default-om' });
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
     });
 
@@ -632,10 +696,7 @@ describe('Agent FGA checks', () => {
       const stream = await agent.streamLegacy('test', { requestContext: requestContext as any });
       await stream.consumeStream();
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'user-1', organizationMembershipId: 'om-1' }, { requestContext });
     });
 
     it('should fail closed when FGA is configured and no user is present in requestContext', async () => {
@@ -688,9 +749,10 @@ describe('Agent FGA checks', () => {
       const stream = await agent.streamLegacy('test', { requestContext: explicitRequestContext as any });
       await stream.consumeStream();
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
+      expectAgentExecutionRequire(
+        fgaProvider,
         { id: 'explicit-user', organizationMembershipId: 'explicit-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        { requestContext: explicitRequestContext },
       );
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
     });
@@ -713,10 +775,7 @@ describe('Agent FGA checks', () => {
       const stream = await agent.streamLegacy('test');
       await stream.consumeStream();
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'default-user', organizationMembershipId: 'default-om' });
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
     });
 
@@ -753,6 +812,329 @@ describe('Agent FGA checks', () => {
     });
   });
 
+  describe('network()', () => {
+    it('should reject missing users when FGA is configured', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const model = createMockModel();
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.network('test')).rejects.toThrow(FGADeniedError);
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(model.doGenerateCalls).toHaveLength(0);
+    });
+
+    it('should call FGA provider when request context user is provided', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      try {
+        await agent.network('test', { requestContext: requestContext as any });
+      } catch {
+        // Expected to fail due to no real model.
+      }
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1', organizationMembershipId: 'om-1' },
+        expect.objectContaining({
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext,
+            resourceId: 'resource-a',
+            metadata: expect.objectContaining({ agentId: 'test-agent', agentName: 'test-agent' }),
+          }),
+        }),
+      );
+    });
+
+    it('should authorize the effective request context from default network options', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: {} as any,
+        defaultNetworkOptions: { requestContext: requestContext as any },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      try {
+        await agent.network('test');
+      } catch {
+        // Expected to fail due to no real model.
+      }
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'default-user', organizationMembershipId: 'default-om' },
+        expect.objectContaining({
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext: expect.any(RequestContext),
+            resourceId: 'resource-a',
+            metadata: expect.objectContaining({ agentId: 'test-agent', agentName: 'test-agent' }),
+          }),
+        }),
+      );
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+    });
+
+    it('should fail closed before starting a network run when FGA cannot verify a resource owner', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(agent.network('test', { requestContext: requestContext as any })).rejects.toMatchObject({
+        id: 'AGENT_NETWORK_OWNER_UNVERIFIED',
+      });
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('should not treat caller-controlled network memory resource as a verified FGA owner', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        agent.network('test', {
+          requestContext: requestContext as any,
+          memory: { resource: 'caller-controlled-resource', thread: 'thread-a' },
+        }),
+      ).rejects.toMatchObject({
+        id: 'AGENT_NETWORK_OWNER_UNVERIFIED',
+      });
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('should not use caller-controlled network memory thread when FGA has no trusted context thread', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const getThreadById = vi.fn(async ({ threadId }: { threadId: string }) => {
+        if (threadId === 'caller-thread') {
+          throw new Error('caller-controlled thread should not be used');
+        }
+        return null;
+      });
+      const memory = {
+        hasOwnStorage: true,
+        __registerMastra: vi.fn(),
+        getConfig: vi.fn(() => ({})),
+        getThreadById,
+        createThread: vi.fn(async ({ threadId, resourceId }: { threadId: string; resourceId: string }) => ({
+          id: threadId,
+          resourceId,
+          title: 'Network Thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+        saveMessages: vi.fn(async () => undefined),
+        getMergedThreadConfig: vi.fn(() => ({})),
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: {} as any,
+        memory: memory as any,
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await agent.network('test', {
+        requestContext: requestContext as any,
+        runId: 'caller-thread',
+        memory: { resource: 'resource-a', thread: 'caller-thread' },
+      });
+
+      expect(getThreadById).toHaveBeenCalledWith({ threadId: 'test-run-id' });
+      expect(getThreadById).not.toHaveBeenCalledWith({ threadId: 'caller-thread' });
+    });
+  });
+
+  describe('network resume helpers', () => {
+    it('should reject missing users in resumeNetwork before loading network resume state', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const getStorage = vi.fn(() => ({
+        getStore: vi.fn(() => ({
+          loadWorkflowSnapshot: vi.fn(),
+        })),
+      }));
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.resumeNetwork({ approved: true }, { runId: 'missing-run-id' })).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(getStorage).not.toHaveBeenCalled();
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('should reject missing users in network approval helpers when FGA is configured', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.approveNetworkToolCall({ runId: 'missing-run-id' })).rejects.toThrow(FGADeniedError);
+      await expect(agent.declineNetworkToolCall({ runId: 'missing-run-id' })).rejects.toThrow(FGADeniedError);
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('should reject denied network resume users before loading network resume state', async () => {
+      const fgaProvider = createMockFGAProvider(false);
+      const getStorage = vi.fn(() => ({
+        getStore: vi.fn(() => ({
+          loadWorkflowSnapshot: vi.fn(),
+        })),
+      }));
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeNetwork({ approved: true }, { runId: 'missing-run-id', requestContext: requestContext as any }),
+      ).rejects.toThrow(FGADeniedError);
+      expect(getStorage).not.toHaveBeenCalled();
+    });
+
+    it('should reject callers whose resource does not own the suspended network run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage, workflowsStore } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeNetwork({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_MISMATCH' });
+      expect(workflowsStore.getWorkflowRunById).toHaveBeenCalledWith({
+        workflowName: 'agent-loop-main-workflow',
+        runId: 'suspended-run-id',
+      });
+    });
+
+    it('should fail closed when FGA is configured and caller resource is missing for an owned network run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        agent.resumeNetwork({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_UNVERIFIED' });
+      expect(getStorage).not.toHaveBeenCalled();
+    });
+
+    it('should fail closed when FGA is configured and the persisted network run has no owner', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: undefined });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeNetwork({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_PERSISTED_RUN_NO_OWNER' });
+    });
+
+    it('should authorize approval helpers with the default network request context', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: {} as any,
+        defaultNetworkOptions: { requestContext: requestContext as any },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      try {
+        await agent.approveNetworkToolCall({ runId: 'missing-run-id' });
+      } catch {
+        // Expected to fail after authorization because no suspended network state exists.
+      }
+
+      try {
+        await agent.declineNetworkToolCall({ runId: 'missing-run-id' });
+      } catch {
+        // Expected to fail after authorization because no suspended network state exists.
+      }
+
+      expect(fgaProvider.require).toHaveBeenCalledTimes(2);
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'default-user', organizationMembershipId: 'default-om' },
+        expect.objectContaining({
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext: expect.any(RequestContext),
+            resourceId: 'resource-a',
+            metadata: expect.objectContaining({ agentId: 'test-agent', agentName: 'test-agent' }),
+          }),
+        }),
+      );
+      expect(requestContext.has('__mastra_networkToolApprovalResume')).toBe(false);
+    });
+  });
+
   describe('resumeStream()', () => {
     it('should call FGA provider before loading a persisted snapshot', async () => {
       const fgaProvider = createMockFGAProvider(true);
@@ -768,10 +1150,7 @@ describe('Agent FGA checks', () => {
         agent.resumeStream({ approved: true }, { runId: 'missing-run-id', requestContext: requestContext as any }),
       ).rejects.toMatchObject({ id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND' });
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'user-1', organizationMembershipId: 'om-1' }, { requestContext });
     });
 
     it('should reject denied users before loading a persisted snapshot', async () => {
@@ -856,10 +1235,7 @@ describe('Agent FGA checks', () => {
         id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
       });
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'default-user', organizationMembershipId: 'default-om' });
     });
 
     it('should reject callers whose resource does not own the suspended run', async () => {
@@ -1030,9 +1406,10 @@ describe('Agent FGA checks', () => {
       ).rejects.toMatchObject({ id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND' });
 
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
-      expect(fgaProvider.require).toHaveBeenCalledWith(
+      expectAgentExecutionRequire(
+        fgaProvider,
         { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        { requestContext, runId: 'missing-run-id' },
       );
     });
 
@@ -1056,9 +1433,43 @@ describe('Agent FGA checks', () => {
       });
 
       expect(fgaProvider.require).toHaveBeenCalledTimes(1);
-      expect(fgaProvider.require).toHaveBeenCalledWith(
+      expectAgentExecutionRequire(fgaProvider, { id: 'default-user', organizationMembershipId: 'default-om' }, {
+        runId: 'missing-run-id',
+      });
+    });
+
+    it('should authorize merged resumeStreamUntilIdle options when caller memory overrides defaults', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'default-user', organizationMembershipId: 'default-om' });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: {} as any,
+        defaultOptions: {
+          requestContext: requestContext as any,
+          memory: { resource: 'default-resource', thread: 'default-thread' },
+        },
+      });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(
+        agent.resumeStreamUntilIdle(
+          { approved: true },
+          { runId: 'missing-run-id', memory: { resource: 'caller-resource', thread: 'caller-thread' } },
+        ),
+      ).rejects.toMatchObject({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+      });
+
+      expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+      expectAgentExecutionRequire(
+        fgaProvider,
         { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        { resourceId: 'caller-resource', runId: 'missing-run-id' },
       );
     });
 
@@ -1098,9 +1509,10 @@ describe('Agent FGA checks', () => {
         agent.resumeGenerate({ approved: true }, { runId: 'missing-run-id', requestContext: requestContext as any }),
       ).rejects.toMatchObject({ id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND' });
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
+      expectAgentExecutionRequire(
+        fgaProvider,
         { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        { requestContext, runId: 'missing-run-id' },
       );
     });
 
@@ -1163,10 +1575,9 @@ describe('Agent FGA checks', () => {
         id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
       });
 
-      expect(fgaProvider.require).toHaveBeenCalledWith(
-        { id: 'default-user', organizationMembershipId: 'default-om' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
-      );
+      expectAgentExecutionRequire(fgaProvider, { id: 'default-user', organizationMembershipId: 'default-om' }, {
+        runId: 'missing-run-id',
+      });
     });
 
     it('should reject callers whose resource does not own the suspended generate run', async () => {

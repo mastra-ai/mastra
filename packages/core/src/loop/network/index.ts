@@ -2717,6 +2717,7 @@ export async function networkLoop<OUTPUT = undefined>({
 
   const run = await mainWorkflow.createRun({
     runId: runIdToUse,
+    resourceId,
   });
 
   const { thread } = await prepareMemoryStep({
