@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.9
+
+### Patch Changes
+
+- Moved the `Dialog` component to Base UI. The public API is unchanged — `asChild` on `DialogTrigger` and `DialogClose` still works the same way, and open/close animations behave as before. ([#16821](https://github.com/mastra-ai/mastra/pull/16821))
+
 ## 29.0.0-alpha.8
 
 ### Minor Changes
