@@ -133,7 +133,7 @@ export class AgentThreadStreamRuntime {
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
       type: event.type,
-      runId: event.runId,
+      runId: 'runId' in event ? event.runId : undefined,
       data: event,
     });
   }
