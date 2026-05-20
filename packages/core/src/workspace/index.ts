@@ -128,7 +128,7 @@ export type {
 } from './skills';
 
 // Skill Tools
-export { createSkillTools } from './skills';
+export { createSkillTools, formatSkillActivation } from './skills';
 
 // Skill Publishing
 export type { SkillPublishResult } from './skills';

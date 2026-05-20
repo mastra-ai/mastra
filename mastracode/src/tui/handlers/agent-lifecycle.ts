@@ -9,12 +9,14 @@ import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { showInfo } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
+import { clearPendingUserMessages } from '../render-messages.js';
 import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.goalManager.startActiveTimer();
 
   // Refresh git branch so status line reflects the current branch
   const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
@@ -117,6 +119,7 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -134,11 +137,16 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.chatContainer.addChild(new Spacer(1));
   }
   state.userInitiatedAbort = false;
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
+  }
 
   state.followUpComponents = [];
   state.pendingFollowUpMessages = [];
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
+  clearPendingUserMessages(state);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
@@ -148,6 +156,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -156,11 +165,16 @@ export function handleAgentError(ctx: EventHandlerContext): void {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
+  }
 
   state.followUpComponents = [];
   state.pendingFollowUpMessages = [];
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
+  clearPendingUserMessages(state);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
@@ -177,6 +191,15 @@ export function handleAgentError(ctx: EventHandlerContext): void {
  * whether the standing goal is satisfied. If not, send a continuation
  * prompt to keep the agent working.
  */
+function removeJudgeComponent(state: EventHandlerContext['state'], component: JudgeDisplayComponent): void {
+  const children = state.chatContainer.children;
+  const index = children.indexOf(component);
+  if (index >= 0) {
+    children.splice(index, 1);
+    state.chatContainer.invalidate?.();
+  }
+}
+
 function maybeGoalContinuation(ctx: EventHandlerContext): void {
   const { state } = ctx;
   if (!state.goalManager.isActive()) return;
@@ -190,46 +213,96 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       ctx.updateStatusLine();
     });
   }
-  state.activeGoalJudge = { modelId: goal.judgeModelId };
+  const abortController = new AbortController();
+  const judgeComponent = new JudgeDisplayComponent(null, goal.turnsUsed, goal.maxTurns);
+  const activeGoalJudge = { modelId: goal.judgeModelId, abortController, component: judgeComponent };
+  state.activeGoalJudge = activeGoalJudge;
+  state.chatContainer.addChild(judgeComponent);
   state.gradientAnimator.start();
   ctx.updateStatusLine();
   state.ui.requestRender();
 
   state.goalManager
-    .evaluateAfterTurn(state)
+    .evaluateAfterTurn(state, {
+      abortSignal: abortController.signal,
+      onActivity: line => {
+        if (state.activeGoalJudge === activeGoalJudge) {
+          judgeComponent.addActivity(line);
+          state.ui.requestRender();
+        }
+      },
+    })
     .then(async ({ continuation, judgeResult }) => {
-      // Display the judge result in chat if available
+      if (state.activeGoalJudge !== activeGoalJudge) {
+        return;
+      }
+
+      const currentGoal = state.goalManager.getGoal();
+      if (!currentGoal || currentGoal.id !== evaluatedGoalId) {
+        removeJudgeComponent(state, judgeComponent);
+        return;
+      }
+
       if (judgeResult) {
-        const goal = state.goalManager.getGoal()!;
-        const judgeComponent = new JudgeDisplayComponent(judgeResult, goal.turnsUsed, goal.maxTurns);
-        state.chatContainer.addChild(judgeComponent);
+        judgeComponent.setResult(judgeResult, currentGoal.turnsUsed, currentGoal.maxTurns);
         state.ui.requestRender();
       }
 
+      if (abortController.signal.aborted) {
+        state.userInitiatedAbort = false;
+        return;
+      }
+
       if (continuation) {
-        const currentGoal = state.goalManager.getGoal();
-        if (currentGoal?.id !== evaluatedGoalId || currentGoal.status !== 'active') {
+        if (currentGoal.status !== 'active') {
           return;
         }
         if (drainQueuedAction(ctx)) {
           return;
         }
-        ctx.fireMessage(continuation);
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: continuation,
+            attributes: { type: 'goal-judge' },
+            metadata: {
+              goalId: currentGoal.id,
+              turnsUsed: currentGoal.turnsUsed,
+              maxTurns: currentGoal.maxTurns,
+              judgeModelId: currentGoal.judgeModelId,
+            },
+          }).accepted;
+        } catch (error) {
+          ctx.showError(`Failed to send goal continuation: ${error instanceof Error ? error.message : String(error)}`);
+        }
       } else {
         // Goal is done, paused, or waiting at an explicit checkpoint. Persist the final
         // judge response so the conversation history survives reloads.
-        const goal = state.goalManager.getGoal();
-        if (goal && judgeResult) {
+        if (judgeResult) {
           const harness = state.harness as typeof state.harness & {
             saveSystemReminderMessage?: (args: { reminderType: string; message: string }) => Promise<unknown>;
           };
           await harness.saveSystemReminderMessage?.({
             reminderType: 'goal-judge',
-            message: `${judgeResult.decision} (${goal.turnsUsed}/${goal.maxTurns})\n${judgeResult.reason}`,
+            message: `${judgeResult.decision} (${currentGoal.turnsUsed}/${currentGoal.maxTurns})\n${judgeResult.reason}`,
           });
         }
-        if (goal?.status === 'paused') {
-          showInfo(state, `Goal paused (attempt ${goal.turnsUsed}/${goal.maxTurns}). Use /goal resume to continue.`);
+        if (currentGoal.status === 'paused') {
+          showInfo(
+            state,
+            `Goal paused (attempt ${currentGoal.turnsUsed}/${currentGoal.maxTurns}). Use /goal resume to continue.`,
+          );
+        }
+
+        if (judgeResult?.decision === 'done' && currentGoal.id === state.planStartedGoalId) {
+          const goalId = state.planStartedGoalId;
+          state.planStartedGoalId = undefined;
+          try {
+            await state.harness.switchMode({ modeId: 'plan' });
+          } catch (error) {
+            ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
+            state.planStartedGoalId = goalId;
+          }
         }
       }
     })
@@ -237,7 +310,9 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       // Goal evaluation failed — don't block the TUI
     })
     .finally(() => {
-      state.activeGoalJudge = undefined;
+      if (state.activeGoalJudge === activeGoalJudge) {
+        state.activeGoalJudge = undefined;
+      }
       state.gradientAnimator?.fadeOut();
       ctx.updateStatusLine();
       state.ui.requestRender();

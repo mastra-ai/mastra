@@ -26,7 +26,13 @@ import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
 
-/** Configuration for the DefaultExporter's batching, retry, and strategy behavior. */
+/**
+ * Configuration for the DefaultExporter's batching, retry, and strategy behavior.
+ *
+ * @deprecated Use `MastraStorageExporterConfig` from `@mastra/observability` instead.
+ * This interface is kept for backward compatibility and will be removed in a
+ * future major version.
+ */
 interface DefaultExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBufferSize?: number; // Default: 10000 spans
@@ -66,6 +72,11 @@ function resolveTracingStorageStrategy(
 type Resolve = (value: void | PromiseLike<void>) => void;
 
 /**
+ * @deprecated Use `MastraStorageExporter` from `@mastra/observability` instead.
+ * This class is preserved unchanged so existing integrations (including code
+ * that matches on the `mastra-default-observability-exporter` exporter name)
+ * keep working. It will be removed in a future major version.
+ *
  * Default storage-backed exporter. Buffers observability events and flushes them
  * in batches to the configured ObservabilityStorage backend with retry support.
  */
@@ -336,8 +347,14 @@ export class DefaultExporter extends BaseExporter {
         deferredUpdates.length = 0;
         this.emitDrop('tracing', 'unsupported-storage', events.length + deferredCountAtEntry, error);
       } else {
-        // Clear deferred to avoid double-adding — re-add all original events instead
-        deferredUpdates.length = 0;
+        // `events` includes both partials-bound and newly-deferred entries, so
+        // re-adding it would double-add the newly-deferred ones if they stayed
+        // in deferredUpdates. Splice off only what this call appended — entries
+        // from a prior flushSpanUpdates call must survive.
+        const newlyDeferred = deferredUpdates.length - deferredCountAtEntry;
+        if (newlyDeferred > 0) {
+          deferredUpdates.splice(deferredUpdates.length - newlyDeferred, newlyDeferred);
+        }
         const dropped = this.#eventBuffer.reAddUpdates(events);
         this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       }

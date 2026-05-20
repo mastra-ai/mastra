@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
-import type { MastraBrowser } from '@mastra/core/browser';
+import type { PubSub } from '@mastra/core/events';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -22,7 +22,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import {
+  Observability,
+  MastraStorageExporter,
+  MastraPlatformExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -54,6 +59,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
+import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
@@ -67,12 +73,14 @@ import {
   getResourceIdOverride,
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
+import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
   openai: 'openai-codex',
+  'github-copilot': 'github-copilot',
 };
 
 export interface MastraCodeConfig {
@@ -125,18 +133,25 @@ export interface MastraCodeConfig {
    */
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
-  browser?: MastraBrowser;
+  browser?: HarnessConfig['browser'];
+  /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
+  pubsub?: PubSub;
+  /** Use Mastra Code's built-in Unix socket PubSub for local cross-process signal routing. */
+  unixSocketPubSub?: boolean;
+  /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
+  crossProcessPubSub?: boolean;
 }
 
 export function createAuthStorage() {
   const authStorage = new AuthStorage();
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
+  setGitHubCopilotAuthStorage(authStorage);
   return authStorage;
 }
 
 /**
- * Resolve cloud observability credentials for the CloudExporter.
+ * Resolve cloud observability credentials for the MastraPlatformExporter.
  * Priority: per-resource settings > environment variables > disabled.
  */
 function resolveCloudObservabilityConfig(
@@ -207,13 +222,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  try {
-    await gatewayRegistry.syncGateways(true);
-  } catch (error) {
-    console.warn('Failed to sync gateways at startup', error);
-  }
+  void Promise.resolve(gatewayRegistry.syncGateways(true)).catch(() => {});
 
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  const mgApiKey = storedGatewayKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
 
   // Project detection
   const project = detectProject(cwd);
@@ -222,6 +233,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (resourceIdOverride) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
+  }
+
+  const configuredPubSub = config?.pubsub;
+  const useUnixSocketPubSub =
+    (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
+  const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
+  const crossProcessPubSub = config?.crossProcessPubSub ?? (!configuredPubSub && useUnixSocketPubSub);
+  if (crossProcessPubSub && !signalsPubSub) {
+    throw new Error('crossProcessPubSub requires a pubsub instance');
   }
 
   // Storage
@@ -308,8 +328,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.reflectionThreshold',
         ],
         exporters: [
-          new DefaultExporter({ strategy: 'event-sourced' }),
-          new CloudExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+          new MastraStorageExporter({ strategy: 'event-sourced' }),
+          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -326,12 +346,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
-
-  if (hookManager?.hasHooks()) {
-    const hookConfig = hookManager.getConfig();
-    const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
-    console.info(`Hooks: ${hookCount} hook(s) configured`);
-  }
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
@@ -410,6 +424,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Also scan the full provider registry so configured API keys satisfy access checks.
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
+  const githubCopilotCred = authStorage.get('github-copilot');
   const startupAccess: ProviderAccess = {
     anthropic:
       anthropicCred?.type === 'oauth'
@@ -426,6 +441,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
+    'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
   };
   // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
   if (mgApiKey) {
@@ -455,6 +471,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
+  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -504,6 +521,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveCavemanObservations !== undefined) {
     globalInitialState.cavemanObservations = effectiveCavemanObservations;
   }
+  if (effectiveObserveAttachments !== undefined) {
+    globalInitialState.observeAttachments = effectiveObserveAttachments;
+  }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
@@ -525,6 +545,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     storage,
     observability,
     memory,
+    pubsub: signalsPubSub,
     stateSchema,
     subagents,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
@@ -588,7 +609,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         console.error('Failed to persist model usage count', error);
       }
     },
-    customModelCatalogProvider: () => {
+    customModelCatalogProvider: async () => {
       const settings = loadSettings();
       const customModels: CustomAvailableModel[] = [];
       for (const provider of settings.customProviders) {
@@ -603,12 +624,38 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           });
         }
       }
+
+      // GitHub Copilot exposes its model list dynamically via `/models` since the
+      // available models depend on the user's subscription tier and any org policies.
+      // The catalog is cached + refreshed in the background, so steady-state cost is
+      // a single Map lookup.
+      //
+      // The provider uses the generic OpenAI-compatible adapter pointed at
+      // GitHub Copilot's API, so expose the full live model catalog returned by
+      // Copilot instead of filtering by vendor family here.
+      try {
+        const copilotModels = await getCopilotModelCatalog({ authStorage });
+        for (const m of copilotModels) {
+          customModels.push({
+            id: `github-copilot/${m.id}`,
+            provider: 'github-copilot',
+            modelName: m.id,
+            hasApiKey: true,
+            apiKeyEnvVar: undefined,
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to load GitHub Copilot model catalog:', error);
+      }
+
       return customModels;
     },
-    threadLock: {
-      acquire: acquireThreadLock,
-      release: releaseThreadLock,
-    },
+    threadLock: crossProcessPubSub
+      ? undefined
+      : {
+          acquire: acquireThreadLock,
+          release: releaseThreadLock,
+        },
   });
 
   // Sync hookManager session ID on thread changes
@@ -634,6 +681,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     harness,
     mcpManager,
     hookManager,
+    signalsPubSub,
     authStorage,
     resolveModel,
     storageWarning,

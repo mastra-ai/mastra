@@ -1,20 +1,7 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import {
-  Notice,
-  Badge,
-  Button,
-  Header,
-  HeaderAction,
-  HeaderTitle,
-  Icon,
-  MainContentLayout,
-  Skeleton,
-  Spinner,
-  toast,
-} from '@mastra/playground-ui';
+import { Notice, Badge, Button, MainContentLayout, Spinner, toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { BookIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
@@ -30,6 +17,7 @@ import {
   usePromptBlockEditForm,
 } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
 
@@ -134,7 +122,7 @@ function CmsPromptBlocksEditForm({
       // Fetch latest version after save and activate it
       const versionsResponse = await client
         .getStoredPromptBlock(blockId)
-        .listVersions({ sortDirection: 'DESC', perPage: 1 });
+        .listVersions({ orderBy: { direction: 'DESC' }, perPage: 1 });
       const latestVersion = versionsResponse.versions[0];
       if (!latestVersion) {
         throw new Error('No version found to publish');
@@ -224,7 +212,7 @@ function CmsPromptBlocksEditPage() {
   const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const activeVersionId = block?.activeVersionId;
@@ -248,24 +236,16 @@ function CmsPromptBlocksEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <BookIcon />
-            </Icon>
-            <Skeleton className="h-6 w-[200px]" />
-          </HeaderTitle>
-        </Header>
+      <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
             <div className="flex items-center justify-center h-full">
-              <Spinner className="h-8 w-8" />
+              <Spinner className="size-8" />
             </div>
           }
         >
           <div className="flex items-center justify-center h-full">
-            <Spinner className="h-8 w-8" />
+            <Spinner className="size-8" />
           </div>
         </AgentEditLayout>
       </MainContentLayout>
@@ -274,15 +254,7 @@ function CmsPromptBlocksEditPage() {
 
   if (!block || !blockId) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <BookIcon />
-            </Icon>
-            Prompt block not found
-          </HeaderTitle>
-        </Header>
+      <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={<div className="flex items-center justify-center h-full text-neutral3">Prompt block not found</div>}
         >
@@ -293,24 +265,19 @@ function CmsPromptBlocksEditPage() {
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <BookIcon />
-          </Icon>
-          Edit prompt block: {block.name}
+    <MainContentLayout className="grid-rows-[1fr]">
+      <RouteHeaderActions owner="cms-prompt-block-edit">
+        <div className="flex items-center gap-2">
           {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-        </HeaderTitle>
-        <HeaderAction>
           <PromptBlockVersionCombobox
             blockId={blockId}
             value={selectedVersionId ?? ''}
             onValueChange={handleVersionSelect}
+            variant="ghost"
             activeVersionId={activeVersionId}
           />
-        </HeaderAction>
-      </Header>
+        </div>
+      </RouteHeaderActions>
       <CmsPromptBlocksEditForm
         block={block}
         blockId={blockId}

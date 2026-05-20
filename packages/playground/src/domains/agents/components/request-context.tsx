@@ -1,6 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import {
   Button,
+  Notice,
   useCodemirrorTheme,
   Select,
   SelectContent,
@@ -172,21 +173,26 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
   const { Link } = useLinkComponent();
 
   return (
-    <div className="max-w-3xl p-5 overflow-y-scroll h-full">
-      <div className="rounded-lg p-4 pb-5 bg-surface4 shadow-md space-y-3 border border-border1 mb-5">
-        <Txt as="p" variant="ui-lg" className="text-neutral3">
+    <div>
+      <Notice
+        variant="note"
+        title="Request context"
+        className="mb-5"
+        action={
+          <Notice.Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
+            <Icon>
+              <ExternalLink />
+            </Icon>
+            See documentation
+          </Notice.Button>
+        }
+      >
+        <Notice.Message>
           Mastra provides request context, which is a system based on dependency injection that enables you to configure
           your agents and tools with runtime variables. If you find yourself creating several different agents that do
           very similar things, request context allows you to combine them into one agent.
-        </Txt>
-
-        <Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
-          <Icon>
-            <ExternalLink />
-          </Icon>
-          See documentation
-        </Button>
-      </div>
+        </Notice.Message>
+      </Notice>
       {children}
     </div>
   );

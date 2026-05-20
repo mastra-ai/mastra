@@ -10,6 +10,7 @@ export type {
   A2AAgentCardSigningConfig,
   A2AConfig,
   ContextWithMastra,
+  CorsOptions,
   ApiRoute,
   HttpLoggingConfig,
   ValidationErrorContext,
@@ -57,6 +58,10 @@ type RegisterApiRouteOptions<P extends string> = {
     >
   >;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
+  /**
+   * Route-specific CORS configuration.
+   */
+  cors?: ApiRoute['cors'];
   /**
    * When false, skips Mastra auth for this route (defaults to true)
    */
@@ -118,6 +123,7 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
+    cors: options.cors,
     requiresAuth: options.requiresAuth,
     requiresPermission: options.requiresPermission,
     fga: options.fga,

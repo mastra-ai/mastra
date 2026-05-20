@@ -643,6 +643,7 @@ export class SlackProvider implements ChannelProvider {
     const displayName = installation.name || agent?.name || installation.agentId;
 
     const adapter = createSlackAdapter({
+      ...this.#forwardedAdapterOptions(),
       botToken: installation.botToken,
       botUserId: installation.botUserId,
       signingSecret: installation.signingSecret,
@@ -725,12 +726,47 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
+   * Extract the SlackAdapter fields the provider forwards to every
+   * `createSlackAdapter()` call. Installation-managed credentials/identity are
+   * applied separately.
+   */
+  #forwardedAdapterOptions() {
+    const { logger } = this.#channelConfig;
+    return { logger };
+  }
+
+  /**
+   * Extract the AgentChannels fields the provider forwards. `adapters` and
+   * `userName` are applied separately by `#createAgentChannels`. Undefined
+   * values are filtered out so the merge in `#createAgentChannels` does not
+   * clobber options preserved from an existing `AgentChannels`.
+   */
+  #forwardedChannelOptions() {
+    const { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions } = this.#channelConfig;
+    const candidate = { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions };
+    return Object.fromEntries(Object.entries(candidate).filter(([, value]) => value !== undefined));
+  }
+
+  /**
    * Create AgentChannels for an agent with the Slack adapter.
    * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
+   *
+   * If the agent already has an `AgentChannels` (e.g. the author configured a
+   * Discord adapter directly on `agent.channels`), we preserve its config and
+   * adapters and merge Slack in alongside them. We also call `close()` on the
+   * existing instance first so any persistent thread subscriptions from the
+   * previous instance are torn down before we replace it.
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
+    const { adapterConfig } = this.#channelConfig;
+    const slackEntry = adapterConfig ? { adapter, ...adapterConfig } : adapter;
+    const existing = agent.getChannels() as AgentChannels | undefined;
+    const existingConfig = existing?.channelConfig;
+    existing?.close();
     const agentChannels = new AgentChannels({
-      adapters: { slack: adapter },
+      ...existingConfig,
+      ...this.#forwardedChannelOptions(),
+      adapters: { ...existingConfig?.adapters, slack: slackEntry },
       userName: agent.name,
     });
     agent.setChannels(agentChannels);
@@ -1211,6 +1247,7 @@ export class SlackProvider implements ChannelProvider {
       const agent = this.#mastra?.getAgentById(pending.agentId);
       const displayName = installation.name || agent?.name || pending.agentId;
       const adapter = createSlackAdapter({
+        ...this.#forwardedAdapterOptions(),
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,
@@ -1283,16 +1320,22 @@ export class SlackProvider implements ChannelProvider {
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(rawBody);
-    } catch {
-      return c.json({ error: 'Malformed JSON body' }, 400);
-    }
-
-    // Handle URL verification challenge
-    if (event.type === 'url_verification') {
-      return c.json({ challenge: event.challenge });
+    // Slack sends JSON for events and form-urlencoded for interactive payloads / slash
+    // commands. Only the JSON event-callback path needs to be peeked here to handle the
+    // url_verification challenge; everything else is forwarded as-is to the adapter's
+    // handleWebhook, which sniffs content-type and routes interactivity, slash commands,
+    // and events itself.
+    const contentType = c.req.header('content-type') || '';
+    if (contentType.includes('application/json')) {
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(rawBody);
+      } catch {
+        return c.json({ error: 'Malformed JSON body' }, 400);
+      }
+      if (event.type === 'url_verification') {
+        return c.json({ challenge: event.challenge });
+      }
     }
 
     // Resolve agent and delegate to AgentChannels
@@ -1312,6 +1355,7 @@ export class SlackProvider implements ChannelProvider {
     const currentAdapter =
       this.#adapters.get(installation.id) ??
       createSlackAdapter({
+        ...this.#forwardedAdapterOptions(),
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,

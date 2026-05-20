@@ -906,7 +906,7 @@ By default, a subagent runs with a fresh context — it doesn't see the parent c
 
 #### Enabling forked mode
 
-Set `forked: true` either on the [`HarnessSubagent` definition](#configuration) (per-type default) or on each `subagent` tool call (per-invocation override):
+Set `forked: true` either on the `HarnessSubagent` definition (per-type default) or on each `subagent` tool call (per-invocation override):
 
 ```typescript
 // Per-type default — every call to this subagent forks unless overridden.

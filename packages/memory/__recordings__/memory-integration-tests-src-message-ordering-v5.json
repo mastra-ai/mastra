@@ -5917,6 +5917,136 @@
       }
     },
     {
+      "hash": "de2bdafe3f47e9dd",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "What's the weather in San Francisco?"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "get_weather",
+                    "args": {
+                      "city": "San Francisco"
+                    }
+                  },
+                  "thoughtSignature": "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"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "get_weather",
+                    "response": {
+                      "name": "get_weather",
+                      "content": {
+                        "city": "San Francisco",
+                        "weather": "sunny",
+                        "temperature": 72
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "I would be happy to help you with the weather in San Francisco! Here is exactly what I am going to do: first, I will access our real-time weather database to check the current meteorological conditions in San Francisco so you know what is happening right this moment. Once I have that information, I will share it with you. Then, I will query the system again to gather the extended weather forecast for the next few days. Finally, I will provide a comprehensive summary of both the current weather and the upcoming forecast so you are fully prepared for your time in the city. \n\nLet's begin by checking the current weather in San Francisco right now."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a weather assistant. When asked about weather, first explain what you will do, then get the current weather, explain what you found, then get the forecast, and finally summarize everything. Always be verbose between tool calls."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "get_weather",
+                  "description": "Get the current weather for a city",
+                  "parameters": {
+                    "required": ["city"],
+                    "type": "object",
+                    "properties": {
+                      "city": {
+                        "description": "The city to get weather for",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "get_forecast",
+                  "description": "Get the weather forecast for the next few days",
+                  "parameters": {
+                    "required": ["city"],
+                    "type": "object",
+                    "properties": {
+                      "city": {
+                        "description": "The city to get forecast for",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1777469780756
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Wed, 29 Apr 2026 13:36:22 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1838",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" \\n\\n*\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 355,\"candidatesTokenCount\": 3,\"totalTokenCount\": 358,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 355}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"VgnyafjhH-SJvdIPl92z8Qw\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Checking current conditions...*\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 355,\"candidatesTokenCount\": 8,\"totalTokenCount\": 363,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 355}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"VgnyafjhH-SJvdIPl92z8Qw\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 760,\"candidatesTokenCount\": 8,\"totalTokenCount\": 768,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 760}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"VgnyafjhH-SJvdIPl92z8Qw\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 0, 57],
+        "isStreaming": true
+      }
+    },
+    {
       "hash": "0734548048772ca2",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
@@ -6020,6 +6150,134 @@
     },
     {
       "hash": "12f6cf31e85579d1",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Research weather patterns in CA and create a summary."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "search",
+                    "args": {
+                      "query": "California general climate and overarching weather patterns"
+                    }
+                  },
+                  "thoughtSignature": "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"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "search",
+                    "response": {
+                      "name": "search",
+                      "content": {
+                        "results": ["Result for: California general climate and overarching weather patterns"]
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "I would be happy to help you research weather patterns in California and create a summary document for you. \n\nHere is my research plan:\n1. **Initial Search (General Climate):** I will first search for the general climate and overall weather patterns of California to understand the baseline, such as its Mediterranean climate characteristics.\n2. **Second Search (Regional Variations):** California is a massive state, so I will conduct a second search to explore the regional weather differences, specifically comparing Northern vs. Southern California, as well as coastal vs. inland and mountainous areas.\n3. **Third Search (Recent Trends and Phenomena):** Finally, I will do a third search to look into specific weather phenomena and recent trends affecting the state, such as droughts, El Niño/La Niña impacts, and atmospheric rivers.\n4. **Document Creation:** Once I have gathered all this information, I will synthesize it and create a comprehensive summary document for you.\n5. **Confirmation:** I will let you know as soon as the document is ready.\n\nLet's begin with the first search to understand the general climate and overarching weather patterns of California. I am initiating the search now."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a research assistant. When asked to research something, first explain your research plan, then search for information multiple times, explain what you found after each search, then create a document with your findings, and finally confirm completion. Always be verbose between tool calls."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "search",
+                  "description": "Search for information",
+                  "parameters": {
+                    "required": ["query"],
+                    "type": "object",
+                    "properties": {
+                      "query": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "create_document",
+                  "description": "Create a document",
+                  "parameters": {
+                    "required": ["title", "content"],
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1777469790316
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Wed, 29 Apr 2026 13:36:32 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1874",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"search\",\"args\": {\"query\": \"California general climate Mediterranean climate characteristics\"},\"id\": \"60sj34ne\"},\"thoughtSignature\": \"EiYKJGUyNDgzMGE3LTVjZDYtNDJmZS05OThiLWVlNTM5ZTcyYjljMw==\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 444,\"candidatesTokenCount\": 19,\"totalTokenCount\": 463,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 444}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"YAnyafyEB9iyxN8PnLi1kAY\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 873,\"candidatesTokenCount\": 19,\"totalTokenCount\": 892,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 873}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"YAnyafyEB9iyxN8PnLi1kAY\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "e3fd33c6e5e394a9",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -7151,6 +7409,140 @@
     },
     {
       "hash": "cc96316898b1142e",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "What's the weather in NYC?"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "get_weather",
+                    "args": {
+                      "city": "NYC"
+                    }
+                  },
+                  "thoughtSignature": "EuMICuAIAQw51seyEU8E5mvWHnMXZYLNBhAfzCfS2miqGnqPNEij4KEhkNRTcn8P8vGJ6ccXqBgNlSglJKGt401EMMaZLeP8emJDO7H4m71aLxNDqUJNQZ3eO/D+PtcTmeBzVIPNJB9d8JLhbormPJZxTappqc74P9jW8JzqPBY6KEojtjUF/rSvbcOQvKRuYzND4hBLF2E92pAx10Rqd4IH8Tc9e1dJI4HYgSIJVBGNoCDH7tO+d5h2087eFNdhwlnp0EyIAeKbzy1WNARjL6iUIhY04qjy7f8RDAly+s9a/cAwQoeoQ0EPPzIRZgKkipg+mwugG4gWaxlr0S64tPHO2TeNLXwVUlZUq1h3tZI/63UrP/4mwRz3PUDQNiq54NU9Zt6dIAAhVUE94Jm/x7Eu27G/xMUedqUzvdr4ACcHx0iZ4MHufzFf41g8NqvLbGkUOH0j/tPhmugfIYerF3oFdN8sbwm40jv0P3Z8lTqEIY8NGz4Coun7ACSkDmPBsXAAqG/UO0O8y4SMhA9viIctkMQARpZGi2vGddUMCPzr8jaV+gp6OMO1dMYBatAjQlqkrIGylXozZ6r5UF9uDGpWtXEee47Ne/bkN20ArGFm+O9o2NwmBBILiCqst7ThF0mZJZ/AS0r2pgAHjxglXCMj/zQ9yjkZ1KqKSh9FqgHsNCB2WsAFHmS6I17eTOBvn9S32li8u4htvrU3MnOxT3STb7MvKypZ9sowu/KHuWgmSTH92d/LNoafvUeDh7eWaKvp0oDfOwSyacMXEpf8WXVj/L/h6FgRieR8oL77CfqT5L3vuwK+LNkKEiYA/uFJsgRtcrsfqNAvS4qI8/1dl7eYHDJF6W2VeKNrql6wncTMf0GXQSjmRX3R9Zn+zjvJ5qJzBRUf5kIRSvO1dqMgfuHoT0d27qQHvWhh9k6XdR9rfBcCHeJoZPJ7BkFJbv5BPMQulta++RWxLAOJZ3CR4m4WqtqF9hca330U6wV38L48BcJ9ECSWIlFquqwAla6JDYczgQMeT33PO9VXBYf6MI+TofXtS6qnusfWT5b6fIrTa6S3nm0u4iGN7AtHk9ZGbicsXs0tH7ORwhwGody6iw8s6KdgAi93ZKWLmWXVCGXOW0MTlPfjViEZ974SLVDeBPzTF8LHqc+PJ+5+fEiVzaNhZao4ZqMli+tpvKVsvNHF7QKL79Rn0Y99sDM3aC3pFF+jekCRCdrRgaecCVWvNEL9SHR/fjVZ/+zEdbXh0qLt7eHKNasWionakoegk7DKyeVvGjL8uIOpdtsqhLPZpFLC2Q3Ee3ZUtJzlWfpKH8panggs5aQ3pW21CPK+M868rh4au5YxuJLJ0yU03Z0KX/t6L67VGgIShqKsPZrOEX90WKFcK1rW/kcnIp8crJTbViU9TlPL6VfC4+S45SHPhQWDqaEOeKlc4DGuYeVrmHCmGIbhUPnS7qSJ16OuabvA7WMwYtP0QPpEmvXpwOzjB3hkvG/tSQ=="
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "get_weather",
+                    "response": {
+                      "name": "get_weather",
+                      "content": {
+                        "city": "NYC",
+                        "weather": "sunny",
+                        "temperature": 72
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "To help you with the weather in New York City, I will first check the current weather conditions. Once I have that information, I will share it with you. After that, I will look up the forecast for the upcoming days so you have a complete picture of what to expect. Let me pull up the current weather for you right now."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a weather assistant. When asked about weather, first explain what you will do, then get the current weather, explain what you found, then get the forecast, and finally summarize everything. Always be verbose between tool calls."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "get_weather",
+                  "description": "Get the current weather for a city",
+                  "parameters": {
+                    "required": ["city"],
+                    "type": "object",
+                    "properties": {
+                      "city": {
+                        "description": "The city to get weather for",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "get_forecast",
+                  "description": "Get the weather forecast for the next few days",
+                  "parameters": {
+                    "required": ["city"],
+                    "type": "object",
+                    "properties": {
+                      "city": {
+                        "description": "The city to get forecast for",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1777469819474
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Wed, 29 Apr 2026 13:37:01 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1642",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" \\n\\nI just checked the\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 288,\"candidatesTokenCount\": 6,\"totalTokenCount\": 294,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 288}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" current weather for NYC, and it looks like it is currently sunny with a comfortable\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 288,\"candidatesTokenCount\": 22,\"totalTokenCount\": 310,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 288}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" temperature of 72 degrees Fahrenheit. That sounds like absolutely beautiful weather for being outside! \\n\\nNext, I will retrieve the weather forecast\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 288,\"candidatesTokenCount\": 50,\"totalTokenCount\": 338,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 288}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" for the next few days in New York City to see if this pleasant weather is going to stick around. Allow me a moment to fetch those\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 288,\"candidatesTokenCount\": 78,\"totalTokenCount\": 366,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 288}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" details for you.\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 288,\"candidatesTokenCount\": 82,\"totalTokenCount\": 370,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 288}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_forecast\",\"args\": {\"city\": \"NYC\"},\"id\": \"ga6f6vnt\"},\"thoughtSignature\": \"EiYKJGUyNDgzMGE3LTVjZDYtNDJmZS05OThiLWVlNTM5ZTcyYjljMw==\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 288,\"candidatesTokenCount\": 98,\"totalTokenCount\": 386,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 288}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 531,\"candidatesTokenCount\": 98,\"totalTokenCount\": 629,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 531}]},\"modelVersion\": \"gemini-3.1-pro-preview\",\"responseId\": \"fQnyaeXUAsagvdIP9eCd6QM\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 155, 272, 241, 191, 38, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "178ac78f400825ad",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
         "method": "POST",

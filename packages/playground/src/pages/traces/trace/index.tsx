@@ -2,9 +2,7 @@ import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import {
   Button,
-  ButtonWithTooltip,
   ButtonsGroup,
-  PageHeader,
   PageLayout,
   SpanDataPanelView,
   TraceDataPanelView,
@@ -16,7 +14,7 @@ import {
   useTraceSpanNavigation,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
-import { ArrowLeftIcon, BookIcon, CircleGaugeIcon, EyeIcon, SaveIcon } from 'lucide-react';
+import { CircleGaugeIcon, SaveIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
@@ -27,7 +25,7 @@ import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list
 import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
-import { Link } from '@/lib/link';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 export default function TracePage() {
   const { traceId } = useParams()! as { traceId: string };
@@ -159,70 +157,38 @@ export default function TracePage() {
     }
   }, [rootSpan, featuredSpanId, updateSearchParams]);
 
-  const traceTopAreaSharedContent = (
-    <>
-      <Button as={Link} href="/observability" variant="link" size="md" className="text-neutral2">
-        <ArrowLeftIcon />
-        Back to Traces
-      </Button>
-      <PageLayout.Row>
-        <PageLayout.Column>
-          <PageHeader>
-            <PageHeader.Title isLoading={isTraceLoading}>
-              <EyeIcon /> Trace <span className="text-neutral3">{traceId}</span>
-            </PageHeader.Title>
-          </PageHeader>
-        </PageLayout.Column>
-        <PageLayout.Column>
-          <ButtonsGroup>
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/observability/tracing/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Traces documentation"
-              tooltipContent="Go to Traces documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-            {rootSpan && (
-              <>
-                <ButtonWithTooltip
-                  tooltipContent="Evaluate Trace"
-                  aria-label="Evaluate Trace"
-                  onClick={handleEvaluateTrace}
-                >
-                  <CircleGaugeIcon />
-                  Evaluate
-                </ButtonWithTooltip>
-                <ButtonWithTooltip
-                  tooltipContent="Save as Dataset Item"
-                  aria-label="Save as Dataset Item"
-                  onClick={() => setDatasetDialogOpen(true)}
-                >
-                  <SaveIcon />
-                  Save
-                </ButtonWithTooltip>
-              </>
-            )}
-          </ButtonsGroup>
-        </PageLayout.Column>
-      </PageLayout.Row>
+  const traceHeaderActions = rootSpan ? (
+    <RouteHeaderActions owner="trace-detail">
+      <ButtonsGroup>
+        <Button tooltip="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
+          <CircleGaugeIcon />
+          Evaluate
+        </Button>
+        <Button
+          tooltip="Save as Dataset Item"
+          aria-label="Save as Dataset Item"
+          onClick={() => setDatasetDialogOpen(true)}
+        >
+          <SaveIcon />
+          Save
+        </Button>
+      </ButtonsGroup>
+    </RouteHeaderActions>
+  ) : null;
 
-      {rootSpan && (
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <TraceKeysAndValues rootSpan={rootSpan} numOfCol={3} />
-          </PageLayout.Column>
-        </PageLayout.Row>
-      )}
-    </>
-  );
+  const traceTopAreaSharedContent = rootSpan ? (
+    <PageLayout.Row>
+      <PageLayout.Column>
+        <TraceKeysAndValues rootSpan={rootSpan} numOfCol={3} />
+      </PageLayout.Column>
+    </PageLayout.Row>
+  ) : null;
 
   if (traceError) {
     return (
       <PageLayout height="full">
-        <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>
+        {traceHeaderActions}
+        {traceTopAreaSharedContent && <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>}
         <PageLayout.MainArea isCentered>
           <TracesErrorContent error={traceError} resource="traces" errorTitle="Failed to load trace" />
         </PageLayout.MainArea>
@@ -232,7 +198,8 @@ export default function TracePage() {
 
   return (
     <PageLayout>
-      <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>
+      {traceHeaderActions}
+      {traceTopAreaSharedContent && <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>}
 
       <TraceAsItemDialog
         rootSpanId={rootSpan?.spanId}
