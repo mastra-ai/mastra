@@ -59,6 +59,29 @@ export interface CreateObservabilityVNextTestsOptions {
  * retention, retry idempotency on persistent storage, internal helpers like
  * `extractBranchSpans`) stays in the adapter's own test file.
  */
+/**
+ * Polls `fn` until `predicate` returns true. Used in tests that read through
+ * adapter components with eventual visibility (e.g. ClickHouse incremental
+ * materialized views) so the assertion isn't racey. Adapters with synchronous
+ * reads (InMemory, DuckDB) satisfy the predicate on the first call.
+ */
+async function waitFor<T>(
+  fn: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<T> {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const intervalMs = opts.intervalMs ?? 50;
+  const deadline = Date.now() + timeoutMs;
+  let lastValue: T | undefined;
+  while (Date.now() < deadline) {
+    lastValue = await fn();
+    if (predicate(lastValue)) return lastValue;
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  return lastValue as T;
+}
+
 export function createObservabilityVNextTests(options: CreateObservabilityVNextTestsOptions) {
   const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges } = options;
 
@@ -856,18 +879,29 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ],
         });
 
-        const deltaFromPage = await storage.listTraces({
-          mode: 'delta',
-          filters: { entityName: 'Observer' },
-          after: page.deltaCursor!,
-        });
+        // ClickHouse populates trace_roots through an incremental MV; the row
+        // is normally visible immediately but occasionally lags a tick under
+        // CI load. Poll briefly so the assertion is not racey.
+        const deltaFromPage = await waitFor(
+          () =>
+            storage.listTraces({
+              mode: 'delta',
+              filters: { entityName: 'Observer' },
+              after: page.deltaCursor!,
+            }),
+          result => result.spans.length === 1,
+        );
         expect(deltaFromPage.spans.map(span => span.traceId)).toEqual(['trace-1']);
 
-        const deltaFromStart = await storage.listTraces({
-          mode: 'delta',
-          filters: { entityName: 'Observer' },
-          after: start.deltaCursor!,
-        });
+        const deltaFromStart = await waitFor(
+          () =>
+            storage.listTraces({
+              mode: 'delta',
+              filters: { entityName: 'Observer' },
+              after: start.deltaCursor!,
+            }),
+          result => result.spans.length === 1,
+        );
         expect(deltaFromStart.spans.map(span => span.traceId)).toEqual(['trace-1']);
       });
 
