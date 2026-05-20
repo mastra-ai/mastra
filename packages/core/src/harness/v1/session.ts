@@ -1,10 +1,12 @@
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
+import type { StoredMessageRow } from '../_shared/message-conversion';
 import { HarnessSessionClosedError, HarnessValidationError } from './errors';
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe, EmitInput } from './events';
 import type { Harness } from './harness';
-import type { HarnessMode } from './shared';
-import type { ModelAuthStatus, SessionLifecycleState } from './types';
+import type { HarnessMessage, HarnessMode } from './shared';
+import type { ListMessagesOptions, ModelAuthStatus, SessionLifecycleState, TokenUsage } from './types';
 
 export interface SessionConstructorOptions {
   harness: Harness;
@@ -13,6 +15,12 @@ export interface SessionConstructorOptions {
   record: SessionRecord;
   leaseExpiresAt: number;
   leaseTtlMs: number;
+}
+
+interface IdleWaiter {
+  check: () => boolean;
+  reject: (reason: unknown) => void;
+  cleanup: () => void;
 }
 
 export class Session {
@@ -25,6 +33,12 @@ export class Session {
   private lifecycle: SessionLifecycleState = 'live';
   private leaseRenewTimer?: ReturnType<typeof setTimeout>;
   private flushChain: Promise<void> = Promise.resolve();
+  private currentTurnAbortController?: AbortController;
+  private currentQueuedItemId?: string;
+  private currentRunId?: string;
+  private currentTraceId?: string;
+  private draining = false;
+  private readonly idleWaiters = new Set<IdleWaiter>();
 
   constructor(opts: SessionConstructorOptions) {
     this.harness = opts.harness;
@@ -50,6 +64,10 @@ export class Session {
 
   get threadId(): string {
     return this.record.threadId;
+  }
+
+  get createdAt(): number {
+    return this.record.createdAt;
   }
 
   get parentSessionId(): string | undefined {
@@ -144,15 +162,108 @@ export class Session {
     }
   }
 
+  isRunning(): boolean {
+    return this.currentTurnAbortController !== undefined;
+  }
+
+  isBusy(): boolean {
+    if (this.currentTurnAbortController !== undefined) return true;
+    if (this.draining) return true;
+    if (this.currentQueuedItemId !== undefined) return true;
+    if ((this.record.pendingQueue?.length ?? 0) > 0) return true;
+    if (this.record.pendingResume !== undefined) return true;
+    return false;
+  }
+
+  getQueueDepth(): number {
+    return this.record.pendingQueue?.length ?? 0;
+  }
+
+  getTokenUsage(): TokenUsage {
+    return { ...this.record.tokenUsage };
+  }
+
+  getCurrentRunId(): string | null {
+    return this.currentRunId ?? null;
+  }
+
+  getCurrentTraceId(): string | null {
+    return this.currentTraceId ?? null;
+  }
+
+  waitForIdle(opts?: { timeoutMs?: number }): Promise<void> {
+    this.assertLive('waitForIdle()');
+    if (!this.isBusy()) return Promise.resolve();
+
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter: IdleWaiter = {
+        check: () => {
+          if (!this.isBusy()) {
+            cleanup();
+            resolve();
+            return true;
+          }
+          return false;
+        },
+        reject,
+        cleanup: () => {},
+      };
+      const cleanup = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        this.idleWaiters.delete(waiter);
+      };
+      waiter.cleanup = cleanup;
+      this.idleWaiters.add(waiter);
+      if (opts?.timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new HarnessValidationError('waitForIdle()', `session did not become idle within ${opts.timeoutMs}ms`));
+        }, opts.timeoutMs);
+      }
+    });
+  }
+
+  async listMessages(opts?: ListMessagesOptions): Promise<HarnessMessage[]> {
+    this.assertLive('listMessages()');
+    const limit = opts?.limit;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 0 || !Number.isInteger(limit))) {
+      throw new HarnessValidationError('limit', `\`limit\` must be a non-negative integer; received ${String(limit)}`);
+    }
+    if (limit === 0) return [];
+
+    const memory = await this.harness._internalTryGetMemoryStorage();
+    if (!memory) return [];
+
+    if (limit !== undefined) {
+      const result = await memory.listMessages({
+        threadId: this.threadId,
+        resourceId: this.resourceId,
+        perPage: limit,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      return result.messages
+        .slice()
+        .reverse()
+        .map(msg => convertStoredMessageToHarnessMessage(msg as unknown as StoredMessageRow));
+    }
+
+    const result = await memory.listMessages({ threadId: this.threadId, resourceId: this.resourceId, perPage: false });
+    return result.messages.map(msg => convertStoredMessageToHarnessMessage(msg as unknown as StoredMessageRow));
+  }
+
   _markClosed(record: SessionRecord): void {
     this.clearLeaseRenewal();
     this.record = record;
     this.lifecycle = 'closed';
+    this.rejectIdleWaiters(new HarnessSessionClosedError(this.id));
   }
 
   _markEvicted(): void {
     this.clearLeaseRenewal();
     this.lifecycle = 'evicted';
+    this.rejectIdleWaiters(new HarnessSessionClosedError(this.id));
   }
 
   _markWorkspaceLost(): void {
@@ -287,10 +398,28 @@ export class Session {
         ifVersion: this.record.version,
       });
       this.record = { ...next, version: saved.version };
+      this.notifyMaybeIdle();
     };
     const next = this.flushChain.then(run, run);
     this.flushChain = next.catch(() => {});
     return next;
+  }
+
+  private notifyMaybeIdle(): void {
+    if (this.idleWaiters.size === 0) return;
+    if (this.isBusy()) return;
+    const waiters = Array.from(this.idleWaiters);
+    for (const waiter of waiters) waiter.check();
+  }
+
+  private rejectIdleWaiters(reason: unknown): void {
+    if (this.idleWaiters.size === 0) return;
+    const waiters = Array.from(this.idleWaiters);
+    this.idleWaiters.clear();
+    for (const waiter of waiters) {
+      waiter.cleanup();
+      waiter.reject(reason);
+    }
   }
 
   private assertLive(method: string): void {
