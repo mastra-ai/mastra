@@ -32,13 +32,7 @@ export interface SignalMigrationStatus {
   tables: SignalMigrationStatusTable[];
 }
 
-const CURSOR_ID_TABLES = [
-  'span_events',
-  'metric_events',
-  'log_events',
-  'score_events',
-  'feedback_events',
-] as const;
+const CURSOR_ID_TABLES = ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events'] as const;
 
 /**
  * Drop any leftover `DEFAULT nextval(...)` on observability `cursorId` columns.

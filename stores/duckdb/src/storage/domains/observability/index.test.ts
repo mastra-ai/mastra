@@ -155,9 +155,7 @@ describe('ObservabilityStorageDuckDB', () => {
       // Reintroduce the broken catalog default that the prior migration would
       // have applied, to simulate a database upgraded from that version.
       for (const table of observabilityTables) {
-        await db.execute(
-          `ALTER TABLE ${table} ALTER COLUMN cursorId SET DEFAULT nextval('${table}_cursor_id_seq')`,
-        );
+        await db.execute(`ALTER TABLE ${table} ALTER COLUMN cursorId SET DEFAULT nextval('${table}_cursor_id_seq')`);
       }
 
       await storage.init();
