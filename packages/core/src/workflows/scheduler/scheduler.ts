@@ -140,19 +140,20 @@ export class WorkflowScheduler extends MastraBase {
       return;
     }
 
-    if (due.length === 0) {
-      // Nothing due right now. Check whether any active schedules exist at
-      // all — if not, suspend the tick loop so we stop hitting the DB.
+    if (due.length === 0 && !this.#config.enabled) {
+      // Nothing due right now and the scheduler was not explicitly enabled
+      // for imperative usage. Check whether any schedules exist at all — if
+      // not, suspend the tick loop so we stop hitting the DB.
       // Mastra.registerWorkflow() will restart the loop when a new schedule
       // is registered.
       try {
-        const active = await this.#schedulesStore.listSchedules({ status: 'active' });
-        if (active.length === 0) {
-          this.logger.info('No active schedules remain — suspending scheduler tick loop');
+        const all = await this.#schedulesStore.listSchedules();
+        if (all.length === 0) {
+          this.logger.info('No schedules remain — suspending scheduler tick loop');
           this.#suspendLoop();
         }
       } catch (err) {
-        this.logger.error('Failed to check active schedules', { error: err });
+        this.logger.error('Failed to check schedules', { error: err });
       }
       return;
     }

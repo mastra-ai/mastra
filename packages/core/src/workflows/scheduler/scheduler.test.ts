@@ -353,6 +353,22 @@ describe('WorkflowScheduler', () => {
     await scheduler.stop();
   });
 
+  it('does not auto-suspend when config.enabled is true (imperative mode)', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000, enabled: true },
+    });
+
+    // Zero schedules, but enabled:true keeps the loop alive for imperative use.
+    await scheduler.start();
+    expect(scheduler.isRunning).toBe(true);
+
+    await scheduler.stop();
+  });
+
   it('does not auto-suspend when active schedules exist but none are due yet', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
