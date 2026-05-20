@@ -5364,7 +5364,8 @@ export class Agent<
    * @internal
    */
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
     const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: 'agentic-loop',
       runId,
@@ -5761,7 +5762,7 @@ export class Agent<
     // Users who just do `new Mastra({ agents })` without calling startWorkers
     // would otherwise hang here — events would publish but no worker would
     // consume them. startWorkers is idempotent.
-    await effectiveMastra.startWorkers();
+    await effectiveMastra?.startWorkers();
     // Register as internal so the evented engine's event processor can resolve
     // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
     // We pick the runId up front and register run-scoped (not unscoped), so
@@ -5769,7 +5770,7 @@ export class Agent<
     // closure-bound instance. __registerInternalWorkflow also calls
     // __registerMastra under the hood, which wires the pubsub `createRun` needs.
     const executionRunId = randomUUID();
-    effectiveMastra.__registerInternalWorkflow(executionWorkflow as any, executionRunId);
+    effectiveMastra?.__registerInternalWorkflow(executionWorkflow as any, executionRunId);
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     try {

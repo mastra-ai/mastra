@@ -2,6 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
 import { createScorer } from '../base';
 import { runEvals } from '.';
 
@@ -46,34 +47,28 @@ describe('runEvals - Score Persistence', () => {
       return 0.85;
     });
 
-    // Track if saveScore is called
-    const saveScoreCalls: any[] = [];
-
-    // Mock storage that tracks saveScore calls
-    const mockStorage = {
-      init: vi.fn().mockResolvedValue(undefined),
-      getStore: vi.fn(async (storeName: string) => {
-        if (storeName === 'scores') {
-          return {
-            saveScore: vi.fn(async (payload: any) => {
-              saveScoreCalls.push(payload);
-              return { score: { id: 'mock-id', ...payload } };
-            }),
-          };
-        }
-        // Return minimal mocks for other stores
-        return null;
-      }),
-      __setLogger: vi.fn(),
-    };
+    // Use a real in-memory store rather than a partial mock: the agent loop
+    // runs on the evented workflow engine, which needs a functioning
+    // `workflows` store to coordinate step execution. A scores-only mock would
+    // leave the loop unable to complete and the run would hang.
+    const storage = new InMemoryStore();
 
     const mastra = new Mastra({
       agents: { testAgent: agent },
       scorers: { testScorer: scorer },
       logger: false,
+      storage,
     });
 
-    mastra.setStorage(mockStorage as any);
+    // Track saveScore calls by spying on the real scores store the eval
+    // pipeline writes to, while still delegating to the real implementation.
+    const saveScoreCalls: any[] = [];
+    const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+    const realSaveScore = scoresStore.saveScore.bind(scoresStore);
+    vi.spyOn(scoresStore, 'saveScore').mockImplementation(async (payload: any) => {
+      saveScoreCalls.push(payload);
+      return realSaveScore(payload);
+    });
 
     // Run the evaluation
     const result = await runEvals({

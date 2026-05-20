@@ -1022,7 +1022,17 @@ export class Mastra<
     // coordination in parallel/foreach steps, so a missing store would cause
     // parallel branches to silently fail to aggregate. In-memory is the safe
     // default for `new Mastra({})` / tests; production callers always override.
-    let storage = config?.storage ?? new InMemoryStore();
+    let storage: MastraCompositeStore;
+    if (config?.storage) {
+      storage = config.storage;
+    } else {
+      storage = new InMemoryStore();
+      this.#logger?.warn(
+        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+      );
+    }
     storage = augmentWithInit(storage);
 
     // Validate and assign observability instance
