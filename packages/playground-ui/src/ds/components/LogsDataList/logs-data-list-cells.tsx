@@ -1,19 +1,9 @@
-import { format, isToday } from 'date-fns';
-import { DataListCell } from '../DataList/data-list-cells';
+import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function toDate(value: Date | string): Date | null {
-  const date = value instanceof Date ? value : new Date(value);
-  return isNaN(date.getTime()) ? null : date;
-}
 
 const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
   debug: { label: 'DEBUG', color: '#71717a' },
@@ -39,47 +29,6 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
       <span className="uppercase text-ui-sm font-semibold" style={{ color: config.color }}>
         {config.label}
       </span>
-    </DataListCell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DateCell
-// ---------------------------------------------------------------------------
-
-export interface LogsDataListDateCellProps {
-  timestamp: Date | string;
-}
-
-export function LogsDataListDateCell({ timestamp }: LogsDataListDateCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
-    </DataListCell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// TimeCell
-// ---------------------------------------------------------------------------
-
-export interface LogsDataListTimeCellProps {
-  timestamp: Date | string;
-}
-
-export function LogsDataListTimeCell({ timestamp }: LogsDataListTimeCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3 flex">
-      {date ? (
-        <>
-          {format(date, 'HH:mm:ss')}
-          <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
-        </>
-      ) : (
-        '-'
-      )}
     </DataListCell>
   );
 }
@@ -158,9 +107,5 @@ export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
     })
     .join(', ');
 
-  return (
-    <DataListCell height="compact" className="min-w-0">
-      <span className="block text-neutral3 text-ui-smd font-mono truncate">{summary}</span>
-    </DataListCell>
-  );
+  return <DataListMonoCell>{summary}</DataListMonoCell>;
 }
