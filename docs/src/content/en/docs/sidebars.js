@@ -291,6 +291,11 @@ const sidebars = {
           id: 'editor/prompts',
           label: 'Prompts',
         },
+        {
+          type: 'doc',
+          id: 'editor/multi-tenant-connections',
+          label: 'Multi-tenant connections',
+        },
       ],
     },
     {

@@ -1,0 +1,156 @@
+---
+title: "Multi-tenant connections | Editor"
+description: "Serve many end-user identities from a single agent definition using caller-supplied tool-provider connections."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Multi-tenant connections
+
+Use this guide when your end users — not the agent author — own the
+Composio (or other tool-provider) connection. The common shape: a SaaS
+app where each customer signs into Gmail / Slack / etc. with their own
+account, and a single agent definition runs on behalf of any of them.
+
+## TL;DR
+
+- Pin the connection with `scope: 'caller-supplied'`.
+- Your host app sets `MASTRA_RESOURCE_ID_KEY` on every request before
+  the agent runs.
+- The runtime buckets the connection under that key; no shared- or
+  per-author fallback.
+- If the key is missing at runtime, Mastra throws
+  `CALLER_SUPPLIED_USER_ID_MISSING` (a structured `MastraError`).
+- If the key is missing during `POST /api/tool-providers/:id/authorize`,
+  the server returns `400 Bad Request`.
+
+## Scope cheat sheet
+
+<PropertiesTable
+  content={[
+  {
+    name: "'per-author'",
+    type: 'builder default',
+    description: 'Buckets the connection under the agent `authorId`. Use when the agent author owns the credentials.',
+  },
+  {
+    name: "'shared'",
+    type: 'literal',
+    description: 'Buckets the connection under `SHARED_BUCKET_ID`. Use when a team of editors share one OAuth account.',
+  },
+  {
+    name: "'caller-supplied'",
+    type: 'editor default',
+    description:
+      'Buckets the connection under `ctx[MASTRA_RESOURCE_ID_KEY]` at runtime. Use when the end user owns their own credentials and the host app injects their ID.',
+  },
+]}
+/>
+
+Mixed scopes per agent are first-class. For example, a single agent
+can have Gmail as `caller-supplied` while Slack is `shared`.
+
+## 1. Pin the connection in the editor
+
+In the agent editor (CMS) the connection picker shows the three scope
+options. Pick **Caller-supplied** for tools the end user will own.
+With this scope the picker:
+
+- Hides the "Pin an existing connection" section. End-user
+  connections aren't enumerable from the author's seat (that would
+  leak other tenants' identities).
+- Hides the label input. Labels are ignored for caller-supplied
+  connections.
+- Stores a sentinel pin (`scope: 'caller-supplied'`, no real
+  `connectionId`). The actual `connectionId` is created at runtime
+  under the end user's bucket.
+
+## 2. Set the resource ID per request in your host app
+
+```ts title="src/server/handler.ts"
+import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '@mastra/core'
+
+// In your HTTP handler / queue worker / job runner:
+const requestContext = new RequestContext()
+requestContext.set(MASTRA_RESOURCE_ID_KEY, currentUser.id)
+
+await mastra.getAgent('support').generate(prompt, { requestContext })
+```
+
+The same `requestContext` is plumbed through to the tool-provider
+runtime, so every Composio call resolves under `currentUser.id`.
+
+## 3. Drive the end user through OAuth
+
+When `currentUser.id` does not have a Composio account yet, kick off
+the OAuth flow from your host app. The runtime reads
+`ctx[MASTRA_RESOURCE_ID_KEY]` from the request that proxied this call:
+
+```ts title="src/server/auth.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: '/api' })
+const composio = client.getToolProvider('composio')
+
+const { redirectUrl } = await composio.authorize({
+  toolkit: 'gmail',
+  scope: 'caller-supplied',
+})
+```
+
+Send the user to `redirectUrl`. Composio handles the OAuth round-trip
+and stores the connection under that user's bucket.
+
+If you forget to set `MASTRA_RESOURCE_ID_KEY` before calling
+`authorize`, the server returns `400 Bad Request` with a
+`CALLER_SUPPLIED_USER_ID_MISSING` payload.
+
+## 4. Runtime resolution
+
+When the agent runs:
+
+1. The runtime sees `scope: 'caller-supplied'` on the pin.
+1. It reads `ctx[MASTRA_RESOURCE_ID_KEY]` from the active
+   `RequestContext`.
+1. That ID is passed as Composio's `userId` for every tool call.
+1. If the key is missing, the runtime throws
+   `MastraError({ id: 'CALLER_SUPPLIED_USER_ID_MISSING' })`.
+
+There is no fallback to the agent author or a shared bucket. The
+error is structured so your host app can recognise it and route the
+user back through OAuth (or surface a friendly "connect your Gmail"
+message).
+
+## 5. Admin visibility
+
+End-user connections are not listed in the picker for normal authors
+(the filter would leak other tenants' identities). Admins
+(`tool-providers:admin` permission) can list connections for a
+specific end user via the `userIds[]` query parameter on
+`GET /api/tool-providers/:id/connections`:
+
+```ts
+await composio.listConnections({
+  scope: 'caller-supplied',
+  userIds: ['user_abc123'],
+})
+```
+
+`disconnectConnection` and `getConnectionUsage` apply the same admin
+gate — admins can act on any row, authors can only act on their own.
+
+## 6. Storage
+
+End-user connections persist in the `mastra_tool_provider_connections`
+table with composite primary key
+`(authorId, providerId, connectionId)`. For `caller-supplied` scope,
+the row's `authorId` is the `MASTRA_RESOURCE_ID_KEY` value from the
+request that ran `authorize` — not the agent author. This is what
+gives each tenant their own bucket.
+
+```sql
+SELECT scope, label, "authorId", "connectionId"
+FROM mastra_tool_provider_connections
+WHERE scope = 'caller-supplied';
+```
