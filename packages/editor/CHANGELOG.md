@@ -1,5 +1,42 @@
 # @mastra/editor
 
+## 0.9.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`14b69c6`](https://github.com/mastra-ai/mastra/commit/14b69c6b05ce1e50c140b030a48cafb41d0746e3), [`4bd4e8e`](https://github.com/mastra-ai/mastra/commit/4bd4e8e042f6687559f49a560a7914cee9b85447), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/memory@1.19.0-alpha.1
+  - @mastra/mcp@1.8.0-alpha.1
+
+## 0.9.0-alpha.2
+
+### Minor Changes
+
+- Added an `editor.favorites` namespace so direct (non-HTTP) callers can favorite, unfavorite, and query favorited stored agents/skills through the editor instance. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+
+  const editor = new MastraEditor({ mastra });
+
+  // Toggle
+  await editor.favorites.favorite({ userId, entityType: 'agent', entityId });
+  await editor.favorites.unfavorite({ userId, entityType: 'agent', entityId });
+
+  // Lookups
+  const isFav = await editor.favorites.isFavorited({ userId, entityType: 'agent', entityId });
+  const favSet = await editor.favorites.isFavoritedBatch({ userId, entityType: 'agent', entityIds });
+  const ids = await editor.favorites.listFavoritedIds({ userId, entityType: 'agent' });
+  ```
+
+  The namespace performs the storage mutation only — visibility and ownership enforcement still belong to the caller (the HTTP route handlers in `@mastra/server` already do this).
+
+### Patch Changes
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+
 ## 0.9.0-alpha.1
 
 ### Minor Changes

@@ -1,5 +1,58 @@
 # mastracode
 
+## 0.20.0-alpha.7
+
+### Minor Changes
+
+- Added PostHog product analytics for MastraCode sessions, prompts, thread changes, command usage, and interactive prompts. Set MASTRA_TELEMETRY_DISABLED=1 to disable telemetry. ([#15173](https://github.com/mastra-ai/mastra/pull/15173))
+
+### Patch Changes
+
+- Improved MastraCode quiet mode so terminal sessions are easier to scan. ([#16771](https://github.com/mastra-ai/mastra/pull/16771))
+  - Quiet mode is now the default for new installs, and existing classic users get a one-time prompt to choose whether to enable it.
+  - Added compact tool previews with a configurable preview-line limit, including an option to hide previews.
+  - Improved repeated tool-call rendering, path continuation handling, task wrapping, shell/error previews, and spacing between tools, messages, plans, and completed subagents.
+  - Added edited line ranges to workspace edit results so tool UIs can show where replacements happened.
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+
+## 0.20.0-alpha.6
+
+### Minor Changes
+
+- Added automatic return to Plan mode when a goal started from an approved plan finishes. ([#16676](https://github.com/mastra-ai/mastra/pull/16676))
+
+### Patch Changes
+
+- Add an "Observe attachments" toggle in `/om` settings that controls whether ([#16682](https://github.com/mastra-ai/mastra/pull/16682))
+  file and image attachments are forwarded to the Observer LLM. Turn it off when
+  running with a text-only observer model. Stored as `omObserveAttachments` in
+  global settings and seeded into the harness state at startup.
+
+- Updated MastraCode to use provider-aware Observational Memory idle activation. ([#16663](https://github.com/mastra-ai/mastra/pull/16663))
+
+  MastraCode now sets `activateAfterIdle: "auto"`, shows an idle-time counter above the input after one minute of inactivity, and combines back-to-back OM activation markers into a single line.
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`14b69c6`](https://github.com/mastra-ai/mastra/commit/14b69c6b05ce1e50c140b030a48cafb41d0746e3), [`4bd4e8e`](https://github.com/mastra-ai/mastra/commit/4bd4e8e042f6687559f49a560a7914cee9b85447), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`96d225b`](https://github.com/mastra-ai/mastra/commit/96d225b05ed52ff250e0a342a7e6398e291945f0)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/memory@1.19.0-alpha.1
+  - @mastra/mcp@1.8.0-alpha.1
+  - @mastra/fastembed@1.1.0-alpha.0
+
+## 0.20.0-alpha.5
+
+### Patch Changes
+
+- Restore MastraCode local command execution to inherit parent environment variables while redacting env-shaped and secret-looking workspace trace data. ([#16691](https://github.com/mastra-ai/mastra/pull/16691))
+
+- Fixed goal pursuit timers so they only count active work and stay paused while waiting for user input. ([#16690](https://github.com/mastra-ai/mastra/pull/16690))
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021), [`3552b1c`](https://github.com/mastra-ai/mastra/commit/3552b1c872988885f1c33d97122323567e2aff8e)]:
+  - @mastra/core@1.36.0-alpha.3
+  - @mastra/duckdb@1.4.0-alpha.0
+  - @mastra/observability@1.13.0-alpha.1
+
 ## 0.20.0-alpha.4
 
 ### Patch Changes

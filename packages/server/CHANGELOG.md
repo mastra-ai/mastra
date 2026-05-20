@@ -1,5 +1,59 @@
 # @mastra/server
 
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+
+## 1.36.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Added delta polling support for observability list endpoints. ([#16632](https://github.com/mastra-ai/mastra/pull/16632))
+
+  ```ts
+  const page = await client.observability.listTraces({
+    mode: 'page',
+    filters: { entityName: 'agent-1' },
+  });
+
+  const delta = await client.observability.listTraces({
+    mode: 'delta',
+    filters: { entityName: 'agent-1' },
+    after: page.deltaCursor,
+  });
+  ```
+
+  Use `mode: 'delta'` to fetch only new items after the last cursor.
+
+  Page-mode responses include `pagination` and `deltaCursor` when delta polling is supported. Delta-mode responses include `delta` and do not include `pagination`.
+
+  If you read these responses directly in typed code, note that `pagination` is only included in page mode.
+
+### Patch Changes
+
+- Hardened the stored-agent and stored-skill favorite toggle endpoints (`PUT`/`DELETE /stored/{agents,skills}/:id/favorite`) so callers can no longer favorite or unfavorite entities outside their tenant scope. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  Deployments that configure `storedResources.scope` now get the same 404-on-mismatch protection on favorite toggles that already applied to read/update/delete. Single-tenant deployments are unaffected.
+
+  Also corrected JSDoc on stored-agent and stored-skill handlers to reference the canonical resource/action names (`stored-agents:read`, `stored-skills:write`).
+
+- Restore backwards compatibility for the legacy `GET /api/memory/threads?orderBy=<field>&sortDirection=<dir>` query shape emitted by `@mastra/client-js` < 1.18 (and any hand-rolled HTTP clients written against pre-1.0 docs). Server 1.31.0 turned that shape into a hard 400 (`Invalid input: expected object, received undefined`); the legacy bare-string + `sortDirection` pair is now transparently fused into the current `{ orderBy: { field, direction } }` object shape before validation, so pinned clients keep working. ([#16745](https://github.com/mastra-ai/mastra/pull/16745))
+
+  Current callers using bracket notation (`orderBy[field]=...&orderBy[direction]=...`) or a JSON-stringified `orderBy` are unaffected.
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+
 ## 1.36.0-alpha.2
 
 ### Minor Changes
