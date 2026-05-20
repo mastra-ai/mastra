@@ -84,9 +84,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     if (wasJudgeFailure) {
       // The goal was paused because the judge failed — retrigger the judge
       // evaluation instead of prompting the main agent.
-      ctx.showInfo(
-        `Goal resumed: "${goal.objective}" — retriggering judge evaluation...`,
-      );
+      ctx.showInfo(`Goal resumed: "${goal.objective}" — retriggering judge evaluation...`);
       triggerGoalJudge(ctx);
       return;
     }
