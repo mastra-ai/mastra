@@ -938,6 +938,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     status: { type: 'text', nullable: false },
     mode: { type: 'text', nullable: true },
     model: { type: 'text', nullable: true },
+    yolo: { type: 'boolean', nullable: true },
     attempts: { type: 'integer', nullable: false },
     missed_count: { type: 'integer', nullable: true },
     claim_id: { type: 'text', nullable: true },

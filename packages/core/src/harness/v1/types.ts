@@ -31,6 +31,7 @@ import type {
   ChannelProviderDeliveryReceipt,
   HarnessAttachmentKind,
   HarnessPrimitiveType,
+  PersistedRequestContextInput,
   HarnessRowErrorCode,
   HarnessStorage,
   JsonValue,
@@ -1530,6 +1531,12 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Resolved mode id for this turn (with any per-turn overrides applied). */
   modeId: string;
+
+  /** Caller-provided application metadata after durable JSON normalization. */
+  app?: Readonly<Record<string, JsonValue>>;
+
+  /** Trusted channel metadata attached by Harness-owned integration paths. */
+  channel?: Readonly<PersistedRequestContextInput['channel']>;
 
   /** Snapshot of session state at slot construction. Live reads use `getState`. */
   state: TState;

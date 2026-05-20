@@ -50,8 +50,8 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
-import type { MastraWorker, WorkerDeps } from '../worker';
+import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker, HarnessWakeupWorker } from '../worker';
+import type { HarnessWakeupWorkerConfig, MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
@@ -424,6 +424,13 @@ export interface Config<
    * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: WorkflowSchedulerConfig;
+
+  /**
+   * Worker configuration for durable Harness scheduled/proactive wakeups.
+   * The worker claims `HarnessWakeupItem` rows and admits them through the
+   * Harness queue boundary; it is not the workflow cron scheduler.
+   */
+  harnessWakeups?: HarnessWakeupWorkerConfig;
 
   /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
@@ -1045,6 +1052,12 @@ export class Mastra<
       }
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
+      }
+      const hasHarnessWakeupStorage =
+        config?.storage !== undefined ||
+        Object.values(configuredHarnesses).some(harness => harness?._internalGetSessionStorage() !== undefined);
+      if (hasHarnessWakeupStorage && Object.keys(configuredHarnesses).length > 0) {
+        defaultWorkers.push(new HarnessWakeupWorker(config?.harnessWakeups));
       }
       this.#workers = defaultWorkers;
       for (const w of this.#workers) {

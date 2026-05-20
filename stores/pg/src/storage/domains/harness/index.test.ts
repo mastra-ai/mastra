@@ -305,6 +305,7 @@ describe('HarnessPG', () => {
       createdAt: now,
       updatedAt: now,
       status: 'due',
+      yolo: true,
       attempts: 0,
       content: 'wake up',
       attachments: [],
@@ -330,7 +331,13 @@ describe('HarnessPG', () => {
         claimTtlMs: 30_000,
       }),
     ).resolves.toEqual([
-      expect.objectContaining({ id: 'wakeup-1', status: 'claimed', claimId: 'claim-wakeup', attempts: 1 }),
+      expect.objectContaining({
+        id: 'wakeup-1',
+        status: 'claimed',
+        claimId: 'claim-wakeup',
+        attempts: 1,
+        yolo: true,
+      }),
     ]);
   });
 

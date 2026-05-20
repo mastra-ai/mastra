@@ -2450,6 +2450,7 @@ function assertLegalHarnessWakeupUpdate(current: HarnessWakeupItem, next: Harnes
     current.createdAt !== next.createdAt ||
     current.mode !== next.mode ||
     current.model !== next.model ||
+    (current.yolo === true) !== (next.yolo === true) ||
     current.content !== next.content ||
     stableJsonString(current.requestContext) !== stableJsonString(next.requestContext) ||
     stableJsonString(current.attachments) !== stableJsonString(next.attachments);
@@ -2629,6 +2630,7 @@ function harnessWakeupItemsEquivalentForCreate(a: HarnessWakeupItem, b: HarnessW
     a.dueAt === b.dueAt &&
     a.mode === b.mode &&
     a.model === b.model &&
+    (a.yolo === true) === (b.yolo === true) &&
     stableJsonString(a.requestContext) === stableJsonString(b.requestContext) &&
     a.content === b.content &&
     stableJsonString(a.attachments) === stableJsonString(b.attachments)

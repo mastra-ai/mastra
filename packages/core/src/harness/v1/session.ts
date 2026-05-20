@@ -8,9 +8,10 @@
  * The current local surface includes message/signal/queue turns, mode/model
  * and state mutation, display snapshots, message listing, pending inbox
  * responses, permissions, code/workspace skills, subagents, goals, event
- * forwarding, abort, idle waiting, and the core admission/mutation primitives
- * used by remote routes. Remote SDKs, channels, wakeups, and request-context
- * `registerQuestion` / `registerPlanApproval` support remain follow-up lanes.
+ * forwarding, abort, idle waiting, wakeup queue admission, and the core
+ * admission/mutation primitives used by remote routes. Remote SDKs, full
+ * channel routing, and request-context `registerQuestion` /
+ * `registerPlanApproval` support remain follow-up lanes.
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
@@ -53,6 +54,7 @@ import type {
   PermissionRules,
   PersistedAttachment,
   OperationAdmissionTombstone,
+  PersistedRequestContextInput,
   QueuedItem,
   SaveAttachmentReferenceInput,
   SessionGrants,
@@ -5549,6 +5551,11 @@ export class Session {
   private async _admitQueue(
     opts: QueueOptions,
     methodName: 'queue()' | 'admitQueue()',
+    internal?: {
+      persistedAttachments?: PersistedAttachment[];
+      persistedRequestContext?: PersistedRequestContextInput;
+      expectedAdmissionHash?: string;
+    },
   ): Promise<{
     queuedItemId: string;
     evidence: QueueAdmissionReceipt | OperationAdmissionTombstone;
@@ -5566,10 +5573,18 @@ export class Session {
       throw new HarnessValidationError(`${methodName}.admissionId`, 'admissionId must be a non-empty string');
     }
 
-    const attachments = await this._resolveAttachmentRefs(`${methodName}.attachments`, opts.attachments ?? []);
+    const attachments =
+      internal?.persistedAttachments ??
+      (await this._resolveAttachmentRefs(`${methodName}.attachments`, opts.attachments ?? []));
+    if (internal?.persistedAttachments) {
+      this._validatePersistedAttachments(`${methodName}.attachments`, attachments);
+    }
     const effectiveModeId = opts.mode ?? this._record.modeId;
     const admissionId = opts.admissionId ?? `queue-${randomUUID()}`;
-    const admissionHash = this._computeQueueAdmissionHash(opts, attachments);
+    const admissionHash = this._computeQueueAdmissionHash(opts, attachments, internal?.persistedRequestContext);
+    if (internal?.expectedAdmissionHash !== undefined && internal.expectedAdmissionHash !== admissionHash) {
+      throw new HarnessAdmissionConflictError(this.id, admissionId, internal.expectedAdmissionHash, admissionHash);
+    }
     const duplicate = opts.admissionId
       ? await this._resolveQueueAdmissionDuplicate({ admissionId, admissionHash })
       : undefined;
@@ -5594,6 +5609,9 @@ export class Session {
       enqueuedAt: Date.now(),
       content: opts.content,
       attachments,
+      ...(internal?.persistedRequestContext
+        ? { requestContext: clonePersistedRequestContext(internal.persistedRequestContext) }
+        : {}),
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       mode: effectiveModeId,
       ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
@@ -5668,6 +5686,45 @@ export class Session {
     }
 
     return { queuedItemId: item.id, evidence: receipt, duplicate: false };
+  }
+
+  /**
+   * @internal
+   * Worker-only admission for durable wakeups. Wakeup rows already carry
+   * persisted attachment/request-context records, so this path must not
+   * reinterpret them as caller-provided attachment refs or route request
+   * context through public queue options.
+   */
+  async _admitWakeupQueue(item: {
+    content: string;
+    admissionId: string;
+    admissionHash?: string;
+    mode?: string;
+    model?: string;
+    yolo?: boolean;
+    attachments: PersistedAttachment[];
+    requestContext?: PersistedRequestContextInput;
+  }): Promise<QueueAdmissionResult> {
+    const admission = await this._admitQueue(
+      {
+        content: item.content,
+        admissionId: item.admissionId,
+        ...(item.mode !== undefined ? { mode: item.mode } : {}),
+        ...(item.model !== undefined ? { model: item.model } : {}),
+        ...(item.yolo === true ? { yolo: true } : {}),
+      },
+      'admitQueue()',
+      {
+        persistedAttachments: item.attachments.map(clonePersistedAttachment),
+        ...(item.requestContext ? { persistedRequestContext: clonePersistedRequestContext(item.requestContext) } : {}),
+        ...(item.admissionHash ? { expectedAdmissionHash: item.admissionHash } : {}),
+      },
+    );
+    if (!admission.duplicate) {
+      this._liveAdmittedQueuedItemIds.add(admission.queuedItemId);
+    }
+    void this._maybeDrainQueue();
+    return { accepted: true, queuedItemId: admission.queuedItemId, duplicate: admission.duplicate };
   }
 
   private async _resolveQueueAdmissionDuplicate({
@@ -5789,7 +5846,11 @@ export class Session {
     };
   }
 
-  private _computeQueueAdmissionHash(opts: QueueOptions, attachments: PersistedAttachment[]): string {
+  private _computeQueueAdmissionHash(
+    opts: QueueOptions,
+    attachments: PersistedAttachment[],
+    requestContext?: PersistedRequestContextInput,
+  ): string {
     return sha256CanonicalJson({
       kind: 'queue',
       content: opts.content,
@@ -5818,6 +5879,7 @@ export class Session {
             }
           : { url: attachment.url }),
       })),
+      ...(requestContext ? { requestContext: clonePersistedRequestContext(requestContext) } : {}),
     });
   }
 
@@ -5880,6 +5942,16 @@ export class Session {
       });
     }
     return attachments;
+  }
+
+  private _validatePersistedAttachments(field: string, attachments: PersistedAttachment[]): void {
+    for (let i = 0; i < attachments.length; i += 1) {
+      const attachment = attachments[i]!;
+      if (attachment.kind !== 'ref') continue;
+      if (attachment.ownerSessionId !== this.id) {
+        throw new HarnessValidationError(`${field}[${i}].ownerSessionId`, 'attachment must belong to this session');
+      }
+    }
   }
 
   /**
@@ -6046,6 +6118,7 @@ export class Session {
           modeId: effectiveModeId,
           modelId: this._modelIdForQueuedItem(item.id),
           abortSignal: turnAbortController.signal,
+          persistedRequestContext: item.requestContext,
         }),
         activeTurnWaiter.promise,
       ]);
@@ -6868,9 +6941,13 @@ export class Session {
     modeId: string;
     modelId: string;
     abortSignal: AbortSignal;
+    persistedRequestContext?: PersistedRequestContextInput;
   }): Promise<RequestContext> {
     const session = this;
     const stateSnapshot = (this._record.state ?? {}) as unknown;
+    const persistedRequestContext = turn.persistedRequestContext
+      ? clonePersistedRequestContext(turn.persistedRequestContext)
+      : undefined;
     // Resolve the workspace eagerly so tools see a populated `ctx.workspace`
     // without each tool re-awaiting. Errors here surface as the turn's
     // failure; workspace_error is still emitted via the registry.
@@ -6888,6 +6965,8 @@ export class Session {
       threadId: this.threadId,
       resourceId: this.resourceId,
       modeId: turn.modeId,
+      ...(persistedRequestContext?.metadata ? { app: persistedRequestContext.metadata } : {}),
+      ...(persistedRequestContext?.channel ? { channel: persistedRequestContext.channel } : {}),
       state: stateSnapshot,
       getState: () => (session._record.state ?? {}) as unknown,
       setState: ((updatesOrUpdater: unknown) =>
@@ -6914,7 +6993,14 @@ export class Session {
       useSkill: (ref, opts) => session._skillsUse(ref, opts),
       ...(workspace ? { workspace } : {}),
     };
-    return new RequestContext([['harness', harnessSlot]]);
+    const entries: [string, unknown][] = [['harness', harnessSlot]];
+    if (persistedRequestContext?.metadata) {
+      entries.push(['app', persistedRequestContext.metadata]);
+    }
+    if (persistedRequestContext?.channel) {
+      entries.push(['channel', persistedRequestContext.channel]);
+    }
+    return new RequestContext(entries);
   }
 
   private async _setTurnState<TState = unknown>(
@@ -7186,6 +7272,14 @@ function publicErrorProjectionToError(error: { code: string; message: string }):
 
 function cloneAttachmentMetadata(metadata: Record<string, JsonValue>): Record<string, JsonValue> {
   return JSON.parse(JSON.stringify(metadata)) as Record<string, JsonValue>;
+}
+
+function clonePersistedAttachment(attachment: PersistedAttachment): PersistedAttachment {
+  return JSON.parse(JSON.stringify(attachment)) as PersistedAttachment;
+}
+
+function clonePersistedRequestContext(input: PersistedRequestContextInput): PersistedRequestContextInput {
+  return JSON.parse(JSON.stringify(input)) as PersistedRequestContextInput;
 }
 
 class QueueRecoveryPendingError extends Error {

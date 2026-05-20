@@ -95,7 +95,7 @@ export interface QueuedItem {
   enqueuedAt: number;
   content: string;
   attachments: PersistedAttachment[];
-  requestContext?: unknown;
+  requestContext?: PersistedRequestContextInput;
   model?: string;
   mode?: string;
   yolo?: boolean;
@@ -817,6 +817,7 @@ export interface HarnessWakeupItem {
   status: 'due' | 'claimed' | 'queued' | 'completed' | 'failed' | 'dead';
   mode?: string;
   model?: string;
+  yolo?: boolean;
   attempts: number;
   missedCount?: number;
   claimId?: string;

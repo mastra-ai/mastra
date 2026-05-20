@@ -14,8 +14,8 @@
  *     resolver.
  *
  * Known remaining gaps are deliberately visible here: production server routes,
- * remote SDKs, durable admission/result rows, channels, wakeups, and worker
- * recovery live in follow-up Harness v1 lanes.
+ * remote SDKs, full channel routing, wakeup producers/completion, and
+ * acceptance evidence live in follow-up Harness v1 lanes.
  */
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -3506,6 +3506,11 @@ export class Harness {
 
   private _getEffectiveSessionStorage(): HarnessStorage | undefined {
     return this._storageOverride ?? this._mastra?.getStorage()?.stores?.harness;
+  }
+
+  /** @internal — used by Harness wakeup workers to honor session storage overrides. */
+  _internalGetSessionStorage(): HarnessStorage | undefined {
+    return this._getEffectiveSessionStorage();
   }
 
   private _usesSeparateSessionStorage(): boolean {

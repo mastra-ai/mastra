@@ -9,10 +9,10 @@
  * actually wiring a real tool execution.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { setupHarness } from './__test-utils__/setup';
-import { HarnessStateConflictError } from './errors';
+import { HarnessStateConflictError, HarnessValidationError } from './errors';
 import type { HarnessRequestContext } from './types';
 
 function getHarnessSlot(streamCalls: any[]): HarnessRequestContext {
@@ -142,5 +142,107 @@ describe('HarnessRequestContext — queued turns', () => {
     expect(slot.sessionId).toBe(session.id);
     expect(slot.modeId).toBe('default');
     expect(slot.abortSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('wakeup-admitted queued turns surface persisted app and channel context slots', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'wakeup reply' });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const admitted = await (session as any)._admitWakeupQueue({
+      content: 'scheduled work',
+      admissionId: 'wakeup-admission-1',
+      attachments: [],
+      requestContext: {
+        metadata: { appId: 'scheduler' },
+        channel: {
+          origin: 'inbound',
+          harnessName: 'default',
+          channelId: 'slack-main',
+          providerId: 'slack',
+          platform: 'slack',
+          externalThreadId: 'thread-1',
+          externalMessageId: 'message-1',
+          actor: { platformUserId: 'user-1', displayName: 'Ada' },
+        },
+      },
+    });
+    await session.waitForIdle({ timeoutMs: 1000 });
+
+    expect(admitted).toMatchObject({ accepted: true, queuedItemId: expect.any(String), duplicate: false });
+    const requestContext = agent.streamCalls.at(-1)!.options.requestContext;
+    expect(requestContext.get('app')).toEqual({ appId: 'scheduler' });
+    expect(requestContext.get('channel')).toMatchObject({
+      origin: 'inbound',
+      harnessName: 'default',
+      channelId: 'slack-main',
+      providerId: 'slack',
+      externalThreadId: 'thread-1',
+      externalMessageId: 'message-1',
+      actor: { platformUserId: 'user-1', displayName: 'Ada' },
+    });
+    const slot = getHarnessSlot(agent.streamCalls);
+    expect(slot.app).toEqual({ appId: 'scheduler' });
+    expect(slot.channel).toMatchObject({
+      origin: 'inbound',
+      harnessName: 'default',
+      channelId: 'slack-main',
+      providerId: 'slack',
+      externalThreadId: 'thread-1',
+      externalMessageId: 'message-1',
+      actor: { platformUserId: 'user-1', displayName: 'Ada' },
+    });
+  });
+
+  it('preserves yolo when admitting durable wakeup queue rows', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const admitQueue = vi.spyOn(session as any, '_admitQueue').mockResolvedValue({
+      queuedItemId: 'queued-yolo',
+      evidence: {},
+      duplicate: false,
+    });
+
+    await (session as any)._admitWakeupQueue({
+      content: 'scheduled work',
+      admissionId: 'wakeup-admission-yolo',
+      yolo: true,
+      attachments: [],
+    });
+
+    expect(admitQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'scheduled work',
+        admissionId: 'wakeup-admission-yolo',
+        yolo: true,
+      }),
+      'admitQueue()',
+      expect.objectContaining({ persistedAttachments: [] }),
+    );
+    admitQueue.mockRestore();
+  });
+
+  it('wakeup admission rejects persisted refs owned by another session', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      (session as any)._admitWakeupQueue({
+        content: 'scheduled work',
+        admissionId: 'wakeup-admission-foreign-ref',
+        attachments: [
+          {
+            kind: 'ref',
+            name: 'foreign.txt',
+            mimeType: 'text/plain',
+            ownerSessionId: 'other-session',
+            attachmentId: 'attachment-1',
+            bytes: 12,
+            sha256: 'sha256-1',
+            source: 'preupload',
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
   });
 });

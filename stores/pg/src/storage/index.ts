@@ -21,6 +21,7 @@ import { BlobsPG } from './domains/blobs';
 import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
+import { FavoritesPG } from './domains/favorites';
 import { HarnessPG } from './domains/harness';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
@@ -53,6 +54,7 @@ const ALL_DOMAINS = [
   WorkflowsPG,
   DatasetsPG,
   ExperimentsPG,
+  FavoritesPG,
   HarnessPG,
   BackgroundTasksPG,
   ChannelsPG,

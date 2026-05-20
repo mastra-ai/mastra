@@ -3509,6 +3509,11 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_WAKEUPS],
       compositePrimaryKey: wakeupConfig?.compositePrimaryKey,
     });
+    await this.#db.alterTable({
+      tableName: TABLE_HARNESS_WAKEUPS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_WAKEUPS],
+      ifNotExists: ['yolo'],
+    });
     await this.#ensureWakeupIndexes();
   }
 
@@ -3898,6 +3903,7 @@ const HARNESS_WAKEUP_COLUMN_NAMES = [
   'status',
   'mode',
   'model',
+  'yolo',
   'attempts',
   'missed_count',
   'claim_id',
@@ -3938,6 +3944,7 @@ function harnessWakeupColumnValues(record: HarnessWakeupItem): { names: string[]
     record.status,
     record.mode ?? null,
     record.model ?? null,
+    record.yolo === true ? true : null,
     record.attempts,
     record.missedCount ?? null,
     record.claimId ?? null,
@@ -3980,6 +3987,7 @@ function rowToHarnessWakeupItem(row: Record<string, unknown>): HarnessWakeupItem
     status: String(row.status) as HarnessWakeupItem['status'],
     mode: row.mode == null ? undefined : String(row.mode),
     model: row.model == null ? undefined : String(row.model),
+    yolo: row.yolo === true || row.yolo === 1 || row.yolo === '1' ? true : undefined,
     attempts: Number(row.attempts),
     missedCount: row.missed_count == null ? undefined : Number(row.missed_count),
     claimId: row.claim_id == null ? undefined : String(row.claim_id),
@@ -5002,6 +5010,7 @@ function assertLegalHarnessWakeupUpdate(current: HarnessWakeupItem, next: Harnes
     current.createdAt !== next.createdAt ||
     current.mode !== next.mode ||
     current.model !== next.model ||
+    (current.yolo === true) !== (next.yolo === true) ||
     current.content !== next.content ||
     stableJsonString(current.requestContext) !== stableJsonString(next.requestContext) ||
     stableJsonString(current.attachments) !== stableJsonString(next.attachments);
@@ -5181,6 +5190,7 @@ function harnessWakeupItemsEquivalentForCreate(a: HarnessWakeupItem, b: HarnessW
     a.dueAt === b.dueAt &&
     a.mode === b.mode &&
     a.model === b.model &&
+    (a.yolo === true) === (b.yolo === true) &&
     stableJsonString(a.requestContext) === stableJsonString(b.requestContext) &&
     a.content === b.content &&
     stableJsonString(a.attachments) === stableJsonString(b.attachments)

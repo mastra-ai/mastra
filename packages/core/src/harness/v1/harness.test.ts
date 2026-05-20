@@ -2673,6 +2673,19 @@ describe('Harness v1 — deterministic-id branch (§5.3)', () => {
     expect(second.threadId).toBe('t1');
   });
 
+  it('rehydrates the active thread record when caller-supplied sessionId is stale', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const first = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    await harness.shutdown();
+
+    const restarted = makeHarness({ sessions: { storage } });
+    const resolved = await restarted.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-stale' });
+
+    expect(resolved.id).toBe(first.id);
+    expect(resolved.threadId).toBe('t1');
+  });
+
   it('returns an existing active child when the parent closes after thread lookup misses', async () => {
     const storage = makeStorage();
     const harness = makeHarness({ sessions: { storage } });

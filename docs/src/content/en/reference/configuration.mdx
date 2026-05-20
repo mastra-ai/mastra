@@ -350,6 +350,107 @@ export const mastra = new Mastra({
 })
 ```
 
+### harnessWakeups
+
+**Type:** `HarnessWakeupWorkerConfig`
+
+Configures the durable Harness wakeup worker. A wakeup is a scheduled or
+event-triggered operation that resumes or triggers a Harness session. Mastra
+automatically registers the worker when at least one Harness is configured and
+either the Mastra instance has `storage` or a Harness has its own session
+storage. The worker name is `harnessWakeups`, so you can start only this worker with
+`mastra.startWorkers('harnessWakeups')` or include it in `MASTRA_WORKERS`.
+
+Set `workers: false` to opt out of all auto-created workers, or pass an explicit
+`workers` array when you run wakeup processing in a separate process.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Harness } from '@mastra/core/harness/v1'
+import { LibSQLStore } from '@mastra/libsql'
+
+const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You help users',
+  model: 'openai/gpt-5.4',
+})
+
+const harness = new Harness({
+  modes: [{ id: 'default', agentId: 'assistant' }],
+  defaultModeId: 'default',
+})
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+  harness,
+  harnessWakeups: {
+    batchSize: 25,
+    pollIntervalMs: 2_000,
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxAttempts',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Maximum claim attempts before a wakeup is marked dead.',
+  },
+  {
+    name: 'claimTtlMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '30000',
+    description: 'Lease duration in milliseconds for each claimed wakeup row.',
+  },
+  {
+    name: 'claimRenewMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 'Math.max(1, Math.floor(claimTtlMs / 3))',
+    description:
+      'How often the worker renews the claim while admitting work. Must be a positive integer less than claimTtlMs.',
+  },
+  {
+    name: 'batchSize',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '50',
+    description: 'Maximum wakeup rows claimed per harness on each poll.',
+  },
+  {
+    name: 'pollIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Delay in milliseconds between polling ticks.',
+  },
+  {
+    name: 'retryBackoffMs',
+    type: '(attempt: number) => number',
+    isOptional: true,
+    description:
+      'Function that returns the retry delay for recoverable failures. The returned value must be a positive integer.',
+  },
+  {
+    name: 'harnesses',
+    type: 'readonly string[]',
+    isOptional: true,
+    description:
+      'Optional allowlist of Harness names for this worker instance. Omit to process every registered Harness.',
+  },
+]}
+/>
+
 ### idGenerator
 
 **Type:** `(context?: IdGeneratorContext) => string`\

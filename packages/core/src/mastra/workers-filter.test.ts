@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Harness } from '../harness/v1/harness';
+import { InMemoryHarness } from '../storage/domains/harness/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import { MockStore } from '../storage/mock';
 import { Mastra } from './index';
 
@@ -62,6 +65,18 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     for (const s of starts) {
       expect(s.spy, `worker ${s.name} should have started`).toHaveBeenCalled();
     }
+  });
+
+  it('registers harness wakeup worker for harness session storage without top-level storage', () => {
+    const mastra = new Mastra({
+      harness: new Harness({
+        modes: [],
+        sessions: { storage: new InMemoryHarness({ db: new InMemoryDB() }) },
+      }),
+      logger: false,
+    });
+
+    expect(mastra.workers.map(worker => worker.name)).toContain('harnessWakeups');
   });
 
   it('disables all workers when MASTRA_WORKERS=false', async () => {

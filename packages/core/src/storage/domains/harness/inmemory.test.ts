@@ -1078,6 +1078,30 @@ describe('InMemoryHarness wakeup ledger', () => {
     });
   });
 
+  it('preserves wakeup yolo admission overrides', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    await expect(storage.createOrLoadHarnessWakeupItem(sampleWakeup({ yolo: true }))).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      item: { yolo: true },
+    });
+    await expect(
+      storage.loadHarnessWakeupItemByIdempotencyKey({ harnessName: 'default', idempotencyKey: 'wake-key-1' }),
+    ).resolves.toMatchObject({ yolo: true });
+  });
+
+  it('treats omitted and false wakeup yolo overrides as the same idempotent input', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.createOrLoadHarnessWakeupItem(sampleWakeup({ yolo: false }));
+
+    await expect(storage.createOrLoadHarnessWakeupItem(sampleWakeup({ id: 'wakeup-retry' }))).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      item: { id: 'wakeup-1' },
+    });
+  });
+
   it('claims due and retryable failed wakeups while respecting backoff', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
     await storage.createOrLoadHarnessWakeupItem(sampleWakeup({ dueAt: 5000, nextAttemptAt: 7000 }));
