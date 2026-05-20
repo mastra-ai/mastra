@@ -1,4 +1,4 @@
-import type { DatePreset, PropertyFilterToken } from '@mastra/playground-ui';
+import type { DatePreset, DateRange, PropertyFilterToken } from '@mastra/playground-ui';
 import {
   Notice,
   Button,
@@ -55,12 +55,27 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
 ]);
 
 const PERIOD_PARAM = 'period';
+const DATE_FROM_PARAM = 'dateFrom';
+const DATE_TO_PARAM = 'dateTo';
 
 export default function Metrics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const preset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
+
+  // Concrete from/to bounds only apply to the 'custom' preset; relative presets
+  // derive their window from the preset alone.
+  const customRange = useMemo<DateRange | undefined>(() => {
+    if (preset !== 'custom') return undefined;
+    const fromRaw = searchParams.get(DATE_FROM_PARAM);
+    const toRaw = searchParams.get(DATE_TO_PARAM);
+    const from = fromRaw ? new Date(fromRaw) : undefined;
+    const to = toRaw ? new Date(toRaw) : undefined;
+    if (!from && !to) return undefined;
+    return { from, to };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, searchParams.toString()]);
 
   // Derive tokens straight from the URL. Memoized on a stable digest so the
   // array identity only changes when the URL actually changes — this prevents
@@ -81,6 +96,33 @@ export default function Metrics() {
             params.delete(PERIOD_PARAM);
           } else {
             params.set(PERIOD_PARAM, next);
+          }
+          if (next !== 'custom') {
+            params.delete(DATE_FROM_PARAM);
+            params.delete(DATE_TO_PARAM);
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleCustomRangeChange = useCallback(
+    (range: DateRange | undefined) => {
+      setSearchParams(
+        prev => {
+          const params = new URLSearchParams(prev);
+          if (range?.from) {
+            params.set(DATE_FROM_PARAM, range.from.toISOString());
+          } else {
+            params.delete(DATE_FROM_PARAM);
+          }
+          if (range?.to) {
+            params.set(DATE_TO_PARAM, range.to.toISOString());
+          } else {
+            params.delete(DATE_TO_PARAM);
           }
           return params;
         },
@@ -131,6 +173,8 @@ export default function Metrics() {
       filterTokens={filterTokens}
       onPresetChange={handlePresetChange}
       onFilterTokensChange={handleFilterTokensChange}
+      customRange={customRange}
+      onCustomRangeChange={handleCustomRangeChange}
     >
       <MetricsContent />
     </MetricsProvider>
