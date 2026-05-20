@@ -1,9 +1,15 @@
 # Restart on `yj/magnificent-marquess`: extend `ToolProvider` with v1 capabilities
 
-**Status:** scoping — not yet executed
+**Status:** Phase 1 complete (commit `6c7a63b199`) — Phase 2 next
 **Base branch:** `yj/magnificent-marquess`
 **New branch:** `yj/mm/v1-tool-provider-extensions`
 **Reference (read-only):** `yj/mm/v1-integrations-plan` (archive — source for porting logic; symbols translated `ToolIntegration` → `ToolProvider` as we paste)
+
+## Mid-flight notes
+
+- **v1 surface is additive, v2 methods are optional.** The legacy `ToolProvider` keeps its existing `listToolkits` / `listTools` / `resolveTools` signatures intact. New methods (`listToolkitsV2`, `listToolsV2`, `resolveToolsV2`, `authorize`, `listConnectionFields`, `getAuthStatus`, `getConnectionStatus`, `listConnections`, `getHealth`, `revokeConnection`) are all marked `?`. `capabilities` is also optional so legacy adapters compile unchanged. `BaseToolProvider` bridges legacy↔v2 by forwarding `listToolkits`/`listTools` into the v2 envelopes.
+- **Vocabulary kept marquess-native.** Used `toolkit` (existing on marquess) instead of `toolService` (archive vocab). Internal symbols: `ToolProviderConnection`, `ToolProviderToolMeta`, `ToolProviderConfig`, `ToolProviders`, `ToolProviderCapabilities`, `ToolProviderHealth`. Capability flag renamed `multipleConnectionsPerService` → `multipleConnectionsPerToolkit`.
+- **Errors module: lightweight only for now.** Phase 1 ships `DuplicateToolProviderError` / `UnknownToolProviderError`. The `MastraError` IDs (`CALLER_SUPPLIED_USER_ID_MISSING`, etc.) are emitted inline from `runtime.ts` — no separate ID registry file is needed yet. If subsequent phases need more IDs we can collect them then.
 
 > No `ToolIntegration` exists on `magnificent-marquess`. All work is **extend the existing `ToolProvider` interface** or **add new files** under existing `tool-provider*` paths. Zero renames on the working branch.
 
@@ -33,16 +39,18 @@
 
 ---
 
-## Phase 1: Branch setup + core types (`p1_*`)
+## Phase 1: Branch setup + core types (`p1_*`) ✅ complete
+
+**Status:** complete — commit `6c7a63b199` (5 files, +774 / −12)
 
 **Subtasks:**
-- `p1_branch` — create `yj/mm/v1-tool-provider-extensions` off `yj/magnificent-marquess`, rename old branch to `yj/mm/v1-integrations-plan-archive`
-- `p1_core_types` — extend `packages/core/src/tool-provider/types.ts` with new optional surface (Connection, Scope, AuthFlowStatus, capabilities, all list/auth methods)
-- `p1_core_errors` — add `packages/core/src/tool-provider/errors.ts` (`MastraError` IDs for `CALLER_SUPPLIED_USER_ID_MISSING`, `CONNECTION_NOT_FOUND`, etc.)
-- `p1_core_base` — add `packages/core/src/tool-provider/base.ts` (`BaseToolProvider` abstract class with default capability flags)
-- `p1_core_runtime` — add `packages/core/src/tool-provider/runtime.ts` (scope → userId resolver)
-- `p1_core_index` — update `packages/core/src/tool-provider/index.ts` exports
-- `p1_typecheck` — `pnpm --filter @mastra/core build:lib` clean
+- ✅ `p1_branch` — created `yj/mm/v1-tool-provider-extensions` off `yj/magnificent-marquess`
+- ✅ `p1_core_types` — extended `packages/core/src/tool-provider/types.ts` with optional surface (ToolProviderConnection, scope, AuthFlowStatus, capabilities, list/auth/health methods)
+- ✅ `p1_core_errors` — added `packages/core/src/tool-provider/errors.ts` (`DuplicateToolProviderError`, `UnknownToolProviderError`; runtime emits inline `MastraError` for `CALLER_SUPPLIED_USER_ID_MISSING`)
+- ✅ `p1_core_base` — added `packages/core/src/tool-provider/base.ts` (`BaseToolProvider` abstract with allowlist filtering + legacy↔v2 bridging)
+- ✅ `p1_core_runtime` — added `packages/core/src/tool-provider/runtime.ts` (`resolveStoredToolProviders` fan-out + scope resolver)
+- ✅ `p1_core_index` — updated `packages/core/src/tool-provider/index.ts` exports
+- ✅ `p1_typecheck` — `pnpm --filter @mastra/core build:lib` + `tsc --noEmit` clean
 
 **Touched files:**
 - `packages/core/src/tool-provider/types.ts` (extend, ~+300 LOC)
