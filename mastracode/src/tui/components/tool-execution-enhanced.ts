@@ -4,7 +4,7 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
@@ -540,6 +540,21 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       currentWidth = 0;
     };
 
+    const takeVisiblePrefix = (text: string, maxWidth: number): string => {
+      let chunk = '';
+      let chunkWidth = 0;
+
+      for (const char of text) {
+        const charWidth = visibleWidth(char);
+        if (chunk && chunkWidth + charWidth > maxWidth) break;
+        chunk += char;
+        chunkWidth += charWidth;
+        if (chunkWidth >= maxWidth) break;
+      }
+
+      return chunk;
+    };
+
     for (const token of this.tokenizeQuietShellCommand(command)) {
       let remaining = token.text;
 
@@ -552,9 +567,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
           continue;
         }
 
-        if (remaining.length <= available) {
+        const remainingWidth = visibleWidth(remaining);
+        if (remainingWidth <= available) {
           current += token.color(remaining);
-          currentWidth += remaining.length;
+          currentWidth += remainingWidth;
           break;
         }
 
@@ -563,10 +579,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
           continue;
         }
 
-        const chunk = remaining.slice(0, available);
+        const chunk = takeVisiblePrefix(remaining, available);
         current += token.color(chunk);
-        currentWidth += chunk.length;
-        remaining = remaining.slice(available);
+        currentWidth += visibleWidth(chunk);
+        remaining = remaining.slice(chunk.length);
         pushCurrent();
       }
     }
@@ -1378,7 +1394,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const horizontal = '─'.repeat(contentWidth + 2);
       const renderLine = (line: string, color: (value: string) => string = value => theme.fg('toolOutput', value)) => {
         const truncated = truncateAnsi(line, contentWidth);
-        const padding = ' '.repeat(Math.max(0, contentWidth - this.stripAnsi(truncated).length));
+        const padding = ' '.repeat(Math.max(0, contentWidth - visibleWidth(truncated)));
         return `${border('│')} ${color(truncated)}${padding} ${border('│')}`;
       };
       const displayOutput = outputLines.map(line => renderLine(line)).join('\n');
@@ -1391,11 +1407,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       }
       const footerWrapWidth = Math.max(1, contentWidth - 2);
       const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
-      const footerSuffixWidth = this.stripAnsi(footerSuffix).length;
+      const footerSuffixWidth = visibleWidth(footerSuffix);
       footerLines.forEach((footerLine, index) => {
         const prefix = index === 0 ? footerPrompt : '  ';
         const isLast = index === footerLines.length - 1;
-        const suffixFits = isLast && this.stripAnsi(footerLine).length + footerSuffixWidth <= footerWrapWidth;
+        const suffixFits = isLast && visibleWidth(footerLine) + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
         this.contentBox.addChild(
           new Text(
@@ -1406,7 +1422,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         );
       });
       const lastFooterLine = footerLines[footerLines.length - 1] ?? '';
-      if (this.stripAnsi(lastFooterLine).length + footerSuffixWidth > footerWrapWidth) {
+      if (visibleWidth(lastFooterLine) + footerSuffixWidth > footerWrapWidth) {
         this.contentBox.addChild(
           new Text(
             renderLine(`  ${footerSuffix}`, value => value),

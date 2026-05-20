@@ -1,3 +1,4 @@
+import { visibleWidth } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
 import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
@@ -641,6 +642,32 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('line 16');
     expect(lines.some(line => line.includes('line 1 ') || line.includes('line 1│'))).toBe(false);
     expect(lines.filter(line => line.includes('line '))).toHaveLength(15);
+  });
+
+  it('keeps quiet shell box borders aligned for long git output', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'git remote -v' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    const remoteLine = 'fork_truffle-dev    https://github.com/truffle-dev/mastra.git (push)'.repeat(4);
+
+    component.updateResult(
+      {
+        content: [{ type: 'text', text: remoteLine }],
+        isError: false,
+      },
+      false,
+    );
+
+    const rendered = component.render(80);
+    const topWidth = visibleWidth(rendered[0]!);
+    const boxLines = rendered.filter(line => /^[╭│├╰]/.test(stripAnsi(line)));
+
+    expect(boxLines.length).toBeGreaterThan(1);
+    expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
+    expect(boxLines.every(line => /[╮│┤╯]$/.test(stripAnsi(line).trimEnd()))).toBe(true);
   });
 
   it('keeps quiet detail lines visible after completion', () => {
