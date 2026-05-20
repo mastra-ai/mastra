@@ -6,11 +6,12 @@ import type {
   ScheduleTrigger,
   ScheduleTriggerListOptions,
   ScheduleUpdate,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../client';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -85,16 +86,20 @@ export class SchedulesPG extends SchedulesStorage {
   #db: PgDB;
   #client: DbClient;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#client = client;
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (SchedulesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -106,23 +111,87 @@ export class SchedulesPG extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the schedules domain.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}idx_mastra_schedules_status_next_fire`,
+        table: TABLE_SCHEDULES,
+        columns: ['status', 'next_fire_at'],
+      },
+      {
+        name: `${schemaPrefix}idx_mastra_schedule_triggers_schedule_fire`,
+        table: TABLE_SCHEDULE_TRIGGERS,
+        columns: ['schedule_id', 'actual_fire_at DESC'],
+      },
+    ];
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return SchedulesPG.getDefaultIndexDefs(schemaPrefix);
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   static getExportDDL(schemaName?: string): string[] {
-    return [
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    statements.push(
       generateTableSQL({
         tableName: TABLE_SCHEDULES,
         schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
         schemaName,
         includeAllConstraints: true,
       }),
+    );
+    statements.push(
       generateTableSQL({
         tableName: TABLE_SCHEDULE_TRIGGERS,
         schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
         schemaName,
         includeAllConstraints: true,
       }),
-    ];
+    );
+
+    for (const idx of SchedulesPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
   }
 
   async dangerouslyClearAll(): Promise<void> {
