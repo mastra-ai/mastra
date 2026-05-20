@@ -1,5 +1,189 @@
 # @mastra/playground-ui
 
+## 29.0.0
+
+### Minor Changes
+
+- Added `ContextMenu` for right-click interactions. Supports submenus, checkbox and radio items, keyboard shortcuts, and a `destructive` variant for dangerous actions like delete. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  import { ContextMenu } from '@mastra/playground-ui';
+
+  <ContextMenu>
+    <ContextMenu.Trigger className="…">Right click here</ContextMenu.Trigger>
+    <ContextMenu.Content>
+      <ContextMenu.Item>Rename</ContextMenu.Item>
+      <ContextMenu.Item variant="destructive">Delete</ContextMenu.Item>
+    </ContextMenu.Content>
+  </ContextMenu>;
+  ```
+
+- Removed `ButtonWithTooltip` from `@mastra/playground-ui`. Use `Button` with the `tooltip` prop instead. ([#16719](https://github.com/mastra-ai/mastra/pull/16719))
+
+  **Migration**
+
+  ```tsx
+  // before
+  import { ButtonWithTooltip } from '@mastra/playground-ui';
+
+  <ButtonWithTooltip tooltipContent="Search">
+    <Search />
+  </ButtonWithTooltip>;
+
+  // after
+  import { Button } from '@mastra/playground-ui';
+
+  <Button tooltip="Search">
+    <Search />
+  </Button>;
+  ```
+
+  `tooltip` supports the same values as `tooltipContent`. Icon-only buttons that pass a string `tooltip` now also get it as their `aria-label` automatically, matching how labelled controls have always behaved. Pass an explicit `aria-label` to override.
+
+- Added a custom date range option to the Metrics page date picker. You can now filter metrics by an arbitrary start and end date and time, matching the Traces page, alongside the existing relative presets (last 24 hours, 3, 7, 14, and 30 days). ([#16832](https://github.com/mastra-ai/mastra/pull/16832))
+
+  The selected range is reflected in the URL so it can be bookmarked or shared:
+
+  ```txt
+  /metrics?period=custom&dateFrom=2026-05-01T00:00:00.000Z&dateTo=2026-05-07T23:59:59.999Z
+  ```
+
+- Refreshed Button + Card design system tokens. ([#16769](https://github.com/mastra-ai/mastra/pull/16769))
+
+  **Button variants (breaking)**: consolidated to `default`, `primary`, `outline`, `ghost`. The `cta`, `contrast`, and unused `link` variants have been removed. `primary` now uses a high-contrast `neutral6` fill instead of `surface4`, so it reads clearly as the form submit action in both themes.
+
+  ```tsx
+  // Before
+  <Button variant="cta">Save</Button>
+  <Button variant="contrast">Done</Button>
+  <Button variant="link">Open</Button>
+
+  // After
+  <Button variant="primary">Save</Button>     // cta → primary (no brand green; theme-aware high contrast)
+  <Button variant="primary">Done</Button>     // contrast → primary (same recipe, renamed)
+  <Button as="a" href="…" variant="ghost">Open</Button>  // link → ghost (or plain <a> for inline text links)
+  ```
+
+  **New tokens**: `--surface-overlay-soft` and `--surface-overlay-strong` — alpha overlays of the opposite-theme color, used by `SectionCard` header strip and `DashboardCard` fill so cards read consistently on any surface.
+
+  **Other**:
+  - DashboardCard radius reduced to `rounded-xl` and padding tightened to `px-4 py-3` for better grid density.
+  - SectionCard wrapper no longer fills its background — header strip + border carry definition.
+  - Dark `surface2` / `surface3` darkened slightly (16.84% → 16%, 19.13% → 18%) so the main frame reads as a distinct surface.
+  - Dark `border1` / `border2` alphas bumped (6% → 7%, 10% → 11%) for closer dark/light parity.
+  - Removed deprecated `--section-card-*` tokens and their `@utility` blocks.
+
+### Patch Changes
+
+- Added a `destructive` variant on `DropdownMenu.Item` to highlight dangerous actions like delete. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  <DropdownMenu.Item variant="destructive">Delete project</DropdownMenu.Item>
+  ```
+
+- `PopoverContent` no longer forwards the underlying library's auto-focus event handlers (`onOpenAutoFocus`, `onCloseAutoFocus`). To control focus when the popover opens or closes, use `initialFocus` and `finalFocus`. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  // Before
+  <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} />
+
+  // After
+  <PopoverContent initialFocus={false} />
+  ```
+
+- Fixed a crash in filter menus with nested submenus (such as the Filter on the Agent review page) that showed "`MenuPortal` must be used within `Menu`". The submenu content now uses the design system's `DropdownMenu.SubContent` instead of the underlying library's portal directly. ([#16829](https://github.com/mastra-ai/mastra/pull/16829))
+
+- Fixed type definitions and shared UI component types for `@mastra/playground-ui`. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- `AlertDialog`'s API and behavior are unchanged — `asChild` on `AlertDialog.Trigger`, and `AlertDialog.Action` and `AlertDialog.Cancel`, all work exactly as before. (Internally it now builds on Base UI primitives.) ([#16824](https://github.com/mastra-ai/mastra/pull/16824))
+
+- Moved the `Collapsible` component to Base UI, with a smoother height-based expand and collapse animation. The public API is unchanged — `asChild` on `CollapsibleTrigger` still works. ([#16825](https://github.com/mastra-ai/mastra/pull/16825))
+
+- Upgraded `@base-ui/react` to 1.5, making popups noticeably faster — components built on Base UI such as `Tooltip`, `Popover`, `DropdownMenu` and `ContextMenu` now open and close more quickly. ([#16819](https://github.com/mastra-ai/mastra/pull/16819))
+
+- Moved the Level icon from its own column into the Name column, next to the trace name, on the Observability traces list. ([#16712](https://github.com/mastra-ai/mastra/pull/16712))
+
+- The Traces list now updates live via delta polling. Previously the list was refetched every 10 seconds, replacing the whole page with no signal about what changed; now new traces appear within a few seconds of being created, with a brief highlight to draw attention. Status changes on already-visible rows (running → success / error) also propagate without intervention, and returning to the tab after being idle re-syncs from a fresh cursor. ([#16727](https://github.com/mastra-ai/mastra/pull/16727))
+
+  **New `useTraces` return fields**
+  - `isRefetching` — true while any meaningful refetch is in flight. Use it to drive a heartbeat indicator.
+  - `autoRefetch` / `setAutoRefetch` — pause / resume all automatic polling so the consumer can render an opt-out toggle.
+  - `recentlyAddedKeys` — `Set<string>` of `traceId:spanId` for rows that just arrived via delta polling. Drives the temporary highlight in `TracesListView`.
+
+  **New polling config**
+
+  Every timing in the hook is tunable per-instance via a new `polling` option:
+
+  ```ts
+  import { useTraces, type TracesPollingConfig } from '@mastra/playground-ui';
+
+  useTraces({
+    filters,
+    listMode,
+    polling: {
+      deltaPollIntervalMs: 10_000,
+      idleGuardThresholdMs: 5 * 60_000,
+    },
+  });
+  ```
+
+  Omitted fields fall through to the defaults (delta poll every 5s, idle reset after 15 min, status refresh every 60s, etc).
+
+  **TracesListView**
+
+  New optional `recentlyAddedKeys?: Set<string>` prop. Rows whose `traceId:spanId` is in the set get the `animate-row-highlight` class — a brief fade-out to transparent, added to `index.css`.
+
+  **Compatibility**
+
+  Requires `@mastra/server` and `@mastra/client-js` at the versions that ship the observability delta-polling endpoints, and a store that opts into delta polling (`@mastra/clickhouse`, `@mastra/duckdb`, and the in-memory store today). When unavailable — older server or a store without delta capability — the hook silently falls back to page-mode interval refetching. No consumer changes required.
+
+- Added `align` and `stack` variants to `PageLayout.Row`. Use `stack="responsive"` for top bars that should collapse to a vertical stack on narrow viewports, and `align="center"` to vertically center children. Applied the new variants to the Prompts and Workflows top bars so the search field and primary action share a single row on desktop and stack on mobile. ([#16714](https://github.com/mastra-ai/mastra/pull/16714))
+
+  ```tsx
+  <PageLayout.Row align="center" stack="responsive">
+    <ListSearch ... />
+    <Button ...>Create</Button>
+  </PageLayout.Row>
+  ```
+
+- Fixed the playground memory configuration display for agents using observationalMemory: true. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Fixed double-counted cache token costs in the Metrics dashboard. The Model Usage & Cost table and the Token Usage by Agent table were summing cache read/write costs on top of the total input cost, which already includes them. ([#16737](https://github.com/mastra-ai/mastra/pull/16737))
+
+- Migrated the Tooltip primitive to Base UI while preserving the existing API. The popup explicitly sets `role="tooltip"` so consumers can keep querying it via `getByRole('tooltip')` (Base UI does not add this role automatically). Existing `<TooltipTrigger asChild>` usage continues to work unchanged, and Base UI's native `render` prop is now also supported on `TooltipTrigger` so consumers wrapping anchors, custom router links, or icons can pass the element directly without an `asChild` adapter: ([#16713](https://github.com/mastra-ai/mastra/pull/16713))
+
+  ```tsx
+  // Still supported
+  <TooltipTrigger asChild>
+    <Button>Save</Button>
+  </TooltipTrigger>
+
+  // New: pass the element via Base UI's native API
+  <TooltipTrigger render={<Button>Save</Button>} />
+  ```
+
+  Also fixed the arrow rendering so the diagonal stroke meets the popup outline at the exact same pixel center on every side, removing the ~1px seam previously visible where the arrow joined the popup edge.
+
+- Migrated the Slider component to base-ui with a refined neutral visual design. ([#16788](https://github.com/mastra-ai/mastra/pull/16788))
+
+  **What changed**
+  - Replaced `@radix-ui/react-slider` with `@base-ui/react/slider` as the underlying primitive
+  - Refreshed visuals: thin rounded thumb with white border and neutral inside, opacity-based track that adapts to any surface, neutral filled indicator (no green/accent color)
+  - Larger click target via padded `Slider.Control` and an invisible hit area on the thumb so it is easier to grab
+  - Added `cursor-pointer` on the control and `cursor-not-allowed` when disabled
+  - Removed the now unused `@radix-ui/react-slider` and `@radix-ui/react-tabs` dependencies
+
+  **API compatibility**
+
+  The public API is preserved. `onValueChange` and `onValueCommitted` are wrapped so consumers always receive `number[]`, even though base-ui returns `number | number[]` internally. Existing call sites like `<Slider value={[temperature]} onValueChange={value => setTemperature(value[0])} />` continue to work without changes.
+
+- Moved the `Dialog` component to Base UI. The public API is unchanged — `asChild` on `DialogTrigger` and `DialogClose` still works the same way, and open/close animations behave as before. ([#16821](https://github.com/mastra-ai/mastra/pull/16821))
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`6b25032`](https://github.com/mastra-ai/mastra/commit/6b250329fa4795b4d085cba4077c7998893c1d59), [`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`9692d60`](https://github.com/mastra-ai/mastra/commit/9692d60298e8f629d10de54867642a38955fb708), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021), [`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337), [`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/core@1.36.0
+  - @mastra/client-js@1.20.0
+  - @mastra/react@0.4.0
+
 ## 29.0.0-alpha.11
 
 ### Minor Changes
