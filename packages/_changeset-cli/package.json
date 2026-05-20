@@ -35,12 +35,12 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.19",
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

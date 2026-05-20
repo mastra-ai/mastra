@@ -46,11 +46,11 @@
     "@rollup/plugin-commonjs": "29.0.2",
     "@rollup/plugin-json": "6.1.0",
     "@rollup/plugin-node-resolve": "16.0.3",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.19",
     "esbuild": "^0.27.4",
     "eslint": "^10.2.1",
     "mastra": "workspace:^",
-    "rollup": "^4.59.0",
+    "rollup": "^4.60.4",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.1.2",
     "typescript": "catalog:"

@@ -40,7 +40,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.19",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^1.13.0",
@@ -48,7 +48,7 @@
     "eslint": "^10.2.1",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
