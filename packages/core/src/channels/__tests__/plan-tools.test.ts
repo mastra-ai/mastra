@@ -109,6 +109,66 @@ async function setupHarness(): Promise<Harness> {
   return { channels, memory, tools, context: { requestContext }, threadId, sdkThread };
 }
 
+/**
+ * Variant that only registers the plan scope (mirroring exactly what
+ * `consumeAgentStream` does when plan mode is enabled but no plan has been
+ * opened yet). Used to verify that the first `task_write` lazily creates the
+ * active plan entry instead of failing with "No active plan for this thread".
+ */
+async function setupHarnessScopeOnly(): Promise<Harness> {
+  const memory = createFakeMemoryStore();
+  const threadId = 'mastra-thread-scope';
+  const now = new Date();
+  memory.threads.set(threadId, {
+    id: threadId,
+    resourceId: 'res-1',
+    title: 't',
+    metadata: {},
+    createdAt: now,
+    updatedAt: now,
+  } as StorageThreadType);
+
+  const channels = new AgentChannels({
+    adapters: {
+      test: { adapter: createMockAdapter('test'), plan: true } as any,
+    },
+  });
+  channels.__setAgent({
+    id: 'agent-1',
+    name: 'agent-1',
+    getMemory: async () => memory,
+    logger: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
+  } as any);
+
+  const sdkThread: any = {
+    id: 'test:c1:t1',
+    channelId: 'test:c1',
+    isDM: false,
+    post: vi.fn().mockResolvedValue({ id: 'plan-msg-1', text: '' }),
+    startTyping: vi.fn().mockResolvedValue(undefined),
+  };
+
+  const tools = createPlanTools(channels);
+  const requestContext = new RequestContext();
+  requestContext.set('channel', {
+    platform: 'test',
+    threadId: sdkThread.id,
+    mastraThreadId: threadId,
+  } as ChannelContext);
+
+  // Only register the scope — do NOT call beginActivePlan. The first task_write
+  // should create the entry on demand.
+  (channels as any).planScopes.set(threadId, {
+    sdkThread,
+    platform: 'test',
+    initialMessage: 'Working…',
+    completeMessage: 'Done',
+    toolDisplay: 'inline',
+  });
+
+  return { channels, memory, tools, context: { requestContext }, threadId, sdkThread };
+}
+
 // Tool execute return type is `unknown` from the createTool generic; cast in
 // one place so individual assertions stay tidy.
 async function run(tool: any, input: any, ctx: any): Promise<any> {
@@ -179,6 +239,25 @@ describe('createPlanTools', () => {
       await expect(
         run(h.tools.task_write, { tasks: [{ title: 'x' }] }, { requestContext: new RequestContext() }),
       ).rejects.toThrow(/Plan tools can only be called from a channel-driven agent run/);
+    });
+
+    it('lazily creates the active plan entry on the first call when only a scope is registered', async () => {
+      const h = await setupHarnessScopeOnly();
+      // Sanity: no entry yet.
+      expect((h.channels as any).activePlans.has(h.threadId)).toBe(false);
+
+      const result = await run(h.tools.task_write, { tasks: [{ title: 'recon' }] }, h.context);
+      expect(result.tasks).toHaveLength(1);
+      expect(result.tasks[0].title).toBe('recon');
+
+      // Entry now exists and the plan widget was posted to the platform.
+      expect((h.channels as any).activePlans.has(h.threadId)).toBe(true);
+      expect(h.sdkThread.post).toHaveBeenCalledTimes(1);
+
+      // Persisted to thread metadata.
+      const stored = h.memory.threads.get(h.threadId)!.metadata as any;
+      expect(stored.channelPlan.status).toBe('active');
+      expect(stored.channelPlan.tasks).toHaveLength(1);
     });
   });
 

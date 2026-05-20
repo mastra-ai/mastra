@@ -606,6 +606,24 @@ export class AgentChannels {
     }
   >();
 
+  /**
+   * Per-thread context needed to lazily open a plan when the LLM calls
+   * `task_write` for the first time. Populated by `consumeAgentStream` whenever
+   * plan mode is enabled for a run, regardless of whether a persisted plan
+   * already exists. The tool path reads this to call `beginActivePlan` on
+   * demand instead of pre-creating an empty plan entry.
+   */
+  private planScopes = new Map<
+    string,
+    {
+      sdkThread: Thread;
+      platform: string;
+      initialMessage: string;
+      completeMessage: string;
+      toolDisplay: 'inline' | 'hidden';
+    }
+  >();
+
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
     const adapters: Record<string, Adapter> = {};
@@ -1725,22 +1743,30 @@ export class AgentChannels {
       hasApprovalContext: !!approvalContext,
     });
 
-    // Rehydrate any persisted plan from a previous run / restart. The first
-    // tool that mutates the plan (`task_write`) will lazily post a new widget
-    // via `ensurePlanInstanceForTool`; the old widget from before the restart
-    // becomes orphaned.
-    if (planEnabled && !this.activePlans.has(mastraThreadId)) {
-      const existing = await loadPersistedPlan(this.agent, mastraThreadId);
-      if (existing && existing.status === 'active') {
-        await this.beginActivePlan({
-          mastraThreadId,
-          sdkThread,
-          platform,
-          initialMessage: existing.initialMessage,
-          completeMessage: existing.completeMessage,
-          toolDisplay: existing.toolDisplay,
-          existing,
-        });
+    // Plan mode: stash the context the LLM tools need to lazily open a plan
+    // entry on the first `task_write` call. Also rehydrate any persisted plan
+    // from a previous run / restart so the LLM picks up where it left off.
+    if (planEnabled && planConfig) {
+      this.planScopes.set(mastraThreadId, {
+        sdkThread,
+        platform,
+        initialMessage: planConfig.initialMessage,
+        completeMessage: planConfig.completeMessage,
+        toolDisplay: planToolDisplay,
+      });
+      if (!this.activePlans.has(mastraThreadId)) {
+        const existing = await loadPersistedPlan(this.agent, mastraThreadId);
+        if (existing && existing.status === 'active') {
+          await this.beginActivePlan({
+            mastraThreadId,
+            sdkThread,
+            platform,
+            initialMessage: existing.initialMessage,
+            completeMessage: existing.completeMessage,
+            toolDisplay: existing.toolDisplay,
+            existing,
+          });
+        }
       }
     }
 
@@ -2364,6 +2390,22 @@ export class AgentChannels {
    * restart when the persisted plan is found but no instance exists yet.
    */
   private async ensurePlanInstanceForTool(mastraThreadId: string): Promise<void> {
+    // Lazily open the plan entry on the first tool call. `consumeAgentStream`
+    // stashes the scope (sdkThread / platform / messages / toolDisplay) when
+    // plan mode is enabled; we use it here to call `beginActivePlan` without
+    // requiring the channel to pre-create empty entries.
+    if (!this.activePlans.has(mastraThreadId)) {
+      const scope = this.planScopes.get(mastraThreadId);
+      if (!scope) return;
+      await this.beginActivePlan({
+        mastraThreadId,
+        sdkThread: scope.sdkThread,
+        platform: scope.platform,
+        initialMessage: scope.initialMessage,
+        completeMessage: scope.completeMessage,
+        toolDisplay: scope.toolDisplay,
+      });
+    }
     const entry = this.activePlans.get(mastraThreadId);
     if (!entry || entry.instance) return;
     const PlanCtor = chatModule().Plan;
