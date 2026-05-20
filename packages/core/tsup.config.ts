@@ -75,6 +75,7 @@ export default defineConfig({
     'src/storage/domains/skills/index.ts',
     'src/storage/domains/favorites/index.ts',
     'src/storage/domains/workspaces/index.ts',
+    'src/storage/domains/harness/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
