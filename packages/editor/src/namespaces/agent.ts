@@ -38,7 +38,7 @@ import type {
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
-import { assertModelAllowed, builderToModelPolicy } from '@mastra/core/agent-builder/ee';
+
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
@@ -189,24 +189,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   async create(input: StorageCreateAgentInput): Promise<Agent> {
     let finalInput = input;
-    let policyAllowed: Parameters<typeof assertModelAllowed>[0];
-    let policyActive = false;
 
     if (this.editor.hasEnabledBuilderConfig()) {
       const builder = await this.editor.resolveBuilder();
       const agentConfig = builder?.getConfiguration()?.agent;
       finalInput = applyBuilderDefaults(input, agentConfig);
-
-      // Phase 6 enforcement: assert resolved model passes the active allowlist.
-      const policy = builderToModelPolicy(builder);
-      if (policy.active) {
-        policyActive = true;
-        policyAllowed = policy.allowed;
-      }
-    }
-
-    if (policyActive && finalInput.model !== undefined) {
-      assertModelAllowed(policyAllowed, finalInput.model as Parameters<typeof assertModelAllowed>[1]);
     }
 
     // Ensure the workspace referenced by the agent exists in stored workspaces
@@ -1416,16 +1403,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       authorId: options.authorId,
       visibility: options.visibility,
     };
-
-    // Phase 6 enforcement: a previously-valid source model may now be outside
-    // the current allowlist. Reject the clone before persisting.
-    if (this.editor.hasEnabledBuilderConfig()) {
-      const builder = await this.editor.resolveBuilder();
-      const policy = builderToModelPolicy(builder);
-      if (policy.active) {
-        assertModelAllowed(policy.allowed, model);
-      }
-    }
 
     const adapter = await this.getStorageAdapter();
     await adapter.create(createInput);
