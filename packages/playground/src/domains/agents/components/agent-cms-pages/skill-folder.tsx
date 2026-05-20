@@ -116,7 +116,7 @@ export function SkillFolder({
                 key={selectedFileId}
                 language={editorLanguage}
                 value={selectedFileContent}
-                onChange={readOnly ? undefined : val => handleFileContentChange(val ?? '')}
+                onChange={readOnly ? undefined : (val: string | undefined) => handleFileContentChange(val ?? '')}
                 showCopyButton={false}
                 autoFocus
                 className="h-full"

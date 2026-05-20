@@ -104,6 +104,7 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
 const METRIC_COLUMNS = [
   'metricId',
   'timestamp',
+  'cursorId',
   'name',
   'value',
   'traceId',
@@ -287,6 +288,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
     return `(${[
       v(m.metricId),
       v(m.timestamp),
+      "nextval('metric_events_cursor_id_seq')",
       v(m.name),
       v(m.value),
       v(m.traceId ?? null),

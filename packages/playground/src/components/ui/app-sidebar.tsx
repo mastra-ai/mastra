@@ -27,7 +27,7 @@ function toSidebarLink(item: NavItem): NavLink {
 }
 
 function getIsLinkActive(item: NavItem, pathname: string): boolean {
-  // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
+  // Exact match or sub-path match (with / boundary so sibling routes don't match by prefix)
   const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
   if (matches(item.url)) return true;
   return item.activePaths?.some(matches) ?? false;

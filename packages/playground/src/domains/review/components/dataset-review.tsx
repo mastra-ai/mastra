@@ -20,7 +20,6 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import {
   CheckCircle,
   ChevronDown,
@@ -33,7 +32,6 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ComponentPropsWithoutRef } from 'react';
 import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import type { ReviewItem } from './review-item-card';
@@ -51,23 +49,6 @@ function truncateInput(value: unknown, max: number): string {
   } catch {
     return String(value);
   }
-}
-
-const subContentClass = cn(
-  'bg-surface5 backdrop-blur-xl z-50 min-w-32 overflow-auto rounded-lg p-2 shadow-md',
-  'data-[state=open]:animate-in data-[state=closed]:animate-out',
-  'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
-  'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-);
-
-function PortalSubContent({ className, children, ...props }: ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
-  return (
-    <DropdownMenuPortal>
-      <DropdownMenuSubContent className={cn(subContentClass, className)} {...props}>
-        {children}
-      </DropdownMenuSubContent>
-    </DropdownMenuPortal>
-  );
 }
 
 export interface DatasetReviewProps {
@@ -102,14 +83,14 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
 
   // Items in local state — null means "not hydrated yet", [] means "user cleared all"
   const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
-  const items = localItems ?? reviewItems ?? [];
+  const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
 
   // Sync server data to local on initial load
   useEffect(() => {
     if (reviewItems && localItems === null) {
       setLocalItems(reviewItems);
     }
-  }, [reviewItems]);
+  }, [reviewItems, localItems]);
 
   // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
@@ -584,7 +565,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                       Status
                       {showCompleted && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
+                    <DropdownMenu.SubContent>
                       <DropdownMenu.CheckboxItem
                         checked={!showCompleted}
                         onCheckedChange={() => {
@@ -605,7 +586,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                       >
                         Completed
                       </DropdownMenu.CheckboxItem>
-                    </PortalSubContent>
+                    </DropdownMenu.SubContent>
                   </DropdownMenu.Sub>
 
                   {/* Tags */}
@@ -614,7 +595,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                       Tags
                       {activeTagFilter && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
+                    <DropdownMenu.SubContent>
                       <DropdownMenu.CheckboxItem
                         checked={!activeTagFilter}
                         onCheckedChange={() => setActiveTagFilter(null)}
@@ -644,7 +625,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                           {tag}
                         </DropdownMenu.CheckboxItem>
                       ))}
-                    </PortalSubContent>
+                    </DropdownMenu.SubContent>
                   </DropdownMenu.Sub>
 
                   {/* Clear all */}

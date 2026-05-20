@@ -1,12 +1,14 @@
 import { KeyValueList, cn } from '@mastra/playground-ui';
 import type { KeyValueListItemData } from '@mastra/playground-ui';
 import { PackageOpenIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
 import { Container } from './shared';
 
 type TemplateSuccessProps = {
   name: string;
   entities?: string[];
   installedEntities?: KeyValueListItemData[];
+  linkComponent?: ComponentType<any>;
 };
 
 export function TemplateSuccess({ name, installedEntities }: TemplateSuccessProps) {
