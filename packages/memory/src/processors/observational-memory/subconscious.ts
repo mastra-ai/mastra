@@ -877,7 +877,7 @@ export class Subconscious {
     const signalType = `om.subconscious.${handle.name}.extracted`;
     const inheritedModel =
       handle.managedAgent && shouldInheritMainAgentModel(handle.model)
-        ? (modelFromContext(context) ?? (await getMainAgentModel(context)))
+        ? ((await getMainAgentModel(context)) ?? modelFromContext(context))
         : undefined;
 
     if (inheritedModel) {

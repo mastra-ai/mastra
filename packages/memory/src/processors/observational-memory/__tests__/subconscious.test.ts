@@ -140,6 +140,31 @@ describe('Subconscious', () => {
     expect(extractor.schema.parse({ critic: { verdict: 'review' } })).toEqual({ critic: { verdict: 'review' } });
   });
 
+  it('inherits the resolved main-agent model before falling back to provider strings', async () => {
+    const inheritedModel = createModel();
+    const mainAgent = createAgent('main-agent');
+    vi.spyOn(mainAgent, 'getModel').mockResolvedValue(inheritedModel as any);
+    const subconscious = new Subconscious();
+    const handle = subconscious.get('critic');
+    const stream = vi.spyOn(handle.agent, 'stream').mockResolvedValue(streamWithParts([]));
+
+    await subconscious.run(
+      { critic: { risks: ['risk'], needsReview: true } },
+      {
+        ...createContext(subconscious.psyches(['critic'])),
+        mainAgent,
+        currentModel: { provider: 'openai.responses', modelId: 'gpt-5.5' },
+      },
+    );
+
+    expect(stream).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        model: inheritedModel,
+      }),
+    );
+  });
+
   it('onExtracted replaces default routing and receives a scoped runtime', async () => {
     const onExtracted = vi.fn();
     const agent = createAgent('critic-agent');
