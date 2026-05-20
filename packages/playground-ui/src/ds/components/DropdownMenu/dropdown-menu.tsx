@@ -84,7 +84,12 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
         sideOffset={sideOffset}
         className="z-50 outline-none"
       >
-        <MenuPrimitive.Popup ref={ref} className={cn(popupClass, className)} {...props} />
+        <MenuPrimitive.Popup
+          ref={ref}
+          data-slot="dropdown-menu-sub-content"
+          className={cn(popupClass, className)}
+          {...props}
+        />
       </MenuPrimitive.Positioner>
     </MenuPrimitive.Portal>
   ),
@@ -106,7 +111,12 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
         sideOffset={sideOffset}
         className="z-50 outline-none"
       >
-        <MenuPrimitive.Popup ref={ref} className={cn(popupClass, className)} {...props} />
+        <MenuPrimitive.Popup
+          ref={ref}
+          data-slot="dropdown-menu-content"
+          className={cn(popupClass, className)}
+          {...props}
+        />
       </MenuPrimitive.Positioner>
     </MenuPrimitive.Portal>
   ),

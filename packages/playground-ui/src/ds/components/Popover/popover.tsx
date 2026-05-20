@@ -40,6 +40,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
         >
           <PopoverPrimitive.Popup
             ref={ref}
+            data-slot="popover-content"
             className={cn(
               'z-50 w-72 rounded-xl border border-border1 bg-surface3 text-neutral5 shadow-dialog focus-visible:outline-hidden origin-[var(--transform-origin)]',
               'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',

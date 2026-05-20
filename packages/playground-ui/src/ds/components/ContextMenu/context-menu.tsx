@@ -37,7 +37,12 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
         sideOffset={sideOffset}
         className="z-50 outline-none"
       >
-        <ContextMenuPrimitive.Popup ref={ref} className={cn(popupClass, className)} {...props} />
+        <ContextMenuPrimitive.Popup
+          ref={ref}
+          data-slot="context-menu-content"
+          className={cn(popupClass, className)}
+          {...props}
+        />
       </ContextMenuPrimitive.Positioner>
     </ContextMenuPrimitive.Portal>
   ),
@@ -178,7 +183,12 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
         sideOffset={sideOffset}
         className="z-50 outline-none"
       >
-        <ContextMenuPrimitive.Popup ref={ref} className={cn(popupClass, className)} {...props} />
+        <ContextMenuPrimitive.Popup
+          ref={ref}
+          data-slot="context-menu-sub-content"
+          className={cn(popupClass, className)}
+          {...props}
+        />
       </ContextMenuPrimitive.Positioner>
     </ContextMenuPrimitive.Portal>
   ),
