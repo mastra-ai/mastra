@@ -821,7 +821,16 @@ export class Agent extends BaseResource {
     let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
 
     // keep track of partial tool calls
-    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+    const partialToolCalls: Record<
+      string,
+      {
+        text: string;
+        step: number;
+        index: number;
+        toolName: string;
+        observability?: ClientToolObservabilityContext;
+      }
+    > = {};
 
     let usage: any = {
       completionTokens: NaN,
@@ -952,14 +961,17 @@ export class Agent extends BaseResource {
           step,
           toolName: value.toolName,
           index: message.toolInvocations.length,
+          observability: getClientToolObservabilityContext(value),
         };
 
+        const observability = getClientToolObservabilityContext(value);
         const invocation = {
           state: 'partial-call',
           step,
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: undefined,
+          ...(observability ? { observability } : {}),
         } as const;
 
         message.toolInvocations.push(invocation);
@@ -981,6 +993,7 @@ export class Agent extends BaseResource {
           toolCallId: value.toolCallId,
           toolName: partialToolCall!.toolName,
           args: partialArgs,
+          ...(partialToolCall!.observability ? { observability: partialToolCall!.observability } : {}),
         } as const;
 
         message.toolInvocations![partialToolCall!.index] = invocation;
@@ -1212,7 +1225,16 @@ export class Agent extends BaseResource {
     let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
 
     // keep track of partial tool calls
-    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+    const partialToolCalls: Record<
+      string,
+      {
+        text: string;
+        step: number;
+        index: number;
+        toolName: string;
+        observability?: ClientToolObservabilityContext;
+      }
+    > = {};
 
     let usage: any = {
       completionTokens: NaN,
@@ -1397,14 +1419,17 @@ export class Agent extends BaseResource {
               step,
               toolName: chunk.payload.toolName,
               index: message.toolInvocations.length,
+              observability: getClientToolObservabilityContext(chunk),
             };
 
+            const observability = getClientToolObservabilityContext(chunk);
             const invocation = {
               state: 'partial-call',
               step,
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: chunk.payload.args,
+              ...(observability ? { observability } : {}),
             } as const;
 
             message.toolInvocations.push(invocation as ToolInvocation);
@@ -1428,6 +1453,7 @@ export class Agent extends BaseResource {
               toolCallId: chunk.payload.toolCallId,
               toolName: partialToolCall!.toolName,
               args: partialArgs,
+              ...(partialToolCall!.observability ? { observability: partialToolCall!.observability } : {}),
             } as const;
 
             message.toolInvocations![partialToolCall!.index] = invocation as ToolInvocation;

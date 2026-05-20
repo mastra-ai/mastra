@@ -142,6 +142,67 @@ describe('Agent vNext', () => {
     expect(recursiveMessagesJson).toContain(traceparent);
   });
 
+  it('stream: preserves client observability from streaming tool input without a final tool-call chunk', async () => {
+    const toolCallId = 'call_1';
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call-input-streaming-start',
+        payload: {
+          toolCallId,
+          toolName: 'weatherTool',
+          providerExecuted: false,
+          observability: { traceparent },
+        },
+      },
+      {
+        type: 'tool-call-delta',
+        payload: {
+          toolCallId,
+          toolName: 'weatherTool',
+          argsTextDelta: '{"location":"NYC"}',
+        },
+      },
+      { type: 'tool-call-input-streaming-end', payload: { toolCallId } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async (_args, { observe }) => {
+      observe.log('info', 'client weather executed', { location: 'NYC' });
+      return observe.span('read client weather', () => ({ ok: true }), { location: 'NYC' });
+    });
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const recursiveMessagesJson = JSON.stringify(secondCallBody.messages);
+    expect(recursiveMessagesJson).toContain('__mastraObservability');
+    expect(recursiveMessagesJson).toContain(traceparent);
+  });
+
   it('resumeStream: omits local seed messages from initial request and preserves them for stateless client-tool recursion', async () => {
     const toolCallId = 'call_1';
     const seedMessages = [{ role: 'user', content: 'Original prompt before suspension' }];

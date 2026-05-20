@@ -489,6 +489,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         dynamic: !!chunk.payload.dynamic,
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
+        ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
       };
     case 'tool-call-input-streaming-end':
       return {

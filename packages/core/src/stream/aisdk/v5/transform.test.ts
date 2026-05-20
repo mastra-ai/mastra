@@ -80,6 +80,29 @@ describe('convertFullStreamChunkToMastra', () => {
       expect((result as { observability?: unknown } | undefined)?.observability).toEqual(observability);
     });
 
+    it('should preserve observability when converting Mastra streaming tool-call starts to AI SDK chunks', () => {
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+
+      const result = convertMastraChunkToAISDKv5({
+        chunk: {
+          type: 'tool-call-input-streaming-start',
+          runId: 'test-run-123',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'get_weather',
+            providerExecuted: false,
+            observability,
+          },
+        },
+      });
+
+      expect(result?.type).toBe('tool-input-start');
+      expect((result as { observability?: unknown } | undefined)?.observability).toEqual(observability);
+    });
+
     it('should gracefully handle unterminated JSON string in input - simulating streaming race condition', () => {
       // This simulates when a tool-call chunk arrives with partial JSON
       // BUG: Currently this throws "Unterminated string in JSON" error
