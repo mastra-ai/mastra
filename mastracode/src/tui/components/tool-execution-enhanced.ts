@@ -509,8 +509,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private tokenizeQuietShellCommand(command: string): Array<{ text: string; color: (value: string) => string }> {
-    const tokens =
-      command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;&()<>]|[^\s|;&()<>]+/g) ?? [''];
+    const tokens = command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;&()<>]|[^\s|;&()<>]+/g) ?? [''];
 
     return tokens.map(token => {
       if (/^\s+$/.test(token)) return { text: token, color: (value: string) => value };
