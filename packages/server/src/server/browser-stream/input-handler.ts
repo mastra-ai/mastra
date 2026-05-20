@@ -1,5 +1,5 @@
 import type { MastraBrowser } from '@mastra/core/browser';
-import type { ClientInputMessage, MouseInputMessage, KeyboardInputMessage } from './types.js';
+import type { BrowserStreamConfig, ClientInputMessage, MouseInputMessage, KeyboardInputMessage } from './types.js';
 
 // Valid CDP mouse event types
 const VALID_MOUSE_EVENTS = new Set(['mousePressed', 'mouseReleased', 'mouseMoved', 'mouseWheel']);
@@ -100,12 +100,12 @@ function getVirtualKeyCode(key: string | undefined): number | undefined {
  * @param agentId - The agent ID this WebSocket connection is for
  * @param threadId - The thread ID for thread-scoped operations (optional)
  */
-export function handleInputMessage(
+export async function handleInputMessage(
   data: string,
-  getToolset: (agentId: string) => MastraBrowser | undefined,
+  getToolset: BrowserStreamConfig['getToolset'],
   agentId: string,
   threadId?: string,
-): void {
+): Promise<void> {
   let message: unknown;
   try {
     message = JSON.parse(data);
@@ -117,7 +117,7 @@ export function handleInputMessage(
     return;
   }
 
-  const toolset = getToolset(agentId);
+  const toolset = await getToolset(agentId);
   if (!toolset) {
     return;
   }

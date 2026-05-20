@@ -31,6 +31,10 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+function getCurrentModeColor(state: TUIState): string | undefined {
+  return state.harness.getCurrentMode?.()?.color;
+}
+
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
@@ -587,7 +591,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: state.quietMode, forked: subArgs?.forked },
+              { collapseOnComplete: false, expandOnComplete: state.quietMode, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -598,7 +602,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             }
             // Mark as finished with result
             subComponent.finish(isErr ?? false, durationMs, resultText);
-            state.chatContainer.addChild(subComponent);
+            insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
           }
@@ -711,6 +715,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           if (!replacedWithInline) {
             if (state.quietMode) {
+              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
               toolComponent.setQuietModeDisplay('quiet');
               toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
             }

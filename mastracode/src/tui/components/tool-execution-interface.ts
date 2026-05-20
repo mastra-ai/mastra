@@ -24,6 +24,7 @@ export interface IToolExecutionComponent {
   setExpanded(expanded: boolean): void;
   setQuietModeDisplay?(mode: QuietToolDisplayMode): void;
   setQuietPreviewLineLimit?(limit: number): void;
+  setCompactToolModeColor?(color: string | undefined): void;
   getChatSpacingKind?(): ChatSpacingKind | undefined;
   getCompactToolGroupKey?(): string | undefined;
   getCompactToolGroupSummary?(): string | undefined;
