@@ -14,6 +14,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
@@ -84,10 +85,16 @@ function _createToolCallModel(toolName: string, args: Record<string, unknown>) {
   });
 }
 
-function _createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
+function createToolCallThenTextModel(
+  toolName: string,
+  args: Record<string, unknown>,
+  finalText: string,
+  prompts: unknown[] = [],
+) {
   let callCount = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async (options: any) => {
+      prompts.push(options.prompt);
       callCount++;
       if (callCount === 1) {
         // First call: return tool call
@@ -130,6 +137,14 @@ function _createToolCallThenTextModel(toolName: string, args: Record<string, unk
       }
     },
   });
+}
+
+async function collectStreamChunks(stream: ReadableStream<any>) {
+  const chunks: any[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return chunks;
 }
 
 // ============================================================================
@@ -392,6 +407,62 @@ describe('DurableAgent streaming execution', () => {
       expect(chunks.length).toBeGreaterThan(0);
 
       cleanup();
+    });
+
+    it('should continue durable and evented streams after a tool-call step when maxSteps allows it', async () => {
+      const finalText = 'tool returned hello';
+      const echoTool = createTool({
+        id: 'echo',
+        description: 'Echo the input',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        execute: async ({ text }) => ({ echoed: text }),
+      });
+
+      const createTestCase = (name: string, agentId: string) => {
+        const prompts: unknown[] = [];
+        const agent = new Agent({
+          id: agentId,
+          name: agentId,
+          instructions: 'Call echo, then describe what came back.',
+          model: createToolCallThenTextModel('echo', { text: 'hello' }, finalText, prompts) as LanguageModelV2,
+          tools: { echo: echoTool },
+        });
+
+        return {
+          name,
+          prompts,
+          agent: name === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub }),
+        };
+      };
+
+      const cases = [
+        createTestCase('durable', 'durable-multi-step-agent'),
+        createTestCase('evented', 'evented-multi-step-agent'),
+      ];
+
+      for (const testCase of cases) {
+        const { output, cleanup } = await testCase.agent.stream('Run echo with hello.', { maxSteps: 4 });
+        const chunks = await collectStreamChunks(output.fullStream);
+
+        const chunkTypes = chunks.map(chunk => chunk.type);
+        const finishChunk = chunks.findLast(chunk => chunk.type === 'finish');
+        const secondPrompt = JSON.stringify(testCase.prompts[1]);
+
+        expect(testCase.prompts, testCase.name).toHaveLength(2);
+        expect(secondPrompt, testCase.name).toContain('"echoed":"hello"');
+        expect(chunkTypes, testCase.name).toContain('tool-call');
+        expect(chunkTypes, testCase.name).toContain('tool-result');
+        expect(chunkTypes, testCase.name).toContain('text-delta');
+        expect(
+          chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === finalText),
+          testCase.name,
+        ).toBe(true);
+        expect(finishChunk?.payload?.stepResult?.reason, testCase.name).toBe('stop');
+        expect(finishChunk?.payload?.output?.text, testCase.name).toBe(finalText);
+
+        cleanup();
+      }
     });
 
     it('should stream multiple text chunks', async () => {
