@@ -8,8 +8,13 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from './chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
+import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
@@ -26,9 +31,27 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+function getCurrentModeColor(state: TUIState): string | undefined {
+  return state.harness.getCurrentMode?.()?.color;
+}
+
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
+
+class TaskHistoryComponent extends Container {
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'task';
+  }
+}
+
+function insertTaskHistoryComponent(state: TUIState, component: Component, insertIndex: number): void {
+  insertChatComponentWithBoundarySpacing(
+    state.chatContainer,
+    component,
+    insertIndex >= 0 ? insertIndex : state.chatContainer.children.length,
+  );
+}
 
 /**
  * Render a completed task list inline in the chat history.
@@ -42,7 +65,7 @@ export function renderCompletedTasksInline(
   const headerText =
     theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   container.addChild(new Text(headerText, BOX_INDENT, 0));
   const MAX_VISIBLE = 4;
   const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
@@ -65,19 +88,14 @@ export function renderCompletedTasksInline(
   }
   container.addChild(new Spacer(1));
 
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 /**
  * Render inline display when tasks are cleared.
  */
 export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
   container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
@@ -87,12 +105,7 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   container.addChild(new Spacer(1));
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 function renderTaskTransitionFromHistory(
@@ -154,13 +167,12 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
     const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
     const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-      state.chatContainer.invalidate();
+      insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
       return;
     }
   }
 
-  state.chatContainer.addChild(child);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, child);
 }
 
 export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
@@ -169,8 +181,7 @@ export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Compone
     if (anchor) {
       const idx = state.chatContainer.children.indexOf(anchor as never);
       if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
         return;
       }
     }
@@ -191,11 +202,13 @@ export function addPendingUserMessage(
   const existing = state.pendingSignalMessageComponentsById.get(messageId);
   if (existing) {
     state.chatContainer.removeChild(existing.component as never);
+    reconcileChatBoundarySpacers(state.chatContainer);
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
   state.pendingSignalMessageComponentsById.set(messageId, { component, text });
   state.chatContainer.addChild(component);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -215,11 +228,11 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const confirmed = new UserMessageComponent(text);
+  const confirmed = new UserMessageComponent(text, getMarkdownTheme());
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
-    state.chatContainer.invalidate();
+    reconcileChatBoundarySpacers(state.chatContainer);
   } else {
     addChildBeforeFollowUps(state, confirmed);
   }
@@ -249,11 +262,11 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
-    const confirmed = new UserMessageComponent(text);
+    const confirmed = new UserMessageComponent(text, getMarkdownTheme());
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
-      state.chatContainer.invalidate();
+      reconcileChatBoundarySpacers(state.chatContainer);
     } else {
       addChildBeforeFollowUps(state, confirmed);
     }
@@ -295,7 +308,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
       if (idx >= 0) {
         (state.chatContainer.children as unknown[]).splice(idx, 0, reminderComponent);
-        state.chatContainer.invalidate();
+        reconcileChatBoundarySpacers(state.chatContainer);
         state.ui.requestRender();
         return;
       }
@@ -392,13 +405,14 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText);
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme());
 
     state.messageComponentsById.set(message.id, userComponent);
 
     if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
+      reconcileChatBoundarySpacers(state.chatContainer);
       return;
     }
 
@@ -577,7 +591,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: state.quietMode, forked: subArgs?.forked },
+              { collapseOnComplete: false, expandOnComplete: state.quietMode, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -588,7 +602,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             }
             // Mark as finished with result
             subComponent.finish(isErr ?? false, durationMs, resultText);
-            state.chatContainer.addChild(subComponent);
+            insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
           }
@@ -700,8 +714,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (!replacedWithInline) {
+            if (state.quietMode) {
+              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
+              toolComponent.setQuietModeDisplay('quiet');
+              toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+            }
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
+          } else {
           }
         } else if (
           content.type === 'om_observation_start' ||
@@ -745,6 +765,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
         } else if (content.type === 'om_thread_title_updated') {
+          if (state.quietMode) continue;
           // Render thread title update marker in history
           state.chatContainer.addChild(
             new OMMarkerComponent({
@@ -794,6 +815,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
   }
 
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 

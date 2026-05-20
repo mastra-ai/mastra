@@ -205,15 +205,17 @@ export async function createHonoServer(
       // First try the runtime registry (code-defined + previously hydrated agents),
       // then fall back to the editor for stored agents (hydrates on first access).
       try {
-        const agent = mastra.getAgentById(agentId);
-        return agent?.browser;
+        const runtimeAgent = mastra.getAgentById(agentId);
+        if (runtimeAgent) {
+          return runtimeAgent.browser;
+        }
       } catch {
         // Agent not in runtime registry — try stored agents via editor
       }
 
       try {
-        const agent = await mastra.getEditor?.()?.agent.getById(agentId);
-        return agent?.browser;
+        const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
+        return storedAgent?.browser;
       } catch {
         return undefined;
       }

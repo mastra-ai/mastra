@@ -277,6 +277,11 @@ export class ViewerRegistry implements ViewerRegistryLike {
     threadId?: string,
   ): Promise<void> {
     const toolset = await getToolset(agentId);
+    // Viewer may have disconnected while awaiting async toolset lookup.
+    // Bail out so we don't register callbacks or start a screencast for a stale viewer.
+    if (!this.viewers.has(viewerKey)) {
+      return;
+    }
     if (!toolset) {
       // No browser available for this agent - just keep connection open.
       // The screencast will start when the agent hydrates and the browser launches

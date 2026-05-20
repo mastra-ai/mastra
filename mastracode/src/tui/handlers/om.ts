@@ -43,6 +43,15 @@ function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Com
   return insertIndex > 0 && ctx.state.chatContainer.children[insertIndex - 1] === child;
 }
 
+function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {
+  if (!child) return;
+  const idx = ctx.state.chatContainer.children.indexOf(child);
+  if (idx >= 0) {
+    ctx.state.chatContainer.children.splice(idx, 1);
+    ctx.state.chatContainer.invalidate();
+  }
+}
+
 export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: string, tokensToObserve: number): void {
   const { state } = ctx;
   // Show in-progress marker in chat
@@ -168,6 +177,12 @@ export function handleOMBufferingStart(
   state.activeActivationData = undefined;
   state.activeActivationTTLMarker = undefined;
   state.activeActivationProviderChangeMarker = undefined;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   state.activeBufferingMarker = new OMMarkerComponent({
     type: 'om_buffering_start',
     operationType,
@@ -185,6 +200,12 @@ export function handleOMBufferingEnd(
   observations?: string,
 ): void {
   const { state } = ctx;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   if (state.activeBufferingMarker) {
     state.activeBufferingMarker.update({
       type: 'om_buffering_end',
@@ -204,6 +225,12 @@ export function handleOMBufferingFailed(
   error: string,
 ): void {
   const { state } = ctx;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   if (state.activeBufferingMarker) {
     state.activeBufferingMarker.update({
       type: 'om_buffering_failed',
@@ -293,6 +320,7 @@ export function handleOMActivation(
 }
 
 export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {
+  if (ctx.state.quietMode) return;
   const marker = new OMMarkerComponent({
     type: 'om_thread_title_updated',
     newTitle,

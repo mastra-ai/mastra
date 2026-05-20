@@ -73,6 +73,7 @@ import {
   getResourceIdOverride,
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
+import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
@@ -135,6 +136,8 @@ export interface MastraCodeConfig {
   browser?: HarnessConfig['browser'];
   /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
   pubsub?: PubSub;
+  /** Use Mastra Code's built-in Unix socket PubSub for local cross-process signal routing. */
+  unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
 }
@@ -232,8 +235,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceIdOverride = true;
   }
 
-  const signalsPubSub = config?.pubsub;
-  const crossProcessPubSub = config?.crossProcessPubSub ?? false;
+  const configuredPubSub = config?.pubsub;
+  const useUnixSocketPubSub =
+    (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
+  const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
+  const crossProcessPubSub = config?.crossProcessPubSub ?? (!configuredPubSub && useUnixSocketPubSub);
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
@@ -675,11 +681,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     harness,
     mcpManager,
     hookManager,
+    signalsPubSub,
     authStorage,
     resolveModel,
     storageWarning,
     observabilityWarning,
-    signalsPubSub,
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,

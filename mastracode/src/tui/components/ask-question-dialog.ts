@@ -19,6 +19,8 @@ export interface AskQuestionDialogOptions {
   multiline?: boolean;
   allowEmptyInput?: boolean;
   defaultValue?: string;
+  allowCustomResponse?: boolean;
+  selectedOptionLabel?: string;
   tui?: TUI;
   onSubmit: (answer: string) => void;
   onCancel: () => void;
@@ -33,6 +35,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private multiline = false;
   private allowEmptyInput = false;
   private defaultValue?: string;
+  private allowCustomResponse = true;
+  private selectedOptionLabel?: string;
   private onSubmit: (answer: string) => void;
   private onCancel: () => void;
 
@@ -57,6 +61,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.multiline = Boolean(options.multiline);
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
     this.defaultValue = options.defaultValue;
+    this.allowCustomResponse = options.allowCustomResponse ?? true;
+    this.selectedOptionLabel = options.selectedOptionLabel;
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
@@ -81,13 +87,16 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
     }));
 
-    // Append a "Custom response..." option so the user can type a free-text answer
-    items.push({
-      value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
-      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
-    });
+    if (this.allowCustomResponse) {
+      items.push({
+        value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
+        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+      });
+    }
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    const selectedIndex = items.findIndex(item => item.value === this.selectedOptionLabel);
+    if (selectedIndex >= 0) this.selectList.setSelectedIndex(selectedIndex);
 
     this.selectList.onSelect = (item: SelectItem) => {
       if (item.value === AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE) {
