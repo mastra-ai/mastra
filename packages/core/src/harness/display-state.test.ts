@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 import type { HarnessEvent, HarnessSubagent, HarnessSubagentHistoryEntry } from './types';
 import { createEmptyTokenUsage, defaultDisplayState } from './types';
 
@@ -14,7 +14,7 @@ function createHarness(storage?: InMemoryStore, opts?: { subagents?: HarnessSuba
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage: storage ?? new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -23,7 +23,7 @@ function createHarness(storage?: InMemoryStore, opts?: { subagents?: HarnessSuba
 }
 
 // Helper to call the private emit method
-function emit(harness: Harness, event: HarnessEvent) {
+function emit(harness: HarnessLegacy, event: HarnessEvent) {
   (harness as any).emit(event);
 }
 
@@ -62,7 +62,7 @@ describe('defaultDisplayState', () => {
 });
 
 describe('Harness.getDisplayState()', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -95,7 +95,7 @@ describe('Harness.getDisplayState()', () => {
 // ===========================================================================
 
 describe('agent lifecycle', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -193,7 +193,7 @@ describe('agent lifecycle', () => {
 // ===========================================================================
 
 describe('message streaming', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
   const msg1 = {
     id: 'm1',
     role: 'assistant' as const,
@@ -234,7 +234,7 @@ describe('message streaming', () => {
 // ===========================================================================
 
 describe('tool lifecycle', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -598,7 +598,7 @@ describe('tool lifecycle', () => {
 // ===========================================================================
 
 describe('modifiedFiles tracking', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -673,7 +673,7 @@ describe('modifiedFiles tracking', () => {
 // ===========================================================================
 
 describe('interactive prompts', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -723,7 +723,7 @@ describe('interactive prompts', () => {
 // ===========================================================================
 
 describe('subagent lifecycle', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -893,7 +893,7 @@ describe('subagent lifecycle', () => {
 // ===========================================================================
 
 describe('usage_update', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -963,7 +963,7 @@ describe('usage_update', () => {
 // ===========================================================================
 
 describe('task_updated', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -1010,7 +1010,7 @@ describe('task_updated', () => {
 // ===========================================================================
 
 describe('OM event transitions', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -1294,7 +1294,7 @@ describe('OM event transitions', () => {
 // ===========================================================================
 
 describe('state_changed threshold syncing', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -1345,7 +1345,7 @@ describe('state_changed threshold syncing', () => {
 // ===========================================================================
 
 describe('resetThreadDisplayState', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();
@@ -1424,7 +1424,7 @@ describe('resetThreadDisplayState', () => {
 // ===========================================================================
 
 describe('display_state_changed emission', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
   let events: HarnessEvent[];
 
   beforeEach(() => {
@@ -1506,7 +1506,7 @@ describe('display_state_changed emission', () => {
 });
 
 describe('Harness.subscribeDisplayState()', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1777,7 +1777,7 @@ describe('Harness.subscribeDisplayState()', () => {
 // ===========================================================================
 
 describe('full lifecycle integration', () => {
-  let harness: Harness;
+  let harness: HarnessLegacy;
 
   beforeEach(() => {
     harness = createHarness();

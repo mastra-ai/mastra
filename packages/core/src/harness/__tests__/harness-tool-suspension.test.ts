@@ -15,7 +15,7 @@ import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 
-import { Harness } from '../harness';
+import { HarnessLegacy } from '../harness';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -111,7 +111,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     const registeredAgent = mastra.getAgent('test-agent');
 
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test-harness',
       storage,
       modes: [
@@ -186,7 +186,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     const registeredAgent = mastra.getAgent('test-agent-ds');
 
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test-harness-ds',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -247,7 +247,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     const registeredAgent = mastra.getAgent('test-agent-resume');
 
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test-harness-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -328,7 +328,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     const resumeStreamSpy = vi.spyOn(registeredAgent, 'resumeStream');
 
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test-harness-yolo-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],

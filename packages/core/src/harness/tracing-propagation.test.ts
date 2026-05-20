@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { TracingContext, TracingOptions } from '../observability';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 function createAgent() {
   return new Agent({
@@ -36,13 +36,13 @@ function createMockStreamResponse() {
 
 describe('Harness tracing propagation', () => {
   let agent: Agent;
-  let harness: Harness;
+  let harness: HarnessLegacy;
   let streamSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     agentThreadStreamRuntime.resetForTests();
     agent = createAgent();
-    harness = new Harness({
+    harness = new HarnessLegacy({
       id: 'test-harness',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent }],

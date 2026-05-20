@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 function createHarness(resourceId: string) {
   const agent = new Agent({
@@ -10,7 +10,7 @@ function createHarness(resourceId: string) {
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  return new HarnessLegacy({
     id: 'test-harness',
     storage: new InMemoryStore(),
     resourceId,
@@ -19,7 +19,7 @@ function createHarness(resourceId: string) {
 }
 
 async function writeThreadDirect(
-  harness: Harness,
+  harness: HarnessLegacy,
   thread: {
     id: string;
     resourceId: string;

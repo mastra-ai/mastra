@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { getDummyResponseModel } from '../agent/__tests__/mock-model';
 import { signalToMastraDBMessage } from '../agent/signals';
 import { InMemoryStore } from '../storage/mock';
-import { Harness } from './harness';
+import { HarnessLegacy } from './harness';
 
 describe('Harness signal history rendering', () => {
   async function createHarnessWithThread() {
@@ -14,7 +14,7 @@ describe('Harness signal history rendering', () => {
       instructions: 'test',
       model: getDummyResponseModel('v2'),
     });
-    const harness = new Harness({
+    const harness = new HarnessLegacy({
       id: 'test-harness',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
