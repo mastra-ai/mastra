@@ -7,7 +7,10 @@ import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
 export type {
   MastraAuthConfig,
+  A2AAgentCardSigningConfig,
+  A2AConfig,
   ContextWithMastra,
+  CorsOptions,
   ApiRoute,
   HttpLoggingConfig,
   ValidationErrorContext,
@@ -59,9 +62,21 @@ type RegisterApiRouteOptions<P extends string> = {
   >;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
   /**
+   * Route-specific CORS configuration.
+   */
+  cors?: ApiRoute['cors'];
+  /**
    * When false, skips Mastra auth for this route (defaults to true)
    */
   requiresAuth?: boolean;
+  /**
+   * Explicit RBAC permission for the route.
+   */
+  requiresPermission?: ApiRoute['requiresPermission'];
+  /**
+   * Optional FGA configuration for resource-level authorization.
+   */
+  fga?: ApiRoute['fga'];
 };
 
 function validateOptions<P extends string>(
@@ -120,7 +135,10 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
+    cors: options.cors,
     requiresAuth: options.requiresAuth,
+    requiresPermission: options.requiresPermission,
+    fga: options.fga,
   } as unknown as ValidatePath<P, ApiRoute>;
 }
 

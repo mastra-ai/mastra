@@ -1,5 +1,5 @@
 import { DuckDBInstance } from '@duckdb/node-api';
-import type { DuckDBValue } from '@duckdb/node-api';
+
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
@@ -15,8 +15,9 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { buildFilterClause } from './filter-builder.js';
-import type { DuckDBVectorConfig, DuckDBVectorFilter } from './types.js';
+import { bindParam } from '../storage/db/index';
+import { buildFilterClause } from './filter-builder';
+import type { DuckDBVectorConfig, DuckDBVectorFilter } from './types';
 
 /**
  * DuckDB vector store implementation for Mastra.
@@ -119,8 +120,9 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
 
       const stmt = await connection.prepare(preparedSql);
-      // Bind parameters as array - DuckDB Node API bind() accepts array
-      stmt.bind(params as DuckDBValue[]);
+      for (let i = 0; i < params.length; i++) {
+        bindParam(stmt, i + 1, params[i]);
+      }
       const result = await stmt.run();
       const rows = await result.getRows();
 
@@ -152,8 +154,9 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
         const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
 
         const stmt = await connection.prepare(preparedSql);
-        // Bind parameters as array - DuckDB Node API bind() accepts array
-        stmt.bind(params as DuckDBValue[]);
+        for (let i = 0; i < params.length; i++) {
+          bindParam(stmt, i + 1, params[i]);
+        }
         await stmt.run();
       }
     } finally {
@@ -188,6 +191,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     }
   }
 
+  /** Perform a vector similarity search with optional metadata filtering. */
   async query(params: QueryVectorParams<DuckDBVectorFilter>): Promise<QueryResult[]> {
     await this.initialize();
 
@@ -270,6 +274,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     });
   }
 
+  /** Insert or replace vectors with metadata. Returns the vector IDs. */
   async upsert(params: UpsertVectorParams): Promise<string[]> {
     await this.initialize();
 
@@ -304,6 +309,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     return vectorIds;
   }
 
+  /** Create a vector table with HNSW index for similarity search. */
   async createIndex(params: CreateIndexParams): Promise<void> {
     await this.initialize();
 
@@ -343,6 +349,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     }
   }
 
+  /** List all vector table names in the database. */
   async listIndexes(): Promise<string[]> {
     await this.initialize();
 
@@ -358,6 +365,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     return rows.map(row => row[0] as string);
   }
 
+  /** Return dimension, row count, and metric for a vector index. */
   async describeIndex(params: DescribeIndexParams): Promise<IndexStats> {
     await this.initialize();
 
@@ -396,6 +404,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     };
   }
 
+  /** Drop a vector table and its HNSW index. */
   async deleteIndex(params: DeleteIndexParams): Promise<void> {
     await this.initialize();
 
@@ -406,6 +415,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     await connection.run(`DROP TABLE IF EXISTS ${tableName}`);
   }
 
+  /** Update a vector's embedding and/or metadata by ID or filter. */
   async updateVector(params: UpdateVectorParams<DuckDBVectorFilter>): Promise<void> {
     await this.initialize();
 
@@ -456,6 +466,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     }
   }
 
+  /** Delete a single vector by ID. */
   async deleteVector(params: DeleteVectorParams): Promise<void> {
     await this.initialize();
 
@@ -467,6 +478,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     await this.runStatement(sql, [id]);
   }
 
+  /** Delete multiple vectors by IDs or metadata filter (mutually exclusive). */
   async deleteVectors(params: DeleteVectorsParams<DuckDBVectorFilter>): Promise<void> {
     await this.initialize();
 

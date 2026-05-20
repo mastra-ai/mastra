@@ -1,10 +1,25 @@
 import type { Mastra } from '@mastra/core';
+import type { RequestContext } from '@mastra/core/di';
 import type { SystemMessage } from '@mastra/core/llm';
-import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
+
 import { stringify } from 'superjson';
-import type { ZodType } from 'zod';
-import type { z as zv4 } from 'zod/v4';
+import { MASTRA_RESOURCE_ID_KEY } from './constants';
+import { HTTPException } from './http-exception';
+
+/**
+ * Convert any PublicSchema to a JSON Schema.
+ * Uses toStandardSchema to handle all schema types (Zod v4, AI SDK Schema, JSON Schema).
+ */
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) return undefined;
+
+  // Convert any PublicSchema to StandardSchemaWithJSON, then extract JSON Schema
+  const standardSchema = toStandardSchema(schema);
+  return standardSchemaToJSONSchema(standardSchema);
+}
 
 /**
  * Normalizes a route path to ensure consistent formatting.
@@ -36,17 +51,80 @@ export function normalizeRoutePath(path: string): string {
   return normalized;
 }
 
+const DEFAULT_STORED_RESOURCE_SCOPE_METADATA_KEY = 'mastra.resourceId';
+
+export type StoredResourceScope = {
+  metadataKey: string;
+  value: string;
+};
+
+export type StoredResourceLike = {
+  metadata?: Record<string, unknown> | null;
+};
+
+export async function getStoredResourceScope(
+  mastra: Pick<Mastra, 'getServer'>,
+  requestContext: RequestContext | undefined,
+): Promise<StoredResourceScope | undefined> {
+  const scopeConfig = mastra?.getServer?.()?.storedResources?.scope;
+  if (!scopeConfig) {
+    return undefined;
+  }
+
+  const options = scopeConfig === true ? {} : scopeConfig;
+  const metadataKey = options.metadataKey ?? DEFAULT_STORED_RESOURCE_SCOPE_METADATA_KEY;
+  const user = requestContext?.get('user');
+  const resolved = options.resolve
+    ? await options.resolve({ requestContext, user })
+    : (requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
+
+  if (!resolved) {
+    if (options.requireScope === false) {
+      return undefined;
+    }
+    throw new HTTPException(403, { message: 'Stored resource scope is required' });
+  }
+
+  return { metadataKey, value: resolved };
+}
+
+export function scopeStoredResourceMetadata(
+  metadata: Record<string, unknown> | undefined,
+  scope: StoredResourceScope | undefined,
+): Record<string, unknown> | undefined {
+  if (!scope) {
+    return metadata;
+  }
+
+  return {
+    ...(metadata ?? {}),
+    [scope.metadataKey]: scope.value,
+  };
+}
+
+export function assertStoredResourceScope(
+  resource: StoredResourceLike | null | undefined,
+  scope: StoredResourceScope | undefined,
+): void {
+  if (!resource || !scope) {
+    return;
+  }
+
+  if (resource.metadata?.[scope.metadataKey] !== scope.value) {
+    throw new HTTPException(404, { message: 'Stored resource not found' });
+  }
+}
+
 /**
  * Check if a schema looks like a processor step schema.
  * Processor step schemas are discriminated unions on 'phase' with specific values.
  */
-function looksLikeProcessorStepSchema(
-  schema: ZodType | zv4.ZodType<any, any> | { parse(data: unknown): unknown } | undefined,
-): boolean {
+function looksLikeProcessorStepSchema(schema: PublicSchema<unknown> | undefined): boolean {
   if (!schema) return false;
 
   try {
-    const jsonSchema = zodToJsonSchema(schema) as Record<string, unknown>;
+    const jsonSchema = standardSchemaToJSONSchema(toStandardSchema(schema)) as Record<string, unknown> | undefined;
+    if (!jsonSchema) return false;
 
     // Check for discriminated union pattern: anyOf/oneOf with phase discriminator
     const variants = (jsonSchema.anyOf || jsonSchema.oneOf) as Array<Record<string, unknown>> | undefined;
@@ -81,11 +159,11 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
     acc[fullKey] = {
       id: step.id,
       description: step.description,
-      inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-      outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-      resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-      suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-      stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
+      inputSchema: step.inputSchema ? stringify(schemaToJsonSchema(step.inputSchema)) : undefined,
+      outputSchema: step.outputSchema ? stringify(schemaToJsonSchema(step.outputSchema)) : undefined,
+      resumeSchema: step.resumeSchema ? stringify(schemaToJsonSchema(step.resumeSchema)) : undefined,
+      suspendSchema: step.suspendSchema ? stringify(schemaToJsonSchema(step.suspendSchema)) : undefined,
+      stateSchema: step.stateSchema ? stringify(schemaToJsonSchema(step.stateSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
       component: step.component,
       metadata: step.metadata,
@@ -124,13 +202,13 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
       acc[key] = {
         id: step.id,
         description: step.description,
-        inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-        outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-        resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-        suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-        stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
+        inputSchema: step.inputSchema ? stringify(schemaToJsonSchema(step.inputSchema)) : undefined,
+        outputSchema: step.outputSchema ? stringify(schemaToJsonSchema(step.outputSchema)) : undefined,
+        resumeSchema: step.resumeSchema ? stringify(schemaToJsonSchema(step.resumeSchema)) : undefined,
+        suspendSchema: step.suspendSchema ? stringify(schemaToJsonSchema(step.suspendSchema)) : undefined,
+        stateSchema: step.stateSchema ? stringify(schemaToJsonSchema(step.stateSchema)) : undefined,
         requestContextSchema: step.requestContextSchema
-          ? stringify(zodToJsonSchema(step.requestContextSchema))
+          ? stringify(schemaToJsonSchema(step.requestContextSchema))
           : undefined,
         component: step.component,
         metadata: step.metadata,
@@ -139,11 +217,11 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     }, {}),
     allSteps: getSteps(workflow.steps) || {},
     stepGraph: workflow.serializedStepGraph,
-    inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-    outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-    stateSchema: workflow.stateSchema ? stringify(zodToJsonSchema(workflow.stateSchema)) : undefined,
+    inputSchema: workflow.inputSchema ? stringify(schemaToJsonSchema(workflow.inputSchema)) : undefined,
+    outputSchema: workflow.outputSchema ? stringify(schemaToJsonSchema(workflow.outputSchema)) : undefined,
+    stateSchema: workflow.stateSchema ? stringify(schemaToJsonSchema(workflow.stateSchema)) : undefined,
     requestContextSchema: workflow.requestContextSchema
-      ? stringify(zodToJsonSchema(workflow.requestContextSchema))
+      ? stringify(schemaToJsonSchema(workflow.requestContextSchema))
       : undefined,
     options: workflow.options,
     isProcessorWorkflow: workflow.type === 'processor' || looksLikeProcessorStepSchema(workflow.inputSchema),

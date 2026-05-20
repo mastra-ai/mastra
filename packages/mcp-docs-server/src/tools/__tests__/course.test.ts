@@ -104,7 +104,11 @@ describe('Course Tools', () => {
 
       test('should handle invalid email', async () => {
         const result = await callTool(tools.mastra_startMastraCourse, { email: 'invalid_email' });
-        expect(result.toLowerCase()).toContain('invalid email');
+        const lower = result.toLowerCase();
+        // Zod v3 says "invalid email", Zod v4 says "must match pattern ..."
+        expect(
+          lower.includes('invalid email') || (lower.includes('email') && lower.includes('validation failed')),
+        ).toBe(true);
       });
 
       test('should handle already registered', async () => {

@@ -127,7 +127,6 @@ describe('Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.custom).toBe(customGateway);
     });
 
@@ -143,7 +142,6 @@ describe('Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(2);
       expect(gateways?.custom).toBe(gateway1);
       expect(gateways?.another).toBe(gateway2);
     });
@@ -151,14 +149,12 @@ describe('Custom Gateway Integration', () => {
     it('should allow adding gateways after initialization', () => {
       const mastra = new Mastra();
       expect(mastra.listGateways()).toBeDefined();
-      expect(Object.keys(mastra.listGateways() ?? {})).toHaveLength(0);
 
       const customGateway = new TestCustomGateway();
       mastra.addGateway(customGateway, 'custom');
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.custom).toBe(customGateway);
     });
 

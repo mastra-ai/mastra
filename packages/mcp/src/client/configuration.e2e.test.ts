@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import path from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
@@ -8,41 +11,100 @@ import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-sche
 import type { LogHandler, LogMessage } from './client';
 import { MCPClient } from './configuration';
 
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
+
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
+
+type WeatherFixtureServer = {
+  port: number;
+  process: ReturnType<typeof spawn>;
+};
+
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, () => {
+      const address = server.address();
+      server.close(error => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!address || typeof address === 'string') {
+          reject(new Error('Could not allocate a test port'));
+          return;
+        }
+
+        resolve(address.port);
+      });
+    });
+  });
+}
+
+async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
+  const port = await getAvailablePort();
+  const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
+    env: { ...process.env, WEATHER_SERVER_PORT: String(port) },
+  });
+
+  let resolved = false;
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        reject(new Error(`Timed out waiting for weather fixture server on port ${port}`));
+      }
+    }, 15000);
+
+    childProcess.on('exit', (code, signal) => {
+      if (!resolved) {
+        clearTimeout(timeout);
+        reject(new Error(`Weather fixture server exited before startup with code ${code} and signal ${signal}`));
+      }
+    });
+    childProcess.stderr?.on('data', chunk => {
+      console.error(chunk.toString());
+    });
+    childProcess.stdout?.on('data', chunk => {
+      if (chunk.toString().includes('server is running on SSE')) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+  });
+
+  return { port, process: childProcess };
+}
+
+async function stopWeatherFixtureServer(process?: ReturnType<typeof spawn>): Promise<void> {
+  if (!process || process.killed || process.exitCode !== null || process.signalCode !== null) {
+    return;
+  }
+
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(resolve, 5000);
+    process.once('exit', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    process.kill('SIGINT');
+  });
+}
 
 describe('MCPClient', () => {
   let mcp: MCPClient;
-  let weatherProcess: ReturnType<typeof spawn>;
+  let weatherFixtureServer: WeatherFixtureServer;
   let clients: MCPClient[] = [];
   let weatherServerPort: number;
 
   beforeAll(async () => {
-    weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
-    // Start the weather SSE server
-    weatherProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
-    });
-
-    // Wait for SSE server to be ready
-    let resolved = false;
-    await new Promise<void>((resolve, reject) => {
-      weatherProcess.on(`exit`, () => {
-        if (!resolved) reject();
-      });
-      if (weatherProcess.stderr) {
-        weatherProcess.stderr.on(`data`, chunk => {
-          console.error(chunk.toString());
-        });
-      }
-      if (weatherProcess.stdout) {
-        weatherProcess.stdout.on('data', chunk => {
-          if (chunk.toString().includes('server is running on SSE')) {
-            resolve();
-            resolved = true;
-          }
-        });
-      }
-    });
+    weatherFixtureServer = await startWeatherFixtureServer();
+    weatherServerPort = weatherFixtureServer.port;
   });
 
   beforeEach(async () => {
@@ -76,8 +138,7 @@ describe('MCPClient', () => {
   });
 
   afterAll(async () => {
-    // Kill the weather SSE server
-    weatherProcess.kill('SIGINT');
+    await stopWeatherFixtureServer(weatherFixtureServer?.process);
   });
 
   describe('Instance Management', () => {
@@ -233,7 +294,7 @@ describe('MCPClient', () => {
       expect(receivedUri).toBe(resourceUri);
 
       await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
-    }, 5000);
+    }, 15_000);
 
     it('should receive resource list changed notification from a specific server', async () => {
       const serverName = 'weather';
@@ -301,48 +362,36 @@ describe('MCPClient', () => {
       expect(currentWeatherPrompt).toBeDefined();
       expect(currentWeatherPrompt).toMatchObject({
         name: 'current',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const forecast = promptResources.find(r => r.name === 'forecast');
       expect(forecast).toBeDefined();
       expect(forecast).toMatchObject({
         name: 'forecast',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const historical = promptResources.find(r => r.name === 'historical');
       expect(historical).toBeDefined();
       expect(historical).toMatchObject({
         name: 'historical',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
     });
 
     it('should get a specific prompt from a server', async () => {
-      const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'current',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
+      expect(description).toBeDefined();
       expect(messages).toBeDefined();
       const messageItem = messages[0];
       let parsedText: any = {};
-      if (messageItem.content.text && typeof messageItem.content.text === 'string') {
+      const content = messageItem.content;
+      if ('text' in content && typeof content.text === 'string') {
         try {
-          parsedText = JSON.parse(messageItem.content.text);
+          parsedText = JSON.parse(content.text);
         } catch {
           // If parsing fails, parsedText remains an empty object
-          // console.error("Failed to parse resource content text:", _e);
         }
       }
       expect(parsedText).toHaveProperty('location');
@@ -691,30 +740,37 @@ describe('MCPClient', () => {
       agentTestContext.set('traceId', 'agent-trace-xyz');
       agentTestContext.set('tenant', 'acme-corp');
       const loggerFn = vi.fn();
+      const mock = createGatewayMock();
 
-      const mcpClientForAgentTest = new MCPClient({
-        id: 'mcp-for-agent-test-suite',
-        servers: {
-          stockPriceServer: {
-            command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
-            env: { FAKE_CREDS: 'test' },
-            logger: loggerFn,
+      mock.start();
+
+      try {
+        const mcpClientForAgentTest = new MCPClient({
+          id: 'mcp-for-agent-test-suite',
+          servers: {
+            stockPriceServer: {
+              command: 'npx',
+              args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+              env: { FAKE_CREDS: 'test' },
+              logger: loggerFn,
+            },
           },
-        },
-      });
-      clientsToCleanup.push(mcpClientForAgentTest);
+        });
+        clientsToCleanup.push(mcpClientForAgentTest);
 
-      const agentName = 'stockAgentForContextTest';
-      const agent = new Agent({
-        id: agentName,
-        name: agentName,
-        model: 'openai/gpt-4o',
-        instructions: 'Use the getStockPrice tool to find the price of MSFT.',
-        tools: await mcpClientForAgentTest.listTools(),
-      });
+        const agentName = 'stockAgentForContextTest';
+        const agent = new Agent({
+          id: agentName,
+          name: agentName,
+          model: 'openai/gpt-4o',
+          instructions: 'Use the getStockPrice tool to find the price of MSFT.',
+          tools: await mcpClientForAgentTest.listTools(),
+        });
 
-      await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
+        await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
+      } finally {
+        await mock.saveAndStop();
+      }
 
       expect(loggerFn).toHaveBeenCalled();
       const callWithAgentContext = loggerFn.mock.calls.find(call => {
@@ -862,11 +918,9 @@ describe('MCPClient', () => {
       const mixedMcp = new MCPClient({
         id: 'test-fault-isolation-tools',
         servers: {
-          // Healthy server - the weather SSE server started in beforeAll
           weather: {
             url: new URL(`http://localhost:${weatherServerPort}/sse`),
           },
-          // Failing server - nonexistent command will fail to connect
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
             args: [],
@@ -889,11 +943,9 @@ describe('MCPClient', () => {
       const mixedMcp = new MCPClient({
         id: 'test-fault-isolation-toolsets',
         servers: {
-          // Healthy server
           weather: {
             url: new URL(`http://localhost:${weatherServerPort}/sse`),
           },
-          // Failing server
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
             args: [],

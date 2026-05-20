@@ -152,6 +152,41 @@ export function createBasicOperationsTest(config: VectorTestConfig) {
         expect(stats.count).toBeGreaterThanOrEqual(4); // 1 from previous test + 3 from this test
       });
 
+      it('should upsert multiple vectors at once with ID', async () => {
+        const vectors = [createVector(5), createVector(6), createVector(7)];
+        const metadata = [
+          { type: 'batch', index: 5 },
+          { type: 'batch', index: 6 },
+          { type: 'batch', index: 7 },
+        ];
+
+        // Don't use non UUID strings to be compatible with QDrant patterns
+        const initialIds = [
+          '1000',
+          '5c56c793-69f3-4fbf-87e6-c4bf54c28c26',
+          'urn:uuid:F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4',
+        ];
+
+        const returnedIds = await config.vector.upsert({
+          indexName: upsertTestIndex,
+          vectors,
+          metadata,
+          ids: initialIds,
+        });
+
+        // Should return array of IDs matching input length
+        expect(Array.isArray(returnedIds)).toBe(true);
+        expect(returnedIds).toHaveLength(3);
+        expect(returnedIds.every(id => typeof id === 'string')).toBe(true);
+        expect(returnedIds).toEqual(initialIds);
+
+        await waitForIndexing(upsertTestIndex);
+
+        // Verify all vectors were stored
+        const stats = await config.vector.describeIndex({ indexName: upsertTestIndex });
+        expect(stats.count).toBeGreaterThanOrEqual(7); // 4 from previous test + 3 from this test
+      });
+
       it('should handle upserting with duplicate IDs (update)', async () => {
         const vector1 = createVector(10);
         const metadata1 = { type: 'original', value: 'first' };

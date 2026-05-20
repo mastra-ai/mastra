@@ -38,7 +38,7 @@ export const ProjectDiscoveryResultSchema = z.object({
     existingAgents: z.array(z.string()),
     existingTools: z.array(z.string()),
   }),
-  dependencies: z.record(z.string()),
+  dependencies: z.record(z.string(), z.string()),
   message: z.string(),
   error: z.string().optional(),
 });
@@ -115,7 +115,7 @@ export const UserClarificationInputSchema = z.object({
 });
 
 export const UserClarificationResultSchema = z.object({
-  answers: z.record(z.string()),
+  answers: z.record(z.string(), z.string()),
   hasAnswers: z.boolean(),
 });
 

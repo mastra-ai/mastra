@@ -1,0 +1,233 @@
+{
+  "meta": {
+    "name": "core-src-agent-__tests__-tool-suspension.e2e",
+    "testFile": "src/agent/__tests__/tool-suspension.e2e.test.ts",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-03-09T19:12:45.715Z",
+    "updatedAt": "2026-03-24T15:26:47.179Z"
+  },
+  "recordings": [
+    {
+      "hash": "2c25402ef3d0cbf1",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant. When asked to process data:\n1. First, use the validate-data tool to validate the data\n2. Then, use the process-data tool to process the validated data\nAlways follow this order."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Please process the data \"test-data-123\". First validate it, then process it."
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "validateData",
+              "description": "Validates data format before processing",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "The data to validate"
+                  }
+                },
+                "required": ["data"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "processData",
+              "description": "Processes validated data and may require manual approval",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "The data to process"
+                  }
+                },
+                "required": ["data"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1774366005370
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e16b22e0e0aaa7c-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 24 Mar 2026 15:26:45 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "79",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_5c2fb256d4974063a65cbca74e177a90"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0a8aef6312a73ff60069c2ad3589f881908335915dc1bf1fc7\",\"object\":\"response\",\"created_at\":1774366005,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prom",
+          "pt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Validates data format before processing\",\"name\":\"validateData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to validate\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Processes validated data and may require manual approval\",\"name\":\"processData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to process\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0a8aef6312a73ff60069c2ad3589f881908335915dc1bf1fc7\",\"object\":\"response\",\"created_at\":1774366005,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":",
+          "true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Validates data format before processing\",\"name\":\"validateData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to validate\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Processes validated data and may require manual approval\",\"name\":\"processData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to process\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_SSD0gBNGs9pdqHVruSfzlcFX\",\"name\":\"validateData\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"JIz05Q2h07st6Z\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"data\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"jzAbvyTu5K51\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"IunpX9Icp6SqR\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"test\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"dJ6CH2ogqHLe\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-data\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"rgL3mIELWDs\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"pnPhVBlH3ENCnp0\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"123\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"1vmNqjVCM3Rnh\",\"output_index\":0,\"sequence_number\":9}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"obfuscation\":\"3ndMDqRmXcXBLW\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"data\\\":\\\"test-data-123\\\"}\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"data\\\":\\\"test-data-123\\\"}\",\"call_id\":\"call_SSD0gBNGs9pdqHVruSfzlcFX\",\"name\":\"validateData\"},\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0a8aef6312a73ff60069c2ad3589f881908335915dc1bf1fc7\",\"object\":\"response\",\"created_at\":1774366005,\"status\":\"completed\",\"background\":false,\"completed_at\":1774366006,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"data\\\":\\\"test-data-123\\\"}\",\"call_id\":\"call_SSD0gBNGs9pdqHVruSfzlcFX\",\"name\":\"validateData\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Validates data format before processing\",\"name\":\"validateData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to validate\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Processes validated data and may require manual approval\",\"name\":\"processData\",\"param",
+          "eters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to process\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":141,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":18,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":159},\"user\":null,\"metadata\":{}},\"sequence_number\":13}\n\n"
+        ],
+        "chunkTimings": [0, 0, 0, 161, 28, 2, 40, 0, 30, 17, 22, 1, 63, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "8449426510433e81",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant. When asked to process data:\n1. First, use the validate-data tool to validate the data\n2. Then, use the process-data tool to process the validated data\nAlways follow this order."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Please process the data \"test-data-123\". First validate it, then process it."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0a8aef6312a73ff60069c2ad35f1b08190b0268df59597c83d"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_SSD0gBNGs9pdqHVruSfzlcFX",
+              "output": "{\"valid\":true,\"message\":\"Data \\\"test-data-123\\\" is valid\"}"
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "validateData",
+              "description": "Validates data format before processing",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "The data to validate"
+                  }
+                },
+                "required": ["data"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "processData",
+              "description": "Processes validated data and may require manual approval",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "The data to process"
+                  }
+                },
+                "required": ["data"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1774366006241
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e16b2331c45aa7c-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 24 Mar 2026 15:26:46 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "87",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_5ab0cb885a774c8d96f9ef6f05388504"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0a8aef6312a73ff60069c2ad365c6c8190a45be0ea05d66e9c\",\"object\":\"response\",\"created_at\":1774366006,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Validates data format before processing\",\"name\":\"validateData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to validate\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Processes validated data and may require manual approval\",\"name\":\"processData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to process\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usa",
+          "ge\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0a8aef6312a73ff60069c2ad365c6c8190a45be0ea05d66e9c\",\"object\":\"response\",\"created_at\":1774366006,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Validates data format before processing\",\"name\":\"validateData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to validate\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Processes validated data and may require manual approval\",\"name\":\"processData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to process\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabl",
+          "ed\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_AYwPeqz0W4ZF4wCSZBNrFWTC\",\"name\":\"processData\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"Z5BoLdNkOtBy3y\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"data\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"YlesN69D2ErM\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"KXY9DrWx3lhqc\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"test\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"lYqsYJLqNR7R\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-data\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"xJGfft58au6\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"lJ7QBbpIzZvyFhS\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"123\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"zLv5PnCjQDNYn\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"obfuscation\":\"ujReKTqZ2U36RX\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"data\\\":\\\"test-data-123\\\"}\",\"item_id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"data\\\":\\\"test-data-123\\\"}\",\"call_id\":\"call_AYwPeqz0W4ZF4wCSZBNrFWTC\",\"name\":\"processData\"},\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0a8aef6312a73ff60069c2ad365c6c8190a45be0ea05d66e9c\",\"object\":\"response\",\"created_at\":1774366006,\"status\":\"completed\",\"background\":false,\"completed_at\":1774366006,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"fc_0a8aef6312a73ff60069c2ad36c57c8190b2eaf9b4cec85ff9\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"data\\\":\\\"test-data-123\\\"}\",\"call_id\":\"call_AYwPeqz0W4ZF4wCSZBNrFWTC\",\"name\":\"processData\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Validates data format before processing\",\"name\":\"validateData\",\"parameters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to validate\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Processes validated data and may require manual approval\",\"name\":\"processData\",\"parame",
+          "ters\":{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"string\",\"description\":\"The data to process\"}},\"required\":[\"data\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":184,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":18,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":202},\"user\":null,\"metadata\":{}},\"sequence_number\":13}\n\n"
+        ],
+        "chunkTimings": [7, 0, 0, 0, 393, 0, 0, 0, 0, 0, 36, 0, 2, 31, 1, 60, 0],
+        "isStreaming": true
+      }
+    }
+  ]
+}

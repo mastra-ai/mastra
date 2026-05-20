@@ -30,6 +30,11 @@ export { SchemaCompatLayer } from './schema-compatibility';
 
 // Utility functions
 export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
+export { wrapSchemaWithNullTransform } from './null-to-undefined';
+export { ensureAllPropertiesRequired, prepareJsonSchemaForOpenAIStrictMode } from './zod-to-json';
+
+// Standard Schema compatibility utilities
+export { extractZodSchema, applyOpenAICompatTransforms, applyOpenAICompatToTools } from './standard-schema-compat';
 
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
@@ -41,3 +46,24 @@ export { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reas
 
 export { type ModelInformation } from './types';
 export { type JSONSchema7, type Schema, jsonSchema } from './json-schema';
+
+// Re-export standard schema types and functions from the schema.ts subpath
+// These are also available directly from the main entry for convenience
+export type { PublicSchema, InferPublicSchema } from './schema.types';
+
+export type {
+  StandardSchemaWithJSON,
+  StandardSchemaWithJSONProps,
+  InferInput,
+  InferOutput,
+  StandardSchemaIssue,
+} from './standard-schema/standard-schema.types';
+
+export {
+  toStandardSchema,
+  isStandardSchema,
+  isStandardJSONSchema,
+  isStandardSchemaWithJSON,
+  standardSchemaToJSONSchema,
+  JSON_SCHEMA_LIBRARY_OPTIONS,
+} from './standard-schema/standard-schema';

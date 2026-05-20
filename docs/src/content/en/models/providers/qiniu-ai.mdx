@@ -618,8 +618,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
     "model": "qiniu-ai/MiniMax-M1",
@@ -1082,12 +1082,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
     "model": "qiniu-ai/z-ai/autoglm-phone-9b",
@@ -1140,9 +1140,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 ]}
 />
 
-## Advanced Configuration
+## Advanced configuration
 
-### Custom Headers
+### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -1159,7 +1159,7 @@ const agent = new Agent({
 });
 ```
 
-### Dynamic Model Selection
+### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({

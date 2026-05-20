@@ -138,6 +138,7 @@ export default function LessonPage() {
                 name: lesson.title,
                 description: seoDescription,
                 thumbnailUrl: ogImageUrl.toString(),
+                uploadDate: lesson.publishedDate,
                 embedUrl: `https://www.youtube.com/embed/${lesson.youtubeId}`,
                 contentUrl: `https://www.youtube.com/watch?v=${lesson.youtubeId}`,
                 duration: `PT${lesson.durationMin}M`,

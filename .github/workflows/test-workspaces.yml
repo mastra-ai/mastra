@@ -11,6 +11,10 @@ on:
       - 'packages/core/**'
       - '.github/workflows/test-workspaces.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   setup:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
@@ -67,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [s3, gcs]
+        package: [s3, gcs, azure]
     steps:
       - uses: actions/checkout@v5
 

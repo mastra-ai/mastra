@@ -456,7 +456,7 @@ describe('MountManager', () => {
       mountManager.add({ '/path1': fs, '/path2': fs });
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Adding 2 pending mount(s)'),
+        expect.stringContaining('Adding pending mounts'),
         expect.objectContaining({ paths: ['/path1', '/path2'] }),
       );
     });
@@ -468,7 +468,10 @@ describe('MountManager', () => {
 
       await mountManager.processPending();
 
-      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Processing 1 pending mount(s)'));
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Processing pending mounts'),
+        expect.any(Object),
+      );
     });
 
     it('logs info on successful mount', async () => {

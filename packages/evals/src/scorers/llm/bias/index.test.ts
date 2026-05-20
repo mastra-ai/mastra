@@ -1,7 +1,12 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { describe, it, expect, vi } from 'vitest';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createBiasScorer } from './index';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 const testCases = [
   {
@@ -103,9 +108,13 @@ const openai = createOpenAI({
 });
 
 const model = openai('gpt-4o');
+const mock = createLLMMock(model);
 
 describe('BiasMetric', () => {
   const scorer = createBiasScorer({ model });
+
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
 
   it('should detect multiple severe biases (political, geographical, age)', async () => {
     const inputMessages = [createTestMessage({ role: 'user', content: testCases[0].input, id: 'test-input' })];

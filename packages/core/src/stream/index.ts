@@ -19,7 +19,11 @@ export type {
   ReasoningChunk,
   SourceChunk,
   ToolCallChunk,
+  PendingToolCall,
   ToolResultChunk,
+
+  // Result Types
+  LLMStepResult,
 
   // Payload Types
   StepFinishPayload,
@@ -44,7 +48,10 @@ export type {
   ReadonlyJSONValue,
 } from './types';
 
-export type { OutputSchema, PartialSchemaOutput, SchemaWithValidation, InferSchemaOutput } from './base/schema';
+/**
+ * @deprecated Use StandardSchemaWithJSON from '../schema' instead
+ */
+export type { OutputSchema, PartialSchemaOutput } from './base/schema';
 export type { FullOutput } from './base/output';
 
 // ============================================================================
@@ -57,3 +64,9 @@ export { WorkflowRunOutput } from './RunOutput';
 export { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './aisdk/v5/file';
 export { convertFullStreamChunkToMastra, convertMastraChunkToAISDKv5 } from './aisdk/v5/transform';
 export { convertFullStreamChunkToUIMessageStream } from './aisdk/v5/compat';
+
+// ============================================================================
+// Caching Transform Stream
+// ============================================================================
+export type { CachingTransformStreamOptions } from './caching-transform-stream';
+export { createCachingTransformStream, createReplayStream, withStreamCaching } from './caching-transform-stream';

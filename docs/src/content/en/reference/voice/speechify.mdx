@@ -9,7 +9,7 @@ packages:
 
 The Speechify voice implementation in Mastra provides text-to-speech capabilities using Speechify's API.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { SpeechifyVoice } from '@mastra/voice-speechify'
@@ -32,7 +32,7 @@ const audioStream = await voice.speak('Hello, world!', {
 })
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -75,7 +75,7 @@ const audioStream = await voice.speak('Hello, world!', {
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using the configured speech model and voice.
 
@@ -119,7 +119,7 @@ Converts text to speech using the configured speech model and voice.
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 
@@ -148,13 +148,13 @@ Returns an array of available voice options, where each node contains:
 ]}
 />
 
-### listen()
+### `listen()`
 
-This method is not supported by Speechify and will throw an error. Speechify does not provide speech-to-text functionality.
+This method isn't supported by Speechify and will throw an error. Speechify doesn't provide speech-to-text functionality.
 
 ## Notes
 
 - Speechify requires an API key for authentication
 - The default model is 'simba-english'
-- Speech-to-text functionality is not supported
+- Speech-to-text functionality isn't supported
 - Additional audio stream options can be passed through the speak() method's options parameter

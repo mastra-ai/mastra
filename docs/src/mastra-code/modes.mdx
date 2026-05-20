@@ -78,6 +78,7 @@ When the agent finishes analyzing the codebase, it submits a structured plan usi
 After submission, you can:
 
 - **Approve**: Mastra Code switches to Build mode and begins implementation.
+- **Use as /goal**: Start a goal from the approved plan so Mastra Code keeps executing and checking the plan across turns.
 - **Reject**: Stay in Plan mode.
 - **Request changes**: Provide feedback for the agent to revise and resubmit.
 
@@ -105,6 +106,8 @@ Each mode has a default model that's selected when you switch to it:
 | Fast | `cerebras/zai-glm-4.7` |
 
 Override the model for any mode using the `/models` command. Per-mode model selections persist to the thread, so switching back to a mode restores the last model you used in it.
+
+If you select a model that doesn't have an API key configured, Mastra Code prompts you to enter one. See [Interactive API key prompt](/configuration#interactive-api-key-prompt) for details.
 
 :::note
 

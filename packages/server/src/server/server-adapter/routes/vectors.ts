@@ -8,9 +8,8 @@ import {
   LIST_VECTORS_ROUTE,
   LIST_EMBEDDERS_ROUTE,
 } from '../../handlers/vector';
-import type { ServerRoute } from '.';
 
-export const VECTORS_ROUTES: ServerRoute<any, any, any>[] = [
+export const VECTORS_ROUTES = [
   UPSERT_VECTORS_ROUTE,
   CREATE_INDEX_ROUTE,
   QUERY_VECTORS_ROUTE,
@@ -19,4 +18,4 @@ export const VECTORS_ROUTES: ServerRoute<any, any, any>[] = [
   DELETE_INDEX_ROUTE,
   LIST_VECTORS_ROUTE,
   LIST_EMBEDDERS_ROUTE,
-];
+] as const;

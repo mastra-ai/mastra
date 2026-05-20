@@ -6,15 +6,17 @@ import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SlashCommand } from '@mariozechner/pi-tui';
-import type { HarnessEventListener, TaskItem } from '@mastra/core/harness';
+import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
+import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
+import { IdleCounterComponent } from './components/idle-counter.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
-import { addUserMessage } from './render-messages.js';
+import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -28,6 +30,7 @@ export function setupKeyboardShortcuts(
   callbacks: {
     stop: () => void;
     doubleCtrlCMs: number;
+    queueFollowUpMessage: (text: string) => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -39,6 +42,10 @@ export function setupKeyboardShortcuts(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
 
     if (state.pendingApprovalDismiss) {
       // Dismiss active approval dialog and abort
@@ -59,8 +66,8 @@ export function setupKeyboardShortcuts(
       const current = state.editor.getText();
       if (current.length > 0) {
         state.lastClearedText = current;
+        state.editor.setText('');
       }
-      state.editor.setText('');
       state.ui.requestRender();
     }
   });
@@ -118,6 +125,12 @@ export function setupKeyboardShortcuts(
     for (const sc of state.allSlashCommandComponents) {
       sc.setExpanded(state.toolOutputExpanded);
     }
+    for (const reminder of state.allSystemReminderComponents) {
+      reminder.setExpanded(state.toolOutputExpanded);
+    }
+    for (const shell of state.allShellComponents) {
+      shell.setExpanded(state.toolOutputExpanded);
+    }
     state.ui.requestRender();
   });
 
@@ -145,35 +158,57 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
-  // Ctrl+F - queue follow-up message while streaming
+  // Enter - submit immediately. The submit handler decides whether active input
+  // should be sent as a signal or queued for cases signals cannot handle.
   state.editor.onAction('followUp', () => {
-    const text = state.editor.getText().trim();
-    if (!text) return;
-    if (!state.harness.isRunning()) return; // Only relevant while streaming
-
-    // Clear editor
-    state.editor.setText('');
-    state.ui.requestRender();
-
-    if (text.startsWith('/')) {
-      // Queue slash command for processing after the agent completes
-      state.pendingSlashCommands.push(text);
-      showInfo(state, `Slash command queued: ${text}`);
-    } else {
-      // Queue as a regular follow-up message
-      addUserMessage(state, {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        createdAt: new Date(),
-      });
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
       state.ui.requestRender();
-
-      state.harness.followUp({ content: text }).catch(error => {
-        showError(state, error instanceof Error ? error.message : 'Follow-up failed');
-      });
+      return true;
     }
+
+    state.editor.onSubmit?.(state.editor.getExpandedText());
+    return true;
   });
+
+  // Ctrl+F - explicitly queue a follow-up while a run is active. Enter now sends
+  // normal messages as signals during active runs; this preserves manual FIFO
+  // queueing for slash commands, image messages, and messages the user wants to
+  // hold until the current run finishes.
+  state.editor.onAction('queueFollowUp', () => {
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
+      return true;
+    }
+
+    const text = state.editor.getExpandedText();
+    if (!state.harness.isRunning()) {
+      state.editor.onSubmit?.(text);
+      return true;
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return true;
+    }
+
+    state.editor.addToHistory(text);
+    state.editor.setText('');
+    callbacks.queueFollowUpMessage(text);
+    return true;
+  });
+}
+
+function abortActiveGoalJudge(state: TUIState): boolean {
+  const activeGoalJudge = state.activeGoalJudge;
+  if (!activeGoalJudge) return false;
+
+  state.userInitiatedAbort = true;
+  activeGoalJudge.abortController.abort();
+  activeGoalJudge.component.setInterrupted();
+  state.ui.requestRender();
+  return true;
 }
 
 // =============================================================================
@@ -218,8 +253,11 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
+  state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
   state.ui.addChild(state.editorContainer);
+  state.idleCounter = new IdleCounterComponent();
+  state.editorContainer.addChild(state.idleCounter);
   state.editorContainer.addChild(state.editor);
 
   // Add footer with two-line status
@@ -259,6 +297,7 @@ export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
     { name: 'clone', description: 'Clone the current thread' },
+    { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
@@ -267,6 +306,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
+    { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
@@ -300,8 +340,23 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
+    { name: 'browser', description: 'Configure browser automation' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
+    { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'observability', description: 'Configure cloud observability' },
+    {
+      name: 'goal',
+      description: 'Set/manage persistent goal (Ralph loop)',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'status', label: 'status', description: 'Show current goal status' },
+          { value: 'pause', label: 'pause', description: 'Pause the goal continuation loop' },
+          { value: 'resume', label: 'resume', description: 'Resume the current goal' },
+          { value: 'clear', label: 'clear', description: 'Clear the current goal' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -312,12 +367,32 @@ export function setupAutocomplete(state: TUIState): void {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
   }
 
-  // Add custom slash commands to the list
+  // Add custom slash commands to the list with // prefixes so they remain
+  // visually distinct from built-in slash commands in autocomplete.
   for (const customCmd of state.customSlashCommands) {
-    // Prefix with extra / to distinguish from built-in commands (//command-name)
     slashCommands.push({
       name: `/${customCmd.name}`,
       description: customCmd.description || `Custom: ${customCmd.name}`,
+    });
+    if (customCmd.goal) {
+      slashCommands.push({
+        name: `goal/${customCmd.name}`,
+        description: customCmd.description ? `Goal: ${customCmd.description}` : `Goal: ${customCmd.name}`,
+      });
+    }
+  }
+
+  for (const skill of state.skillCommands) {
+    slashCommands.push({
+      name: `skill/${skill.name}`,
+      description: skill.description ? `Skill: ${skill.description}` : `Skill: ${skill.name}`,
+    });
+  }
+
+  for (const skill of state.goalSkillCommands) {
+    slashCommands.push({
+      name: `goal/${skill.name}`,
+      description: skill.description ? `Goal skill: ${skill.description}` : `Goal skill: ${skill.name}`,
     });
   }
 
@@ -353,6 +428,38 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   } catch {
     state.customSlashCommands = [];
   }
+  // Skills load via `refreshSkillsAutocomplete` so this never blocks on workspace resolution.
+}
+
+/**
+ * Populate `state.skillCommands` and `state.goalSkillCommands` from the
+ * workspace. Safe to call before the workspace is resolved (returns empty
+ * lists) and again later once it is (resolves and refreshes).
+ */
+export async function loadSkillCommands(state: TUIState): Promise<void> {
+  try {
+    let workspace = state.harness.getWorkspace() ?? state.workspace;
+    if (!workspace && state.harness.hasWorkspace()) {
+      workspace = await state.harness.resolveWorkspace();
+    }
+    if (!workspace?.skills) {
+      state.skillCommands = [];
+      state.goalSkillCommands = [];
+      return;
+    }
+    const skills = (await workspace.skills.list()).filter(isUserInvocable);
+    state.skillCommands = skills;
+    state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
+  } catch {
+    state.skillCommands = [];
+    state.goalSkillCommands = [];
+  }
+}
+
+/** Reload skills and rebuild the autocomplete provider. */
+export async function refreshSkillsAutocomplete(state: TUIState): Promise<void> {
+  await loadSkillCommands(state);
+  setupAutocomplete(state);
 }
 
 // =============================================================================
@@ -374,6 +481,9 @@ export function setupKeyHandlers(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }
@@ -397,7 +507,15 @@ export function setupKeyHandlers(
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   const listener: HarnessEventListener = async event => {
-    await handleEvent(event);
+    try {
+      await handleEvent(event);
+    } catch (err) {
+      // Log but don't crash — individual event errors shouldn't kill the process
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+      if (stack) process.stderr.write(stack + '\n');
+    }
   };
   state.unsubscribe = state.harness.subscribe(listener);
 }
@@ -491,8 +609,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const harnessState = state.harness.getState() as { tasks?: TaskItem[] };
-    const tasks = harnessState.tasks || [];
+    const tasks = state.harness.getDisplayState().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

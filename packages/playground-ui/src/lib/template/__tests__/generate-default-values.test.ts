@@ -222,6 +222,7 @@ describe('generateDefaultValues', () => {
   describe('circular reference protection', () => {
     it('should handle very deep nesting by stopping at max depth', () => {
       // Create a deeply nested schema (deeper than MAX_DEPTH of 10)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const createDeepSchema = (depth: number): JsonSchema => {
         if (depth === 0) {
           return {

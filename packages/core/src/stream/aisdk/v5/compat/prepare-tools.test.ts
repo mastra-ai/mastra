@@ -1,5 +1,6 @@
+import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
 import { prepareToolsAndToolChoice } from './prepare-tools';
 
@@ -23,9 +24,10 @@ describe('prepareToolsAndToolChoice', () => {
 
       expect(result.tools).toBeDefined();
       expect(result.tools).toHaveLength(1);
+      // Tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
         args: { search_context_size: 'medium' },
       });
@@ -46,9 +48,10 @@ describe('prepareToolsAndToolChoice', () => {
       });
 
       expect(result.tools).toBeDefined();
+      // Tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider-defined',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
       });
     });
@@ -68,10 +71,35 @@ describe('prepareToolsAndToolChoice', () => {
         targetVersion: 'v3',
       });
 
+      // Tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'tools.web_search_20250305',
+        name: 'search',
         id: 'anthropic.tools.web_search_20250305',
+      });
+    });
+
+    it('should prefer tool.name over ID-derived name for versioned provider tools', () => {
+      // V5 Anthropic tools have name: "web_search" but id: "anthropic.web_search_20250305"
+      // The model-facing name should be "web_search" (from tool.name), not "web_search_20250305"
+      const v5AnthropicTool = {
+        id: 'anthropic.web_search_20250305',
+        type: 'provider-defined',
+        name: 'web_search',
+        args: {},
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { search: v5AnthropicTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'provider',
+        name: 'web_search',
+        id: 'anthropic.web_search_20250305',
       });
     });
 
@@ -92,9 +120,10 @@ describe('prepareToolsAndToolChoice', () => {
 
       expect(result.tools).toBeDefined();
       expect(result.tools).toHaveLength(1);
+      // V6 tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
         args: { search_context_size: 'medium' },
       });
@@ -117,9 +146,10 @@ describe('prepareToolsAndToolChoice', () => {
       });
 
       expect(result.tools).toHaveLength(1);
+      // V6 tools don't have a .name property, so the user key is used
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
       });
     });
@@ -149,6 +179,56 @@ describe('prepareToolsAndToolChoice', () => {
         type: 'function',
         name: 'testTool',
         description: 'A test tool',
+      });
+    });
+
+    it('should pass strict through for v3 function tools', () => {
+      const strictTool = createTool({
+        id: 'strict-tool',
+        description: 'A strict test tool',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
+      });
+    });
+
+    it('should preserve strict in prepared v2 function tools for downstream router handoff', () => {
+      const strictTool = createTool({
+        id: 'strict-tool-v2',
+        description: 'A strict test tool for v2',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
       });
     });
 
@@ -342,6 +422,24 @@ describe('prepareToolsAndToolChoice', () => {
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toEqual({ type: 'none' });
     });
+    it('should strip tools when toolChoice is "none" even when tools are non-empty (#14459)', () => {
+      // Regression test: workflow tools injected via listWorkflowTools() were still
+      // being serialized in the HTTP request even when toolChoice was set to none.
+      // Gemini rejects requests combining tools + structured output (response_format: json_schema).
+      const workflowTool = createTool({
+        id: 'workflow-tool',
+        description: 'A workflow tool injected by listWorkflowTools()',
+        inputSchema: z.object({ input: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const result = prepareToolsAndToolChoice({
+        tools: { workflowTool },
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
   });
 
   describe('agent-as-tools schema serialization (#13324)', () => {
@@ -394,20 +492,45 @@ describe('prepareToolsAndToolChoice', () => {
           hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
           `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
         ).toBe(true);
-
-        // Typeless fallback must NOT include 'array' — an array without a meaningful
-        // items schema is unusable, and it breaks Gemini which rejects items on non-ARRAY types.
-        if (Array.isArray(schema.type)) {
-          expect(
-            schema.type,
-            `Property '${propName}' fallback type should not include 'array'. Got: ${JSON.stringify(schema)}`,
-          ).not.toContain('array');
-          expect(
-            schema.items,
-            `Property '${propName}' should not have 'items' in the fallback. Got: ${JSON.stringify(schema)}`,
-          ).toBeUndefined();
-        }
       }
+
+      const resumeDataSchema = properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
+    });
+
+    it('should drop items for typeless properties when applying non-array fallback type', () => {
+      const toolWithTypelessItems = {
+        description: 'A tool with a typeless schema property that incorrectly includes items',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            resumeData: {
+              description: 'Typeless schema with items that Gemini rejects',
+              items: {
+                type: 'string',
+              },
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithTypelessItems as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      const resumeDataSchema = toolDef.inputSchema.properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
     });
   });
 

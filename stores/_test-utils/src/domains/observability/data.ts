@@ -43,6 +43,7 @@ export function createSpan(overrides: Partial<CreateSpanRecord> = {}): CreateSpa
     input: null,
     output: null,
     error: null,
+    requestContext: null,
     isEvent: false,
     startedAt: baseDate,
     endedAt: new Date(baseDate.getTime() + 1000),
@@ -115,6 +116,7 @@ export function createOldSchemaSpan(overrides: Partial<CreateSpanRecord> = {}): 
     error: overrides.error ?? null,
 
     // New fields - explicitly set to null to simulate pre-migration data
+    requestContext: null,
     entityType: null,
     entityId: null,
     entityName: null,

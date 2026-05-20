@@ -5,7 +5,7 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { getSingleDummyResponseModel } from './mock-model';
@@ -474,15 +474,134 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
       const testRequestContext = new RequestContext();
       testRequestContext.set('test-key', 'test-value');
 
-      // Call convertTools which internally calls listAgentTools -> agent.getModel()
-      await orchestratorAgent['convertTools']({
+      // getModel is called during tool execution (not tool creation) so we
+      // need to invoke the agent tool's execute to trigger it.
+      const tools = await orchestratorAgent['convertTools']({
         requestContext: testRequestContext,
         methodType: 'generate',
       });
 
+      const agentTool = tools['agent-subAgent'];
+      expect(agentTool).toBeDefined();
+
+      // Execute the tool — it will call resolvedAgent.getModel({ requestContext })
+      // during version resolution. The generate call itself will fail since the
+      // mock model isn't wired for a full conversation, but getModel is invoked first.
+      try {
+        await agentTool.execute!({ prompt: 'hello' }, { toolCallId: 'test-call', messages: [] } as any);
+      } catch {
+        // Expected — the mock model doesn't support a full generate flow
+      }
+
       // Verify that the sub-agent's model function received the correct requestContext
       expect(receivedRequestContext).toBeDefined();
       expect(receivedRequestContext?.get('test-key')).toBe('test-value');
+    });
+
+    it('should create agent tools for sub-agents with defaultOptions.memory', async () => {
+      // Create a sub-agent with its own defaultOptions.memory
+      const subAgent = new Agent({
+        id: 'sub-agent-with-memory',
+        name: 'sub-agent-with-memory',
+        instructions: 'You are a sub-agent with custom memory config.',
+        model: dummyModel,
+        defaultOptions: {
+          memory: {
+            thread: 'custom-thread',
+            resource: 'custom-resource',
+          },
+        },
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created with proper configuration
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents without defaultOptions', async () => {
+      // Create a sub-agent WITHOUT defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-no-options',
+        name: 'sub-agent-no-options',
+        instructions: 'You are a sub-agent without default options.',
+        model: dummyModel,
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // This should not throw - convertTools should handle missing defaultOptions gracefully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      // Verify the agent tool was created
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents with function-based defaultOptions', async () => {
+      // Create a sub-agent with function-based defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-fn-options',
+        name: 'sub-agent-fn-options',
+        instructions: 'You are a sub-agent with function-based options.',
+        model: dummyModel,
+        defaultOptions: ({ requestContext }) => ({
+          memory: {
+            thread: `thread-${requestContext.get('userId') || 'default'}`,
+            resource: 'custom-resource',
+          },
+        }),
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created successfully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
     });
   });
 }

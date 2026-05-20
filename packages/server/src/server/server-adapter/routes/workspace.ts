@@ -12,9 +12,8 @@ import {
   WORKSPACE_SKILLS_ROUTES,
   WORKSPACE_SKILLS_SH_ROUTES,
 } from '../../handlers/workspace';
-import type { ServerRoute } from '.';
 
-export const WORKSPACE_ROUTES: ServerRoute<any, any, any>[] = [
+export const WORKSPACE_ROUTES = [
   // List all workspaces route (at /api/workspaces)
   LIST_WORKSPACES_ROUTE,
 
@@ -32,4 +31,4 @@ export const WORKSPACE_ROUTES: ServerRoute<any, any, any>[] = [
 
   // skills.sh proxy routes (at /api/workspaces/:workspaceId/skills-sh/*)
   ...WORKSPACE_SKILLS_SH_ROUTES,
-];
+] as const;

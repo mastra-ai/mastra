@@ -1,0 +1,232 @@
+---
+title: "Reference: GoogleDriveFilesystem | Workspace"
+description: "Documentation for the GoogleDriveFilesystem provider, which stores files in a Google Drive folder."
+packages:
+  - "@mastra/google-drive"
+---
+
+# GoogleDriveFilesystem
+
+Stores files in a single Google Drive folder. Each directory maps to a Drive folder under the configured root, and paths use POSIX semantics (for example `/notes/todo.txt`).
+
+:::info
+
+For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/google-drive
+```
+
+## Usage
+
+Add a `GoogleDriveFilesystem` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { GoogleDriveFilesystem } from '@mastra/google-drive'
+
+const workspace = new Workspace({
+  filesystem: new GoogleDriveFilesystem({
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
+    accessToken: process.env.GOOGLE_DRIVE_ACCESS_TOKEN!,
+  }),
+})
+
+const agent = new Agent({
+  id: 'drive-agent',
+  name: 'Drive Agent',
+  model: 'openai/gpt-4o-mini',
+  workspace,
+})
+```
+
+### Authentication
+
+Supply one of the following authentication options:
+
+- **`accessToken`**: A pre-obtained OAuth access token. Use the `https://www.googleapis.com/auth/drive` scope so the token can see folders shared with the authenticated identity.
+- **`getAccessToken`**: A callback that returns a token. Useful when tokens are refreshed externally.
+- **`serviceAccount`**: A Google service account. Share the target folder with the service account email.
+
+#### Service account
+
+Service account auth is the recommended option for backend agents. There is no user consent flow and no token refresh handling. You only need **two values** from the service account JSON key file: `client_email` and `private_key`.
+
+##### Set up the service account
+
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and select or create a project.
+1. Go to **APIs & Services > Library**, search for **Google Drive API**, and select **Enable**.
+1. Go to **APIs & Services > Credentials**, select **Create credentials > Service account**, and complete the form. The role can be left blank — Drive permissions are granted by sharing folders, not by IAM roles.
+1. Open the new service account, go to the **Keys** tab, and select **Add key > Create new key > JSON**. The browser downloads a JSON key file.
+1. Copy the `client_email` value from the JSON file. This is the address you share Drive folders with.
+
+##### Share the Drive folder with the service account
+
+The service account is its own Google identity. It cannot see anything in Drive until you share with it explicitly.
+
+1. Open the target folder in [Google Drive](https://drive.google.com/).
+1. Select **Share**.
+1. Paste the service account's `client_email` address.
+1. Set the role to **Editor** (for read and write) or **Viewer** (for read-only access). Select **Send**.
+1. Copy the folder ID from the URL. It is the segment after `/folders/` in `https://drive.google.com/drive/folders/<folderId>`.
+
+:::warning
+
+Service accounts cannot create files in standard "My Drive" folders. A service account has no personal Drive storage quota, so any file it creates needs to be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
+
+For write access, place the folder inside a **shared drive** (formerly Team Drive) and add the service account as a member of that shared drive. Shared drives provide the storage quota that service-account-created files need.
+
+Read-only workloads against a personal Drive folder do not have this restriction.
+
+:::
+
+##### Configure the filesystem
+
+Copy `client_email` and `private_key` from the JSON file into your environment:
+
+```bash filename=".env"
+GOOGLE_DRIVE_FOLDER_ID=1AbCdEfGhIjKlMnOpQrStUvWxYz
+GOOGLE_DRIVE_CLIENT_EMAIL=my-bot@my-project.iam.gserviceaccount.com
+# Wrap the value in quotes — the key contains newlines that must be preserved.
+GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkq...\n-----END PRIVATE KEY-----\n"
+```
+
+```typescript
+import { GoogleDriveFilesystem } from '@mastra/google-drive'
+
+const filesystem = new GoogleDriveFilesystem({
+  folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
+  serviceAccount: {
+    clientEmail: process.env.GOOGLE_DRIVE_CLIENT_EMAIL!,
+    privateKey: process.env.GOOGLE_DRIVE_PRIVATE_KEY!,
+  },
+})
+```
+
+You do **not** need to copy the entire JSON file or pass other fields like `project_id`, `client_id`, `private_key_id`, or `token_uri`. They are not used. Only `clientEmail` and `privateKey` are required. `privateKeyId`, `scopes`, and `subject` are optional. `scopes` defaults to `['https://www.googleapis.com/auth/drive']`, which is the scope required for the service account to see folders shared with it. The narrower `drive.file` scope only grants access to files the application created itself, so a folder shared with the service account would return `404 Not Found`.
+
+`GoogleDriveFilesystem` automatically normalizes the `privateKey` string before signing. It strips surrounding quotes (including escaped quotes from JSON-wrapped values), converts literal `\n` sequences to real newlines, normalizes `\r\n` line endings, and removes a trailing comma. The key works regardless of how your `.env` loader handles the value.
+
+##### Troubleshoot
+
+- **`404 File not found: <folderId>`**: The service account does not have access to the folder. Confirm the folder is shared with the exact `client_email` address and that the folder ID matches the URL.
+- **`storageQuotaExceeded` on write**: The folder is in a personal "My Drive". Move the folder to a shared drive and add the service account as a member.
+- **`error:1E08010C:DECODER routines::unsupported`**: The `privateKey` value is malformed. Confirm the value contains the full PEM block and that newlines are preserved (literal `\n` is fine).
+
+### Read-only mode
+
+Pass `readOnly: true` to block write operations (`writeFile`, `appendFile`, `deleteFile`, `copyFile`, `moveFile`, `mkdir`, `rmdir`).
+
+```typescript
+const filesystem = new GoogleDriveFilesystem({
+  folderId,
+  accessToken,
+  readOnly: true,
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'folderId',
+    type: 'string',
+    description:
+      'ID of the Google Drive folder that acts as the workspace root. All paths are resolved inside this folder.',
+  },
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'OAuth access token with access to the folder.',
+    isOptional: true,
+  },
+  {
+    name: 'getAccessToken',
+    type: '() => string | Promise<string>',
+    description: 'Callback that returns a fresh OAuth access token. Called on every request that needs authorization.',
+    isOptional: true,
+  },
+  {
+    name: 'serviceAccount',
+    type: '{ clientEmail: string; privateKey: string; privateKeyId?: string; scopes?: string[]; subject?: string }',
+    description: 'Service account credentials used to mint access tokens via the OAuth 2.0 JWT flow.',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance',
+    isOptional: true,
+    defaultValue: '`google-drive:${folderId}`',
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all write operations are blocked.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'instructions',
+    type: 'InstructionsOption',
+    description: 'Override the default instructions returned to tool descriptions.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('GoogleDriveFilesystem')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('google-drive')",
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem is in read-only mode',
+  },
+]}
+/>
+
+## Methods
+
+GoogleDriveFilesystem implements the [WorkspaceFilesystem interface](/reference/workspace/filesystem), providing all standard filesystem methods:
+
+- `readFile(path, options?)` - Download file contents
+- `writeFile(path, content, options?)` - Upload or overwrite a file
+- `appendFile(path, content)` - Append content by reading and re-uploading the file
+- `deleteFile(path, options?)` - Delete a file
+- `copyFile(src, dest, options?)` - Copy a file using the Drive `files.copy` API
+- `moveFile(src, dest, options?)` - Move a file between folders by swapping parents
+- `mkdir(path, options?)` - Create a folder
+- `rmdir(path, options?)` - Remove a folder
+- `readdir(path, options?)` - List folder contents (supports `recursive` and `extension` filtering)
+- `stat(path)` - Return Drive metadata for a file or folder
+- `exists(path)` - Check if a file or folder exists
+
+## Notes
+
+- Google Drive allows multiple files with the same name in a folder. `GoogleDriveFilesystem` resolves paths by picking the first match, so keep names unique within each folder when you rely on path-based lookup.
+- `writeFile` creates parent folders automatically when `recursive` is unset (the default) or `true`. Set `recursive: false` to require the parent folder to already exist.
+- `expectedMtime` on `WriteOptions` is honored — when the stored `modifiedTime` differs, the write is rejected with `StaleFileError` to support optimistic concurrency.
+- The provider only exercises Drive REST endpoints (`https://www.googleapis.com/drive/v3` and `https://www.googleapis.com/upload/drive/v3`) through the built-in `fetch`; no additional dependencies are required.

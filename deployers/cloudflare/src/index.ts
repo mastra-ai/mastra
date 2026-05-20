@@ -1,12 +1,33 @@
 import { writeFile } from 'node:fs/promises';
+import { builtinModules } from 'node:module';
 import { join, relative } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
 import virtual from '@rollup/plugin-virtual';
+import type { Plugin } from 'rollup';
 import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is unstable, and no stable alternative exists. However, `wrangler` is a peerDep, allowing users to use latest properties.
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
+
+const nodeBuiltins = new Set(builtinModules);
+
+/**
+ * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
+ * as external. Cloudflare Workers with `nodejs_compat` provides these at runtime,
+ * so they must not be resolved to npm polyfill packages during bundling.
+ */
+function nodeBuiltinsExternal(): Plugin {
+  return {
+    name: 'node-builtins-external',
+    resolveId(id) {
+      if (nodeBuiltins.has(id)) {
+        return { id, external: true };
+      }
+      return null;
+    },
+  };
+}
 
 /** @deprecated */
 interface D1DatabaseBinding {
@@ -83,9 +104,16 @@ export class CloudflareDeployer extends Deployer {
       kvNamespaces?: unknown;
     };
     const loadedEnvVars = await this.loadEnvVars();
+    const envsAsObject = Object.assign({}, userVars);
 
-    // Merge env vars from .env files with user-provided vars
-    const envsAsObject = Object.assign({}, Object.fromEntries(loadedEnvVars.entries()), userVars);
+    if (loadedEnvVars.size > 0) {
+      const envKeys = [...loadedEnvVars.keys()].join(', ');
+      this.logger.warn(
+        `Environment variables from .env (${envKeys}) were not written to wrangler.jsonc.
+Upload them as Cloudflare Secrets instead:
+npx wrangler secret bulk .env`,
+      );
+    }
 
     // Write TypeScript stub to prevent bundling the full TypeScript library (~10MB)
     // The agent-builder package dynamically imports TypeScript for code validation,
@@ -126,6 +154,18 @@ export const $ = execa;
 `;
     await writeFile(join(outputDirectory, this.outputDir, execaStubPath), execaStub);
 
+    // Write readable-stream stub — redirects to native node:stream available via nodejs_compat.
+    // readable-stream is a userland copy of Node.js streams used by packages like elevenlabs.
+    // Bundling it for Workers pulls in Node.js polyfills (abort-controller, process/, string_decoder/)
+    // that are unnecessary and fail to resolve. The native node:stream is API-compatible.
+    const readableStreamStubPath = 'readable-stream-stub.mjs';
+    const readableStreamStub = `// Redirect readable-stream to native node:stream (available via nodejs_compat)
+import stream from 'node:stream';
+export const { Readable, Writable, Duplex, Transform, PassThrough, Stream, pipeline, finished } = stream;
+export default stream;
+`;
+    await writeFile(join(outputDirectory, this.outputDir, readableStreamStubPath), readableStreamStub);
+
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
       compatibility_date: '2025-04-01',
@@ -142,6 +182,7 @@ export const $ = execa;
       alias: {
         typescript: `./${typescriptStubPath}`,
         execa: `./${execaStubPath}`,
+        'readable-stream': `./${readableStreamStubPath}`,
         ...userAlias,
       },
     };
@@ -215,6 +256,7 @@ export const $ = execa;
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
+        nodeBuiltinsExternal(),
         virtual({
           '#polyfills': `
 process.versions = process.versions || {};

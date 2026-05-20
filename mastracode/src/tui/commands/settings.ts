@@ -1,8 +1,29 @@
 import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
+import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import type { NotificationMode } from '../notify.js';
+import { showModalOverlay } from '../overlay.js';
+import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
+
+function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
+
+function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
+  const tools = ctx.state.allToolComponents.filter(
+    (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
+  );
+
+  tools.forEach(tool => {
+    tool.setCompactToolModeColor?.(getCurrentModeColor(ctx));
+    tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
+    tool.setQuietPreviewLineLimit?.(previewLineLimit);
+  });
+
+  ctx.state.ui.requestRender();
+}
 
 export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<void> {
   const state = ctx.state.harness.getState() as any;
@@ -14,6 +35,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
+    quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
@@ -42,8 +64,18 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       onQuietModeChange: enabled => {
         const current = loadSettings();
         current.preferences.quietMode = enabled;
+        current.onboarding.quietModePreferenceSelected = true;
         saveSettings(current);
         ctx.state.quietMode = enabled;
+        ctx.state.taskProgress?.setQuietMode(enabled);
+        applyQuietModeToRenderedTools(ctx, enabled, ctx.state.quietModeMaxToolPreviewLines);
+      },
+      onQuietModeMaxToolPreviewLinesChange: lines => {
+        const current = loadSettings();
+        current.preferences.quietModeMaxToolPreviewLines = lines;
+        saveSettings(current);
+        ctx.state.quietModeMaxToolPreviewLines = lines;
+        applyQuietModeToRenderedTools(ctx, ctx.state.quietMode, lines);
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();
@@ -60,17 +92,18 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         console.info(`\nStorage backend changed to ${label}. Restarting is required.\n`);
         process.exit(0);
       },
+      onApiKeys: () => {
+        ctx.state.ui.hideOverlay();
+        resolve();
+        handleApiKeysCommand(ctx);
+      },
       onClose: () => {
         ctx.state.ui.hideOverlay();
         resolve();
       },
     });
 
-    ctx.state.ui.showOverlay(settings, {
-      width: '60%',
-      maxHeight: '50%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, settings, { maxHeight: '75%' });
     settings.focused = true;
   });
 }

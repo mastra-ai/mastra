@@ -1,6 +1,6 @@
 # @internal/test-utils
 
-Mastra-specific test helpers. Provides version-agnostic agent wrappers and API key management for integration tests.
+Mastra-specific test helpers. Provides version-agnostic agent wrappers, API key management, and provider-scoped LLM mocking for integration tests.
 
 > **Note**: This is an internal package. Not for public consumption.
 >
@@ -92,12 +92,90 @@ hasApiKey('google'); // checks GOOGLE_API_KEY
 hasApiKey('openrouter'); // checks OPENROUTER_API_KEY
 ```
 
-## Development
+### Provider-Scoped LLM Mocking
 
-```bash
-# Build
-pnpm build
+Mock specific LLM providers while leaving others live. Built on `@internal/llm-recorder` for recording/replay.
 
-# Run tests
-pnpm test
+Returns a self-contained instance — no global state. You control the lifecycle.
+
+```typescript
+import { createLLMMock } from '@internal/test-utils';
 ```
+
+#### `createLLMMock(model, options?)`
+
+Create a mock by wrapping a real AI SDK model instance. The mock reads its `provider` and `modelId` for naming the recording file. MSW intercepts all LLM API traffic.
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+
+describe('OpenAI agent', () => {
+  const mock = createLLMMock(openai('gpt-4o'));
+
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
+
+  it('generates a response', async () => {
+    const result = await agent.generate('Hello');
+    expect(result.text).toBeDefined();
+  });
+});
+```
+
+Works with any AI SDK model instance:
+
+```typescript
+createLLMMock(openai('gpt-4o')); // recording tagged with openai.chat + gpt-4o
+createLLMMock(anthropic('claude-3')); // recording tagged with anthropic + claude-3
+```
+
+> **Note**: For gateway/string models like `'openai/gpt-4o'`, use `createGatewayMock()` instead.
+
+The returned `LLMMock` instance has:
+
+| Property / Method | Description                                            |
+| ----------------- | ------------------------------------------------------ |
+| `providerId`      | Extracted provider (e.g. `"openai"`)                   |
+| `modelId`         | Extracted model if present (e.g. `"gpt-4o"`)           |
+| `recordingName`   | Name used for the recording file                       |
+| `mode`            | Current test mode (`record`, `replay`, `auto`, `live`) |
+| `start()`         | Start intercepting requests                            |
+| `saveAndStop()`   | Save recordings and stop intercepting                  |
+| `recorder`        | Underlying `LLMRecorderInstance` for advanced use      |
+
+Options:
+
+- `name` — Explicit recording name (auto-derived from test file path if omitted)
+- `recordingsDir` — Directory for recording files (default: `__recordings__` in cwd)
+- `forceRecord` — Force re-record even if recording exists
+- `replayWithTiming` — Replay with original chunk timing
+- `maxChunkDelay` — Max delay between chunks in replay, ms (default: 10)
+- `transformRequest` — Transform requests before hashing
+- `extraHosts` — Additional API hosts to intercept (merged with auto-detected ones)
+- `debug` — Enable verbose debug logging
+
+### Utility Functions
+
+#### `extractProviderId(modelRouterId)`
+
+Extract the provider from a model router ID:
+
+```typescript
+extractProviderId('openai/gpt-4o'); // 'openai'
+extractProviderId('netlify/anthropic/claude-3'); // 'anthropic'
+extractProviderId('azure-openai/my-deployment'); // 'azure-openai'
+```
+
+#### `extractModelId(modelRouterId)`
+
+Extract the model from a model router ID:
+
+```typescript
+extractModelId('openai/gpt-4o'); // 'gpt-4o'
+extractModelId('netlify/anthropic/claude-3'); // 'claude-3'
+extractModelId('openai'); // undefined
+```
+
+#### `PROVIDER_HOSTS`
+
+Mapping of known provider IDs to their API hosts. Exported for advanced use cases.

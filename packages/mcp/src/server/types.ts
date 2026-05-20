@@ -1,3 +1,4 @@
+import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import type { RequestHandlerExtra, RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
   ElicitRequest,
@@ -44,6 +45,23 @@ export type MCPServerResources = {
 };
 
 /**
+ * Extends the MCP SDK Prompt type with an optional version field.
+ *
+ * The MCP protocol does not include `version` on prompts, so this field is
+ * only used server-side for internal prompt lookup and is not sent over the wire.
+ *
+ * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
+ * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
+ */
+export type MastraPrompt = Prompt & {
+  /**
+   * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
+   * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
+   */
+  version?: string;
+};
+
+/**
  * Callback function to retrieve messages for a specific prompt.
  *
  * @param params - Parameters for prompt message retrieval
@@ -60,6 +78,10 @@ export type MCPServerPromptMessagesCallback = ({
   extra,
 }: {
   name: string;
+  /**
+   * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
+   * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
+   */
   version?: string;
   args?: any;
   extra: MCPRequestHandlerExtra;
@@ -72,7 +94,7 @@ export type MCPServerPromptMessagesCallback = ({
  */
 export type MCPServerPrompts = {
   /** Function to list all available prompts */
-  listPrompts: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<Prompt[]>;
+  listPrompts: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<MastraPrompt[]>;
   /** Optional function to get messages for a specific prompt */
   getPromptMessages?: MCPServerPromptMessagesCallback;
 };
@@ -104,3 +126,41 @@ export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
  * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
  */
 export type { Resource, ResourceTemplate, RequestOptions };
+
+/**
+ * Configuration for a single MCP App resource.
+ *
+ * App resources serve interactive HTML UIs via the `ui://` URI scheme
+ * as defined by the MCP Apps extension (SEP-1865).
+ */
+export interface AppResource {
+  /** Display name for the UI resource */
+  name: string;
+  /** Optional description of the UI resource */
+  description?: string;
+  /** Inline HTML content for the UI */
+  html?: string;
+  /** Path to an HTML file (resolved at startup) */
+  htmlPath?: string;
+  /** UI resource metadata (CSP, permissions, rendering preferences) from the official ext-apps SDK */
+  meta?: McpUiResourceMeta;
+}
+
+/**
+ * Map of `ui://` URIs to their app resource configurations.
+ *
+ * Used as a convenience config on MCPServer to auto-register UI resources
+ * that are served via the MCP Apps extension.
+ *
+ * @example
+ * ```typescript
+ * const appResources: AppResources = {
+ *   'ui://weather/dashboard': {
+ *     name: 'Weather Dashboard',
+ *     html: '<html>...</html>',
+ *     meta: { csp: { connectDomains: ['https://api.weather.com'] } },
+ *   },
+ * };
+ * ```
+ */
+export type AppResources = Record<string, AppResource>;

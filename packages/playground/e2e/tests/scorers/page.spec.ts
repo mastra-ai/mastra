@@ -5,22 +5,18 @@ test.afterEach(async () => {
   await resetStorage();
 });
 
-test('has overall information', async ({ page }) => {
+test('shows scorers in the evaluation dashboard', async ({ page }) => {
   await page.goto('/scorers');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('h1')).toHaveText('Scorers');
-  await expect(page.getByRole('link', { name: 'Scorers documentation' })).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/evals/overview',
-  );
+  await expect(page.getByRole('textbox', { name: 'Filter by scorer name' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Response Quality Scorer/i })).toBeVisible();
 });
 
 test('clicking on the scorer row redirects to detail page', async ({ page }) => {
   await page.goto('/scorers');
 
-  const el = page.locator('tr:has-text("Response Quality Scorer")');
-  await el.click();
+  await page.getByRole('link', { name: /Response Quality Scorer/i }).click();
 
   await expect(page).toHaveURL(/\/scorers\/response-quality$/);
 });

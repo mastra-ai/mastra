@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError } from '../../error/index';
 import type { MastraScorer } from '../../evals/base';
 import { Mastra } from '../../mastra';

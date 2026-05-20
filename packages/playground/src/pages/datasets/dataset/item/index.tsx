@@ -1,32 +1,23 @@
 import {
-  MainContentLayout,
-  MainContentContent,
-  useDatasetItemVersions,
-  useDatasetMutations,
-  useLinkComponent,
-  DatasetItemContent,
-  DatasetItemVersionsPanel,
-  EditModeContent,
   AlertDialog,
   Button,
-  Icon,
-  Header,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
   ButtonsGroup,
-  toast,
-  TextAndIcon,
-  useDataset,
-  CopyButton,
-  Columns,
   Column,
+  Columns,
+  CopyButton,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   Notice,
+  PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+  toast,
 } from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import {
-  AlertTriangleIcon,
   ArrowRightToLineIcon,
   Calendar1Icon,
   DatabaseIcon,
@@ -36,7 +27,13 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
+import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
+import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { useLinkComponent } from '@/lib/framework';
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -44,7 +41,7 @@ function DatasetItemPage() {
   const navigate = useNavigate();
 
   // Use versions as single source of truth - works for both active and deleted items
-  const { data: versions, isLoading: isVersionsLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
+  const { data: versions, isLoading: isVersionsLoading, error } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { updateItem, deleteItem } = useDatasetMutations();
   const { data: dataset } = useDataset(datasetId ?? '');
 
@@ -57,11 +54,13 @@ function DatasetItemPage() {
 
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '' };
+    if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '', trajectory: '' };
     return {
       input: JSON.stringify(latestVersion.input, null, 2),
       groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
       metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
+      trajectory:
+        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
 
@@ -73,6 +72,7 @@ function DatasetItemPage() {
   const [inputValue, setInputValue] = useState(formDefaults.input);
   const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
+  const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
 
   // Reset form values when version changes (key-based reset pattern)
   const [prevVersionKey, setPrevVersionKey] = useState(versionKey);
@@ -81,6 +81,7 @@ function DatasetItemPage() {
     setInputValue(formDefaults.input);
     setGroundTruthValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
+    setTrajectoryValue(formDefaults.trajectory);
   }
 
   // Delete dialog state
@@ -149,6 +150,17 @@ function DatasetItemPage() {
       }
     }
 
+    let parsedTrajectory: unknown | undefined;
+    const trajectoryChanged = trajectoryValue !== formDefaults.trajectory;
+    if (trajectoryChanged && trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -156,6 +168,7 @@ function DatasetItemPage() {
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
+        ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
       });
       toast.success('Item updated successfully');
       setIsEditing(false);
@@ -170,6 +183,9 @@ function DatasetItemPage() {
       setInputValue(JSON.stringify(latestVersion.input, null, 2));
       setGroundTruthValue(latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '');
       setMetadataValue(latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '');
+      setTrajectoryValue(
+        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
+      );
     }
     setIsEditing(false);
   };
@@ -197,11 +213,32 @@ function DatasetItemPage() {
         datasetVersion: versionToDisplay.datasetVersion,
         input: versionToDisplay.input,
         groundTruth: versionToDisplay.groundTruth,
+        expectedTrajectory: versionToDisplay.expectedTrajectory,
         metadata: versionToDisplay.metadata,
         createdAt: versionToDisplay.createdAt,
         updatedAt: versionToDisplay.updatedAt,
       }
     : null;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   // Wait for versions to load
   if (isVersionsLoading) {
@@ -222,22 +259,6 @@ function DatasetItemPage() {
   return (
     <>
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <DatabaseIcon />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb as={Link} to={`/datasets/${datasetId}`}>
-              {dataset?.name}
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Item
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <div className="h-full overflow-hidden px-6 pb-4">
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
             <MainHeader>
@@ -265,8 +286,6 @@ function DatasetItemPage() {
                 {!isEditing && !isDeleted && (
                   <ButtonsGroup>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleEditClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
@@ -274,8 +293,6 @@ function DatasetItemPage() {
                       <Edit2Icon /> Edit
                     </Button>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleDeleteClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}
@@ -290,22 +307,23 @@ function DatasetItemPage() {
             <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
               <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Notice variant="destructive">
-                    <AlertTriangleIcon />
+                  <Notice variant="destructive" title="Item deleted">
                     <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
                   </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <>
-                    <Notice variant="warning">
-                      <AlertTriangleIcon />
-                      <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  <Notice
+                    variant="warning"
+                    title="Previous version"
+                    action={
                       <Notice.Button onClick={handleReturnToLatest}>
                         <ArrowRightToLineIcon /> Return to the latest version
                       </Notice.Button>
-                    </Notice>
-                  </>
+                    }
+                  >
+                    <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {isEditing ? (
@@ -316,6 +334,8 @@ function DatasetItemPage() {
                     setGroundTruthValue={setGroundTruthValue}
                     metadataValue={metadataValue}
                     setMetadataValue={setMetadataValue}
+                    trajectoryValue={trajectoryValue}
+                    setTrajectoryValue={setTrajectoryValue}
                     validationErrors={null}
                     onSave={handleSave}
                     onCancel={handleCancel}

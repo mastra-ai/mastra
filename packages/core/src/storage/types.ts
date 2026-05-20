@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
@@ -425,6 +425,8 @@ export interface StorageAgentSnapshotType {
   mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** Workspace reference — ID of a stored workspace or inline config — static or conditional on request context */
   workspace?: StorageConditionalField<StorageWorkspaceRef>;
+  /** Browser reference — inline browser config — static or conditional on request context */
+  browser?: StorageConditionalField<StorageBrowserRef>;
   /** Skill entity IDs with optional per-skill overrides — static or conditional on request context */
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
@@ -437,6 +439,15 @@ export interface StorageAgentSnapshotType {
  * Thin agent record type containing only metadata fields.
  * All configuration lives in version snapshots (StorageAgentSnapshotType).
  */
+/**
+ * Visibility of a stored agent.
+ * - `private`: only the owner (or admins) can read the record.
+ * - `public`: any authenticated caller with `agents:read` can read the record.
+ */
+export type StorageVisibility = 'private' | 'public';
+
+export const STORAGE_VISIBILITY_VALUES = ['private', 'public'] as const satisfies readonly StorageVisibility[];
+
 export interface StorageAgentType {
   /** Unique, immutable identifier */
   id: string;
@@ -446,8 +457,19 @@ export interface StorageAgentType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Visibility of the stored agent. `private` limits access to the owner / admins;
+   * `public` allows any authenticated caller with `agents:read` to read.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
+  /**
+   * Denormalized count of favorites on this agent. Maintained by the favorites
+   * storage domain. Optional; treat undefined as 0 for legacy rows.
+   */
+  favoriteCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -471,6 +493,8 @@ export type StorageCreateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent (defaults to 'private' when an authorId is set) */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
 } & StorageAgentSnapshotType;
@@ -485,15 +509,19 @@ export type StorageUpdateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
-} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+} & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
     memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    /** Browser configuration (inline ref), or null to disable browser */
+    browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
 
 export type StorageListAgentsInput = {
@@ -514,6 +542,10 @@ export type StorageListAgentsInput = {
    */
   authorId?: string;
   /**
+   * Filter agents by visibility (exact match).
+   */
+  visibility?: StorageVisibility;
+  /**
    * Filter agents by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
    */
@@ -523,6 +555,25 @@ export type StorageListAgentsInput = {
    * Defaults to 'published' if not specified.
    */
   status?: 'draft' | 'published' | 'archived';
+  /**
+   * Restrict results to this set of agent IDs. Used by the favorites feature
+   * to fetch a specific subset of favorited agents. When provided as an
+   * empty array, the result is empty.
+   */
+  entityIds?: string[];
+  /**
+   * When set, agents favorited by this user are returned first, ordered
+   * by `(is_favorited DESC, <existing orderBy>, id ASC)` over the full
+   * candidate set before pagination. Implementations that don't support
+   * favorited-first sort treat this as undefined.
+   */
+  pinFavoritedFor?: string;
+  /**
+   * When true, only agents favorited by `pinFavoritedFor` are returned.
+   * Requires `pinFavoritedFor` to be set. SQL backends collapse this into
+   * the same JOIN used for favorited-first sort.
+   */
+  favoritedOnly?: boolean;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
@@ -981,6 +1032,8 @@ export interface BufferedObservationChunk {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1003,6 +1056,8 @@ export interface BufferedObservationChunkInput {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1016,6 +1071,17 @@ export interface BufferedObservationChunkInput {
  * - lastReflectionAt: createdAt of most recent reflection record
  * - previousGeneration: record with next-oldest createdAt
  */
+
+/** Options for filtering observational memory history queries. */
+export interface ObservationalMemoryHistoryOptions {
+  /** Only return records created at or after this date */
+  from?: Date;
+  /** Only return records created at or before this date */
+  to?: Date;
+  /** Number of records to skip (for pagination) */
+  offset?: number;
+}
+
 export interface ObservationalMemoryRecord {
   // Identity
   /** Unique record ID */
@@ -1223,6 +1289,13 @@ export interface SwapBufferedToActiveInput {
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
    */
   lastObservedAt?: Date;
+  /**
+   * Refreshed buffered chunks with up-to-date messageTokens.
+   * When provided, the storage layer uses these instead of the persisted chunks
+   * for activation boundary selection, so stale token weights don't cause
+   * over- or under-activation.
+   */
+  bufferedChunks?: BufferedObservationChunk[];
 }
 
 /**
@@ -1298,6 +1371,15 @@ export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+}
+
+/**
+ * Input for updating the config of an existing observational memory record.
+ * The provided config is deep-merged into the record's existing config.
+ */
+export interface UpdateObservationalMemoryConfigInput {
+  id: string;
+  config: Record<string, unknown>;
 }
 
 // ============================================
@@ -1789,6 +1871,18 @@ export type StorageContentSource =
   | { type: 'managed'; mastraPath: string };
 
 /**
+ * A node in the skill file tree (folder or file with inline content).
+ * Used for round-tripping the full file structure through the UI.
+ */
+export interface StorageSkillFileNode {
+  id?: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: StorageSkillFileNode[];
+}
+
+/**
  * Skill version snapshot type containing ALL skill definition fields.
  * These fields live exclusively in version snapshot rows, not on the skill record.
  */
@@ -1813,6 +1907,8 @@ export interface StorageSkillSnapshotType {
   assets?: string[];
   /** Optional arbitrary metadata */
   metadata?: Record<string, unknown>;
+  /** Full file tree structure (folders, files with content) for round-tripping in the UI */
+  files?: StorageSkillFileNode[];
   /** Content-addressable file tree manifest for this skill version */
   tree?: SkillVersionTree;
 }
@@ -1830,6 +1926,16 @@ export interface StorageSkillType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Access control: 'private' = only owner/admins, 'public' = anyone.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageVisibility;
+  /**
+   * Denormalized count of favorites on this skill. Maintained by the favorites
+   * storage domain. Optional; treat undefined as 0 for legacy rows.
+   */
+  favoriteCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1852,6 +1958,8 @@ export type StorageCreateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Access control visibility */
+  visibility?: StorageVisibility;
 } & StorageSkillSnapshotType;
 
 /**
@@ -1862,6 +1970,8 @@ export type StorageUpdateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Access control visibility */
+  visibility?: StorageVisibility;
   /** FK to skill_versions.id - the currently active version */
   activeVersionId?: string;
   /** Skill status */
@@ -1885,10 +1995,37 @@ export type StorageListSkillsInput = {
    */
   authorId?: string;
   /**
+   * Filter skills by visibility (exact match).
+   */
+  visibility?: StorageVisibility;
+  /**
+   * Filter skills by status (exact match).
+   */
+  status?: StorageSkillType['status'];
+  /**
    * Filter skills by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Restrict results to this set of skill IDs. Used by the favorites feature
+   * to fetch a specific subset of favorited skills. When provided as an
+   * empty array, the result is empty.
+   */
+  entityIds?: string[];
+  /**
+   * When set, skills favorited by this user are returned first, ordered
+   * by `(is_favorited DESC, <existing orderBy>, id ASC)` over the full
+   * candidate set before pagination. Implementations that don't support
+   * favorited-first sort treat this as undefined.
+   */
+  pinFavoritedFor?: string;
+  /**
+   * When true, only skills favorited by `pinFavoritedFor` are returned.
+   * Requires `pinFavoritedFor` to be set. SQL backends collapse this into
+   * the same JOIN used for favorited-first sort.
+   */
+  favoritedOnly?: boolean;
 };
 
 /** Paginated list output for thin skill records */
@@ -1986,6 +2123,18 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+  activePaths?: Array<number>;
+  activeStepsPath?: Record<string, number[]>;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
@@ -2010,18 +2159,56 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 
 /**
  * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
- * Zod 3 uses _def.checks, Zod 4 uses _zod.def.checks.
+ * Zod 3 uses _def.checks with {kind: "..."} objects
+ * Zod 4 uses _zod.def.checks with {def: {check: "...", format: "..."}} objects
  */
 function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
-  const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.checks) {
-    return schemaAny._zod.def.checks;
+  // Zod 4 structure: checks have def.check instead of kind
+  if ('_zod' in schema) {
+    const zodV4 = schema as { _zod?: { def?: { checks?: unknown[] } } };
+    const checks = zodV4._zod?.def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks.map((check: unknown) => {
+        // Type guard for Zod v4 check structure
+        if (
+          typeof check === 'object' &&
+          check !== null &&
+          'def' in check &&
+          typeof check.def === 'object' &&
+          check.def !== null
+        ) {
+          const def = check.def as Record<string, unknown>;
+
+          // For number checks in Zod 4, format:"safeint" means int()
+          if (def.check === 'number_format' && def.format === 'safeint') {
+            return { kind: 'int' };
+          }
+
+          // For string checks in Zod 4, check type is the format name
+          if (def.check === 'string_format' && typeof def.format === 'string') {
+            return { kind: def.format }; // e.g., "uuid", "email", etc.
+          }
+
+          // Generic mapping: use the check type as kind
+          return { kind: typeof def.check === 'string' ? def.check : 'unknown' };
+        }
+
+        return { kind: 'unknown' };
+      });
+    }
   }
-  // Zod 3 structure
-  if (schemaAny._def?.checks) {
-    return schemaAny._def.checks;
+
+  // Zod 3 structure: checks already have kind property
+  if ('_def' in schema) {
+    const zodV3 = schema as { _def?: { checks?: Array<{ kind: string }> } };
+    const checks = zodV3._def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks;
+    }
   }
+
   return [];
 }
 
@@ -2044,7 +2231,8 @@ function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
     const checks = getZodChecks(schema);
     return checks.some(c => c.kind === 'int') ? 'integer' : 'float';
   }
-  if (typeName === 'ZodBigInt') {
+  // Both ZodBigInt (v3) and ZodBigint (v4) should map to bigint
+  if (typeName === 'ZodBigInt' || typeName === 'ZodBigint') {
     return 'bigint';
   }
   if (typeName === 'ZodDate') {
@@ -2080,6 +2268,67 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
 }
 
 // ============================================
+// Browser Configuration Types
+// ============================================
+
+/**
+ * Browser configuration stored in agent snapshots.
+ *
+ * Only stable, declarative configuration is persisted here. Runtime/security
+ * concerns (cdpUrl, scope, profile, executablePath) belong in the BrowserProvider
+ * registration where they're set per-instance via `createBrowser`.
+ *
+ * Runtime-only options (onLaunch, onClose, cdpUrl as function) are never stored.
+ */
+export interface StorageBrowserConfig {
+  /** Provider type identifier (e.g., 'stagehand', 'playwright') — resolved by the editor's browser registry */
+  provider: string;
+
+  /**
+   * Whether to run the browser in headless mode (no visible UI).
+   * @default true
+   */
+  headless?: boolean;
+
+  /**
+   * Browser viewport dimensions.
+   * Controls the size of the browser window and how websites render.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
+
+  /**
+   * Default timeout in milliseconds for browser operations.
+   * @default 10000 (10 seconds)
+   */
+  timeout?: number;
+
+  /**
+   * Screencast options for streaming browser frames.
+   */
+  screencast?: {
+    /** Image format (default: 'jpeg') */
+    format?: 'jpeg' | 'png';
+    /** JPEG quality 0-100 (default: 80) */
+    quality?: number;
+    /** Max width in pixels (default: 1280) */
+    maxWidth?: number;
+    /** Max height in pixels (default: 720) */
+    maxHeight?: number;
+    /** Capture every Nth frame (default: 1) */
+    everyNthFrame?: number;
+  };
+}
+
+/**
+ * Browser reference configuration stored in agent snapshots.
+ * Provides inline browser config that the editor resolves at hydration time.
+ */
+export type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig };
+
+// ============================================
 // Dataset Types
 // ============================================
 
@@ -2092,9 +2341,19 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: TargetType | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
 }
 
 export interface DatasetItem {
@@ -2103,7 +2362,10 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2116,7 +2378,10 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2136,6 +2401,10 @@ export interface CreateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  targetType?: TargetType;
+  targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2145,13 +2414,21 @@ export interface UpdateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[] | null;
+  targetType?: TargetType | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface UpdateDatasetItemInput {
@@ -2159,7 +2436,10 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface ListDatasetsInput {
@@ -2198,7 +2478,10 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }>;
 }
 
@@ -2227,11 +2510,14 @@ export interface Experiment {
   succeededCount: number;
   failedCount: number;
   skippedCount: number;
+  agentVersion?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type ExperimentResultStatus = 'needs-review' | 'reviewed' | 'complete';
 
 export interface ExperimentResult {
   id: string;
@@ -2246,7 +2532,17 @@ export interface ExperimentResult {
   completedAt: Date;
   retryCount: number;
   traceId: string | null;
+  status: ExperimentResultStatus | null;
+  tags: string[] | null;
   createdAt: Date;
+}
+
+export interface UpdateExperimentResultInput {
+  id: string;
+  /** When provided, the update will only succeed if the result belongs to this experiment */
+  experimentId?: string;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface CreateExperimentInput {
@@ -2256,6 +2552,7 @@ export interface CreateExperimentInput {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion?: string;
   targetType: TargetType;
   targetId: string;
   totalItems: number;
@@ -2288,10 +2585,16 @@ export interface AddExperimentResultInput {
   completedAt: Date;
   retryCount: number;
   traceId?: string | null;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface ListExperimentsInput {
   datasetId?: string;
+  targetType?: TargetType;
+  targetId?: string;
+  agentVersion?: string;
+  status?: ExperimentStatus;
   pagination: StoragePagination;
 }
 
@@ -2302,6 +2605,8 @@ export interface ListExperimentsOutput {
 
 export interface ListExperimentResultsInput {
   experimentId: string;
+  traceId?: string;
+  status?: ExperimentResultStatus;
   pagination: StoragePagination;
 }
 
@@ -2309,3 +2614,70 @@ export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
 }
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
+}
+
+// ============================================
+// Favorites Storage Types
+// ============================================
+
+/**
+ * Entity types that can be favorited.
+ * Currently agents and skills; extend here when other entities opt in.
+ */
+export type StorageFavoriteEntityType = 'agent' | 'skill';
+
+export const STORAGE_FAVORITE_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageFavoriteEntityType[];
+
+/**
+ * A single favorite row: one user favoriting one entity. Composite primary key is
+ * `(userId, entityType, entityId)`. Idempotent — re-favoriting is a no-op.
+ */
+export interface StorageFavoriteType {
+  /** Caller identifier (matches authorId conventions used elsewhere). */
+  userId: string;
+  /** Type of entity being favorited. */
+  entityType: StorageFavoriteEntityType;
+  /** ID of the entity being favorited. */
+  entityId: string;
+  /** Timestamp the favorite was created. */
+  createdAt: Date;
+}
+
+/** Identifier for a favorite row, used by lookup and delete operations. */
+export type StorageFavoriteKey = {
+  userId: string;
+  entityType: StorageFavoriteEntityType;
+  entityId: string;
+};
+
+/**
+ * Input to look up which entities in a candidate set are favorited by a given
+ * user. Used to annotate list responses without N+1 queries.
+ */
+export type StorageIsFavoritedBatchInput = {
+  userId: string;
+  entityType: StorageFavoriteEntityType;
+  entityIds: string[];
+};
+
+/** Input to list all entity IDs favorited by a given user, optionally scoped by entity type. */
+export type StorageListFavoritesInput = {
+  userId: string;
+  entityType: StorageFavoriteEntityType;
+};
+
+/**
+ * Input to remove all favorites for a given entity. Called by hard-delete handlers
+ * so favorite rows do not orphan the deleted entity.
+ */
+export type StorageDeleteFavoritesForEntityInput = {
+  entityType: StorageFavoriteEntityType;
+  entityId: string;
+};

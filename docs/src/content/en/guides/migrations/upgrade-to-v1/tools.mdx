@@ -13,7 +13,7 @@ Tool execution signatures have been updated to use separate input and context pa
 
 All `createTool` execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
 
-**Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and does not need to be changed.
+**Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and doesn't need to be changed.
 
 To migrate, update `createTool` signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
 
@@ -86,7 +86,7 @@ For tools that are executed inside a workflow, access workflow-specific properti
 The `suspendPayload` gets validated against the `suspendSchema` when the tool is executed. If the suspendPayload doesn't match the `suspendSchema`, a warning is logged and the error is returned as tool output, but suspension continues.
 Also, when the tool is resumed, the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`, preventing the tool resumption.
 
-To skip the `suspendSchema` or `resumeSchema` validation, do not define `suspendSchema` or `resumeSchema` in the tool creation.
+To skip the `suspendSchema` or `resumeSchema` validation, don't define `suspendSchema` or `resumeSchema` in the tool creation.
 
 :::note
 For MCP-specific tool context changes, see the [MCP migration guide](/guides/migrations/upgrade-to-v1/mcp).

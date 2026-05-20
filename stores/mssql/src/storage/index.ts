@@ -3,13 +3,15 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
 
 import sql from 'mssql';
+import { AgentsMSSQL } from './domains/agents';
+import { BackgroundTasksMSSQL } from './domains/background-tasks';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryMSSQL, ObservabilityMSSQL, ScoresMSSQL, WorkflowsMSSQL };
+export { AgentsMSSQL, BackgroundTasksMSSQL, MemoryMSSQL, ObservabilityMSSQL, ScoresMSSQL, WorkflowsMSSQL };
 export type { MssqlDomainConfig } from './db';
 
 /**
@@ -198,11 +200,17 @@ export class MSSQLStore extends MastraCompositeStore {
       const memory = new MemoryMSSQL(domainConfig);
       const observability = new ObservabilityMSSQL(domainConfig);
 
+      const backgroundTasks = new BackgroundTasksMSSQL(domainConfig);
+
+      const agents = new AgentsMSSQL(domainConfig);
+
       this.stores = {
         scores,
         workflows,
         memory,
         observability,
+        backgroundTasks,
+        agents,
       };
     } catch (e) {
       throw new MastraError(

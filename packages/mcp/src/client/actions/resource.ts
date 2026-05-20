@@ -49,7 +49,8 @@ export class ResourceClientActions {
       if (response && response.resources && Array.isArray(response.resources)) {
         return response.resources;
       } else {
-        this.logger.warn(`Resources response from server ${this.client.name} did not have expected structure.`, {
+        this.logger.warn('Resources response did not have expected structure', {
+          server: this.client.name,
           response,
         });
         return [];
@@ -59,7 +60,8 @@ export class ResourceClientActions {
       if (e.code === ErrorCode.MethodNotFound) {
         return [];
       }
-      this.logger.error(`Error getting resources from server ${this.client.name}`, {
+      this.logger.error('Error getting resources from server', {
+        server: this.client.name,
         error: e instanceof Error ? e.message : String(e),
       });
       throw new Error(
@@ -91,10 +93,10 @@ export class ResourceClientActions {
       if (response && response.resourceTemplates && Array.isArray(response.resourceTemplates)) {
         return response.resourceTemplates;
       } else {
-        this.logger.warn(
-          `Resource templates response from server ${this.client.name} did not have expected structure.`,
-          { response },
-        );
+        this.logger.warn('Resource templates response did not have expected structure', {
+          server: this.client.name,
+          response,
+        });
         return [];
       }
     } catch (e: any) {
@@ -102,7 +104,8 @@ export class ResourceClientActions {
       if (e.code === ErrorCode.MethodNotFound) {
         return [];
       }
-      this.logger.error(`Error getting resource templates from server ${this.client.name}`, {
+      this.logger.error('Error getting resource templates from server', {
+        server: this.client.name,
         error: e instanceof Error ? e.message : String(e),
       });
       throw new Error(

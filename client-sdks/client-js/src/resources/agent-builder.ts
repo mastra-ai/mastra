@@ -287,16 +287,21 @@ export class AgentBuilder extends BaseResource {
    * Streams agent builder action progress in real-time.
    * This calls `/agent-builder/:actionId/stream`.
    */
-  async stream(params: AgentBuilderActionRequest, runId?: string) {
-    const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
+  async stream(
+    params: AgentBuilderActionRequest,
+    runId: string,
+  ): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
+    if (!runId) {
+      throw new Error('runId is required to stream an agent builder action');
     }
+
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', runId);
 
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/agent-builder/${this.actionId}/stream?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       body: { ...actionParams, requestContext },
@@ -320,7 +325,7 @@ export class AgentBuilder extends BaseResource {
    * This is the recommended method for recovery after page refresh/hot reload.
    * This calls `/agent-builder/:actionId/observe`
    */
-  async observeStream(params: { runId: string }) {
+  async observeStream(params: { runId: string }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
@@ -346,7 +351,9 @@ export class AgentBuilder extends BaseResource {
    * Replays cached execution from the beginning, then continues with live stream.
    * This calls `/agent-builder/:actionId/observe-stream-legacy`.
    */
-  async observeStreamLegacy(params: { runId: string }) {
+  async observeStreamLegacy(params: {
+    runId: string;
+  }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
@@ -376,7 +383,7 @@ export class AgentBuilder extends BaseResource {
     step: string | string[];
     resumeData?: unknown;
     requestContext?: RequestContext;
-  }): Promise<ReadableStream> {
+  }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 

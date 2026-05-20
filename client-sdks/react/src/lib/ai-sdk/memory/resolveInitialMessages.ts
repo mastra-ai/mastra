@@ -173,15 +173,31 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
 
       const extendedMessage = message as ExtendedMastraUIMessage;
 
-      // Convert pendingToolApprovals from DB format to stream format
+      // Convert pendingToolApprovals from DB format to stream format,
+      // filtering out tools that have already completed (state: 'output-available')
       const pendingToolApprovals = extendedMessage.metadata?.pendingToolApprovals as Record<string, any> | undefined;
       if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
+        const stillPending = Object.fromEntries(
+          Object.entries(pendingToolApprovals).filter(([_, approval]) => {
+            if (!approval || typeof approval !== 'object' || !('toolCallId' in approval)) {
+              return false;
+            }
+
+            const toolCallId = approval.toolCallId;
+            // Check if this tool already has a result in the message parts
+            return !message.parts.some(
+              (part: any) =>
+                part.toolCallId === toolCallId && (part.state === 'output-available' || part.output != null),
+            );
+          }),
+        );
+
         return {
           ...message,
           metadata: {
             ...message.metadata,
             mode: 'stream' as const,
-            requireApprovalMetadata: pendingToolApprovals,
+            ...(Object.keys(stillPending).length > 0 ? { requireApprovalMetadata: stillPending } : {}),
           },
         };
       }

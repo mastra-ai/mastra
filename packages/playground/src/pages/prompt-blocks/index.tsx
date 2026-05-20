@@ -1,63 +1,78 @@
 import {
   Button,
-  DocsIcon,
-  HeaderAction,
-  Icon,
-  MainContentContent,
-  useLinkComponent,
-  useIsCmsAvailable,
-  useStoredPromptBlocks,
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  PromptBlocksTable,
+  ErrorState,
+  ListSearch,
+  NoDataPageLayout,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { FileTextIcon, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
+import { useLinkComponent } from '@/lib/framework';
 
 export default function PromptBlocks() {
-  const { Link: FrameworkLink, paths } = useLinkComponent();
-  const { data, isLoading } = useStoredPromptBlocks();
+  const { paths } = useLinkComponent();
+  const { data, isLoading, error } = useStoredPromptBlocks();
   const { isCmsAvailable } = useIsCmsAvailable();
+  const [search, setSearch] = useState('');
 
   const promptBlocks = data?.promptBlocks ?? [];
 
-  return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <FileTextIcon />
-          </Icon>
-          Prompts
-        </HeaderTitle>
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-        <HeaderAction>
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout>
+        <PermissionDenied resource="prompt blocks" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout>
+        <ErrorState title="Failed to load prompt blocks" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (promptBlocks.length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout>
+        <NoPromptBlocksInfo />
+      </NoDataPageLayout>
+    );
+  }
+
+  return (
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row align="center" stack="responsive">
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />
+          </div>
           {isCmsAvailable && (
-            <Button variant="light" as={FrameworkLink} to={paths.cmsPromptBlockCreateLink()}>
-              <Icon>
-                <Plus />
-              </Icon>
-              Create a prompt block
+            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" className="shrink-0">
+              <Plus />
+              Create Prompt
             </Button>
           )}
-          <Button
-            variant="outline"
-            as={Link}
-            to="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
-            target="_blank"
-          >
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Documentation
-          </Button>
-        </HeaderAction>
-      </Header>
+        </PageLayout.Row>
+      </PageLayout.TopArea>
 
-      <MainContentContent isCentered={!isLoading && promptBlocks.length === 0}>
-        <PromptBlocksTable isLoading={isLoading} promptBlocks={promptBlocks} />
-      </MainContentContent>
-    </MainContentLayout>
+      <PromptsList promptBlocks={promptBlocks} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }

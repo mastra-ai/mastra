@@ -1,16 +1,21 @@
-import type { ReadableStream } from 'node:stream/web';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 
 async function sharedProcessMastraStream({
   stream,
   onChunk,
+  signal,
 }: {
-  stream: ReadableStream<Uint8Array>;
+  stream: globalThis.ReadableStream<Uint8Array>;
   onChunk: (chunk: any) => Promise<void>;
+  signal?: AbortSignal;
 }) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  const abort = () => void reader.cancel();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -45,6 +50,7 @@ async function sharedProcessMastraStream({
       }
     }
   } finally {
+    signal?.removeEventListener('abort', abort);
     reader.releaseLock();
   }
 }
@@ -52,25 +58,31 @@ async function sharedProcessMastraStream({
 export async function processMastraNetworkStream({
   stream,
   onChunk,
+  signal,
 }: {
-  stream: ReadableStream<Uint8Array>;
+  stream: globalThis.ReadableStream<Uint8Array>;
   onChunk: (chunk: NetworkChunkType) => Promise<void>;
+  signal?: AbortSignal;
 }) {
   return sharedProcessMastraStream({
     stream,
     onChunk,
+    signal,
   });
 }
 
 export async function processMastraStream({
   stream,
   onChunk,
+  signal,
 }: {
-  stream: ReadableStream<Uint8Array>;
+  stream: globalThis.ReadableStream<Uint8Array>;
   onChunk: (chunk: ChunkType) => Promise<void>;
+  signal?: AbortSignal;
 }) {
   return sharedProcessMastraStream({
     stream,
     onChunk,
+    signal,
   });
 }

@@ -1,8 +1,12 @@
 import { openai } from '@ai-sdk/openai';
-import { describe, it, expect } from 'vitest';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createFaithfulnessScorer } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const testCases = [
   {
@@ -147,10 +151,17 @@ const testCases = [
 const SECONDS = 10000;
 
 const model = openai('gpt-4o');
+const mock = createLLMMock(model);
 
 describe(
   'FaithfulnessMetric',
+  {
+    timeout: 15 * SECONDS,
+  },
   () => {
+    beforeAll(() => mock.start());
+    afterAll(() => mock.saveAndStop());
+
     it('should handle perfect faithfulness', async () => {
       const testCase = testCases[0]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
@@ -271,8 +282,5 @@ describe(
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
     });
-  },
-  {
-    timeout: 15 * SECONDS,
   },
 );

@@ -1,11 +1,15 @@
 import { openai } from '@ai-sdk/openai';
-import { describe, expect, it, vi } from 'vitest';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { TestCaseWithContext } from '../../utils';
 
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createHallucinationScorer } from './index';
 import type { GetContextFn, GetContextParams } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
@@ -196,7 +200,10 @@ const testCases: TestCaseWithContext[] = [
 ];
 
 const model = openai('gpt-4o');
+const mock = createLLMMock(model);
 describe('HallucinationMetric', () => {
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
   it('should handle perfect alignment', async () => {
     const testCase = testCases[0]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });

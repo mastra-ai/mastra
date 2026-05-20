@@ -34,7 +34,7 @@ To migrate, if you were relying on the old defaults, explicitly configure these 
 
 ### Default memory scope from `thread` to `resource`
 
-The default scope for both working memory and semantic recall has changed from `'thread'` to `'resource'`. This change aligns with common use cases where applications want to remember user information across conversations. When semantic recall is enabled, it now defaults to searching across all user conversations rather than just the current thread.
+The default scope for both working memory and semantic recall has changed from `'thread'` to `'resource'`. This change aligns with common use cases where applications want to remember user information across conversations. When semantic recall is enabled, it now defaults to searching across all user conversations rather than the current thread.
 
 To migrate, if you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'`.
 
@@ -128,7 +128,7 @@ npx @mastra/codemod@latest v1/memory-readonly-to-options .
 
 ### `Memory.query()` renamed to `Memory.recall()`
 
-The `Memory.query()` method has been renamed to `Memory.recall()`. The new method returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change better describes the action of retrieving messages from memory and simplifies the API.
+The `Memory.query()` method has been renamed to `Memory.recall()`. The new method returns a simpler format with `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change better describes the action of retrieving messages from memory and simplifies the API.
 
 To migrate, rename `query()` to `recall()` and update code that expects the old return format.
 

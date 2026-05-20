@@ -4,6 +4,16 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build", "@internal/playground#build"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
       "outputs": ["dist/**"]
     }
   }

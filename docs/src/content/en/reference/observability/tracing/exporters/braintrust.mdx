@@ -17,13 +17,15 @@ Sends Tracing data to Braintrust for eval and observability.
 new BraintrustExporter(config: BraintrustExporterConfig)
 ```
 
-## BraintrustExporterConfig
+## `BraintrustExporterConfig`
 
 ```typescript
 interface BraintrustExporterConfig extends BaseExporterConfig {
   apiKey?: string
   endpoint?: string
   projectName?: string
+  braintrustLogger?: Logger<true>
+  currentSpan?: () => Span | undefined
   tuningParameters?: Record<string, any>
 }
 ```
@@ -54,6 +56,19 @@ Extends `BaseExporterConfig`, which includes:
     required: false,
   },
   {
+    name: 'braintrustLogger',
+    type: 'Logger<true>',
+    description: 'Braintrust logger instance for eval and traced span context integration.',
+    required: false,
+  },
+  {
+    name: 'currentSpan',
+    type: '() => Span | undefined',
+    description:
+      'Resolver from the app Braintrust package instance. Use this with braintrustLogger when Eval() or logger.traced() spans are created by a different installed Braintrust SDK copy.',
+    required: false,
+  },
+  {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
     description: "Logger level (default: 'warn')",
@@ -70,7 +85,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -124,7 +139,7 @@ const exporter = new BraintrustExporter({
 })
 ```
 
-## Span Type Mapping
+## Span type mapping
 
 | Span Type | Braintrust Type |
 | - | - |

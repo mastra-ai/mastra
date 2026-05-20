@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { CollapsibleContent } from '@/ds/components/Collapsible';
 import { useTreeDepth, TreeDepthProvider } from './tree-context';
+import { CollapsibleContent } from '@/ds/components/Collapsible';
+import { cn } from '@/lib/utils';
 
 export interface TreeFolderContentProps {
   className?: string;

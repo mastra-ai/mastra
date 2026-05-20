@@ -1,0 +1,359 @@
+---
+title: "Reference: MastraAuthOkta & MastraRBACOkta | Auth"
+description: "API reference for the MastraAuthOkta and MastraRBACOkta classes, which authenticate and authorize Mastra applications using Okta."
+packages:
+  - "@mastra/auth-okta"
+  - "@mastra/core"
+---
+
+# MastraAuthOkta & MastraRBACOkta class
+
+## MastraAuthOkta class
+
+The `MastraAuthOkta` class provides authentication for Mastra using Okta. It implements an OAuth 2.0 / OIDC login flow with encrypted session cookies and integrates with the Mastra server using the `auth` option.
+
+### Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOkta } from '@mastra/auth-okta'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOkta({
+      domain: process.env.OKTA_DOMAIN,
+      clientId: process.env.OKTA_CLIENT_ID,
+      clientSecret: process.env.OKTA_CLIENT_SECRET,
+      redirectUri: process.env.OKTA_REDIRECT_URI,
+    }),
+  },
+})
+```
+
+:::note
+
+You can omit the constructor parameters if you have the appropriately named environment variables set. In that case, use `new MastraAuthOkta()` without any arguments.
+
+:::
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'domain',
+    type: 'string',
+    description: 'Your Okta domain (e.g., `dev-123456.okta.com`). Used to construct the issuer URL and API endpoints.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_DOMAIN',
+  },
+  {
+    name: 'clientId',
+    type: 'string',
+    description: 'The OAuth client ID from your Okta application.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_CLIENT_ID',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    description: 'The OAuth client secret. Required for the SSO authorization code flow.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_CLIENT_SECRET',
+  },
+  {
+    name: 'issuer',
+    type: 'string',
+    description: 'The token issuer URL. Override this if you use a custom authorization server.',
+    isOptional: true,
+    defaultValue: '`https://{domain}/oauth2/default`',
+  },
+  {
+    name: 'redirectUri',
+    type: 'string',
+    description:
+      'The OAuth redirect URI for the SSO callback. Must match the redirect URI configured in your Okta application.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_REDIRECT_URI',
+  },
+  {
+    name: 'scopes',
+    type: 'string[]',
+    description: 'OAuth scopes to request during the login flow.',
+    isOptional: true,
+    defaultValue: "['openid', 'profile', 'email', 'groups']",
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description:
+      'Okta API token for user lookups via the Users API. Required for `getUser()` to return user data by ID.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_API_TOKEN',
+  },
+  {
+    name: 'session',
+    type: 'OktaSessionOptions',
+    description: 'Session cookie configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'OktaSessionOptions',
+        parameters: [
+          {
+            name: 'cookieName',
+            type: 'string',
+            description: 'Name of the session cookie.',
+            isOptional: true,
+            defaultValue: "'okta_session'",
+          },
+          {
+            name: 'cookieMaxAge',
+            type: 'number',
+            description: 'Cookie max age in seconds.',
+            isOptional: true,
+            defaultValue: '86400 (24 hours)',
+          },
+          {
+            name: 'cookiePassword',
+            type: 'string',
+            description:
+              'Password for encrypting session cookies. Must be at least 32 characters. If not set, an auto-generated value is used that does not survive restarts.',
+            isOptional: true,
+            defaultValue: 'process.env.OKTA_COOKIE_PASSWORD',
+          },
+          {
+            name: 'secureCookies',
+            type: 'boolean',
+            description: 'Set the `Secure` flag on session cookies.',
+            isOptional: true,
+            defaultValue: 'true in production, false otherwise',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: "'okta'",
+  },
+]}
+/>
+
+### Environment variables
+
+The following environment variables are automatically used when constructor options are not provided:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'OKTA_DOMAIN',
+    type: 'string',
+    description: 'Your Okta domain (e.g., `dev-123456.okta.com`). Found in your Okta admin console.',
+  },
+  {
+    name: 'OKTA_CLIENT_ID',
+    type: 'string',
+    description: 'The OAuth client ID from your Okta application.',
+  },
+  {
+    name: 'OKTA_CLIENT_SECRET',
+    type: 'string',
+    description: 'The OAuth client secret from your Okta application.',
+  },
+  {
+    name: 'OKTA_ISSUER',
+    type: 'string',
+    description: 'Token issuer URL. Defaults to `https://{domain}/oauth2/default` if not set.',
+    isOptional: true,
+  },
+  {
+    name: 'OKTA_REDIRECT_URI',
+    type: 'string',
+    description: 'OAuth redirect URI for the SSO callback.',
+  },
+  {
+    name: 'OKTA_COOKIE_PASSWORD',
+    type: 'string',
+    description: 'Password for encrypting session cookies. Must be at least 32 characters.',
+    isOptional: true,
+  },
+  {
+    name: 'OKTA_API_TOKEN',
+    type: 'string',
+    description: 'Okta API token for user lookups and RBAC group resolution.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Authentication flow
+
+`MastraAuthOkta` authenticates requests in the following order:
+
+1. **Session cookie**: Reads the encrypted session cookie and decrypts it. If the session is valid and not expired, the user is authenticated.
+1. **JWT fallback**: If no session cookie is present, verifies the `Authorization` header token against Okta's JWKS endpoint.
+
+After authentication, `authorizeUser` checks that the user has a valid `oktaId`. Provide a custom `authorizeUser` function to implement additional logic.
+
+### `OktaUser` type
+
+The `OktaUser` type extends the base `EEUser` interface with Okta-specific fields:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'User identifier (maps to the `sub` claim).',
+  },
+  {
+    name: 'oktaId',
+    type: 'string',
+    description: 'Okta user ID (same as `id`).',
+  },
+  {
+    name: 'email',
+    type: 'string',
+    description: 'User email address.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'User display name, constructed from token claims.',
+    isOptional: true,
+  },
+  {
+    name: 'avatarUrl',
+    type: 'string',
+    description: "URL to the user's profile picture.",
+    isOptional: true,
+  },
+  {
+    name: 'groups',
+    type: 'string[]',
+    description: 'Okta groups the user belongs to, populated from the `groups` claim.',
+    isOptional: true,
+  },
+]}
+/>
+
+## MastraRBACOkta class
+
+The `MastraRBACOkta` class maps Okta groups to Mastra permissions. It fetches user groups from the Okta API and resolves them against a configurable role mapping. Use it with `MastraAuthOkta` or any other auth provider.
+
+:::note
+
+RBAC requires a valid Enterprise Edition license. It works without a license in development so you can try it locally, but you’ll need a license for production. [Contact sales](https://mastra.ai/contact) for more information.
+
+:::
+
+### Usage example
+
+Use `MastraRBACOkta` alongside an auth provider by passing it to the `rbac` option:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOkta(),
+    rbac: new MastraRBACOkta({
+      roleMapping: {
+        Admin: ['*'],
+        Engineering: ['agents:*', 'workflows:*', 'tools:*'],
+        Viewer: ['agents:read', 'workflows:read'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+To use Okta RBAC with a different auth provider, pass a `getUserId` function to resolve the Okta user ID from the other provider's user object:
+
+```typescript title="src/mastra/index.ts"
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
+import { MastraRBACOkta } from '@mastra/auth-okta'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0(),
+    rbac: new MastraRBACOkta({
+      getUserId: user => user.metadata?.oktaUserId || user.email,
+      roleMapping: {
+        Engineering: ['agents:*', 'workflows:*'],
+        Admin: ['*'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'roleMapping',
+    type: 'RoleMapping',
+    description:
+      "Maps Okta group names to arrays of Mastra permission strings. Use `'_default'` to assign permissions to users who do not match any group. Supports wildcards like `'*'` (full access) and `'agents:*'` (all agent actions).",
+    isOptional: false,
+  },
+  {
+    name: 'domain',
+    type: 'string',
+    description: 'Your Okta domain. Used to initialize the Okta management SDK.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_DOMAIN',
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description: 'Okta API token for the management SDK. Required to fetch user groups from the Okta API.',
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_API_TOKEN',
+  },
+  {
+    name: 'getUserId',
+    type: '(user: unknown) => string | undefined',
+    description:
+      'Extract the Okta user ID from a user object. Use this when combining Okta RBAC with a different auth provider. If not provided, falls back to `oktaId` or `id` on the user object.',
+    isOptional: true,
+  },
+  {
+    name: 'cache',
+    type: 'PermissionCacheOptions',
+    description: 'Configure the LRU cache for group lookups.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'PermissionCacheOptions',
+        parameters: [
+          {
+            name: 'maxSize',
+            type: 'number',
+            description: 'Maximum number of users to cache.',
+            isOptional: true,
+            defaultValue: '1000',
+          },
+          {
+            name: 'ttlMs',
+            type: 'number',
+            description: 'Time-to-live in milliseconds.',
+            isOptional: true,
+            defaultValue: '60000',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>

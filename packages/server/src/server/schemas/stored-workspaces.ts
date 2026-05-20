@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
@@ -124,8 +124,12 @@ export const storedWorkspaceSchema = z.object({
   operationTimeout: z.number().optional().describe('Operation timeout in milliseconds'),
 });
 
+const listedWorkspaceSchema = storedWorkspaceSchema.extend({
+  runtimeRegistered: z.boolean().optional().describe('Whether this workspace is registered at runtime'),
+});
+
 export const listStoredWorkspacesResponseSchema = paginationInfoSchema.extend({
-  workspaces: z.array(storedWorkspaceSchema),
+  workspaces: z.array(listedWorkspaceSchema),
 });
 
 export const getStoredWorkspaceResponseSchema = storedWorkspaceSchema;

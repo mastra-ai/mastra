@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import * as yaml from 'js-yaml';
+import { parse as parseYaml } from 'yaml';
 
 /**
  * Metadata for a slash command
@@ -16,6 +16,8 @@ export interface SlashCommandMetadata {
   sourcePath: string;
   /** Namespace derived from directory structure */
   namespace?: string;
+  /** Whether this command should also be exposed as /goal/<name> */
+  goal?: boolean;
 }
 
 /**
@@ -51,11 +53,11 @@ export async function parseCommandFile(filePath: string, baseDir?: string): Prom
     const template = parts.slice(2).join('---').trim();
 
     // Parse YAML frontmatter
-    const metadata = yaml.load(frontmatter) as Record<string, string>;
+    const metadata = parseYaml(frontmatter) as Record<string, unknown>;
 
     // Derive name from file path if not specified in frontmatter
     let name: string;
-    if (metadata?.name) {
+    if (typeof metadata?.name === 'string' && metadata.name) {
       name = metadata.name;
     } else if (baseDir) {
       name = extractCommandName(filePath, baseDir);
@@ -65,10 +67,11 @@ export async function parseCommandFile(filePath: string, baseDir?: string): Prom
 
     return {
       name,
-      description: metadata?.description || '',
+      description: typeof metadata?.description === 'string' ? metadata.description : '',
       template,
       sourcePath: filePath,
-      namespace: metadata?.namespace,
+      namespace: typeof metadata?.namespace === 'string' ? metadata.namespace : undefined,
+      goal: metadata?.goal === true,
     };
   } catch (error) {
     console.error(`Error parsing command file ${filePath}:`, error);
@@ -95,9 +98,13 @@ export function extractCommandName(filePath: string, baseDir: string): string {
 }
 
 /**
- * Recursively scan a directory for command files
+ * Recursively scan a directory for command files.
+ * @param dirPath - Current directory to scan
+ * @param rootDir - Original root commands directory (used for namespace derivation).
+ *                  When omitted the first call sets it to dirPath.
  */
-export async function scanCommandDirectory(dirPath: string): Promise<SlashCommandMetadata[]> {
+export async function scanCommandDirectory(dirPath: string, rootDir?: string): Promise<SlashCommandMetadata[]> {
+  const baseDir = rootDir ?? dirPath;
   const commands: SlashCommandMetadata[] = [];
 
   try {
@@ -107,12 +114,12 @@ export async function scanCommandDirectory(dirPath: string): Promise<SlashComman
       const fullPath = path.join(dirPath, entry.name);
 
       if (entry.isDirectory()) {
-        // Recursively scan subdirectories
-        const subCommands = await scanCommandDirectory(fullPath);
+        // Recursively scan subdirectories, preserving the root directory for namespace derivation
+        const subCommands = await scanCommandDirectory(fullPath, baseDir);
         commands.push(...subCommands);
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        // Parse markdown command files, passing dirPath as baseDir for name derivation
-        const command = await parseCommandFile(fullPath, dirPath);
+        // Parse markdown command files, passing the root commands dir as baseDir for name derivation
+        const command = await parseCommandFile(fullPath, baseDir);
         if (command) {
           commands.push(command);
         }
@@ -129,16 +136,12 @@ export async function scanCommandDirectory(dirPath: string): Promise<SlashComman
  * Priority: mastra project > claude project > opencode project > mastra user > claude user > opencode user
  */
 export async function loadCustomCommands(projectDir?: string): Promise<SlashCommandMetadata[]> {
-  const commands: SlashCommandMetadata[] = [];
-  const seenNames = new Set<string>();
+  // Use a Map so later (higher priority) sources override earlier ones with the same name
+  const commandMap = new Map<string, SlashCommandMetadata>();
 
-  // Helper to add commands without duplicates (later commands override earlier ones)
   const addCommands = (newCommands: SlashCommandMetadata[]) => {
     for (const cmd of newCommands) {
-      if (!seenNames.has(cmd.name)) {
-        seenNames.add(cmd.name);
-        commands.push(cmd);
-      }
+      commandMap.set(cmd.name, cmd);
     }
   };
 
@@ -186,7 +189,7 @@ export async function loadCustomCommands(projectDir?: string): Promise<SlashComm
     addCommands(mastraProjectCommands);
   }
 
-  return commands;
+  return Array.from(commandMap.values());
 }
 
 /**

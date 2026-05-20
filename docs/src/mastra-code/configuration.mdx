@@ -13,6 +13,12 @@ Mastra Code is configured through project-level files, global settings, and envi
 
 Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.
 
+:::note
+
+Use the `/setup` command to interactively configure authentication and models.
+
+:::
+
 ### API keys
 
 The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
@@ -27,6 +33,15 @@ export CEREBRAS_API_KEY=...
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
 
+### Interactive API key prompt
+
+When you select a model from the model selector (`/models`) that doesn't have an API key configured, Mastra Code prompts you to enter one. The prompt displays the required environment variable name (for example, `ANTHROPIC_API_KEY`) and lets you paste your key directly.
+
+- **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
+- **Cancel the prompt**: Press Escape to dismiss. The model selection continues without storing a key, and the model remains marked as unavailable.
+
+Stored API keys persist across sessions. On the next startup, Mastra Code loads them into the environment automatically. Environment variables always take priority — if you later set a key via `export`, it overrides the stored value.
+
 ### OAuth login (optional)
 
 If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
@@ -37,6 +52,17 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
+
+When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/login` or during onboarding, Mastra Code asks how you want to sign in:
+
+- **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
+- **Device code (headless)**: shows a code to enter at `https://auth.openai.com/codex/device` — useful for SSH sessions, remote shells, or environments without a browser.
+
+To preselect the device-code flow (for example in scripts or remote shells where the prompt is inconvenient), set `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` before launching Mastra Code:
+
+```sh
+export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
+```
 
 ### Authentication priority for Anthropic
 
@@ -103,7 +129,45 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 }
 ```
 
-Since `headers` only supports static values, use a stdio wrapper for dynamic authentication such as token refresh.
+#### HTTP OAuth
+
+HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object with a `redirectUrl`. Mastra Code stores OAuth client data and tokens in the app data directory.
+
+Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redirect URL must use HTTPS unless it is a loopback HTTP URL, and it must be handled by a callback endpoint that can complete the OAuth flow for that server.
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientName": "Remote MCP",
+        "scopes": ["mcp:read", "mcp:write"]
+      }
+    }
+  }
+}
+```
+
+Use `clientId` and `clientSecret` when the MCP server requires a pre-registered OAuth client:
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret"
+      }
+    }
+  }
+}
+```
+
+Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
 
 #### Startup behavior
 
@@ -204,8 +268,10 @@ Define reusable prompt templates as markdown files. Mastra Code scans these dire
 | - | - | - |
 | Highest | `.mastracode/commands/` | Project |
 | | `.claude/commands/` | Project (Claude Code compatible) |
+| | `.opencode/command/` | Project (Opencode compatible) |
 | | `~/.mastracode/commands/` | Global |
-| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+| | `~/.claude/commands/` | Global (Claude Code compatible) |
+| Lowest | `~/.opencode/command/` | Global (Opencode compatible) |
 
 Each command file can include YAML frontmatter with `name` and `description` fields:
 
@@ -222,6 +288,17 @@ The filename (or directory structure) determines the command name. For example, 
 
 Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
 
+Add `goal: true` to expose the command as a goal entry point under `/goal/<command-name>`:
+
+```md title=".mastracode/commands/pr-triage.md"
+---
+description: Triage every open PR
+goal: true
+---
+
+Review every open PR and continue until each PR has a concise TL;DR.
+```
+
 ## Skills
 
 Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
@@ -232,10 +309,35 @@ Mastra Code scans these directories for skills:
 | - | - | - |
 | Highest | `.mastracode/skills/` | Project |
 | | `.claude/skills/` | Project (Claude Code compatible) |
+| | `.agents/skills/` | Project (Agent Skills spec compatible) |
 | | `~/.mastracode/skills/` | Global |
-| Lowest | `~/.claude/skills/` | Global (Claude Code compatible) |
+| | `~/.claude/skills/` | Global (Claude Code compatible) |
+| Lowest | `~/.agents/skills/` | Global (Agent Skills spec compatible) |
 
 Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
+
+Use `/skill/<name>` to activate a specific skill in the current conversation:
+
+```text
+/skill/release-check
+```
+
+Mastra Code loads the skill instructions and sends them to the agent before the next response.
+
+Set `user-invocable: false` in `SKILL.md` frontmatter to hide a skill from `/skill/<name>` autocomplete, the `/skills` listing, and direct activation. The agent can still load that skill automatically when relevant.
+
+Add `metadata.goal: true` to expose a skill as a goal entry point under `/goal/<skill-name>`:
+
+```md title=".mastracode/skills/release-check/SKILL.md"
+---
+name: release-check
+description: Check whether a release is ready
+metadata:
+  goal: true
+---
+
+Run the release checks and continue until the release is ready or a human decision is required.
+```
 
 ## Agent instructions
 
@@ -287,7 +389,7 @@ Configure the scope through:
 
 ### OM model settings
 
-The observer and reflector models default to `google/gemini-2.5-flash`. Override them per-thread through the `/settings` panel or in the harness state.
+The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the harness state.
 
 ### OM thresholds
 
@@ -302,9 +404,9 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 
 ### Detection order
 
-1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
+1. `MASTRA_THEME` environment variable: explicit `dark` or `light`
 1. Persisted setting from `/theme` command (stored in `settings.json`)
-1. OSC 11 query — asks your terminal for its actual background color
+1. OSC 11 query: asks your terminal for its actual background color
 1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
 1. Falls back to dark theme
 
@@ -346,3 +448,19 @@ Resource IDs determine how threads are grouped. By default, Mastra Code generate
 ```
 
 You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.
+
+## Telemetry
+
+By default, Mastra Code collects anonymous product analytics about how the TUI is used. Each event includes your OS, Mastra Code version, Node.js version, CPU architecture, and a hostname-derived distinct ID. Tracked events cover session start, prompt submission, thread and model changes, slash command usage, and interactive prompts. Prompt text, message content, file paths, and tool inputs are not collected. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/mastracode/src/analytics.ts) to check what's collected.
+
+You can opt out of analytics by setting an environment variable:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+You can also set this when launching Mastra Code:
+
+```sh npm2yarn
+MASTRA_TELEMETRY_DISABLED=1 npx mastracode
+```

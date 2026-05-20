@@ -1,7 +1,8 @@
-import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { CopyButton } from '@/ds/components/CopyButton';
-import { Txt, TxtProps } from '@/ds/components/Txt';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import type { TxtProps } from '@/ds/components/Txt';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
 
 export interface TruncateProps extends Omit<TxtProps, 'children'> {
   children: string;
@@ -61,9 +62,7 @@ export function Truncate({
       ) : (
         truncatedContent
       )}
-      {copy && (
-        <CopyButton content={fullText} iconSize="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" />
-      )}
+      {copy && <CopyButton content={fullText} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
     </Txt>
   );
 }

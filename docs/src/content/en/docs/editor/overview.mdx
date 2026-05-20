@@ -1,0 +1,291 @@
+---
+title: "Editor overview"
+description: Let non-technical team members iterate on agents, version every change, and run experiments without redeploying.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/client-js"
+---
+
+import { VideoPlayer } from "@site/src/components/video-player";
+
+# Editor overview
+
+The editor is a CMS-style system that separates agent configuration from code. Subject-matter experts, prompt engineers, and product teams can iterate on agents directly while developers keep the codebase stable.
+
+The editor manages two types of resources alongside agents:
+
+- [**Prompts**](/docs/editor/prompts): Reusable, versioned instruction templates with template variables and display conditions.
+- [**Tools**](/docs/editor/tools): Add tools from integration providers, MCP servers, and override tool descriptions at runtime.
+
+## When to use the editor
+
+Use the editor when you want to:
+
+- **Let non-developers iterate**: Give subject-matter experts and prompt engineers a way to tune agent behavior without touching code or waiting for deploys.
+- **Version everything**: Every save creates a snapshot so you can compare changes, roll back instantly, and audit what changed and when.
+- **Run experiments**: Route different users or requests to different agent versions for A/B testing, canary rollouts, or prompt experimentation.
+- **Target specific versions**: Pin a version per request, per user, or per environment so production stays stable while new versions are tested.
+- **Manage tools at runtime**: Add integration tools from Composio or Arcade, or connect MCP servers, without updating code.
+- **Override code agents**: Change the instructions, tools, or variables of a code-defined agent while keeping the original code as the baseline.
+
+For building agents entirely in code, see the [Agents overview](/docs/agents/overview).
+
+## Quickstart
+
+Add `@mastra/editor` to your project:
+
+```bash npm2yarn
+npm install @mastra/editor
+```
+
+Pass a `MastraEditor` instance to your Mastra configuration with your existing agents:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: {
+    /* your existing agents */
+  },
+  editor: new MastraEditor(),
+})
+```
+
+Once registered, you can manage agents through [Studio](/docs/studio/overview) or programmatically through the server API and Client SDK.
+
+:::note
+
+See the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
+
+:::
+
+## Studio
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1775596827/editor-overview_obqupx.mp4" />
+
+Go to the **Agents** tab in Studio and select an agent to edit. Select the **Editor** tab. You'll be taken to the editor interface, where you can modify the agent's instructions, tools, and variables.
+
+Modify the system prompt and save a new draft version. Afterwards, publish the draft to make it the active version.
+
+## Programmatic control
+
+Everything you can do in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor). This is useful for scripting bulk updates, seeding stored configurations from code, or building automation that tunes agents based on evaluation results.
+
+Call `mastra.getEditor()` from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
+
+```typescript title="src/scripts/seed-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()
+if (!editor) throw new Error('Editor is not registered on Mastra')
+
+// Create a stored agent override for an existing code-defined agent
+await editor.agent.create({
+  id: 'support-agent',
+  instructions: 'You are a friendly support agent for Acme Inc.',
+  tools: {
+    search_kb: { description: 'Search the Acme knowledge base' },
+  },
+})
+```
+
+Use `editor.agent.update()` to change an existing stored configuration. Every update creates a new draft version automatically:
+
+```typescript title="src/scripts/update-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions:
+    "You are a friendly support agent for Acme Inc. Always respond in the user's language.",
+})
+```
+
+The `editor.agent` namespace also exposes `getById`, `list`, `listResolved`, and `delete`. The `editor.prompt` namespace exposes the same CRUD methods for prompt blocks. See [Prompts](/docs/editor/prompts#programmatic-control) for examples.
+
+### Server endpoints
+
+The same operations are available over HTTP through the Mastra server. Use these when you want to manage stored agents from a separate service or from a non-TypeScript client:
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/stored/agents` | List all stored agents. |
+| `POST` | `/stored/agents` | Create a stored agent. |
+| `GET` | `/stored/agents/:storedAgentId` | Get a stored agent by ID. |
+| `PATCH` | `/stored/agents/:storedAgentId` | Update a stored agent. |
+| `DELETE` | `/stored/agents/:storedAgentId` | Delete a stored agent. |
+
+The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, and `client.getStoredAgent()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
+
+### Automated experimentation
+
+Because stored agents are just data, you can build automation loops that tune agents without human involvement. A common pattern is to pair the editor API with [datasets](/docs/evals/datasets/overview) and [experiments](/docs/evals/datasets/running-experiments):
+
+- Run a dataset through the current version of an agent and score the results.
+- Have another agent read the failing cases and propose changes to the instructions or tools.
+- Apply those changes with `editor.agent.update()` to create a new draft.
+- Re-run the experiment against the draft and compare scores to the baseline.
+- Promote the draft to the published version when the scores improve.
+
+This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested.
+
+:::note
+
+See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
+
+:::
+
+## What can be overridden
+
+When you edit a code-defined agent through the editor, only specific fields can be changed:
+
+| Field | Description |
+| - | - |
+| Instructions | Replace or extend the agent's system prompt using [prompt blocks](/docs/editor/prompts). |
+| Tools | Add tools from the tool registry, integration providers, or MCP clients. Code-defined tools remain available. |
+
+Fields like the agent's `id`, `name`, and `model` come from your code and can't be changed through the editor for code-defined agents. The variables are also read-only.
+
+## Versioning
+
+Every time you save changes to an agent or prompt block, a new version snapshot is created. Versions give you a full history of your agent's configuration. You can roll back to any previous state, compare what changed between two snapshots, and target specific versions per request for A/B testing or gradual rollouts.
+
+Version management is available through the server Studio, REST API, the Client SDK, and the React SDK. See the [Client SDK agents reference](/reference/client-js/agents#version-management) for endpoints, SDK methods, and code examples.
+
+### Version lifecycle
+
+Each version has one of three statuses:
+
+| Status | Description |
+| - | - |
+| Draft | The latest working copy. Every save creates a new draft version. |
+| Published | The active version used in production. Only one version can be published at a time. |
+| Archived | A previous version that is no longer active. You can restore any archived version. |
+
+The typical flow is: Edit the draft, test it, then activate it to make it the published version. The previously published version becomes archived so you can restore it if needed. You can do this through Studio or programmatically through the API.
+
+This lifecycle makes it safe to experiment. Non-technical team members can iterate on a draft without affecting production traffic, then publish when ready. If something goes wrong, restoring a previous version is a single API call.
+
+### Version targeting and experimentation
+
+Because every version has a unique ID, you can route different requests to different agent configurations. This opens up several patterns:
+
+- **A/B testing**: Split traffic between two published versions and compare performance metrics.
+- **Canary rollouts**: Send a small percentage of requests to a new version before promoting it.
+- **Per-user targeting**: Pin specific users or accounts to a version while others use the default.
+- **Environment separation**: Use the draft version in staging and the published version in production.
+
+Pass a `versionId` or `status` when calling the agent through the Client SDK, server query parameters, or React SDK `requestContext`, and the correct version is loaded automatically.
+
+### Version selection
+
+By default, [`mastra.getAgentById()`](/reference/core/getAgentById) loads the published (active) version of the stored override. You can request a specific version, which is useful for testing a draft before publishing, running A/B experiments, or pinning a user to a known-good configuration:
+
+```typescript title="Version selection"
+// Load the published version (default)
+const agent = mastra.getAgentById('support-agent')
+
+// Load the latest draft
+const agent = mastra.getAgentById('support-agent', {
+  status: 'draft',
+})
+
+// Load a specific version
+const agent = mastra.getAgentById('support-agent', {
+  versionId: 'abc-123',
+})
+```
+
+When calling the agent through the Mastra server, pass version parameters as query strings:
+
+```bash title="Version selection via API"
+# Published version (default)
+curl http://localhost:4111/agents/support-agent
+
+# Latest draft
+curl http://localhost:4111/agents/support-agent?status=draft
+
+# Specific version
+curl http://localhost:4111/agents/support-agent?versionId=abc-123
+```
+
+See the [Client SDK agents reference](/reference/client-js/agents#version-management) for API methods.
+
+### Sub-agent versioning
+
+When a [supervisor agent](/docs/agents/supervisor-agents) delegates to sub-agents, version overrides determine which stored version of each sub-agent to use instead of the code-defined default. This lets you iterate on sub-agent prompts and tools through the editor without redeploying the supervisor.
+
+Set version overrides at three levels, with later levels taking priority:
+
+1. **Mastra instance config** — global defaults that apply to every `generate()` and `stream()` call.
+1. **Per-invocation options** — overrides passed directly to `generate()` or `stream()`.
+1. **Server request body** — overrides sent in the `versions` field of an API request.
+
+Resolution order: **per-invocation > request body > Mastra instance defaults > code-defined agent**.
+
+#### Mastra instance config
+
+Set global defaults when creating the `Mastra` instance. Every supervisor call inherits these overrides:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: { supervisor, researchAgent, writerAgent },
+  editor: new MastraEditor(),
+  versions: {
+    agents: {
+      'research-agent': { status: 'published' },
+      'writer-agent': { versionId: 'abc-123' },
+    },
+  },
+})
+```
+
+#### Per-invocation overrides
+
+Override versions for a single call to `generate()` or `stream()`. These take priority over Mastra instance defaults:
+
+```typescript title="src/routes/experiment.ts"
+const result = await supervisor.generate('Research and write an article about AI safety', {
+  versions: {
+    agents: {
+      'research-agent': { versionId: 'draft-456' },
+    },
+  },
+})
+```
+
+#### Server request body
+
+When calling agents through the Mastra server, pass version overrides in the request body:
+
+```bash title="Per-request version overrides via API"
+curl -X POST http://localhost:4111/agents/supervisor/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{ "role": "user", "content": "Research AI safety" }],
+    "versions": {
+      "agents": {
+        "research-agent": { "versionId": "draft-456" }
+      }
+    }
+  }'
+```
+
+#### How propagation works
+
+Version overrides propagate automatically through sub-agent delegation via `requestContext`. When a supervisor delegates to a sub-agent, the framework checks if a version override exists for that sub-agent's ID. If one is found, it resolves the stored version from the editor and uses it instead of the code-defined default.
+
+If version resolution fails (for example, when the editor is not configured or the version ID doesn't exist), the framework logs a warning and falls back to the code-defined agent.
+
+## Next steps
+
+- Set up [prompts](/docs/editor/prompts) to build reusable instruction templates.
+- Add [tools](/docs/editor/tools) from integration providers and MCP servers.
+- Explore the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.

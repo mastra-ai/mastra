@@ -1,0 +1,38 @@
+diff --git a/dist/fetch-to-node/http-server.js b/dist/fetch-to-node/http-server.js
+index d29281cd05bfa88150c3c7c9be8c66b3ccb99391..8b09548c7f5ccab83e27c5b65df1a36add335596 100644
+--- a/dist/fetch-to-node/http-server.js
++++ b/dist/fetch-to-node/http-server.js
+@@ -317,6 +317,7 @@ export class FetchServerResponse extends FetchOutgoingMessage {
+             headers.append(header, value);
+         }
+         const _this = this;
++        let cancelled = false;
+         let body = this._hasBody
+             ? new ReadableStream({
+                 start(controller) {
+@@ -328,18 +329,22 @@ export class FetchServerResponse extends FetchOutgoingMessage {
+                     }
+                     else {
+                         _this.on("finish", () => {
++                            if (cancelled) return;
+                             finished = true;
+-                            controller.close();
++                            try { controller.close(); } catch (_) {}
+                         });
+                         _this.on("_dataWritten", (e) => {
+-                            if (finished) {
++                            if (finished || cancelled) {
+                                 return;
+                             }
+                             const data = _this.dataFromDataWrittenEvent(e);
+-                            controller.enqueue(data);
++                            try { controller.enqueue(data); } catch (_) {}
+                         });
+                     }
+                 },
++                cancel() {
++                    cancelled = true;
++                },
+             })
+             : null;
+         // @ts-expect-error this is (currently) a cloudflare-specific class

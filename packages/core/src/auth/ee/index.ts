@@ -25,5 +25,8 @@ export {
   type LicenseInfo,
 } from './license';
 
+// FGA check utility
+export { checkFGA, requireFGA, FGADeniedError, type CheckFGAOptions, type RequireFGAOptions } from './fga-check';
+
 // Default implementations
 export * from './defaults';

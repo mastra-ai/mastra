@@ -1,7 +1,7 @@
-import { formatCompletionFeedback } from '@mastra/core/loop';
 import type { NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import { formatCompletionFeedback } from '../utils/formatCompletionFeedback';
 import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
 import type { Transformer, TransformerArgs } from './types';
 
@@ -234,6 +234,7 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
                 suspendPayload: chunk.payload.suspendPayload,
+                runId: chunk.payload.runId,
               },
             },
           },
@@ -450,6 +451,7 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
                 suspendPayload: chunk.payload.suspendPayload,
+                runId: chunk.payload.runId,
               },
             },
           },
@@ -597,6 +599,7 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
                 suspendPayload: chunk.payload.suspendPayload,
+                runId: chunk.payload.runId,
               },
             },
           },

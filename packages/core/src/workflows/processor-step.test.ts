@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
@@ -361,6 +361,35 @@ describe('createStep with Processor', () => {
           ],
         }),
       );
+    });
+
+    it('should pass usage to processOutputStep in workflow path', async () => {
+      let receivedUsage: any = undefined;
+
+      const processor: Processor = {
+        id: 'usage-step-processor',
+        processOutputStep: async ({ messages, usage }) => {
+          receivedUsage = usage;
+          return messages;
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const inputData = {
+        phase: 'outputStep' as const,
+        messages: [{ id: '1', role: 'assistant', content: 'response' }],
+        messageList,
+        stepNumber: 0,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      };
+
+      await step.execute({ inputData } as any);
+
+      expect(receivedUsage).toBeDefined();
+      expect(receivedUsage.inputTokens).toBe(100);
+      expect(receivedUsage.outputTokens).toBe(50);
+      expect(receivedUsage.totalTokens).toBe(150);
     });
 
     it('should return original messages when processor method not implemented', async () => {

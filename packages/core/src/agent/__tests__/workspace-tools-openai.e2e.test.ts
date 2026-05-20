@@ -9,15 +9,22 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';
 
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
+const mock = createGatewayMock();
+
 let tempDir: string;
 
 beforeAll(async () => {
+  mock.start();
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-openai-test-'));
   await fs.writeFile(path.join(tempDir, 'hello.txt'), 'Hello, world!\nThis is a test file.\n');
   await fs.mkdir(path.join(tempDir, 'subdir'), { recursive: true });
@@ -25,6 +32,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await mock.saveAndStop();
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 

@@ -19,6 +19,8 @@ import type {
   UpdateSpanArgs,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -60,6 +62,12 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: SPAN_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -286,6 +294,56 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.schema),
+      });
+
+      const request = this.pool.request();
+      request.input('traceId', traceId);
+
+      const result = await request.query<LightSpanRecord>(
+        `SELECT
+          [traceId], [spanId], [parentSpanId], [name],
+          [entityType], [entityId], [entityName],
+          [spanType], [error], [isEvent],
+          [startedAt], [endedAt], [createdAt], [updatedAt]
+        FROM ${tableName}
+        WHERE [traceId] = @traceId
+        ORDER BY [startedAt] ASC`,
+      );
+
+      if (!result.recordset || result.recordset.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: result.recordset.map(span =>
+          transformFromSqlRow<LightSpanRecord>({
+            tableName: TABLE_SPANS,
+            sqlRow: span,
+          }),
+        ),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_TRACE_LIGHT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
     const { traceId, spanId } = args;
     try {
@@ -419,7 +477,8 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
@@ -613,8 +672,8 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = orderBy?.direction ?? 'DESC';
 
       // Get total count
       const countRequest = this.pool.request();

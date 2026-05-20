@@ -37,7 +37,6 @@ export const mastra = new Mastra({
     ],
     vars: {
       NODE_ENV: 'production',
-      API_KEY: '<api-key>',
     },
     d1_databases: [
       {
@@ -61,6 +60,64 @@ export const mastra = new Mastra({
 
 The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.jsonc`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
 
+## Secrets
+
+Environment variables from your `.env` file aren't written to `wrangler.jsonc`. This prevents secrets from being committed to source control.
+
+To make your `.env` secrets available to your Cloudflare Worker, upload them as [Cloudflare Secrets](https://developers.cloudflare.com/workers/configuration/secrets/):
+
+```bash
+npx wrangler secret bulk .env
+```
+
+Use `vars` in the `CloudflareDeployer` constructor only for non-sensitive configuration values like `NODE_ENV`.
+
 ## Build output
 
 After running `mastra build`, the deployer generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/). It points to files inside `.mastra/output` so you need to run `mastra build` before deploying with Wrangler.
+
+## Cloudflare bindings
+
+When you use the Cloudflare deployer, you can import runtime bindings from `cloudflare:workers` in your Mastra config file. Mastra automatically preserves protocol-based runtime imports like `cloudflare:workers` during `mastra build` without trying to install them as npm dependencies.
+
+```typescript title="src/mastra/index.ts"
+import { env } from 'cloudflare:workers'
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
+
+export const mastra = new Mastra({
+  deployer: new CloudflareDeployer({
+    name: 'my-worker',
+    kv_namespaces: [{ binding: 'CACHE', id: 'your-kv-namespace-id' }],
+  }),
+  server: {
+    apiRoutes: [
+      registerApiRoute('/bindings', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          await env.CACHE.put('status', 'ok')
+          return c.json({ status: await env.CACHE.get('status') })
+        },
+      }),
+    ],
+  },
+})
+```
+
+:::note[Keep bindings inline inside `new Mastra({...})`]
+Mastra's Babel plugin defers `new Mastra(...)` so that `env` is available when it runs. Code outside that call evaluates at module load before `env` is populated.
+
+```typescript
+// ✅ Works — binding is inside new Mastra(), so it's deferred
+export const mastra = new Mastra({
+  storage: new D1Store({ binding: env.DB }),
+})
+
+// ❌ Breaks — env.DB is undefined at module load
+const storage = new D1Store({ binding: env.DB })
+export const mastra = new Mastra({ storage })
+```
+
+:::

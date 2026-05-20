@@ -1,8 +1,13 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { describe, it, expect } from 'vitest';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import type { TestCase } from '../../utils';
 import { createAgentTestRun, createTestMessage, isCloserTo } from '../../utils';
 import { createAnswerRelevancyScorer } from '.';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 const testCases: TestCase[] = [
   {
@@ -98,11 +103,15 @@ const openai = createOpenAI({
 });
 
 const model = openai('gpt-4o');
+const mock = createLLMMock(model);
 
 // const scorer = new AnswerRelevancyScorer({ model });
 const scorer = createAnswerRelevancyScorer({ model });
 
 describe('AnswerRelevancyScorer', () => {
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
+
   it(
     'should be able to measure a prompt with perfect relevancy',
     async () => {

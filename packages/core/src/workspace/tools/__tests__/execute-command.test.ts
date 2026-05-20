@@ -1,5 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import type { MastraBrowser } from '../../../browser/browser';
+import { browserCliHandler } from '../../../browser/cli-handler';
 import type { ToolExecutionContext } from '../../../tools/types';
 import type { CommandResult, ExecuteCommandOptions } from '../../sandbox/types';
 import { Workspace } from '../../workspace';
@@ -375,6 +377,22 @@ describe('executeCommandTool data chunks', () => {
   });
 
   describe('abort signal passthrough', () => {
+    it('accepts timeout as a numeric string and passes milliseconds to sandbox.executeCommand', async () => {
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      const result = await execute({ command: 'echo hi', timeout: '15' as any, cwd: null, tail: null }, context);
+
+      expect(result).toBe('ok');
+      expect(receivedOpts.timeout).toBe(15000);
+    });
+
     it('passes context.abortSignal to sandbox.executeCommand', async () => {
       const controller = new AbortController();
       let receivedOpts: any;
@@ -490,6 +508,335 @@ describe('executeCommandTool data chunks', () => {
       await execute({ command: 'cat file.txt | grep error', timeout: null, cwd: null, tail: null }, context);
 
       expect(receivedCommand).toBe('cat file.txt | grep error');
+    });
+  });
+});
+
+/**
+ * Creates a mock browser for testing browser CLI logic.
+ */
+function createMockBrowser(overrides: Partial<MastraBrowser> = {}): MastraBrowser {
+  return {
+    id: 'test-browser-123',
+    name: 'TestBrowser',
+    provider: 'test',
+    providerType: 'cli',
+    isBrowserRunning: vi.fn(() => false),
+    launch: vi.fn(async () => {}),
+    getCdpUrl: vi.fn(() => 'ws://localhost:9222/devtools/browser/abc'),
+    connectToExternalCdp: vi.fn(async () => {}),
+    onBrowserClosed: vi.fn(() => () => {}),
+    ...overrides,
+  } as unknown as MastraBrowser;
+}
+
+/**
+ * Creates a mock context with browser support for testing browser CLI logic.
+ */
+function createMockContextWithBrowser(options: {
+  executeCommand: (command: string, args: string[], opts?: ExecuteCommandOptions) => Promise<CommandResult>;
+  browser?: MastraBrowser;
+  threadId?: string;
+  sandboxProvider?: string;
+}) {
+  const writerCustom = vi.fn();
+
+  const sandbox = {
+    id: 'test-sandbox',
+    name: 'test-sandbox',
+    provider: options.sandboxProvider ?? 'local',
+    status: 'running' as const,
+    executeCommand: options.executeCommand,
+  };
+
+  const workspace = new Workspace({
+    sandbox,
+    browser: options.browser,
+  });
+
+  const context: ToolExecutionContext = {
+    workspace,
+    writer: { custom: writerCustom } as any,
+    agent: { threadId: options.threadId ?? 'test-thread' } as any,
+  };
+
+  return { context, writerCustom, sandbox, workspace };
+}
+
+describe('executeCommandTool browser CLI logic', () => {
+  beforeEach(() => {
+    // Clear mocks + warmup state between tests
+    vi.clearAllMocks();
+    browserCliHandler.warmedUpClis.clear();
+    browserCliHandler.warmupCleanups.clear();
+  });
+
+  describe('browser launch', () => {
+    it('launches browser when browser CLI detected and browser not running', async () => {
+      const mockBrowser = createMockBrowser({
+        isBrowserRunning: vi.fn(() => false),
+      });
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 10,
+        }),
+      });
+
+      await execute(
+        { command: 'agent-browser open https://google.com', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      expect(mockBrowser.launch).toHaveBeenCalledWith('test-thread');
+    });
+
+    it('does not launch browser when already running', async () => {
+      const mockBrowser = createMockBrowser({
+        isBrowserRunning: vi.fn(() => true),
+      });
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 10,
+        }),
+      });
+
+      await execute(
+        { command: 'agent-browser open https://google.com', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      expect(mockBrowser.launch).not.toHaveBeenCalled();
+    });
+
+    it('does not launch browser for non-browser commands', async () => {
+      const mockBrowser = createMockBrowser();
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 10,
+        }),
+      });
+
+      await execute({ command: 'ls -la', timeout: null, cwd: null, tail: null }, context);
+
+      expect(mockBrowser.launch).not.toHaveBeenCalled();
+      expect(mockBrowser.isBrowserRunning).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CDP injection', () => {
+    it('injects CDP URL into browser CLI command', async () => {
+      let executedCommand = '';
+      const mockBrowser = createMockBrowser({
+        isBrowserRunning: vi.fn(() => true),
+        getCdpUrl: vi.fn(() => 'ws://localhost:9222/devtools/browser/test'),
+      });
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async cmd => {
+          executedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 10 };
+        },
+      });
+
+      await execute(
+        { command: 'agent-browser open https://google.com', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      expect(executedCommand).toContain('--cdp');
+      expect(executedCommand).toContain('--session');
+    });
+
+    it('does not inject when no workspace browser configured', async () => {
+      let executedCommand = '';
+
+      const { context } = createMockContextWithBrowser({
+        browser: undefined,
+        executeCommand: async cmd => {
+          executedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 10 };
+        },
+      });
+
+      await execute(
+        { command: 'agent-browser open https://google.com', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      // Command should pass through unchanged
+      expect(executedCommand).toBe('agent-browser open https://google.com');
+    });
+  });
+
+  describe('external CDP', () => {
+    it('connects to external CDP when agent provides CDP URL', async () => {
+      const mockBrowser = createMockBrowser();
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 10,
+        }),
+      });
+
+      await execute(
+        {
+          command: 'agent-browser connect wss://external.cdp.example.com/devtools',
+          timeout: null,
+          cwd: null,
+          tail: null,
+        },
+        context,
+      );
+
+      expect(mockBrowser.connectToExternalCdp).toHaveBeenCalledWith(
+        'wss://external.cdp.example.com/devtools',
+        'test-thread',
+      );
+      // Should NOT launch internal browser when using external CDP
+      expect(mockBrowser.launch).not.toHaveBeenCalled();
+    });
+
+    it('does not inject CDP when agent provides external CDP', async () => {
+      let executedCommand = '';
+      const mockBrowser = createMockBrowser();
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async cmd => {
+          executedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 10 };
+        },
+      });
+
+      await execute(
+        {
+          command: 'agent-browser connect wss://external.cdp.example.com/devtools',
+          timeout: null,
+          cwd: null,
+          tail: null,
+        },
+        context,
+      );
+
+      // Command should pass through unchanged (no injection)
+      expect(executedCommand).toBe('agent-browser connect wss://external.cdp.example.com/devtools');
+    });
+
+    it('handles external CDP connection failure gracefully', async () => {
+      const mockBrowser = createMockBrowser({
+        connectToExternalCdp: vi.fn(async () => {
+          throw new Error('Connection failed');
+        }),
+      });
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 10,
+        }),
+      });
+
+      // Should not throw - connection failure is non-fatal
+      await expect(
+        execute(
+          {
+            command: 'agent-browser connect wss://external.cdp.example.com/devtools',
+            timeout: null,
+            cwd: null,
+            tail: null,
+          },
+          context,
+        ),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  describe('warmup commands', () => {
+    it('runs warmup command for agent-browser', async () => {
+      const executedCommands: string[] = [];
+      const mockBrowser = createMockBrowser({
+        isBrowserRunning: vi.fn(() => true),
+        getCdpUrl: vi.fn(() => 'ws://localhost:9222/devtools/browser/test'),
+      });
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        executeCommand: async cmd => {
+          executedCommands.push(cmd);
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 10 };
+        },
+      });
+
+      // Clear any prior warmup state
+      browserCliHandler['warmedUpClis'].clear();
+
+      await execute(
+        { command: 'agent-browser open https://google.com', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      // Should have warmup command + actual command
+      expect(executedCommands.length).toBeGreaterThanOrEqual(2);
+      // First command should be warmup (connect)
+      expect(executedCommands[0]).toContain('agent-browser');
+      expect(executedCommands[0]).toContain('connect');
+    });
+
+    it('skips warmup when CLI already warmed up', async () => {
+      const executedCommands: string[] = [];
+      const mockBrowser = createMockBrowser({
+        isBrowserRunning: vi.fn(() => true),
+        getCdpUrl: vi.fn(() => 'ws://localhost:9222/devtools/browser/test'),
+      });
+
+      const { context } = createMockContextWithBrowser({
+        browser: mockBrowser,
+        threadId: 'warmed-thread',
+        executeCommand: async cmd => {
+          executedCommands.push(cmd);
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 10 };
+        },
+      });
+
+      // Pre-mark as warmed up
+      browserCliHandler.markWarmedUp('test-browser-123', 'agent-browser', 'warmed-thread');
+
+      await execute(
+        { command: 'agent-browser open https://google.com', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      // Should only have the main command, no warmup
+      expect(executedCommands).toHaveLength(1);
+      expect(executedCommands[0]).toContain('open');
     });
   });
 });

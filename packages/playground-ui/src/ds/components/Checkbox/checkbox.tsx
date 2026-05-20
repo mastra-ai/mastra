@@ -1,10 +1,10 @@
-import * as React from 'react';
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 import { Check } from 'lucide-react';
+import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import { formElementFocus } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,
@@ -31,7 +31,7 @@ const Checkbox = React.forwardRef<
         'data-[state=checked]:animate-in data-[state=checked]:zoom-in-50 data-[state=checked]:duration-150',
       )}
     >
-      <Check className="h-3.5 w-3.5 stroke-[3]" />
+      <Check className="h-3.5 w-3.5 stroke-3" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ));

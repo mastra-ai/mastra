@@ -4,7 +4,15 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
-import type { DatasetRecord, DatasetItem, DatasetItemRow, DatasetVersion } from '../storage/types.js';
+import type {
+  DatasetRecord,
+  DatasetItem,
+  DatasetItemRow,
+  DatasetItemSource,
+  DatasetVersion,
+  TargetType,
+  UpdateExperimentResultInput,
+} from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
@@ -114,6 +122,11 @@ export class Dataset {
     metadata?: Record<string, unknown>;
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
+    requestContextSchema?: Record<string, unknown> | null;
+    tags?: string[] | null;
+    targetType?: TargetType | null;
+    targetIds?: string[] | null;
+    scorerIds?: string[] | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
@@ -144,14 +157,20 @@ export class Dataset {
   async addItem(input: {
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     return store.addItem({
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      expectedTrajectory: input.expectedTrajectory,
+      requestContext: input.requestContext,
       metadata: input.metadata,
+      source: input.source,
     });
   }
 
@@ -162,7 +181,10 @@ export class Dataset {
     items: Array<{
       input: unknown;
       groundTruth?: unknown;
+      expectedTrajectory?: unknown;
+      requestContext?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
+      source?: DatasetItemSource;
     }>;
   }): Promise<DatasetItem[]> {
     const store = await this.#getDatasetsStore();
@@ -210,6 +232,8 @@ export class Dataset {
     itemId: string;
     input?: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
@@ -218,6 +242,8 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      expectedTrajectory: input.expectedTrajectory,
+      requestContext: input.requestContext,
       metadata: input.metadata,
     });
   }
@@ -283,7 +309,7 @@ export class Dataset {
    */
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
-  ): Promise<{ experimentId: string; status: 'pending' }> {
+  ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
     const experimentsStore = await this.#getExperimentsStore();
     const datasetsStore = await this.#getDatasetsStore();
 
@@ -297,27 +323,53 @@ export class Dataset {
       });
     }
 
+    // Validate that dataset has items before creating experiment record
+    const targetVersion = config.version ?? dataset.version;
+    const items = await datasetsStore.getItemsByVersion({
+      datasetId: this.id,
+      version: targetVersion,
+    });
+    if (items.length === 0) {
+      throw new MastraError({
+        id: 'EXPERIMENT_NO_ITEMS',
+        text: `Cannot run experiment: dataset "${this.id}" has no items at version ${targetVersion}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
     const run = await experimentsStore.createExperiment({
       datasetId: this.id,
-      datasetVersion: dataset.version,
+      datasetVersion: targetVersion,
       targetType: config.targetType ?? 'agent',
       targetId: config.targetId ?? 'inline',
-      totalItems: 0,
+      totalItems: items.length,
       name: config.name,
       description: config.description,
       metadata: config.metadata,
+      agentVersion: config.agentVersion,
     });
 
     const experimentId = run.id;
 
-    // Fire-and-forget — errors are silently caught
+    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
       ...config,
-    } as ExperimentConfig).catch(() => {});
+      version: targetVersion,
+    } as ExperimentConfig).catch(async err => {
+      await experimentsStore
+        .updateExperiment({
+          id: experimentId,
+          status: 'failed',
+          completedAt: new Date(),
+        })
+        .catch(() => {});
+      this.#mastra.getLogger()?.error(`Experiment ${experimentId} failed: ${err?.message ?? err}`);
+    });
 
-    return { experimentId, status: 'pending' as const };
+    return { experimentId, status: 'pending' as const, totalItems: items.length };
   }
 
   /**
@@ -353,6 +405,14 @@ export class Dataset {
   /**
    * Delete an experiment (run) by ID.
    */
+  /**
+   * Update an experiment result's status or tags.
+   */
+  async updateExperimentResult(input: UpdateExperimentResultInput) {
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.updateExperimentResult(input);
+  }
+
   async deleteExperiment(args: { experimentId: string }) {
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.deleteExperiment({ id: args.experimentId });

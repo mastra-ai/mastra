@@ -12,12 +12,6 @@ export default defineConfig({
           exclude: ['src/**/*-v3.test.ts'],
           isolate: false,
         },
-        resolve: {
-          alias: {
-            // Alias 'zod' to 'zod-v4' so all imports resolve to the same v4 package
-            zod: 'zod-v4',
-          },
-        },
       },
       {
         test: {
@@ -31,6 +25,12 @@ export default defineConfig({
             'src/provider-compats/*.test.ts',
           ],
           isolate: false,
+        },
+        resolve: {
+          alias: {
+            // Alias 'zod' to 'zod-v4' so all imports resolve to the same v4 package
+            zod: 'zod-v3',
+          },
         },
       },
     ],

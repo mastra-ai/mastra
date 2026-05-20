@@ -1,5 +1,5 @@
 import { getItemListColumnTemplate } from './shared';
-import { type ItemListColumn } from './types';
+import type { ItemListColumn } from './types';
 
 import { cn } from '@/lib/utils';
 

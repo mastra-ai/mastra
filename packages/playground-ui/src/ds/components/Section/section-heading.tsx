@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import React from 'react';
+import { cn } from '@/lib/utils';
 
 export type SectionHeadingProps = {
   headingLevel?: 'h2' | 'h3' | 'h4';

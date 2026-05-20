@@ -27,7 +27,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths cannot start with `/api/` as this prefix is reserved for Mastra server routes.
+**Note:** Paths can't start with `/api/` as this prefix is reserved for Mastra server routes.
 
 ### options
 
@@ -58,6 +58,13 @@ registerApiRoute("/items/:itemId", { ... })
     isOptional: true,
   },
   {
+    name: 'cors',
+    type: 'CorsOptions',
+    description:
+      'Route-specific CORS configuration. Use this when one custom route needs a different cross-origin policy from `server.cors`.',
+    isOptional: true,
+  },
+  {
     name: 'openapi',
     type: 'DescribeRouteOptions',
     description: 'OpenAPI metadata for Swagger UI documentation',
@@ -66,9 +73,9 @@ registerApiRoute("/items/:itemId", { ... })
 ]}
 />
 
-## OpenAPI Options
+## OpenAPI options
 
-The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property are not included in Swagger UI.
+The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property aren't included in Swagger UI.
 
 <PropertiesTable
   content={[
@@ -123,11 +130,11 @@ The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns an `ApiRoute` object to be passed to `server.apiRoutes` in the Mastra configuration.
 
-## Handler Context
+## Handler context
 
 The handler receives a Hono `Context` object with access to:
 
@@ -225,6 +232,23 @@ registerApiRoute('/protected', {
 })
 ```
 
+### Route with CORS
+
+Use route-specific CORS when one custom route needs cross-origin credentials, but the rest of the server should keep the global CORS policy.
+
+```typescript
+registerApiRoute('/customer-webhook', {
+  method: 'POST',
+  cors: {
+    origin: ['https://customer-saas.example'],
+    credentials: true,
+  },
+  handler: async c => {
+    return c.json({ ok: true })
+  },
+})
+```
+
 ### Route with OpenAPI Documentation
 
 ```typescript
@@ -272,7 +296,7 @@ registerApiRoute('/items/:itemId', {
 })
 ```
 
-### Using createHandler
+### Using `createHandler()`
 
 For routes that need async initialization:
 
@@ -290,7 +314,7 @@ registerApiRoute('/dynamic', {
 })
 ```
 
-## Error Handling
+## Error handling
 
 Throw errors with status codes using Hono's `HTTPException`:
 
@@ -314,7 +338,7 @@ registerApiRoute('/items/:itemId', {
 
 ## Related
 
-- [Custom API Routes Guide](/docs/server/custom-api-routes) - Usage guide with examples
-- [Server Middleware](/docs/server/middleware) - Global middleware configuration
-- [createRoute()](/reference/server/create-route) - Type-safe route creation for server adapters
-- [Server Routes](/reference/server/routes) - Built-in Mastra server routes
+- [Custom API Routes Guide](/docs/server/custom-api-routes): Usage guide with examples
+- [Server Middleware](/docs/server/middleware): Global middleware configuration
+- [createRoute()](/reference/server/create-route): Type-safe route creation for server adapters
+- [Server Routes](/reference/server/routes): Built-in Mastra server routes

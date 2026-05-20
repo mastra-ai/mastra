@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
 
 // Filenames to check, in order of preference
 const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];
@@ -19,7 +19,7 @@ const PROJECT_LOCATIONS = [
 
 const GLOBAL_LOCATIONS = ['.claude', '.mastracode', '.config/claude', '.config/mastracode'];
 
-interface InstructionSource {
+export interface InstructionSource {
   path: string;
   content: string;
   scope: 'global' | 'project';
@@ -82,6 +82,10 @@ export function loadAgentInstructions(projectPath: string): InstructionSource[] 
   }
 
   return sources;
+}
+
+export function getStaticallyLoadedInstructionPaths(projectPath: string): string[] {
+  return loadAgentInstructions(projectPath).map(source => normalize(source.path));
 }
 
 /**

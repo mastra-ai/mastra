@@ -45,7 +45,7 @@ To migrate, replace all calls to `getVectors()` with `listVectors()`.
 + const vectors = await vectorStore.listVectors({ ... });
 ```
 
-### LibSQLVector: `connectionUrl` to `url`
+### `LibSQLVector`: `connectionUrl` to `url`
 
 The `connectionUrl` parameter has been renamed to `url` to align with the `@libsql/client` API and match LibSQLStorage.
 
@@ -57,7 +57,7 @@ The `connectionUrl` parameter has been renamed to `url` to align with the `@libs
   });
 ```
 
-### OpenSearchVector: `url` to `node`
+### `OpenSearchVector`: `url` to `node`
 
 The `url` parameter has been renamed to `node` to match the OpenSearch `ClientOptions` API. The constructor now accepts all OpenSearch client options including authentication, SSL, and compression.
 
@@ -69,7 +69,7 @@ The `url` parameter has been renamed to `node` to match the OpenSearch `ClientOp
   });
 ```
 
-### PineconeVector: `environment` removed
+### `PineconeVector`: `environment` removed
 
 The `environment` parameter has been removed. Use `controllerHostUrl` instead if you need to specify a custom controller host. The constructor now accepts all Pinecone configuration options.
 

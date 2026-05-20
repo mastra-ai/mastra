@@ -328,4 +328,46 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
     // The issue: query time scales linearly (or worse) with number of included messages
     // because each one generates a separate CTE with ROW_NUMBER()
   }, 60000);
+
+  it('should perform fast semantic recall with perPage=0 (include-only path, GitHub #11702)', async () => {
+    const threadId = testThreadIds[0]!;
+    const middleIndex = Math.floor(MESSAGES_PER_THREAD / 2);
+
+    // Simulate semantic recall: topK=4, messageRange=1 (withPreviousMessages=1, withNextMessages=1)
+    const includeMessageIds = [
+      `${TEST_PREFIX}-msg-0-${middleIndex}`,
+      `${TEST_PREFIX}-msg-0-${middleIndex + 50}`,
+      `${TEST_PREFIX}-msg-0-${middleIndex + 100}`,
+      `${TEST_PREFIX}-msg-0-${middleIndex + 150}`,
+    ];
+
+    const include = includeMessageIds.map(id => ({
+      id,
+      withPreviousMessages: 1,
+      withNextMessages: 1,
+    }));
+
+    console.log(`\n=== Semantic Recall Path (perPage=0, include-only) ===`);
+    console.log(`Thread has ${MESSAGES_PER_THREAD} messages`);
+    console.log(`topK=4, messageRange=1 (${include.length} messages with ±1 context)`);
+
+    const startTime = performance.now();
+    const result = await memoryStore?.listMessages({
+      threadId,
+      include,
+      perPage: 0,
+      page: 0,
+    });
+    const duration = performance.now() - startTime;
+
+    console.log(`  Duration: ${duration.toFixed(2)}ms`);
+    console.log(`  Messages returned: ${result.messages.length}`);
+    console.log(`  Status: ${duration < PERFORMANCE_THRESHOLD_MS ? 'PASS' : 'FAIL'}`);
+
+    // Each included message should return up to 3 messages (prev + self + next)
+    // With 4 include targets, we expect up to 12 messages (minus duplicates from overlapping ranges)
+    expect(result.messages.length).toBeGreaterThan(0);
+    expect(result.messages.length).toBeLessThanOrEqual(12);
+    expect(duration).toBeLessThan(PERFORMANCE_THRESHOLD_MS);
+  }, 30000);
 });

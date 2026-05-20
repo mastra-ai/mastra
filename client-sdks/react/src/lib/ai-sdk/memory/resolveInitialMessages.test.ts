@@ -1358,6 +1358,131 @@ describe('resolveToChildMessages', () => {
       expect(result[2]).toMatchObject({ toolName: 'database' });
     });
 
+    it('should exclude completed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13a',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'weather',
+              toolCallId: 'tool-1',
+              state: 'output-available',
+              input: { city: 'SF' },
+              output: { temp: 70 },
+            } as any,
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              weather: { toolCallId: 'tool-1', toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.weather).toBeUndefined();
+    });
+
+    it('should ignore malformed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13b',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              malformedNull: null,
+              malformedString: 'invalid',
+              malformedObject: { toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedNull).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedString).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedObject).toBeUndefined();
+    });
+
+    it('should preserve suspendedTools metadata with runId on page refresh', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-suspended',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'workflow-multi-step',
+              toolCallId: 'tool-1',
+              state: 'input-available',
+              input: { data: 'test' },
+            } as any,
+          ],
+          metadata: {
+            suspendedTools: {
+              'workflow-multi-step': {
+                toolCallId: 'tool-1',
+                toolName: 'workflow-multi-step',
+                args: { data: 'test' },
+                suspendPayload: { question: 'Step 2 question' },
+                runId: 'run-abc-123',
+              },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      // After page refresh, suspendedTools metadata must be preserved with runId
+      // so the frontend can resume the correct agentic-loop run (issue #14875)
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        suspendedTools: {
+          'workflow-multi-step': {
+            toolCallId: 'tool-1',
+            toolName: 'workflow-multi-step',
+            suspendPayload: { question: 'Step 2 question' },
+            runId: 'run-abc-123',
+          },
+        },
+      });
+    });
+
     it('should handle empty text content', () => {
       const messages: MastraUIMessage[] = [
         {

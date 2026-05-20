@@ -1,7 +1,4 @@
-import { Tiktoken } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
-
-const enc = new Tiktoken(o200k_base);
+import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
 function sanitizeInput(text: string | object) {
   if (!text) return '';
@@ -9,15 +6,19 @@ function sanitizeInput(text: string | object) {
     .replaceAll(`<|endoftext|>`, ``)
     .replaceAll(`<|endofprompt|>`, ``);
 }
+
 export function tokenEstimate(text: string | object): number {
-  return enc.encode(sanitizeInput(text), `all`).length;
+  return estimateTokenCount(sanitizeInput(text));
 }
 
 export function truncateStringForTokenEstimate(text: string, desiredTokenCount: number, fromEnd = true) {
-  const tokens = enc.encode(sanitizeInput(text));
+  const sanitized = sanitizeInput(text);
+  const totalTokens = estimateTokenCount(sanitized);
 
-  if (tokens.length <= desiredTokenCount) return text;
+  if (totalTokens <= desiredTokenCount) return sanitized;
 
-  return `[Truncated ${tokens.length - desiredTokenCount} tokens]
-${enc.decode(tokens.slice(fromEnd ? -desiredTokenCount : 0, fromEnd ? undefined : desiredTokenCount))}`;
+  const kept = fromEnd ? sliceByTokens(sanitized, -desiredTokenCount) : sliceByTokens(sanitized, 0, desiredTokenCount);
+
+  return `[Truncated ~${totalTokens - desiredTokenCount} tokens]
+${kept}`;
 }

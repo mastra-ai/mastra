@@ -19,17 +19,17 @@ interface TestContext {
 
 export function createMountOperationsTests(getContext: () => TestContext): void {
   describe('Mount Operations', () => {
+    const { createMountableFilesystem } = getContext();
+
     describe('Mounts Property', () => {
       it('has mounts property when mounting is supported', () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsMounting) return;
+        const { sandbox } = getContext();
 
         expect(sandbox.mounts).toBeDefined();
       });
 
       it('mounts.entries returns a Map', () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsMounting) return;
+        const { sandbox } = getContext();
         if (!sandbox.mounts) return;
 
         expect(sandbox.mounts.entries).toBeInstanceOf(Map);
@@ -38,8 +38,7 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
       it(
         'getInfo includes mounts array when mounting is supported',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox } = getContext();
           if (!sandbox.getInfo) return;
 
           const info = await sandbox.getInfo();
@@ -52,15 +51,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
     });
 
     describe('mount()', () => {
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'mounts filesystem at specified path',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
 
           // Skip if filesystem doesn't support mounting
           if (!filesystem.getMountConfig) return;
@@ -79,15 +76,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'mount returns MountResult with success and mountPath',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/test-mount-result-' + Date.now();
@@ -109,15 +104,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
     });
 
     describe('unmount()', () => {
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'unmounts previously mounted filesystem',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount || !sandbox.unmount) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/test-unmount-' + Date.now();
@@ -138,15 +131,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
     });
 
     describe('Mount State Tracking', () => {
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'mounts.has() returns true after mounting',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount || !sandbox.mounts) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/test-has-' + Date.now();
@@ -163,15 +154,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'mounts.has() returns false after unmounting',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount || !sandbox.unmount || !sandbox.mounts) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/test-has-unmount-' + Date.now();
@@ -184,15 +173,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'mounts.get() returns entry with mounted state',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount || !sandbox.mounts) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/test-get-' + Date.now();
@@ -216,8 +203,7 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
       it(
         'mount errors if directory exists and is non-empty',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox } = getContext();
           if (!sandbox.mount || !sandbox.executeCommand) return;
 
           const testDir = '/tmp/test-non-empty-' + Date.now();
@@ -254,8 +240,7 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
       it(
         'mount succeeds if directory exists but is empty',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox } = getContext();
           if (!sandbox.mount || !sandbox.executeCommand) return;
 
           const testDir = '/tmp/test-empty-' + Date.now();
@@ -292,15 +277,13 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
     });
 
     describe('Unmount Cleanup', () => {
-      it(
+      it.skipIf(!createMountableFilesystem)(
         'unmount removes mount directory',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsMounting) return;
+          const { sandbox, createMountableFilesystem } = getContext();
           if (!sandbox.mount || !sandbox.unmount || !sandbox.executeCommand) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/tmp/test-unmount-dir-' + Date.now();

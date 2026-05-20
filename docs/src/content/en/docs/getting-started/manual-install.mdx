@@ -1,12 +1,12 @@
 ---
-title: "Manual Install | Getting Started"
+title: "Manual install | Getting Started"
 description: Set up a Mastra project manually without using the create mastra CLI.
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Manual Install
+# Manual install
 
 :::info
 Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow the [quickstart guide](/guides/getting-started/quickstart), which achieves the same result using the [`mastra create`](/reference/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/cli/mastra#mastra-init).
@@ -40,7 +40,6 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     ```json title="package.json" /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
     {
       "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
         "dev": "mastra dev",
         "build": "mastra build"
       }
@@ -192,7 +191,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
   </StepItem>
 
   <StepItem>
-    You can now launch [Studio](/docs/getting-started/studio) and test your agent.
+    You can now launch [Studio](/docs/studio/overview) and test your agent.
 
     ```bash npm2yarn
     npm run dev

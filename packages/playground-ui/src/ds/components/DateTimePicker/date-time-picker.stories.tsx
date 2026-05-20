@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DateTimePicker } from './date-time-picker';
 import { useState } from 'react';
+import { DateTimePicker } from './date-time-picker';
 
 const meta: Meta<typeof DateTimePicker> = {
   title: 'Composite/DateTimePicker',
@@ -8,7 +8,6 @@ const meta: Meta<typeof DateTimePicker> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

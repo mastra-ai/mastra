@@ -7,10 +7,25 @@ import type {
   UIMessage,
   FinishReason,
 } from '@internal/ai-sdk-v5';
+import type {
+  CallWarning as AISDKCallWarningV6,
+  FinishReason as FinishReasonV6,
+  InferUIMessageChunk as InferUIMessageChunkV6,
+  LanguageModelUsage as AISDKLanguageModelUsageV6,
+  ToolApprovalRequest,
+  UIMessage as UIMessageV6,
+} from '@internal/ai-v6';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
 import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
-
 import { isDataChunkType } from './utils';
+
+/**
+ * Separator used to encode both runId and toolCallId into a single approvalId string.
+ * Chosen because neither runId nor toolCallId can contain ":" in normal usage
+ * (UUIDs are hex + hyphens; provider tool call IDs are alphanumeric + underscores).
+ * The server splits on this separator to recover the runId for resumeStream.
+ */
+export const APPROVAL_ID_SEPARATOR = '::';
 
 /**
  * Maps Mastra's extended finish reasons to AI SDK-compatible values.
@@ -27,6 +42,7 @@ export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
 export type OutputChunkType<OUTPUT = undefined> =
   | TextStreamPart<ToolSet>
   | ObjectStreamPart<Partial<OUTPUT>>
+  | ToolApprovalRequest
   | DataChunkType
   | undefined;
 
@@ -34,13 +50,81 @@ export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; paylo
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
-export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
-  chunk,
-  mode = 'stream',
-}: {
+type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
   chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType<OUTPUT> {
+  normalizeWarnings: (warnings: any[] | undefined) => any[];
+  normalizeUsage: (usage: any) => any;
+  normalizeFinishReason: (reason: MastraFinishReason) => string;
+  includeRawFinishReason?: boolean;
+};
+
+type ToolPayloadTransformTarget = 'display' | 'transcript';
+type ToolPayloadTransformPhase =
+  | 'input-delta'
+  | 'input-available'
+  | 'output-available'
+  | 'error'
+  | 'approval'
+  | 'suspend';
+
+type TransformedToolPayloadState = {
+  transformed?: unknown;
+  suppress?: boolean;
+  failed?: boolean;
+};
+
+function normalizeToolPayloadState(state: unknown): TransformedToolPayloadState | undefined {
+  if (!state || typeof state !== 'object') {
+    return undefined;
+  }
+
+  const payloadState = state as TransformedToolPayloadState & { projected?: unknown };
+  if (
+    Object.prototype.hasOwnProperty.call(payloadState, 'projected') &&
+    !Object.prototype.hasOwnProperty.call(payloadState, 'transformed')
+  ) {
+    const { projected, ...rest } = payloadState;
+    return { ...rest, transformed: projected };
+  }
+
+  return payloadState;
+}
+
+function getTransformedToolPayload(
+  metadata: unknown,
+  target: ToolPayloadTransformTarget,
+  phase: ToolPayloadTransformPhase,
+): TransformedToolPayloadState | undefined {
+  // Keep this local so @mastra/ai-sdk can process transform metadata without requiring
+  // the newest @mastra/core helper export at module load time.
+  const mastraMetadata = (metadata as { mastra?: Record<string, any> } | undefined)?.mastra;
+  const state =
+    mastraMetadata?.toolPayloadTransform?.[target]?.[phase] ?? mastraMetadata?.toolPayloadProjection?.[target]?.[phase];
+  return normalizeToolPayloadState(state);
+}
+
+function hasTransformedToolPayload(
+  transform: TransformedToolPayloadState | undefined,
+): transform is TransformedToolPayloadState & { transformed: unknown } {
+  return Boolean(transform && Object.prototype.hasOwnProperty.call(transform, 'transformed'));
+}
+
+export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
+  chunk,
+  mode = 'stream',
+  normalizeWarnings,
+  normalizeUsage,
+  normalizeFinishReason,
+  includeRawFinishReason = false,
+}: ConvertMastraChunkToAISDKOptions<OUTPUT>): OutputChunkType<OUTPUT> {
+  const displayInputTransform = getTransformedToolPayload(chunk.metadata, 'display', 'input-available');
+  const displayInputDeltaTransform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
+  const displayOutputTransform = getTransformedToolPayload(chunk.metadata, 'display', 'output-available');
+  const displayErrorTransform = getTransformedToolPayload(chunk.metadata, 'display', 'error');
+  const displayApprovalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+  const displaySuspendTransform = getTransformedToolPayload(chunk.metadata, 'display', 'suspend');
+
   switch (chunk.type) {
     case 'start':
       return {
@@ -53,7 +137,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
       return {
         type: 'start-step',
         request: rest.request,
-        warnings: rest.warnings || [],
+        warnings: normalizeWarnings(rest.warnings),
       };
     case 'raw':
       return {
@@ -64,9 +148,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
-        // Cast needed: Mastra's LanguageModelUsage has optional properties, AI SDK has required-but-nullable
-        totalUsage: chunk.payload.output.usage as AISDKLanguageModelUsage,
+        finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
+        ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
+        totalUsage: normalizeUsage(chunk.payload.output.usage),
       };
     }
     case 'reasoning-start':
@@ -83,14 +167,14 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'reasoning-signature':
-      throw new Error('AISDKv5 chunk type "reasoning-signature" not supported');
+      return;
     // return {
     //   type: 'reasoning-signature' as const,
     //   id: chunk.payload.id,
     //   signature: chunk.payload.signature,
     // };
     case 'redacted-reasoning':
-      throw new Error('AISDKv5 chunk type "redacted-reasoning" not supported');
+      return;
     // return {
     //   type: 'redacted-reasoning',
     //   id: chunk.payload.id,
@@ -148,7 +232,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
-        input: chunk.payload.args,
+        input: hasTransformedToolPayload(displayInputTransform)
+          ? displayInputTransform.transformed
+          : chunk.payload.args,
       };
     case 'tool-call-approval':
       return {
@@ -159,7 +245,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
-          args: chunk.payload.args,
+          args: hasTransformedToolPayload(displayApprovalTransform)
+            ? displayApprovalTransform.transformed
+            : chunk.payload.args,
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
@@ -172,7 +260,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
-          suspendPayload: chunk.payload.suspendPayload,
+          suspendPayload: hasTransformedToolPayload(displaySuspendTransform)
+            ? displaySuspendTransform.transformed
+            : chunk.payload.suspendPayload,
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
@@ -192,10 +282,13 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'tool-call-delta':
+      if (displayInputDeltaTransform?.suppress) {
+        return;
+      }
       return {
         type: 'tool-input-delta',
         id: chunk.payload.toolCallId,
-        delta: chunk.payload.argsTextDelta,
+        delta: (displayInputDeltaTransform?.transformed as string | undefined) ?? chunk.payload.argsTextDelta,
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'step-finish': {
@@ -208,8 +301,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           modelId: (rest.modelId as string) || '',
           ...rest,
         },
-        usage: chunk.payload.output.usage,
-        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
+        usage: normalizeUsage(chunk.payload.output.usage),
+        finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
+        ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
         providerMetadata,
       };
     }
@@ -235,18 +329,26 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
     case 'tool-result':
       return {
         type: 'tool-result',
-        input: chunk.payload.args,
+        input: hasTransformedToolPayload(displayInputTransform)
+          ? displayInputTransform.transformed
+          : chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
-        output: chunk.payload.result,
+        output: hasTransformedToolPayload(displayOutputTransform)
+          ? displayOutputTransform.transformed
+          : chunk.payload.result,
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
     case 'tool-error':
       return {
         type: 'tool-error',
-        error: chunk.payload.error,
-        input: chunk.payload.args,
+        error: hasTransformedToolPayload(displayErrorTransform)
+          ? displayErrorTransform.transformed
+          : chunk.payload.error,
+        input: hasTransformedToolPayload(displayInputTransform)
+          ? displayInputTransform.transformed
+          : chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
@@ -293,6 +395,126 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   }
 }
 
+export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
+  chunk,
+  mode = 'stream',
+}: {
+  chunk: ChunkType<OUTPUT>;
+  mode?: 'generate' | 'stream';
+}): OutputChunkType<OUTPUT> {
+  return convertMastraChunkToAISDKBase({
+    chunk,
+    mode,
+    normalizeWarnings: warnings => warnings || [],
+    normalizeUsage: usage => usage as AISDKLanguageModelUsage,
+    normalizeFinishReason: toAISDKFinishReason,
+  });
+}
+
+export function toAISDKFinishReasonV6(reason: MastraFinishReason): FinishReasonV6 {
+  switch (reason) {
+    case 'stop':
+    case 'length':
+    case 'content-filter':
+    case 'tool-calls':
+    case 'error':
+    case 'other':
+      return reason;
+    default:
+      return 'other';
+  }
+}
+
+function normalizeV6Warnings(warnings: any[] | undefined): AISDKCallWarningV6[] {
+  return (warnings ?? []).map(warning => {
+    switch (warning?.type) {
+      case 'unsupported-setting':
+        return {
+          type: 'compatibility',
+          feature: warning.setting,
+          details: warning.details,
+        } satisfies AISDKCallWarningV6;
+      case 'unsupported-tool':
+        return {
+          type: 'unsupported',
+          feature: warning.tool?.name ?? 'tool',
+          details: warning.details,
+        } satisfies AISDKCallWarningV6;
+      case 'other':
+        return {
+          type: 'other',
+          message: warning.message,
+        } satisfies AISDKCallWarningV6;
+      default:
+        return {
+          type: 'other',
+          message: String(warning),
+        } satisfies AISDKCallWarningV6;
+    }
+  });
+}
+
+function normalizeV6Usage(usage: any): AISDKLanguageModelUsageV6 {
+  return {
+    inputTokens: usage?.inputTokens,
+    inputTokenDetails: {
+      noCacheTokens: usage?.inputTokens,
+      cacheReadTokens: usage?.cachedInputTokens,
+      cacheWriteTokens: usage?.cacheCreationInputTokens,
+    },
+    outputTokens: usage?.outputTokens,
+    outputTokenDetails: {
+      textTokens: usage?.outputTokens,
+      reasoningTokens: usage?.reasoningTokens,
+    },
+    totalTokens: usage?.totalTokens,
+    reasoningTokens: usage?.reasoningTokens,
+    cachedInputTokens: usage?.cachedInputTokens,
+  };
+}
+
+export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
+  chunk,
+  mode = 'stream',
+}: {
+  chunk: ChunkType<OUTPUT>;
+  mode?: 'generate' | 'stream';
+}): OutputChunkType<OUTPUT> | OutputChunkType<OUTPUT>[] {
+  if (chunk.type === 'tool-call-approval') {
+    const displayTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+    // Emit both the native v6 tool-approval-request AND the legacy data-tool-call-approval
+    // so that consumers using the data stream protocol remain backwards-compatible.
+    return [
+      {
+        type: 'tool-approval-request',
+        approvalId: `${chunk.runId}${APPROVAL_ID_SEPARATOR}${chunk.payload.toolCallId}`,
+        toolCallId: chunk.payload.toolCallId,
+      } as OutputChunkType<OUTPUT>,
+      {
+        type: 'data-tool-call-approval',
+        id: chunk.payload.toolCallId,
+        data: {
+          state: 'data-tool-call-approval',
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: hasTransformedToolPayload(displayTransform) ? displayTransform.transformed : chunk.payload.args,
+          resumeSchema: chunk.payload.resumeSchema,
+        },
+      } satisfies DataChunkType,
+    ];
+  }
+
+  return convertMastraChunkToAISDKBase({
+    chunk,
+    mode,
+    normalizeWarnings: normalizeV6Warnings,
+    normalizeUsage: normalizeV6Usage,
+    normalizeFinishReason: toAISDKFinishReasonV6,
+    includeRawFinishReason: true,
+  });
+}
+
 export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMessage>({
   part,
   messageMetadataValue,
@@ -304,7 +526,11 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   responseMessageId,
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
-  part: TextStreamPart<ToolSet> | DataChunkType | { type: 'tool-output'; toolCallId: string; output: any };
+  part:
+    | TextStreamPart<ToolSet>
+    | DataChunkType
+    | ToolApprovalRequest
+    | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -312,7 +538,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | ToolWorkflowChunkType | ToolNetworkChunkType | undefined {
+}):
+  | InferUIMessageChunk<UI_MESSAGE>
+  | InferUIMessageChunkV6<UIMessageV6>
+  | ToolAgentChunkType
+  | ToolWorkflowChunkType
+  | ToolNetworkChunkType
+  | undefined {
   const partType = part?.type;
 
   switch (partType) {
@@ -342,6 +574,9 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'reasoning-start': {
+      if (!sendReasoning) {
+        return;
+      }
       return {
         type: 'reasoning-start',
         id: part.id,
@@ -362,6 +597,9 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'reasoning-end': {
+      if (!sendReasoning) {
+        return;
+      }
       return {
         type: 'reasoning-end',
         id: part.id,
@@ -428,6 +666,14 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+      };
+    }
+
+    case 'tool-approval-request': {
+      return {
+        type: 'tool-approval-request',
+        approvalId: part.approvalId,
+        toolCallId: part.toolCallId,
       };
     }
 

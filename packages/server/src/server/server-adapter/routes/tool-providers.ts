@@ -4,11 +4,10 @@ import {
   LIST_TOOL_PROVIDER_TOOLS_ROUTE,
   GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE,
 } from '../../handlers/tool-providers';
-import type { ServerRoute } from '.';
 
-export const TOOL_PROVIDER_ROUTES: ServerRoute<any, any, any>[] = [
+export const TOOL_PROVIDER_ROUTES = [
   LIST_TOOL_PROVIDERS_ROUTE,
   LIST_TOOL_PROVIDER_TOOLKITS_ROUTE,
   LIST_TOOL_PROVIDER_TOOLS_ROUTE,
   GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE,
-];
+] as const;

@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
 import { getColumnTemplate } from './shared';
-import { type ColumnType } from './types';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import type { ColumnType } from './types';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type EntryListEntryProps = {
   entry?: any;

@@ -27,14 +27,11 @@
       ]
     },
     "test": {
-      "dependsOn": ["test:unit", "test:types:zod", "test:integration"],
+      "dependsOn": ["test:unit", "test:integration"],
       "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"]
     },
     "test:unit": {
       "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"]
-    },
-    "test:types:zod": {
-      "inputs": ["src/**", "tsconfig.json", "package.json", "!**/*.md"]
     }
   }
 }

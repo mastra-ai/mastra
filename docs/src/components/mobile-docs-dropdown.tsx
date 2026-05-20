@@ -21,7 +21,7 @@ const docsTabs = [
   },
   {
     id: 'Guides',
-    label: 'Guides & Migrations',
+    label: 'Guides',
     href: '/guides/',
     basePath: '/guides',
   },
@@ -36,7 +36,6 @@ const docsTabs = [
     label: 'Learn',
     href: '/learn/',
     basePath: '/learn',
-    badge: 'new',
   },
 ]
 

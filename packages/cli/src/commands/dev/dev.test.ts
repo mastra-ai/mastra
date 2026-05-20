@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs', () => ({
@@ -91,39 +92,173 @@ vi.mock('./DevBundler', () => {
   };
 });
 
-describe('dev command - inspect flag behavior', () => {
+class MockChildProcess extends EventEmitter {
+  pid = 12345;
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
+  stdout = {
+    on: vi.fn(),
+  } as any;
+  stderr = {
+    on: vi.fn(),
+  } as any;
+  kill = vi.fn((signal?: NodeJS.Signals | number) => {
+    if (signal === 'SIGKILL') {
+      return true;
+    }
+
+    if (signal === 'SIGINT') {
+      setTimeout(() => {
+        this.signalCode = 'SIGINT';
+        this.emit('exit', null, 'SIGINT');
+      }, 0);
+      return true;
+    }
+
+    return true;
+  });
+
+  override on(event: string | symbol, listener: (...args: any[]) => void): this {
+    if (event === 'message') {
+      setTimeout(() => {
+        listener({ type: 'server-ready' });
+      }, 10);
+    }
+
+    return super.on(event, listener);
+  }
+}
+
+describe('dev command - https scheme in internal fetches', () => {
   let execaMock: any;
-  let mockChildProcess: Partial<ChildProcess>;
+  let mockChildProcess: MockChildProcess;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    vi.resetModules();
     vi.clearAllMocks();
 
-    mockChildProcess = {
-      pid: 12345,
-      exitCode: null,
-      stdout: {
-        on: vi.fn(),
-      } as any,
-      stderr: {
-        on: vi.fn(),
-      } as any,
-      on: vi.fn((event, handler) => {
-        if (event === 'message') {
-          setTimeout(() => {
-            handler({ type: 'server-ready' });
-          }, 10);
-        }
-        return mockChildProcess as ChildProcess;
-      }),
-      kill: vi.fn(),
-    };
+    mockChildProcess = new MockChildProcess();
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({ disabled: false }) });
+    vi.stubGlobal('fetch', fetchMock);
 
     const { execa } = await import('execa');
     execaMock = vi.mocked(execa);
-    execaMock.mockReturnValue(mockChildProcess as any);
+    execaMock.mockReturnValue(mockChildProcess as unknown as ChildProcess);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it('should use http:// scheme for internal fetches when https is not configured', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    // Wait for the server-ready message handler to fire and trigger fetch calls
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((call: any[]) => {
+          const url = String(call[0]);
+          return url.includes('__restart-active-workflow-runs') || url.includes('__refresh');
+        }),
+      ).toBe(true);
+    });
+
+    const fetchedUrls = fetchMock.mock.calls.map((call: any[]) => call[0] as string);
+    const internalFetches = fetchedUrls.filter(
+      (url: string) => url.includes('__restart-active-workflow-runs') || url.includes('__refresh'),
+    );
+
+    for (const url of internalFetches) {
+      expect(url).toMatch(/^http:\/\//);
+    }
+  });
+
+  it('should use https:// scheme for internal fetches when server.https is configured', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+      https: {
+        key: Buffer.from('mock-key'),
+        cert: Buffer.from('mock-cert'),
+      },
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    // Wait for the server-ready message handler to fire and trigger fetch calls
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((call: any[]) => {
+          const url = String(call[0]);
+          return url.includes('__restart-active-workflow-runs') || url.includes('__refresh');
+        }),
+      ).toBe(true);
+    });
+
+    const fetchedUrls = fetchMock.mock.calls.map((call: any[]) => call[0] as string);
+    const internalFetches = fetchedUrls.filter(
+      (url: string) => url.includes('__restart-active-workflow-runs') || url.includes('__refresh'),
+    );
+
+    for (const url of internalFetches) {
+      expect(url).toMatch(/^https:\/\//);
+    }
+  });
+});
+
+describe('dev command - inspect flag behavior', () => {
+  let execaMock: any;
+  let mockChildProcess: MockChildProcess;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mockChildProcess = new MockChildProcess();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server unavailable')));
+
+    const { execa } = await import('execa');
+    execaMock = vi.mocked(execa);
+    execaMock.mockReturnValue(mockChildProcess as unknown as ChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 

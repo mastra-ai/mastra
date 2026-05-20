@@ -209,6 +209,56 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+/**
+ * Prepare a JSON Schema for OpenAI strict mode by ensuring all object properties
+ * are required and all objects have additionalProperties: false.
+ */
+export function prepareJsonSchemaForOpenAIStrictMode(schema: JSONSchema7): JSONSchema7 {
+  const withRequired = ensureAllPropertiesRequired(schema);
+  return ensureAdditionalPropertiesFalse(withRequired);
+}
+
+function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema };
+
+  if (result.type === 'object' || result.properties) {
+    result.additionalProperties = false;
+  }
+
+  if (result.properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => [
+        key,
+        ensureAdditionalPropertiesFalse(value as JSONSchema7),
+      ]),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => ensureAdditionalPropertiesFalse(item as JSONSchema7));
+    } else if (typeof result.items === 'object') {
+      result.items = ensureAdditionalPropertiesFalse(result.items as JSONSchema7);
+    }
+  }
+
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => ensureAdditionalPropertiesFalse(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => ensureAdditionalPropertiesFalse(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => ensureAdditionalPropertiesFalse(s as JSONSchema7));
+  }
+
+  return result;
+}
+
 // export function zotToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7', strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative'): JSONSchema7 {
 //   const target = 'draft-07' as StandardJSONSchemaV1.Target;
 //   const standardSchema = toStandardSchema(zodSchema);
@@ -252,6 +302,11 @@ export function zodToJsonSchema(
         if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
           ctx.jsonSchema.type = 'string';
           ctx.jsonSchema.format = 'date-time';
+        }
+        // Add additionalProperties: false for object types to match Zod v3 behavior
+        // This is required for OpenAI strict mode function calling
+        if (def && (def.typeName === 'ZodObject' || def.type === 'object')) {
+          ctx.jsonSchema.additionalProperties = false;
         }
       },
     }) as JSONSchema7;

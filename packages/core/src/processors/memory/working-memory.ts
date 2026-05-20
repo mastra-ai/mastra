@@ -2,14 +2,14 @@ import type { Processor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
-import type { MastraDBMessage, MemoryConfig } from '../../memory';
+import type { MastraDBMessage, MemoryConfigInternal } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { generateEmptyFromSchema } from '../../utils';
 
-export interface WorkingMemoryTemplate {
-  format: 'markdown' | 'json';
-  content: string;
-}
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 export interface WorkingMemoryConfig {
   template?: WorkingMemoryTemplate;
@@ -71,7 +71,7 @@ export class WorkingMemory implements Processor {
       useVNext?: boolean;
       readOnly?: boolean;
       templateProvider?: {
-        getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null>;
+        getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
       };
       logger?: IMastraLogger;
     },
@@ -151,25 +151,9 @@ export class WorkingMemory implements Processor {
     return messageList;
   }
 
-  private generateEmptyFromSchema(schema: any): Record<string, any> | null {
-    try {
-      if (typeof schema === 'object' && schema !== null) {
-        const empty: Record<string, any> = {};
-        for (const key in schema) {
-          if (schema[key]?.type === 'object') {
-            empty[key] = this.generateEmptyFromSchema(schema[key].properties);
-          } else if (schema[key]?.type === 'array') {
-            empty[key] = [];
-          } else {
-            empty[key] = '';
-          }
-        }
-        return empty;
-      }
-      return null;
-    } catch {
-      return null;
-    }
+  private generateEmptyFromSchemaInternal(schema: string | Record<string, unknown>): Record<string, any> | null {
+    const result = generateEmptyFromSchema(schema);
+    return Object.keys(result).length > 0 ? result : null;
   }
 
   private getWorkingMemoryToolInstruction({
@@ -180,7 +164,7 @@ export class WorkingMemory implements Processor {
     data: string | null;
   }): string {
     const emptyWorkingMemoryTemplateObject =
-      template.format === 'json' ? this.generateEmptyFromSchema(template.content) : null;
+      template.format === 'json' ? this.generateEmptyFromSchemaInternal(template.content) : null;
     const hasEmptyWorkingMemoryTemplateObject =
       emptyWorkingMemoryTemplateObject && Object.keys(emptyWorkingMemoryTemplateObject).length > 0;
 
@@ -245,7 +229,7 @@ Guidelines:
 6. Information not being relevant to the current conversation is not a valid reason to replace or remove working memory information. Your working memory spans across multiple conversations and may be needed again later, even if it's not currently relevant.
 
 <working_memory_template>
-${template.content}
+${typeof template.content === 'string' ? template.content : JSON.stringify(template.content)}
 </working_memory_template>
 
 <working_memory_data>
@@ -255,7 +239,8 @@ ${data}
 Notes:
 - Update memory whenever referenced information changes
 ${
-  template.content !== this.defaultWorkingMemoryTemplate
+  (typeof template.content === 'string' ? template.content : JSON.stringify(template.content)) !==
+  this.defaultWorkingMemoryTemplate
     ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
     : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 `

@@ -1,12 +1,17 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { config } from 'dotenv';
-import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { z } from 'zod/v4';
 import type { ChunkType } from '../../stream';
 import { createTool } from '../../tools/tool';
 import { Agent } from '../agent';
 
-config();
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('agent.stopWhen', () => {
   const weatherTool = createTool({

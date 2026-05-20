@@ -7,19 +7,22 @@ import type {
   ToolSet,
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
+import type { CreatedAgentSignal } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MastraMemory, MemoryConfig } from '../memory';
+import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
@@ -32,8 +35,10 @@ import type {
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   ModelManagerModelConfig,
+  StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
+import type { ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -45,7 +50,7 @@ export type StreamInternal = {
   generateId?: IdGenerator;
   currentDate?: () => Date;
   saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
-  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  memoryConfig?: MemoryConfigInternal; // MemoryConfig from memory/types
   threadId?: string;
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory
@@ -60,6 +65,22 @@ export type StreamInternal = {
   _delegationBailed?: boolean;
   // Stream transport reference (e.g., WebSocket) for stream lifecycle management
   transportRef?: StreamTransportRef;
+  // Background task manager for dispatching tools to run asynchronously
+  backgroundTaskManager?: BackgroundTaskManager;
+  // Agent-level background task config
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  // Transform policy for display/transcript tool payloads.
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
+  // Manager-level background task config
+  backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
+  // When true, backgroundTaskCheckStep returns immediately without waiting for
+  // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
+  // continuation from the outside — the inner loop shouldn't also wait.
+  skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  // Signal inputs already stored in the initial message list that still need
+  // stream data-part echoes before the first model step.
+  initialSignalEchoes?: CreatedAgentSignal[];
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -115,6 +136,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition | Array<StopCondition>;
@@ -133,9 +156,9 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   methodType: ModelMethodType;
   /**
-   * Maximum number of times processors can trigger a retry per generation.
-   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
-   * If not set, no retries are performed.
+   * Maximum number of processor-triggered retries allowed for this generation.
+   * Input/output processor retries require this to be explicitly set.
+   * Error processor retries from processAPIError default to 10 when errorProcessors are configured and this is not set.
    */
   maxProcessorRetries?: number;
 
@@ -180,7 +203,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   outputWriter: OutputWriter;
 } & LoopRun<Tools, OUTPUT>;
 

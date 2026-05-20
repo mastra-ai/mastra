@@ -17,7 +17,7 @@ Sends Tracing data to PostHog for AI observability and analytics.
 new PosthogExporter(config: PosthogExporterConfig)
 ```
 
-## PosthogExporterConfig
+## `PosthogExporterConfig`
 
 ```typescript
 interface PosthogExporterConfig extends BaseExporterConfig {
@@ -91,7 +91,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -138,7 +138,7 @@ const exporter = new PosthogExporter({
 })
 ```
 
-## Span Type Mapping
+## Span type mapping
 
 | Mastra Span Type | PostHog Event Type |
 | - | - |

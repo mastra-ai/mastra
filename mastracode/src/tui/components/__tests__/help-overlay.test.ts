@@ -10,7 +10,9 @@ describe('buildHelpText', () => {
     expect(text).toContain('/threads');
     expect(text).toContain('/settings');
     expect(text).toContain('/models');
+    expect(text).toContain('/skill/<name>');
     expect(text).not.toContain('/models:pack');
+    expect(text).not.toContain('/memory-gateway');
     expect(text).toContain('/help');
   });
 
@@ -24,7 +26,10 @@ describe('buildHelpText', () => {
     const text = buildHelpText(baseOpts);
     expect(text).toContain('Ctrl+C');
     expect(text).toContain('Ctrl+D');
+    expect(text).toContain('Enter');
+    expect(text).toContain('Send message');
     expect(text).toContain('Ctrl+F');
+    expect(text).toContain('Queue follow-up');
     expect(text).toContain('Ctrl+T');
     expect(text).toContain('Ctrl+E');
     expect(text).toContain('Ctrl+Y');
@@ -43,7 +48,7 @@ describe('buildHelpText', () => {
     expect(text).not.toMatch(/\/mode\s+Switch/);
   });
 
-  it('shows custom slash commands', () => {
+  it('shows custom slash commands with double-slash prefixes', () => {
     const text = buildHelpText({
       ...baseOpts,
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '' }],

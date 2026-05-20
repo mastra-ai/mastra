@@ -1,19 +1,30 @@
-import type { ZodError } from 'zod';
+import { isModelNotAllowedError } from '@mastra/core/agent-builder/ee';
 
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
 
 /**
+ * Duck-typed interface for ZodError-like objects.
+ * Note: Zod v4 uses PropertyKey[] (string | number | symbol) for path.
+ */
+interface ZodErrorLike {
+  issues: Array<{
+    path: PropertyKey[];
+    message: string;
+  }>;
+}
+
+/**
  * Formats a ZodError into a structured validation error response.
  * Returns an object with an error message and an array of field-specific issues.
  */
 export function formatZodError(
-  error: ZodError,
+  error: ZodErrorLike,
   context: string,
 ): { error: string; issues: Array<{ field: string; message: string }> } {
   const issues = error.issues.map(e => ({
-    field: e.path.length > 0 ? e.path.join('.') : 'root',
+    field: e.path.length > 0 ? e.path.map(p => String(p)).join('.') : 'root',
     message: e.message,
   }));
 
@@ -25,6 +36,27 @@ export function formatZodError(
 
 // Helper to handle errors consistently
 export function handleError(error: unknown, defaultMessage: string): never {
+  if (isModelNotAllowedError(error)) {
+    const body = {
+      error: {
+        code: error.code,
+        message: error.message,
+        allowed: error.allowed,
+        attempted: error.attempted,
+        offendingLabel: error.offendingLabel,
+      },
+    };
+    const res = new Response(JSON.stringify(body), {
+      status: 422,
+      headers: { 'content-type': 'application/json' },
+    });
+    throw new HTTPException(422, {
+      res,
+      message: error.message,
+      cause: error,
+    });
+  }
+
   const apiError = error as ApiError;
 
   const apiErrorStatus = apiError.status || apiError.details?.status || 500;

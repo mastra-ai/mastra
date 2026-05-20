@@ -1,12 +1,11 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
-
-import { CopyButton } from '@/ds/components/CopyButton';
-import { cn } from '@/lib/utils';
+import remarkGfm from 'remark-gfm';
 
 import { highlight } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { cn } from '@/lib/utils';
 
 export type MarkdownRendererProps = {
   children: string;
@@ -31,7 +30,7 @@ const HighlightedPre = React.memo(({ children, language, ...props }: Highlighted
   const [tokens, setTokens] = useState<any[]>([]);
 
   useEffect(() => {
-    highlight(children, language).then(tokens => {
+    void highlight(children, language).then(tokens => {
       if (tokens) setTokens(tokens);
     });
   }, [children, language]);
@@ -204,7 +203,7 @@ const COMPONENTS: Components = {
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -212,7 +211,7 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-neutral6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}

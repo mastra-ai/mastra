@@ -1,3 +1,4 @@
+import { FAVORITE_STORED_SKILL_ROUTE, UNFAVORITE_STORED_SKILL_ROUTE } from '../../handlers/stored-skill-favorites';
 import {
   LIST_STORED_SKILLS_ROUTE,
   GET_STORED_SKILL_ROUTE,
@@ -6,9 +7,8 @@ import {
   DELETE_STORED_SKILL_ROUTE,
   PUBLISH_STORED_SKILL_ROUTE,
 } from '../../handlers/stored-skills';
-import type { ServerRoute } from '.';
 
-export const STORED_SKILLS_ROUTES: ServerRoute<any, any, any>[] = [
+export const STORED_SKILLS_ROUTES = [
   // Stored Skills CRUD Routes
   LIST_STORED_SKILLS_ROUTE,
   GET_STORED_SKILL_ROUTE,
@@ -17,4 +17,7 @@ export const STORED_SKILLS_ROUTES: ServerRoute<any, any, any>[] = [
   DELETE_STORED_SKILL_ROUTE,
   // Publish
   PUBLISH_STORED_SKILL_ROUTE,
-];
+  // Favorites (EE)
+  FAVORITE_STORED_SKILL_ROUTE,
+  UNFAVORITE_STORED_SKILL_ROUTE,
+] as const;
