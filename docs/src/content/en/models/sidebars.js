@@ -273,8 +273,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
+        },
+        {
+          type: 'doc',
           id: 'providers/github-models',
           label: 'GitHub Models',
+        },
+        {
+          type: 'doc',
+          id: 'providers/gmicloud',
+          label: 'GMI Cloud',
         },
         {
           type: 'doc',
@@ -338,6 +348,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
@@ -374,12 +389,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
-          label: 'MiniMax Coding Plan (minimax.io)',
+          label: 'MiniMax Token Plan (minimax.io)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Coding Plan (minimaxi.com)',
+          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',
@@ -465,6 +480,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
+        },
+        {
+          type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
         },
         {
           type: 'doc',
@@ -570,6 +590,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/umans-ai-coding-plan',
+          label: 'Umans AI Coding Plan',
         },
         {
           type: 'doc',

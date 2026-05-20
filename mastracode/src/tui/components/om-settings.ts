@@ -33,6 +33,13 @@ export interface OMSettingsCallbacks {
   onClose: () => void;
 }
 
+interface BooleanSubmenuLabels {
+  onLabel?: string;
+  offLabel?: string;
+  onDescription?: string;
+  offDescription?: string;
+}
+
 // =============================================================================
 // Threshold presets (in tokens)
 // =============================================================================
@@ -305,7 +312,7 @@ export class OMSettingsComponent extends Box implements Focusable {
 
     this.settingsList = new SettingsList(
       items,
-      10,
+      11,
       getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks

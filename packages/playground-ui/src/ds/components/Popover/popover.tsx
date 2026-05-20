@@ -1,11 +1,13 @@
-import * as PopoverPrimitive from '@radix-ui/react-popover';
+import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
 
-const PopoverTrigger = PopoverPrimitive.Trigger;
+type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
+  asChild?: boolean;
+};
 
 const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
@@ -27,7 +29,54 @@ const PopoverContent = React.forwardRef<
 ));
 PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 
-function HoverPopover({ children, ...props }: PopoverPrimitive.PopoverProps) {
+    return (
+      <PopoverPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+        {asChild ? undefined : children}
+      </PopoverPrimitive.Trigger>
+    );
+  },
+);
+PopoverTrigger.displayName = 'PopoverTrigger';
+
+type PopoverContentProps = PopoverPrimitive.Popup.Props &
+  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>;
+
+const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
+  ({ className, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
+    const classNameString = typeof className === 'string' ? className : undefined;
+
+    return (
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Positioner
+          align={align}
+          alignOffset={alignOffset}
+          side={side}
+          sideOffset={sideOffset}
+          className="z-50 outline-none"
+        >
+          <PopoverPrimitive.Popup
+            ref={ref}
+            data-slot="popover-content"
+            className={cn(
+              'z-50 w-72 rounded-xl border border-border1 bg-surface3 text-neutral5 shadow-dialog focus-visible:outline-hidden origin-[var(--transform-origin)]',
+              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+              classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `py-3.5 px-3`,
+              className,
+            )}
+            {...props}
+          />
+        </PopoverPrimitive.Positioner>
+      </PopoverPrimitive.Portal>
+    );
+  },
+);
+PopoverContent.displayName = 'PopoverContent';
+
+function HoverPopover({
+  children,
+  ...props
+}: Omit<React.ComponentProps<typeof Popover>, 'children'> & { children?: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 

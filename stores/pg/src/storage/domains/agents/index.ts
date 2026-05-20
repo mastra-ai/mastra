@@ -7,6 +7,7 @@ import {
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
   TABLE_SCHEMAS,
+  TABLE_FAVORITES,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -98,12 +99,12 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
-      ifNotExists: ['status', 'authorId'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'favoriteCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'browser'],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -285,14 +286,28 @@ export class AgentsPG extends AgentsStorage {
   }
 
   /**
-   * Removes stale draft agent records that have no activeVersionId.
+   * Removes stale draft agent records that have no versions at all.
    * These are left behind when createAgent partially fails (inserts thin record
    * but fails to create the version due to schema mismatch).
+   *
+   * A legitimate draft (never published) will have rows in the versions table,
+   * so we must only delete records with zero associated versions.
    */
   async #cleanupStaleDrafts(): Promise<void> {
     try {
-      const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND \"activeVersionId\" IS NULL`);
+      const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      const versionsTable = getTableName({
+        indexName: TABLE_AGENT_VERSIONS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      await this.#db.client.none(
+        `DELETE FROM ${agentsTable} a
+         WHERE a.status = 'draft'
+           AND a."activeVersionId" IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM ${versionsTable} v WHERE v."agentId" = a.id
+           )`,
+      );
     } catch {
       // Non-critical cleanup, ignore errors
     }
@@ -365,18 +380,23 @@ export class AgentsPG extends AgentsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
+      // Default visibility to 'private' for owned agents; leave null for unowned/legacy rows
+      const visibility = agent.visibility ?? (agent.authorId ? 'private' : null);
+
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
       await this.#db.client.none(
         `INSERT INTO ${agentsTable} (
-          id, status, "authorId", metadata,
+          id, status, "authorId", visibility, metadata, "favoriteCount",
           "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           agent.id,
           'draft',
           agent.authorId ?? null,
+          visibility,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
+          0,
           null, // activeVersionId starts as null
           nowIso,
           nowIso,
@@ -386,7 +406,7 @@ export class AgentsPG extends AgentsStorage {
       );
 
       // 2. Extract config fields from the flat input
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+      const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
       const versionId = crypto.randomUUID();
@@ -405,7 +425,9 @@ export class AgentsPG extends AgentsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: agent.authorId,
+        visibility: visibility ?? undefined,
         metadata: agent.metadata,
+        favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -451,7 +473,7 @@ export class AgentsPG extends AgentsStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status } = updates;
+      const { authorId, activeVersionId, metadata, status, visibility } = updates;
 
       // Update metadata fields on the agent record
       const setClauses: string[] = [];
@@ -472,6 +494,11 @@ export class AgentsPG extends AgentsStorage {
       if (status !== undefined) {
         setClauses.push(`status = $${paramIndex++}`);
         values.push(status);
+      }
+
+      if (visibility !== undefined) {
+        setClauses.push(`visibility = $${paramIndex++}`);
+        values.push(visibility);
       }
 
       if (metadata !== undefined) {
@@ -546,7 +573,18 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      metadata,
+      status,
+      visibility,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -565,34 +603,78 @@ export class AgentsPG extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      // Empty entityIds is short-circuit: no rows possible.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
-      // Build WHERE conditions
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      const favoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+
+      // Build WHERE conditions (referenced via alias `a`).
       const conditions: string[] = [];
       const queryParams: any[] = [];
       let paramIdx = 1;
 
+      // JOIN params come first in the query, but we build WHERE first and prepend later.
+      const joinUserId = pinFavoritedFor;
+      const useJoin = Boolean(joinUserId);
+      let joinSqlIdx: number | null = null;
+      if (useJoin) {
+        joinSqlIdx = paramIdx++;
+      }
+
       if (status) {
-        conditions.push(`status = $${paramIdx++}`);
+        conditions.push(`a.status = $${paramIdx++}`);
         queryParams.push(status);
       }
 
       if (authorId !== undefined) {
-        conditions.push(`"authorId" = $${paramIdx++}`);
+        conditions.push(`a."authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
       }
 
+      if (visibility !== undefined) {
+        conditions.push(`a.visibility = $${paramIdx++}`);
+        queryParams.push(visibility);
+      }
+
       if (metadata && Object.keys(metadata).length > 0) {
-        conditions.push(`metadata @> $${paramIdx++}::jsonb`);
+        conditions.push(`a.metadata @> $${paramIdx++}::jsonb`);
         queryParams.push(JSON.stringify(metadata));
       }
 
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => `$${paramIdx++}`).join(', ');
+        conditions.push(`a.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
+      }
+
+      if (useJoin && favoritedOnly) {
+        conditions.push('s."userId" IS NOT NULL');
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
+      const joinClause =
+        useJoin && joinSqlIdx !== null
+          ? `LEFT JOIN ${favoritesTable} s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = $${joinSqlIdx}`
+          : '';
+      const joinParams: any[] = useJoin && joinUserId ? [joinUserId] : [];
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get total count
+      // Total count (mirrors join + where, no ORDER BY / LIMIT).
       const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
-        queryParams,
+        `SELECT COUNT(*) as count FROM ${tableName} a ${joinClause} ${whereClause}`,
+        [...joinParams, ...queryParams],
       );
       const total = parseInt(countResult.count, 10);
 
@@ -606,11 +688,21 @@ export class AgentsPG extends AgentsStorage {
         };
       }
 
-      // Get paginated results
+      // Compose ORDER BY: favorited-first when JOIN active, then existing field, then id ASC tie-break.
+      const orderByParts: string[] = [];
+      if (useJoin) {
+        orderByParts.push(`(s."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`a."${field}" ${direction}`);
+      orderByParts.push(`a."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
       const limitValue = perPageInput === false ? total : perPage;
+      const limitIdx = paramIdx++;
+      const offsetIdx = paramIdx++;
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-        [...queryParams, limitValue, offset],
+        `SELECT a.* FROM ${tableName} a ${joinClause} ${whereClause} ${orderByClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        [...joinParams, ...queryParams, limitValue, offset],
       );
 
       const agents = (dataResult || []).flatMap(row => {
@@ -659,9 +751,10 @@ export class AgentsPG extends AgentsStorage {
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
           "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
+          browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
         [
           input.id,
           input.agentId,
@@ -684,6 +777,7 @@ export class AgentsPG extends AgentsStorage {
           input.workspace ? JSON.stringify(input.workspace) : null,
           input.skills ? JSON.stringify(input.skills) : null,
           input.skillsFormat ?? null,
+          input.browser ? JSON.stringify(input.browser) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,

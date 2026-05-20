@@ -1,11 +1,12 @@
 import { EntityType } from '@mastra/core/observability';
 import {
-  ButtonWithTooltip,
+  Button,
   DateTimeRangePicker,
   NoTracesInfo,
   PageLayout,
   PropertyFilterCreator,
   SpanDataPanelView,
+  Switch,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -13,6 +14,7 @@ import {
   TracesToolbar,
   buildTraceListFilters,
   createTracePropertyFilterFields,
+  isBranchesNotSupportedError,
   neutralizeFilterTokens,
   useEntityNames,
   useEnvironments,
@@ -48,10 +50,34 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const [groupByThread, setGroupByThread] = useState<boolean>(false);
-  const url = useTraceUrlState(searchParams, setSearchParams, {
-    onRemoveAll: () => setGroupByThread(false),
-  });
+  const url = useTraceUrlState(searchParams, setSearchParams);
+
+  useEffect(() => {
+    if (!scopedEntityId) return;
+    const currentRoot = searchParams.get('rootEntityType');
+    const currentEntityId = searchParams.get('filterEntityId');
+    const needsRoot = !!scopedEntityType && currentRoot !== scopedEntityType;
+    const needsEntityId = currentEntityId !== scopedEntityId;
+    if (!needsRoot && !needsEntityId) return;
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        if (scopedEntityType) next.set('rootEntityType', scopedEntityType);
+        next.set('filterEntityId', scopedEntityId);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [scopedEntityId, scopedEntityType, searchParams, setSearchParams]);
+
+  const lockedFieldIds = useMemo<readonly string[]>(() => (isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
+  const hiddenCreatorFieldIds = useMemo<readonly string[]>(
+    () => (isScoped ? ['rootEntityType', 'entityId', 'entityName'] : []),
+    [isScoped],
+  );
+  const lockedTooltipContent = isScoped
+    ? 'This filter is scoped to the current agent. Open the global Traces view to change it.'
+    : undefined;
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -83,6 +109,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
+  // Set once we detect the active storage provider doesn't implement `listBranches`. Drives both the
+  // auto-flip from branches→traces below and hiding the Branches option in the List mode filter.
+  const [branchesUnsupported, setBranchesUnsupported] = useState(false);
+  const [branchesNoticeDismissed, setBranchesNoticeDismissed] = useState(false);
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
     traceId: string;
     rootSpanId: string | undefined;
@@ -185,7 +215,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   } = useTraces({ filters: traceFilters, listMode: url.listMode });
 
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
-  const threadTitles = tracesData?.threadTitles ?? {};
+
+  // Storage providers that don't implement `listBranches` throw a known MastraError. When that
+  // surfaces in branches mode, treat the provider as branches-incapable for the rest of the
+  // session: flip the URL back to traces mode so the next query succeeds, and remove the
+  // Branches option from the List mode filter (see `branchesSupported` in `filterFields`).
+  useEffect(() => {
+    if (!tracesError || branchesUnsupported) return;
+    if (!isBranchesNotSupportedError(tracesError)) return;
+    setBranchesUnsupported(true);
+    if (url.listMode === 'branches') url.handleListModeChange('traces');
+  }, [tracesError, branchesUnsupported, url]);
 
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),

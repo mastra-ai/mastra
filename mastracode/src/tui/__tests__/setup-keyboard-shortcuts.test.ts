@@ -8,11 +8,23 @@ vi.mock('node:fs', () => ({
   default: {},
 }));
 
-const autocompleteProviders: Array<{ commands: Array<{ name: string; description: string }> }> = [];
+const autocompleteProviders: Array<{
+  commands: Array<{
+    name: string;
+    description: string;
+    getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
+  }>;
+}> = [];
 
 vi.mock('@mariozechner/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
-    constructor(commands: Array<{ name: string; description: string }>) {
+    constructor(
+      commands: Array<{
+        name: string;
+        description: string;
+        getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
+      }>,
+    ) {
       autocompleteProviders.push({ commands });
     }
   },

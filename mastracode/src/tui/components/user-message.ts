@@ -6,6 +6,7 @@ import { Container, Markdown, Spacer, Text, visibleWidth } from '@mariozechner/p
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Strip ANSI escape sequences from a string.

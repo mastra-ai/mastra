@@ -54,6 +54,7 @@ import type {
   StorageWorkspaceType,
   StorageSkillType,
   StorageBlobEntry,
+  StorageFavoriteType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { MCPClientVersion } from '@mastra/core/storage/domains/mcp-clients';
@@ -184,6 +185,7 @@ export type RecordTypes = {
   [TABLE_SKILLS]: StorageSkillType;
   [TABLE_SKILL_VERSIONS]: SkillVersion;
   [TABLE_SKILL_BLOBS]: StorageBlobEntry;
+  [TABLE_FAVORITES]: StorageFavoriteType;
   mastra_background_tasks: Record<string, any>;
   [TABLE_SCHEDULES]: Record<string, any>;
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;

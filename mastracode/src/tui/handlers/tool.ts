@@ -11,8 +11,10 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
 import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
@@ -44,6 +46,10 @@ function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unkno
  * Handles objects, strings, and other types.
  * Extracts content from common tool return structures like { content: "...", isError: false }
  */
+function isToolResultError(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
+}
+
 export function formatToolResult(result: unknown): string {
   if (result === null || result === undefined) {
     return '';
@@ -130,10 +136,14 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
   const { state } = ctx;
   // Component may already exist if created early by handleToolInputStart
   const existingComponent = state.pendingTools.get(toolCallId);
+  const existingSubmitPlanComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
 
   if (existingComponent) {
     // Component was created during input streaming — update with final args
     existingComponent.updateArgs(args);
+    reconcileToolBoundaries(ctx);
+  } else if (existingSubmitPlanComponent) {
+    existingSubmitPlanComponent.updateArgs(args);
   } else if (!state.seenToolCallIds.has(toolCallId)) {
     state.seenToolCallIds.add(toolCallId);
 
@@ -173,21 +183,17 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
+    applyQuietDisplayForNewTool(ctx, component);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
+    reconcileToolBoundaries(ctx);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();
-  }
-
-  // Track submit_plan tool components for inline plan approval placement
-  const component = state.pendingTools.get(toolCallId);
-  if (component && toolName === 'submit_plan') {
-    state.lastSubmitPlanComponent = component;
   }
 
   // File modification tracking is handled by the Harness display state
@@ -202,6 +208,7 @@ export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, p
       isError: false,
     };
     component.updateResult(result, true);
+    reconcileToolBoundaries(ctx);
     state.ui.requestRender();
   }
 }
@@ -219,6 +226,7 @@ export function handleShellOutput(
   const component = state.pendingTools.get(toolCallId);
   if (component?.appendStreamingOutput) {
     component.appendStreamingOutput(output);
+    reconcileToolBoundaries(ctx);
     state.ui.requestRender();
   }
 }
@@ -288,9 +296,11 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
+    applyQuietDisplayForNewTool(ctx, component);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
+    reconcileToolBoundaries(ctx);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
@@ -318,7 +328,9 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
       // Update inline tool component if it exists
       const component = state.pendingTools.get(toolCallId);
       if (component) {
-        component.updateArgs(partialArgs);
+        component.updateArgs(partialArgs, false);
+        reconcileToolBoundaries(ctx);
+        component.refresh?.();
       }
 
       // For ask_user, stream partial args into the question component
@@ -330,6 +342,14 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
           } catch {
             // Don't crash on malformed partial args
           }
+        }
+      }
+
+      // For submit_plan, stream the title/plan args into the inline purple plan box.
+      if (buffer.toolName === 'submit_plan') {
+        const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
+        if (planComponent) {
+          planComponent.updateArgs(partialArgs);
         }
       }
 
@@ -396,6 +416,11 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   // Clean up ask_user component tracking
   state.pendingAskUserComponents.delete(toolCallId);
 
+  if (state.pendingSubmitPlanComponents?.has(toolCallId)) {
+    // submit_plan renders through PlanApprovalInlineComponent, not the generic tool box.
+    return;
+  }
+
   const component = state.pendingTools.get(toolCallId);
   if (component) {
     const isPendingTaskTool = state.pendingTaskToolIds?.has(toolCallId) ?? false;
@@ -406,9 +431,10 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
 
     const toolResult: ToolResult = {
       content: [{ type: 'text', text: formatToolResult(result) }],
-      isError,
+      isError: effectiveIsError,
     };
     component.updateResult(toolResult, false);
+    reconcileToolBoundaries(ctx);
 
     state.pendingTools.delete(toolCallId);
     state.pendingTaskToolIds?.delete(toolCallId);

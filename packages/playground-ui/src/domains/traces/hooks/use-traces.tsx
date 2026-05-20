@@ -6,10 +6,84 @@ import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
 
+/**
+ * Per-MastraClient delta-polling support cache. Sticks once we observe a 501
+ * or a page-0 response without `deltaCursor` (legacy server or store without
+ * delta capability), so we don't re-probe on every mount.
+ */
+type DeltaSupport = 'unknown' | 'unsupported';
+const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, DeltaSupport>();
+
+/** Tunables for live-tail polling. All fields optional — defaults below.
+ *  Platform consumers override individual fields to throttle traffic or
+ *  reshape the freshness/visibility trade-offs. */
+export interface TracesPollingConfig {
+  /** Interval between delta polls. Default 5_000ms. */
+  deltaPollIntervalMs?: number;
+  /** Refetch delay when the server signals `delta.hasMore` (chase remaining updates immediately). Default 100ms. */
+  deltaChaseIntervalMs?: number;
+  /** Max rows per delta poll. Server caps at 100. Default 100. */
+  deltaLimit?: number;
+  /** Page-mode refetch interval used when the configured store does not support delta polling. Default 10_000ms. */
+  pageModeRefetchIntervalMs?: number;
+  /** Periodic page-0 refetch interval while delta is active. Delta only delivers new rows, so this
+   *  is how we surface status flips (running → success/error) on rows already visible. Default 60_000ms. */
+  page0StatusRefreshIntervalMs?: number;
+  /** When the tab returns from being hidden and the last successful poll was older than this, the
+   *  cursor is treated as stale (ClickHouse delta tables TTL after 2 days; other stores may be more
+   *  aggressive). The infinite query is reset so page 0 refetches and delta resumes from a fresh
+   *  cursor. Default 900_000ms (15 min). */
+  idleGuardThresholdMs?: number;
+  /** Minimum visible duration for `isRefetching` after any query completes. On localhost a delta
+   *  poll can resolve in tens of ms — too brief for the spinner's 1s rotation to register visually,
+   *  and quick enough that React may batch the start/finish transitions. Pulsing for this duration
+   *  on completion (~144° of rotation at 400ms) makes each poll perceptible as a heartbeat.
+   *  Default 400ms. */
+  minRefetchSpinMs?: number;
+  /** Window during which a delta-arrived row's key stays in `recentlyAddedKeys` so the list view
+   *  can apply its `animate-row-highlight` class. Should match the CSS animation duration
+   *  (currently 1_000ms — see `index.css`). Default 1_000ms. */
+  deltaHighlightMs?: number;
+}
+
+const DEFAULT_POLLING_CONFIG: Required<TracesPollingConfig> = {
+  deltaPollIntervalMs: 5_000,
+  deltaChaseIntervalMs: 100,
+  deltaLimit: 100,
+  pageModeRefetchIntervalMs: 10_000,
+  page0StatusRefreshIntervalMs: 60_000,
+  idleGuardThresholdMs: 15 * 60_000,
+  minRefetchSpinMs: 400,
+  deltaHighlightMs: 1_000,
+};
+
+/** Returns true when the cursor should be considered stale and re-seeded.
+ *  Exported for testing — pure function of timestamps. */
+export function shouldResetAfterIdle(lastSuccessAt: number, now: number, thresholdMs: number): boolean {
+  if (lastSuccessAt === 0) return false;
+  return now - lastSuccessAt > thresholdMs;
+}
+
+function isHttp501(error: unknown): boolean {
+  return (error as { status?: number } | null)?.status === 501;
+}
+
+type FetchTracesFnArgs = TracesFilters & {
+  client: ReturnType<typeof useMastraClient>;
+  mode?: 'page' | 'delta';
+  page?: number;
+  perPage?: number;
+  after?: string;
+  limit?: number;
+};
+
 const fetchTracesFn = async ({
   client,
+  mode,
   page,
   perPage,
+  after,
+  limit,
   filters,
   listMode = 'traces',
 }: TracesFilters & {
@@ -71,19 +145,32 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
       return true;
     });
 
-  const threadTitles: Record<string, string> = {};
-  for (const page of data.pages) {
-    if (page.threadTitles) {
-      Object.assign(threadTitles, page.threadTitles);
-    }
-  }
-
-  return { spans, threadTitles };
+  return { spans, deltaCursor: data.pages[0]?.deltaCursor };
 }
 
 export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
   const client = useMastraClient();
+  const queryClient = useQueryClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+
+  const [deltaSupport, setDeltaSupport] = useState<DeltaSupport>(() => deltaSupportByClient.get(client) ?? 'unknown');
+  const deltaUnsupported = deltaSupport === 'unsupported';
+
+  // When false, all automatic polling stops: delta polls, status refresh,
+  // idle-guard resets, and the page-mode fallback interval. Manual `resync`
+  // still works. Session-scoped (no persistence across mounts).
+  const [autoRefetch, setAutoRefetch] = useState(true);
+
+  // Keys (`traceId:spanId`) of rows that arrived via the most recent delta
+  // poll(s). The list view reads this to apply a temporary highlight class
+  // for deltaHighlightMs, then they auto-expire. Resets on filter/listMode
+  // change since a new query key spawns a fresh list.
+  const [recentlyAddedKeys, setRecentlyAddedKeys] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setRecentlyAddedKeys(new Set());
+  }, [listMode, filters]);
+
+  const tracesQueryKey = ['traces', listMode, filters] as const;
 
   const query = useInfiniteQuery({
     queryKey: ['traces', listMode, filters],
@@ -103,6 +190,145 @@ export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 10000),
   });
 
+  const cursor = query.data?.deltaCursor;
+
+  // If page 0 came back without a deltaCursor, the server/store doesn't
+  // support delta polling. Pin the client to 'unsupported' so the infinite
+  // query resumes page-mode polling and we stop probing.
+  useEffect(() => {
+    if (query.isSuccess && cursor === undefined && deltaSupport === 'unknown') {
+      deltaSupportByClient.set(client, 'unsupported');
+      setDeltaSupport('unsupported');
+    }
+  }, [query.isSuccess, cursor, deltaSupport, client]);
+
+  const deltaQuery = useQuery({
+    queryKey: ['traces-delta', listMode, filters] as const,
+    queryFn: () => {
+      const current = queryClient.getQueryData<InfiniteData<TracesPageResponse>>(tracesQueryKey)?.pages[0]?.deltaCursor;
+      if (!current) return null;
+      return fetchTracesFn({
+        client,
+        mode: 'delta',
+        after: current,
+        limit: deltaLimit,
+        filters,
+        listMode,
+      });
+    },
+    enabled: !!cursor && !deltaUnsupported && autoRefetch,
+    retry: false,
+    refetchInterval: q => {
+      if (q.state.error) return false;
+      const data = q.state.data as ListTracesResponse | ListBranchesResponse | null | undefined;
+      if (data?.delta?.hasMore) return deltaChaseIntervalMs;
+      return deltaPollIntervalMs;
+    },
+  });
+
+  // Merge new delta rows into the infinite-query cache. Also captures the
+  // arrived keys into `recentlyAddedKeys` for deltaHighlightMs so the UI
+  // can briefly distinguish them. The cleanup timer is intentionally NOT
+  // tied to the effect lifecycle — if a newer delta arrives first, we still
+  // want each prior batch to expire on its own schedule.
+  useEffect(() => {
+    const result = deltaQuery.data;
+    if (!result) return;
+    queryClient.setQueryData<InfiniteData<TracesPageResponse>>(tracesQueryKey, old =>
+      mergeDeltaIntoPage0(old, result, listMode),
+    );
+
+    const newRows =
+      listMode === 'branches' && 'branches' in result
+        ? (result.branches ?? [])
+        : 'spans' in result
+          ? (result.spans ?? [])
+          : [];
+    if (newRows.length === 0) return;
+    const keys = newRows.map(r => `${r.traceId}:${r.spanId ?? ''}`);
+    setRecentlyAddedKeys(prev => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+    setTimeout(() => {
+      setRecentlyAddedKeys(prev => {
+        const next = new Set(prev);
+        for (const k of keys) next.delete(k);
+        return next;
+      });
+    }, deltaHighlightMs);
+    // tracesQueryKey is a new array each render but its contents drive cache keying;
+    // depending on its members (listMode/filters) is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deltaQuery.data, queryClient, listMode, filters, deltaHighlightMs]);
+
+  // A 501 means the server is too old (or store doesn't support delta) — pin
+  // 'unsupported' so the delta query disables and page-mode polling resumes.
+  useEffect(() => {
+    if (isHttp501(deltaQuery.error)) {
+      deltaSupportByClient.set(client, 'unsupported');
+      setDeltaSupport('unsupported');
+    }
+  }, [deltaQuery.error, client]);
+
+  // Periodic page-0 refresh to surface status updates on visible rows
+  // (running → success/error). Only runs while delta is the primary polling
+  // mechanism; otherwise the infinite query's own refetchInterval covers it.
+  const statusRefreshQuery = useQuery({
+    queryKey: ['traces-status-refresh', listMode, filters] as const,
+    queryFn: () =>
+      fetchTracesFn({
+        client,
+        page: 0,
+        perPage: TRACES_PER_PAGE,
+        filters,
+        listMode,
+      }),
+    enabled: !!cursor && !deltaUnsupported && autoRefetch,
+    refetchInterval: page0StatusRefreshIntervalMs,
+    refetchOnMount: false,
+    retry: false,
+  });
+
+  useEffect(() => {
+    const result = statusRefreshQuery.data;
+    if (!result) return;
+    queryClient.setQueryData<InfiniteData<TracesPageResponse>>(tracesQueryKey, old =>
+      refreshPage0Rows(old, result, listMode),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusRefreshQuery.data, queryClient, listMode, filters]);
+
+  // Idle guard: when the tab returns from being hidden, check how long it's
+  // been since the last successful poll. If past the threshold, reset the
+  // infinite query so page 0 refetches and the cursor is re-seeded.
+  const lastSuccessAtRef = useRef(0);
+  useEffect(() => {
+    const ts = Math.max(query.dataUpdatedAt, deltaQuery.dataUpdatedAt, statusRefreshQuery.dataUpdatedAt);
+    if (ts > lastSuccessAtRef.current) {
+      lastSuccessAtRef.current = ts;
+    }
+  }, [query.dataUpdatedAt, deltaQuery.dataUpdatedAt, statusRefreshQuery.dataUpdatedAt]);
+
+  // Track autoRefetch in a ref so the visibility listener (attached once)
+  // reads the current value without needing to re-attach.
+  const autoRefetchRef = useRef(autoRefetch);
+  useEffect(() => {
+    autoRefetchRef.current = autoRefetch;
+  }, [autoRefetch]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!autoRefetchRef.current) return;
+      if (!shouldResetAfterIdle(lastSuccessAtRef.current, Date.now(), idleGuardThresholdMs)) return;
+      void queryClient.resetQueries({ queryKey: ['traces', listMode, filters] });
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [queryClient, listMode, filters, idleGuardThresholdMs]);
+
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
 
   useEffect(() => {
@@ -111,5 +337,43 @@ export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  return { ...query, setEndOfListElement };
+  // `isRefetching` aggregates every active fetch — page-mode (initial, next
+  // page, manual resync, idle reset), the 60s page-0 status refresh, AND the
+  // delta polls — so a spinner bound to it acts as a heartbeat indicator.
+  //
+  // Short polls (e.g. delta on localhost) can resolve in tens of ms — too
+  // brief for `animate-spin` (1s/rotation) to register visually, and quick
+  // enough that React may batch the start/finish transitions so we never
+  // even observe `isFetching: true`. So we also watch every query's
+  // data/errorUpdatedAt; any advance pulses `isRefetching` true for at least
+  // minRefetchSpinMs, which is ~144° of rotation — clearly perceptible.
+  const isFetchingAny = query.isFetching || statusRefreshQuery.isFetching || deltaQuery.isFetching;
+  const lastActivityAt = Math.max(
+    query.dataUpdatedAt,
+    query.errorUpdatedAt,
+    deltaQuery.dataUpdatedAt,
+    deltaQuery.errorUpdatedAt,
+    statusRefreshQuery.dataUpdatedAt,
+    statusRefreshQuery.errorUpdatedAt,
+  );
+  const [pulse, setPulse] = useState(false);
+  const prevActivityAtRef = useRef(lastActivityAt);
+  useEffect(() => {
+    if (lastActivityAt > prevActivityAtRef.current) {
+      prevActivityAtRef.current = lastActivityAt;
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), minRefetchSpinMs);
+      return () => clearTimeout(t);
+    }
+  }, [lastActivityAt, minRefetchSpinMs]);
+  const isRefetching = isFetchingAny || pulse;
+
+  return {
+    ...query,
+    setEndOfListElement,
+    isRefetching,
+    autoRefetch,
+    setAutoRefetch,
+    recentlyAddedKeys,
+  };
 };

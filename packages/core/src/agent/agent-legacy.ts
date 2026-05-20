@@ -16,6 +16,7 @@ import type {
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
 } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';

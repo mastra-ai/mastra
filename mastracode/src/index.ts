@@ -73,6 +73,7 @@ import {
   getResourceIdOverride,
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
+import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { resolveMastraCodeThreadLockConfig } from './utils/thread-lock-config.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
@@ -670,6 +671,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     harness,
     mcpManager,
     hookManager,
+    signalsPubSub,
     authStorage,
     resolveModel,
     storageWarning,

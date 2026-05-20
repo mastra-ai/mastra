@@ -19,10 +19,12 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_SCORE_EVENTS } from './ddl';
+import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -176,13 +178,43 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
 // List
 // ============================================================================
 
-export async function listScores(client: ClickHouseClient, args: ListScoresArgs): Promise<ListScoresResponse> {
+export async function listScores(
+  client: ClickHouseClient,
+  args: ListScoresArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListScoresResponse> {
   const parsed = listScoresArgsSchema.parse(args);
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildScoresFilterConditions(parsed.filters, 's');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingSupported(strategy);
+
+    const streamHeadCursor = await getStreamHeadCursor(client);
+    if (parsed.after === undefined) {
+      return {
+        scores: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryScoresAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      scores: visibleRows.map(rowToScoreRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      deltaCursor: visibleRows.length > 0 ? buildScoresCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
+    };
+  }
+
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause}`,
@@ -205,6 +237,7 @@ export async function listScores(client: ClickHouseClient, args: ListScoresArgs)
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     scores: rows.map(rowToScoreRecord),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 

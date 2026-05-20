@@ -276,6 +276,7 @@ describe('renderExistingMessages subagents', () => {
       ],
     };
     const state = createState();
+    state.quietMode = true;
     state.harness = {
       listMessages: vi.fn().mockResolvedValue([message]),
       getDisplayState: () => ({ isRunning: false }),
@@ -291,5 +292,6 @@ describe('renderExistingMessages subagents', () => {
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('subagent fork openai/gpt-5.5');
+    expect(rendered).toContain('summary text');
   });
 });

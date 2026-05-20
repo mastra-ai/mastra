@@ -161,6 +161,10 @@ describe('safeStringify', () => {
     expect(safeStringify('hello')).toBe('"hello"');
     expect(safeStringify(123)).toBe('123');
   });
+
+  it('returns an empty string for undefined values', () => {
+    expect(safeStringify(undefined)).toBe('');
+  });
 });
 
 describe('formatInput', () => {
@@ -177,6 +181,37 @@ describe('formatInput', () => {
       ];
       const result = formatInput(messages, SpanType.MODEL_GENERATION);
       expect(result).toEqual(messages);
+    });
+
+    it('drops empty user messages from message arrays', () => {
+      const result = formatInput(
+        [
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: '' },
+          { role: 'user', content: '   ' },
+          { role: 'assistant', content: 'What do you need?' },
+          { role: 'user', content: 'Hello' },
+        ],
+        SpanType.MODEL_GENERATION,
+      );
+
+      expect(result).toEqual([
+        { role: 'system', content: 'You are helpful' },
+        { role: 'assistant', content: 'What do you need?' },
+        { role: 'user', content: 'Hello' },
+      ]);
+    });
+
+    it('drops blank string input instead of creating an empty user message', () => {
+      const result = formatInput('   ', SpanType.MODEL_GENERATION);
+
+      expect(result).toEqual([]);
+    });
+
+    it('drops undefined input instead of throwing during empty message filtering', () => {
+      const result = formatInput(undefined, SpanType.MODEL_GENERATION);
+
+      expect(result).toEqual([]);
     });
 
     it('stringifies object input as user message', () => {

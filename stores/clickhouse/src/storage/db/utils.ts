@@ -73,6 +73,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SKILLS]: `ReplacingMergeTree()`,
   [TABLE_SKILL_VERSIONS]: `MergeTree()`,
   [TABLE_SKILL_BLOBS]: `ReplacingMergeTree()`,
+  [TABLE_FAVORITES]: `ReplacingMergeTree()`,
   mastra_background_tasks: `ReplacingMergeTree()`,
   [TABLE_SCHEDULES]: `ReplacingMergeTree()`,
   [TABLE_SCHEDULE_TRIGGERS]: `MergeTree()`,

@@ -7,13 +7,16 @@
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { theme } from '../theme.js';
+import stripAnsi from 'strip-ansi';
+import { getTermWidth, theme } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItemInput[] = [];
 
   constructor() {
     super();
+    this.rebuildDisplay();
   }
 
   /**
@@ -21,6 +24,11 @@ export class TaskProgressComponent extends Container {
    */
   updateTasks(tasks: TaskItemInput[]): void {
     this.tasks = tasks;
+    this.rebuildDisplay();
+  }
+
+  setQuietMode(enabled: boolean): void {
+    this.quietMode = enabled;
     this.rebuildDisplay();
   }
 
@@ -34,19 +42,28 @@ export class TaskProgressComponent extends Container {
   private rebuildDisplay(): void {
     this.clear();
 
-    // No tasks = no render (component takes zero vertical space)
-    if (this.tasks.length === 0) return;
-
-    // Progress header
     const completed = this.tasks.filter(t => t.status === 'completed').length;
     const total = this.tasks.length;
+    const hasVisibleTasks = total > 0 && completed !== total;
 
-    // Hide the component when all tasks are completed
-    if (completed === total) return;
+    if (!hasVisibleTasks) {
+      this.addChild(new Spacer(1));
+      return;
+    }
+
+    this.addChild(new Spacer(1));
+
+    if (this.quietMode) {
+      for (const line of this.formatQuietTaskLines(completed, total)) {
+        this.addChild(new Text(line, 0, 0));
+      }
+      return;
+    }
+
+    // Progress header
     const headerText =
       '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
 
-    this.addChild(new Spacer(1));
     this.addChild(new Text(headerText, 0, 0));
 
     // Render each task

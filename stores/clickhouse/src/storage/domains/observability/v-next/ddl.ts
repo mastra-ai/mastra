@@ -20,6 +20,8 @@
  *   - No physical createdAt/updatedAt columns
  */
 
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+
 // ---------------------------------------------------------------------------
 // Table names
 // ---------------------------------------------------------------------------
@@ -31,6 +33,10 @@ export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
+export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
+export const TABLE_LOG_EVENTS_DELTA = 'mastra_log_events_delta';
+export const TABLE_SCORE_EVENTS_DELTA = 'mastra_score_events_delta';
+export const TABLE_FEEDBACK_EVENTS_DELTA = 'mastra_feedback_events_delta';
 export const TABLE_DISCOVERY_VALUES = 'mastra_discovery_values';
 export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 
@@ -445,6 +451,43 @@ PARTITION BY toDate(timestamp)
 ORDER BY (timestamp, logId)
 `;
 
+export function buildLogEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  timestamp          DateTime64(3, 'UTC'),
+  logId              String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildLogEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_LOG_EVENTS_DELTA}
+TO ${TABLE_LOG_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_log_events_delta_cursor', 'logId')} AS cursorId,
+  ingestedAt,
+  timestamp,
+  logId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    timestamp,
+    logId
+  FROM ${TABLE_LOG_EVENTS}
+)
+`;
+}
+
 // ---------------------------------------------------------------------------
 // score_events — ReplacingMergeTree with scoreId dedup
 // ---------------------------------------------------------------------------
@@ -510,6 +553,47 @@ PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
 `;
+
+export function buildScoreEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  traceId            Nullable(String),
+  timestamp          DateTime64(3, 'UTC'),
+  scoreId            String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+SETTINGS allow_nullable_key = 1
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
+TO ${TABLE_SCORE_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_score_events_delta_cursor', 'scoreId')} AS cursorId,
+  ingestedAt,
+  traceId,
+  timestamp,
+  scoreId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    traceId,
+    timestamp,
+    scoreId
+  FROM ${TABLE_SCORE_EVENTS}
+)
+`;
+}
 
 // ---------------------------------------------------------------------------
 // feedback_events — ReplacingMergeTree with feedbackId dedup
@@ -579,6 +663,91 @@ PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
+
+export function buildFeedbackEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  traceId            Nullable(String),
+  timestamp          DateTime64(3, 'UTC'),
+  feedbackId         String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+SETTINGS allow_nullable_key = 1
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildFeedbackEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_FEEDBACK_EVENTS_DELTA}
+TO ${TABLE_FEEDBACK_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_feedback_events_delta_cursor', 'feedbackId')} AS cursorId,
+  ingestedAt,
+  traceId,
+  timestamp,
+  feedbackId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    traceId,
+    timestamp,
+    feedbackId
+  FROM ${TABLE_FEEDBACK_EVENTS}
+)
+`;
+}
+
+// ---------------------------------------------------------------------------
+// metric_events_delta — append-only cursor index for incremental metric polling
+// ---------------------------------------------------------------------------
+
+export function buildMetricEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  name               LowCardinality(String),
+  timestamp          DateTime64(3, 'UTC'),
+  metricId           String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildMetricEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_METRIC_EVENTS_DELTA}
+TO ${TABLE_METRIC_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_metric_events_delta_cursor', 'metricId')} AS cursorId,
+  ingestedAt,
+  name,
+  timestamp,
+  metricId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    name,
+    timestamp,
+    metricId
+  FROM ${TABLE_METRIC_EVENTS}
+)
+`;
+}
 
 // ---------------------------------------------------------------------------
 // discovery_values — refreshable helper
@@ -687,7 +856,7 @@ SELECT DISTINCT kind, key1, key2, value FROM (
 // All DDL in creation order (tables first, then MVs)
 // ---------------------------------------------------------------------------
 
-export const ALL_TABLE_DDL = [
+export const BASE_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
   TRACE_BRANCHES_DDL,
@@ -799,6 +968,10 @@ export const ALL_TABLE_NAMES = [
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_METRIC_EVENTS_DELTA,
+  TABLE_LOG_EVENTS_DELTA,
+  TABLE_SCORE_EVENTS_DELTA,
+  TABLE_FEEDBACK_EVENTS_DELTA,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
 ];

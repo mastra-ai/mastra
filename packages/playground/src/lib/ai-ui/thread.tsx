@@ -16,6 +16,7 @@ import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/co
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { Link } from '@/lib/link';
 // import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
@@ -127,7 +128,7 @@ interface ComposerProps {
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();

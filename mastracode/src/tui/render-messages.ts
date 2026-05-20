@@ -8,8 +8,13 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from './chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
+import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
@@ -26,9 +31,27 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+function getCurrentModeColor(state: TUIState): string | undefined {
+  return state.harness.getCurrentMode?.()?.color;
+}
+
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
+
+class TaskHistoryComponent extends Container {
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'task';
+  }
+}
+
+function insertTaskHistoryComponent(state: TUIState, component: Component, insertIndex: number): void {
+  insertChatComponentWithBoundarySpacing(
+    state.chatContainer,
+    component,
+    insertIndex >= 0 ? insertIndex : state.chatContainer.children.length,
+  );
+}
 
 /**
  * Render a completed task list inline in the chat history.
@@ -42,7 +65,7 @@ export function renderCompletedTasksInline(
   const headerText =
     theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   container.addChild(new Text(headerText, BOX_INDENT, 0));
   const MAX_VISIBLE = 4;
   const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
@@ -65,12 +88,7 @@ export function renderCompletedTasksInline(
   }
   container.addChild(new Spacer(1));
 
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 /**
@@ -87,12 +105,32 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   container.addChild(new Spacer(1));
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
+  insertTaskHistoryComponent(state, container, insertIndex);
+}
+
+function renderTaskTransitionFromHistory(
+  state: TUIState,
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
+  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
+
+  if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
+    if (!wasAllCompleted) {
+      renderCompletedTasksInline(state, nextTasks, -1, state.quietMode);
+    }
+    return { tasks: nextTasks, replacedWithInline: true };
   }
+
+  if (nextTasks.length === 0) {
+    if (previousTasks.length > 0) {
+      renderClearedTasksInline(state, previousTasks);
+      return { tasks: [], replacedWithInline: true };
+    }
+    return { tasks: [], replacedWithInline: false };
+  }
+
+  return { tasks: nextTasks, replacedWithInline: true };
 }
 
 function renderTaskTransitionFromHistory(
@@ -154,13 +192,12 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
     const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
     const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-      state.chatContainer.invalidate();
+      insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
       return;
     }
   }
 
-  state.chatContainer.addChild(child);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, child);
 }
 
 export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
@@ -169,8 +206,7 @@ export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Compone
     if (anchor) {
       const idx = state.chatContainer.children.indexOf(anchor as never);
       if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
         return;
       }
     }
@@ -365,9 +401,30 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     return;
   }
 
+  // Check for persisted skill activation tags.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
+    state.ui.requestRender();
+    return;
+  }
+
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText);
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme());
 
     state.messageComponentsById.set(message.id, userComponent);
 
@@ -541,7 +598,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: state.quietMode, forked: subArgs?.forked },
+              { collapseOnComplete: false, expandOnComplete: state.quietMode, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -552,7 +609,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             }
             // Mark as finished with result
             subComponent.finish(isErr ?? false, durationMs, resultText);
-            state.chatContainer.addChild(subComponent);
+            insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
           }
@@ -664,8 +721,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (!replacedWithInline) {
+            if (state.quietMode) {
+              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
+              toolComponent.setQuietModeDisplay('quiet');
+              toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+            }
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
+          } else {
           }
         } else if (
           content.type === 'om_observation_start' ||
@@ -709,6 +772,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
         } else if (content.type === 'om_thread_title_updated') {
+          if (state.quietMode) continue;
           // Render thread title update marker in history
           state.chatContainer.addChild(
             new OMMarkerComponent({
@@ -758,6 +822,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
   }
 
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 

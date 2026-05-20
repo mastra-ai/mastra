@@ -470,11 +470,15 @@ export interface ToolAction<
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
-  // Returns: The expected output OR a validation error if input validation fails
+  // Returns: The expected output, a validation error, or void when the tool
+  // suspends via `context.agent?.suspend?.(...)` / `context.workflow?.suspend?.(...)`.
+  // When `suspend` has been called, the tool runtime skips output validation
+  // (see `Tool.execute` in tool.ts), so returning `undefined` after `suspend`
+  // is the supported idiom (e.g. `return await suspend(...)`).
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
-  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError | void>;
   mastra?: Mastra;
   /**
    * Whether the tool requires explicit user approval before execution.

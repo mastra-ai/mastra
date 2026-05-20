@@ -16,6 +16,8 @@ import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkT
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 import { useMastraClient } from '@/mastra-client-context';
 
+type ToolsInput = any;
+
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
@@ -50,7 +52,10 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
   | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
-export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
+export type GenerateArgs = SharedArgs & {
+  onFinish?: (messages: UIMessage[]) => Promise<void>;
+  clientTools?: ToolsInput;
+};
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
@@ -274,6 +279,7 @@ export const useChat = ({
     signal,
     onFinish,
     tracingOptions,
+    clientTools,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -322,6 +328,7 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       tracingOptions,
       requireToolApproval,
+      clientTools,
     });
 
     // Check if suspended for tool approval

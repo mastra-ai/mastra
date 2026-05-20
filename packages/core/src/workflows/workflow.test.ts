@@ -13,6 +13,7 @@ import { Agent } from '../agent';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';

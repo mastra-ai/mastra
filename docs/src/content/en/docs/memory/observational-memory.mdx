@@ -160,6 +160,28 @@ OM uses fast local token estimation for this thresholding work. Text is estimate
 
 The Observer can also see attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript for readability, and forwards the actual attachment parts alongside the text. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while non-image attachments are forwarded as file parts with normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
 
+If your Observer model is text-only or its API rejects multimodal input, set `observation.observeAttachments` to `false` to drop attachments before they reach the Observer. The readable placeholders (`[Image #1: ...]`, `[File #1: ...]`) are kept in the transcript so the Observer can still reason about what was shared without receiving the binary payload. The same filter applies to tool results that contain image or file parts:
+
+```typescript
+new Agent({
+  name: 'assistant',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          model: 'deepseek/deepseek-reasoner',
+          observeAttachments: false,
+        },
+      },
+    },
+  }),
+})
+```
+
+You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle.
+
 ```md
 Date: 2026-01-15
 
@@ -487,7 +509,7 @@ const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
-      activateAfterIdle: '5m',
+      activateAfterIdle: 'auto',
       activateOnProviderChange: true,
     },
   },

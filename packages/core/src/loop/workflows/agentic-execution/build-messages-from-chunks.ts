@@ -38,11 +38,13 @@ export function buildMessagesFromChunks({
   messageId,
   responseModelMetadata,
   tools,
+  createdAt = new Date(),
 }: {
   chunks: CollectedChunk[];
   messageId: string;
   responseModelMetadata?: { metadata: Record<string, unknown> };
   tools?: ToolSet;
+  createdAt?: Date;
 }): MastraDBMessage[] {
   // Parts are pushed in first-delta order. Text and reasoning spans push a part
   // on the first delta and mutate it in place as subsequent deltas arrive.
@@ -342,7 +344,7 @@ export function buildMessagesFromChunks({
       ...(contentString ? { content: contentString } : {}),
       ...responseModelMetadata,
     },
-    createdAt: new Date(),
+    createdAt,
   };
 
   return [message];

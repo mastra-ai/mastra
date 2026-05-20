@@ -1,13 +1,37 @@
-import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+'use client';
+
+import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-const TooltipProvider = TooltipPrimitive.Provider;
+type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
+  delay?: number;
+  timeout?: number;
+  /** Radix API compatibility alias for `delay`. */
+  delayDuration?: number;
+  /** Radix API compatibility alias for `timeout`. */
+  skipDelayDuration?: number;
+};
+
+function TooltipProvider({ delay, delayDuration, timeout, skipDelayDuration, ...props }: TooltipProviderProps) {
+  const resolvedDelay = delay ?? delayDuration;
+  const resolvedTimeout = timeout ?? skipDelayDuration;
+  return (
+    <TooltipPrimitive.Provider
+      {...(resolvedDelay !== undefined ? { delay: resolvedDelay } : {})}
+      {...(resolvedTimeout !== undefined ? { timeout: resolvedTimeout } : {})}
+      {...props}
+    />
+  );
+}
 
 const Tooltip = TooltipPrimitive.Root;
 
-const TooltipTrigger = TooltipPrimitive.Trigger;
+type TooltipTriggerProps = TooltipPrimitive.Trigger.Props & {
+  /** Radix-style alias for Base UI's native `render` prop. */
+  asChild?: boolean;
+};
 
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,

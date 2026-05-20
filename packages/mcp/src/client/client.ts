@@ -749,6 +749,11 @@ export class InternalMastraMCPClient extends MastraBase {
         let requireApproval: boolean | undefined;
         let needsApprovalFn: ((args: any, ctx: any) => boolean | Promise<boolean>) | undefined;
 
+        // Capture server-advertised annotations (title, readOnlyHint, destructiveHint, ...).
+        // These are exposed on the tool's `mcp.annotations` field and forwarded to the
+        // requireToolApproval callback so consumers can write annotation-driven policies.
+        const annotations = tool.annotations;
+
         if (typeof this.requireToolApproval === 'function') {
           // Wrap the server-level function to match the per-tool needsApprovalFn signature.
           // Note: ctx may be undefined when called via network/index.ts (which only passes args).
@@ -757,7 +762,12 @@ export class InternalMastraMCPClient extends MastraBase {
           const toolName = tool.name;
           requireApproval = true; // Signal that approval check is needed
           needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
-            return serverApprovalFn({ toolName, args, ...ctx });
+            // Server-supplied annotations are placed AFTER the ctx spread so a
+            // caller can't accidentally (or maliciously) override them by
+            // injecting an `annotations` key into ctx — the value the
+            // requireToolApproval policy sees always reflects what came back
+            // from the MCP server's tools/list response.
+            return serverApprovalFn({ toolName, args, ...ctx, annotations });
           };
         } else if (this.requireToolApproval === true) {
           requireApproval = true;

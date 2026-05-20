@@ -28,6 +28,8 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
 
+  const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
+
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
   spawnSync(pkgManager, installArgs, {

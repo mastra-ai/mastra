@@ -79,7 +79,9 @@ export function createStreamStep<OUTPUT = undefined>({
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
-      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
+      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT> & {
+        initialSignalEchoes?: CreatedAgentSignal[];
+      };
 
       const processors =
         validatedInputData.outputProcessors ||

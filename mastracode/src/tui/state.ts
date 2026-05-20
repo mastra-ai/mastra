@@ -19,7 +19,7 @@ import type { AskQuestionInlineComponent } from './components/ask-question-inlin
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
 import type { GradientAnimator } from './components/obi-loader.js';
-import type { OMMarkerComponent } from './components/om-marker.js';
+import type { OMMarkerComponent, OMMarkerData } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { ShellStreamComponent } from './components/shell-output.js';
@@ -48,6 +48,9 @@ export interface MastraTUIOptions {
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
+
+  /** Analytics client for product telemetry */
+  analytics?: MastraCodeAnalytics;
 
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
@@ -87,6 +90,7 @@ export interface TUIState {
   harness: Harness<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
+  analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   mcpManager?: McpManager;
   workspace?: Workspace;
@@ -95,6 +99,9 @@ export interface TUIState {
   ui: TUI;
   chatContainer: Container;
   editorContainer: Container;
+  idleCounter?: IdleCounterComponent;
+  idleStartedAt?: number;
+  lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
   terminal: ProcessTerminal;
@@ -155,7 +162,8 @@ export interface TUIState {
   pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
-  lastSubmitPlanComponent?: IToolExecutionComponent;
+  lastSubmitPlanComponent?: Component;
+  pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -180,6 +188,7 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationData?: OMMarkerData;
   activeActivationTTLMarker?: OMMarkerComponent;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 
@@ -233,6 +242,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     harness: options.harness,
     options,
     hookManager: options.hookManager,
+    analytics: options.analytics,
     authStorage: options.authStorage,
     mcpManager: options.mcpManager,
     workspace: options.workspace,
@@ -262,6 +272,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     toolOutputExpanded: false,
     hideThinkingBlock: true,
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,
@@ -272,6 +283,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Inline interaction
     lastClearedText: '',
     pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],

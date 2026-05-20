@@ -295,24 +295,45 @@ export async function handlePlanApproval(
           const objective = formatPlanGoalObjective(title, plan);
           await ctx.startGoal(objective, 'Goal cancelled.');
 
-          resolve();
-        },
-        onReject: async (feedback?: string) => {
-          state.activeInlinePlanApproval = undefined;
-          await state.harness.respondToPlanApproval({
-            planId,
-            response: { action: 'rejected', feedback },
-          });
-          resolve();
-        },
+        resolve();
       },
-      state.ui,
-    );
+      onGoal: async () => {
+        state.activeInlinePlanApproval = undefined;
+        await approvePlan(ctx, planId, title, plan);
+
+        // `approvePlan` waits for plan mode to idle before `startGoal` sends
+        // the canonical goal reminder, so this starts a fresh build-mode run.
+        const objective = formatPlanGoalObjective(title, plan);
+        await ctx.startGoal(objective, 'Goal cancelled.');
+
+        const goal = state.goalManager.getGoal();
+        if (goal?.id) {
+          state.planStartedGoalId = goal.id;
+        }
+
+        resolve();
+      },
+      onReject: async (feedback?: string) => {
+        state.activeInlinePlanApproval = undefined;
+        await state.harness.respondToPlanApproval({
+          planId,
+          response: { action: 'rejected', feedback },
+        });
+        resolve();
+      },
+    };
+
+    const approvalComponent =
+      state.lastSubmitPlanComponent instanceof PlanApprovalInlineComponent
+        ? state.lastSubmitPlanComponent
+        : new PlanApprovalInlineComponent(approvalOptions, state.ui);
+    approvalComponent.activate(approvalOptions);
 
     // Store as active plan approval
     state.activeInlinePlanApproval = approvalComponent;
 
-    // Insert after the submit_plan tool component (same pattern as ask_user)
+    // Insert after the submit_plan placeholder; if streaming already created the
+    // plan box, activate that component in place instead of rendering a duplicate.
     if (state.lastSubmitPlanComponent) {
       const children = [...state.chatContainer.children];
       const submitPlanIndex = children.indexOf(state.lastSubmitPlanComponent as any);
@@ -321,7 +342,9 @@ export async function handlePlanApproval(
         for (let i = 0; i <= submitPlanIndex; i++) {
           state.chatContainer.addChild(children[i]!);
         }
-        state.chatContainer.addChild(approvalComponent);
+        if (state.lastSubmitPlanComponent !== approvalComponent) {
+          state.chatContainer.addChild(approvalComponent);
+        }
         for (let i = submitPlanIndex + 1; i < children.length; i++) {
           state.chatContainer.addChild(children[i]!);
         }

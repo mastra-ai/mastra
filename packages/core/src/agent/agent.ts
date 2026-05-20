@@ -33,6 +33,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -166,6 +167,11 @@ type ProcessorLoadedToolsProvider = {
   getLoadedToolsForRequestContext?: (args: {
     requestContext: RequestContext;
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
+};
+
+type AgentSnapshotMemoryInfo = {
+  threadId?: string;
+  resourceId?: string;
 };
 
 type ProcessorWorkflowChildrenContainer = {
@@ -984,6 +990,7 @@ export class Agent<
         throw mastraError;
       }
 
+      const pubsub = this.getPubSub();
       Object.entries(agents || {}).forEach(([_agentName, agent]) => {
         if (this.#mastra) {
           agent.__registerMastra?.(this.#mastra);
@@ -5648,6 +5655,67 @@ export class Agent<
     } as T;
   }
 
+  #getSnapshotMemoryInfo(existingSnapshot: any): AgentSnapshotMemoryInfo | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+      }
+    }
+
+    return undefined;
+  }
+
+  #getAgentExecutionResourceId({
+    requestContext,
+    memory,
+    snapshotMemoryInfo,
+  }: {
+    requestContext?: RequestContext;
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+  }): string | undefined {
+    const resourceIdFromContext = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
+  }
+
+  async #requireAgentExecutionFGA({
+    requestContext,
+    memory,
+    runId,
+    snapshotMemoryInfo,
+  }: {
+    requestContext?: RequestContext;
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    runId?: string;
+    snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+  }): Promise<void> {
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (!fgaProvider) {
+      return;
+    }
+
+    const user = requestContext?.get('user');
+    const executionResourceId = this.#getAgentExecutionResourceId({ requestContext, memory, snapshotMemoryInfo });
+    const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
+      permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      requestContext,
+      context: {
+        resourceId: executionResourceId,
+      },
+      metadata: {
+        agentId: this.id,
+        agentName: this.name,
+        runId,
+        executionResourceId,
+      },
+    });
+  }
+
   /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
@@ -5711,7 +5779,6 @@ export class Agent<
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
     const threadFromArgs = resolveThreadIdFromArgs({
@@ -5722,7 +5789,11 @@ export class Agent<
       overrideId: threadIdFromContext,
     });
 
-    const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
+    const resourceId = this.#getAgentExecutionResourceId({
+      requestContext,
+      memory: options.memory,
+      snapshotMemoryInfo,
+    });
     const memoryConfig = options.memory?.options;
 
     const llm = (await this.getLLM({
@@ -6378,6 +6449,8 @@ export class Agent<
       await this.#assertAgentExecutionPreflight(mergedOptions.requestContext);
     }
 
+    await this.#requireAgentExecutionFGA(mergedOptions);
+
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
@@ -6421,7 +6494,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<any>;
+    } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
     const result = await this.#execute(executeOptions);
 
@@ -7623,6 +7696,13 @@ export class Agent<
       options: mergedOptions,
     });
 
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
+    });
+
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
@@ -7667,7 +7747,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

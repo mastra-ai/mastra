@@ -142,6 +142,10 @@ export type ServerRoute<
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
    *
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (logical OR). This is useful for routes that serve multiple resource types,
+   * e.g. a streaming endpoint used by both runtime and stored agents.
+   *
    * @example
    * requiresPermission: MastraFGAPermissions.AGENTS_READ
    * requiresPermission: MastraFGAPermissions.WORKFLOWS_EXECUTE
@@ -160,7 +164,7 @@ export type ServerRoute<
     resourceId?:
       | string
       | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-    permission?: MastraFGAPermissionInput;
+    permission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   };
   /**
    * Harness-specific route auth metadata. The server auth boundary uses this

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import { createSignal } from '../agent/signals';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
+import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -563,6 +564,7 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'mode_changed', modeId, previousModeId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   /**
@@ -937,7 +939,6 @@ export class Harness<TState = {}> {
     }
 
     this.tokenUsage = createEmptyTokenUsage();
-    await this.ensureCurrentAgentThreadSubscription();
     this.emit({ type: 'thread_created', thread });
 
     return thread;
@@ -1062,6 +1063,7 @@ export class Harness<TState = {}> {
     this.tokenUsage = createEmptyTokenUsage();
     await this.ensureCurrentAgentThreadSubscription();
     this.emit({ type: 'thread_created', thread: clonedThread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return clonedThread;
   }
@@ -1093,6 +1095,7 @@ export class Harness<TState = {}> {
     await this.ensureCurrentAgentThreadSubscription();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   async listThreads(options?: {
@@ -2014,6 +2017,41 @@ export class Harness<TState = {}> {
         content,
         createdAt: msg.createdAt,
       };
+    }
+
+    if (msg.role === 'signal') {
+      const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
+
+      if (signal.type === 'user-message') {
+        const signalContent = signalContentsToHarnessContent(signal.contents);
+        if (signalContent.length > 0) {
+          return {
+            id: msg.id,
+            role: 'user',
+            content: signalContent,
+            createdAt: msg.createdAt,
+          };
+        }
+      }
+
+      if (signal.type === 'system-reminder') {
+        const reminder = toSystemReminderContent({
+          type: signal.type,
+          contents: signal.contents,
+          attributes: signal.attributes ?? msg.content.metadata,
+          metadata: signal.metadata,
+        });
+        if (reminder) {
+          content.push(reminder);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
     }
 
     for (const part of msg.content.parts) {

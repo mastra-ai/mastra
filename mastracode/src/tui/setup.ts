@@ -11,7 +11,9 @@ import type { HarnessEventListener } from '@mastra/core/harness';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
+import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
+import { IdleCounterComponent } from './components/idle-counter.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -40,6 +42,10 @@ export function setupKeyboardShortcuts(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
 
     if (state.pendingApprovalDismiss) {
       // Dismiss active approval dialog and abort
@@ -194,6 +200,17 @@ export function setupKeyboardShortcuts(
   });
 }
 
+function abortActiveGoalJudge(state: TUIState): boolean {
+  const activeGoalJudge = state.activeGoalJudge;
+  if (!activeGoalJudge) return false;
+
+  state.userInitiatedAbort = true;
+  activeGoalJudge.abortController.abort();
+  activeGoalJudge.component.setInterrupted();
+  state.ui.requestRender();
+  return true;
+}
+
 // =============================================================================
 // Layout
 // =============================================================================
@@ -236,8 +253,11 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
+  state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
   state.ui.addChild(state.editorContainer);
+  state.idleCounter = new IdleCounterComponent();
+  state.editorContainer.addChild(state.idleCounter);
   state.editorContainer.addChild(state.editor);
 
   // Add footer with two-line status
@@ -286,6 +306,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
+    { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
@@ -423,6 +444,9 @@ export function setupKeyHandlers(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }

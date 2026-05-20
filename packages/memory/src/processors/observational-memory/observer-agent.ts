@@ -10,7 +10,24 @@ import {
   resolveToolResultValue,
 } from './tool-result-helpers';
 
-type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
+/**
+ * Filter controlling which attachment parts (image/file) are forwarded to
+ * the Observer model alongside their placeholder text lines.
+ *
+ * - `true` (or undefined): forward all attachments
+ * - `false`: drop all attachments; placeholders still appear in text
+ * - `string[]`: allowlist of mimeType patterns. Each entry is matched against
+ *   the part's mimeType (case-insensitive), supporting exact matches
+ *   (`application/pdf`), wildcard subtypes (`image/\*`), and bare `*` for all.
+ *   Empty array drops everything.
+ */
+export type ObserverAttachmentFilter = boolean | string[];
+
+type ObserverFormatOptions = {
+  maxPartLength?: number;
+  maxToolResultTokens?: number;
+  attachmentFilter?: ObserverAttachmentFilter;
+};
 
 /**
  * The core extraction instructions for the Observer.
@@ -635,6 +652,41 @@ function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
   return hasObserverImageFilenameExtension(part.filename);
 }
 
+function resolveObserverAttachmentMimeType(part: ObserverAttachmentPart): string {
+  if (typeof part.mimeType === 'string' && part.mimeType.length > 0) {
+    return part.mimeType.toLowerCase();
+  }
+  if (part.type === 'image') {
+    return 'image/*';
+  }
+  if (isImageLikeObserverFilePart(part)) {
+    return 'image/*';
+  }
+  return 'application/octet-stream';
+}
+
+function matchObserverMimePattern(mimeType: string, pattern: string): boolean {
+  const normalized = pattern.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === '*' || normalized === '*/*') return true;
+  if (normalized.endsWith('/*')) {
+    const prefix = normalized.slice(0, normalized.length - 1); // keep trailing '/'
+    return mimeType.startsWith(prefix);
+  }
+  return mimeType === normalized;
+}
+
+function shouldIncludeObserverAttachment(
+  part: ObserverAttachmentPart,
+  filter: ObserverAttachmentFilter | undefined,
+): boolean {
+  if (filter === undefined || filter === true) return true;
+  if (filter === false) return false;
+  if (!Array.isArray(filter) || filter.length === 0) return false;
+  const mimeType = resolveObserverAttachmentMimeType(part);
+  return filter.some(pattern => matchObserverMimePattern(mimeType, pattern));
+}
+
 function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
   if (part.type === 'image') {
     return {
@@ -864,6 +916,7 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
+  const attachmentFilter = options?.attachmentFilter;
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
   const attachments: ObserverInputAttachmentPart[] = [];
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
@@ -940,9 +993,11 @@ function formatObserverMessage(
 
       if (partType === 'image' || partType === 'file') {
         const attachment = part as ObserverAttachmentPart;
-        const inputAttachment = toObserverInputAttachmentPart(attachment);
-        if (inputAttachment) {
-          attachments.push(inputAttachment);
+        if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+          const inputAttachment = toObserverInputAttachmentPart(attachment);
+          if (inputAttachment) {
+            attachments.push(inputAttachment);
+          }
         }
         pushLine(
           partType === 'image' ? 'Image' : 'File',

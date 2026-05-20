@@ -722,6 +722,16 @@
         "default": "./dist/storage/domains/skills/index.cjs"
       }
     },
+    "./storage/domains/favorites": {
+      "import": {
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.cjs"
+      }
+    },
     "./storage/domains/workspaces": {
       "import": {
         "types": "./dist/storage/domains/workspaces/index.d.ts",

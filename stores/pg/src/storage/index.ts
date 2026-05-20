@@ -97,6 +97,7 @@ export {
   ScoresPG,
   SchedulesPG,
   SkillsPG,
+  FavoritesPG,
   WorkflowsPG,
   WorkspacesPG,
 };
@@ -172,6 +173,7 @@ export class PostgresStore extends MastraCompositeStore {
         mcpServers: new MCPServersPG(domainConfig),
         workspaces: new WorkspacesPG(domainConfig),
         skills: new SkillsPG(domainConfig),
+        favorites: new FavoritesPG(domainConfig),
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),

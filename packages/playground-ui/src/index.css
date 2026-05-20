@@ -354,6 +354,8 @@ html.light {
   --color-overlay: var(--overlay);
   --color-border1: var(--border1);
   --color-border2: var(--border2);
+  --color-surface-overlay-soft: var(--surface-overlay-soft);
+  --color-surface-overlay-strong: var(--surface-overlay-strong);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -466,4 +468,21 @@ html.light {
 
 .animate-click-ripple {
   animation: click-ripple 300ms ease-out forwards;
+}
+
+/* Temporary highlight for delta-arrived list rows.
+   Same color as the featured / hover state (var(--surface5)), starts fully
+   visible and immediately fades out to transparent over 2s. */
+@keyframes fade-row-highlight {
+  0% {
+    background-color: var(--surface5);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-row-highlight {
+  animation: fade-row-highlight 2000ms ease-out forwards;
 }

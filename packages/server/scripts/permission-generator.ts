@@ -30,6 +30,12 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   write: 'Create and modify',
 };
 
+/**
+ * Permission actions that are valid for role definitions even when no current
+ * server route derives them directly.
+ */
+const ADDITIONAL_ACTIONS = ['share'];
+
 /** Descriptions for resources (used for TSDoc comments in autocomplete) */
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   a2a: 'agent-to-agent communication',
@@ -165,17 +171,20 @@ export function derivePermissionData(): PermissionData {
   for (const route of SERVER_ROUTES) {
     const permission = getEffectivePermission(route);
     if (permission) {
-      const [resource, action] = permission.split(':');
-      if (resource && action) {
-        resourceSet.add(resource);
-        actionSet.add(action);
-        permissionSet.add(permission);
+      const perms = Array.isArray(permission) ? permission : [permission];
+      for (const perm of perms) {
+        const [resource, action] = perm.split(':');
+        if (resource && action) {
+          resourceSet.add(resource);
+          actionSet.add(action);
+          permissionSet.add(perm);
+        }
       }
     }
   }
 
   const resources = [...resourceSet].sort();
-  const actions = [...actionSet].sort();
+  const actions = [...new Set([...actionSet, ...ADDITIONAL_ACTIONS])].sort();
   const permissions = [...permissionSet].sort();
 
   return { resources, actions, permissions };
@@ -193,6 +202,7 @@ export function generatePermissionFileContent(data: PermissionData): string {
     ...actions.map(a => `*:${a}`), // Action wildcards
     ...resources.map(r => `${r}:*`), // Resource wildcards
     ...permissions, // Specific permissions
+    ...ADDITIONAL_PERMISSION_PATTERNS, // Compound aliases
   ];
 
   // Generate the PERMISSION_PATTERNS object entries with TSDoc comments

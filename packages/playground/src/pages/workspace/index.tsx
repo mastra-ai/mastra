@@ -1,5 +1,5 @@
 import {
-  ButtonWithTooltip,
+  Button,
   ErrorState,
   NoDataPageLayout,
   PageLayout,

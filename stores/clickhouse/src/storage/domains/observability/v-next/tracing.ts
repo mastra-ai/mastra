@@ -31,6 +31,10 @@ import type {
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+
+const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 

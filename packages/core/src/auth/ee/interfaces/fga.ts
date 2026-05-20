@@ -15,6 +15,22 @@
 import type { RequestContext } from '../../../di';
 import type { MastraFGAPermissionInput } from './permissions.generated';
 
+export interface FGARouteInfo {
+  method: string;
+  path: string;
+  requiresAuth?: boolean;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+}
+
+export interface FGARouteConfig {
+  resourceType: string;
+  resourceIdParam?: string;
+  resourceId?:
+    | string
+    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext<any> }) => string | undefined);
+  permission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+}
+
 /**
  * Optional context for an authorization check.
  */
@@ -29,7 +45,11 @@ export interface FGACheckContext {
    * Optional request context for providers that need additional request-scoped
    * data to derive the authorization resource identifier.
    */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
+  /**
+   * Optional provider-specific metadata about the attempted action.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -38,8 +58,12 @@ export interface FGACheckContext {
 export interface FGACheckParams {
   /** The resource being accessed */
   resource: { type: string; id: string };
-  /** The permission being checked */
-  permission: MastraFGAPermissionInput;
+  /**
+   * The permission(s) being checked.
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (the check passes if any single permission resolves to allow).
+   */
+  permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /** Optional provider-specific context for resource resolution */
   context?: FGACheckContext;
 }
@@ -212,6 +236,11 @@ export interface FGAListResourcesOptions {
  * ```
  */
 export interface IFGAProvider<TUser = unknown> {
+  validatePermissions?(permissions: MastraFGAPermissionInput[]): Promise<void> | void;
+  auditProtectedRoutes?: false | 'warn' | 'error';
+  requireForProtectedRoutes?: boolean;
+  resolveRouteFGA?(route: FGARouteInfo): FGARouteConfig | null | undefined;
+
   /**
    * Check if a user has a specific permission on a resource.
    *

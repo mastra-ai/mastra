@@ -23,7 +23,13 @@ export const optionalAgentIdQuerySchema = z.object({
 
 /**
  * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
- * Handles JSON parsing from query strings
+ * Handles JSON parsing from query strings.
+ *
+ * The inner object is wrapped in `.optional()` so the preprocess can yield
+ * `undefined` (e.g. when a legacy client sends a bare string like
+ * `?orderBy=updatedAt`) without tripping a "expected object, received undefined"
+ * Zod error. Without that inner `.optional()`, valid optional query usage
+ * regresses into a hard 400.
  */
 const storageOrderBySchema = z
   .preprocess(
@@ -47,7 +53,8 @@ const storageOrderBySchema = z
 
 /**
  * Storage order by configuration for messages (only have createdAt)
- * Handles JSON parsing from query strings
+ * Handles JSON parsing from query strings. See `storageOrderBySchema` for why
+ * the inner object schema is also `.optional()`.
  */
 const messageOrderBySchema = z
   .preprocess(
@@ -192,10 +199,46 @@ export const getMemoryStatusQuerySchema = agentIdQuerySchema.extend({
 export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 
 /**
+ * Inner schema for GET /memory/threads. The outer `listThreadsQuerySchema`
+ * wraps this with a back-compat preprocess (see below) that rewrites the
+ * legacy `?orderBy=<field>&sortDirection=<dir>` shape — emitted by
+ * `@mastra/client-js` < 1.18 (e.g. mobile clients pinned to 1.4.x) — into the
+ * current `{ orderBy: { field, direction } }` object shape.
+ */
+const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
+  agentId: z.string().optional(),
+  resourceId: z.string().optional(),
+  metadata: z
+    .preprocess(
+      val => {
+        if (val === undefined) return val;
+        if (typeof val === 'string') {
+          try {
+            return JSON.parse(val);
+          } catch {
+            // Return invalid string to fail validation (z.record will reject string type)
+            return val;
+          }
+        }
+        return val;
+      },
+      z.record(z.string(), z.any()),
+    )
+    .optional(),
+  orderBy: storageOrderBySchema,
+});
+
+/**
  * GET /memory/threads
  * agentId is optional - can use storage fallback when not provided
  * resourceId is optional - when omitted, returns all threads
  * metadata is optional - filters threads by metadata key-value pairs (AND logic)
+ *
+ * Accepts both the current shape (`orderBy[field]=...&orderBy[direction]=...`)
+ * and the legacy shape used by `@mastra/client-js` < 1.18
+ * (`orderBy=<field>&sortDirection=<dir>`). The legacy shape is fused into the
+ * current shape before schema validation, so existing pinned clients continue
+ * to work without server-side breakage.
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),

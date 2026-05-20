@@ -2,6 +2,8 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it } from 'vitest';
 
+import { MASTRA_USER_KEY } from '../constants';
+
 import {
   allowsHarnessSseSubscriptionToken,
   canAccessPublicly,
@@ -639,7 +641,7 @@ describe('auth helpers', () => {
       });
 
       expect(result.action).toBe('next');
-      expect(requestContext.get('user')).toBe(user);
+      expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
     });
 
@@ -726,7 +728,7 @@ describe('auth helpers', () => {
         requestContext,
       });
 
-      expect(requestContext.get('user')).toEqual({ id: 'user-123' });
+      expect(requestContext.get(MASTRA_USER_KEY)).toEqual({ id: 'user-123' });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
 
@@ -849,7 +851,7 @@ describe('auth helpers', () => {
       expect(result.action).toBe('next');
       expect(result).toHaveProperty('headers');
       expect((result as any).headers['Set-Cookie']).toContain('wos-session=refreshed-token');
-      expect(requestContext.get('user')).toBe(user);
+      expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
       expect(callCount).toBe(2); // authenticateToken called twice
     });
 

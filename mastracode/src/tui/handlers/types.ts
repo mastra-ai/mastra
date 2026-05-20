@@ -18,6 +18,7 @@ export interface EventHandlerContext {
   ) => void;
   updateStatusLine: () => void;
   notify: (reason: NotificationReason, message?: string) => void;
+  analytics?: MastraCodeAnalytics;
   handleSlashCommand: (input: string) => Promise<boolean>;
   addUserMessage: (message: HarnessMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;

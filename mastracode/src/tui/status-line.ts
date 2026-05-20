@@ -24,6 +24,22 @@ function isGenericTitle(title: string): boolean {
   );
 }
 
+function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
+  const activeStartedAt = goal.activeStartedAt ?? (goal.activeDurationMs === undefined ? goal.startedAt : undefined);
+  const startedMs = activeStartedAt ? Date.parse(activeStartedAt) : NaN;
+  const activeRunMs = Number.isFinite(startedMs) ? Math.max(0, Date.now() - startedMs) : 0;
+  const elapsedMinutes = Math.floor(((goal.activeDurationMs ?? 0) + activeRunMs) / 60_000);
+  if (elapsedMinutes < 1) return '<1m';
+
+  const days = Math.floor(elapsedMinutes / 1_440);
+  const hours = Math.floor((elapsedMinutes % 1_440) / 60);
+  const minutes = elapsedMinutes % 60;
+
+  if (days > 0) return hours > 0 ? `${days}days${hours}hr` : `${days}days`;
+  if (hours > 0) return minutes > 0 ? `${hours}hr${minutes}m` : `${hours}hr`;
+  return `${minutes}m`;
+}
+
 /**
  * Update the status line at the bottom of the TUI.
  * Progressively reduces content to fit the terminal width.

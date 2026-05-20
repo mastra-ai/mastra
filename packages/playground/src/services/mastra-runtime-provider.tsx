@@ -10,6 +10,11 @@ import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import {
+  buildMaxStepsStreamErrorMessage,
+  buildStreamErrorMessage,
+  isMaxStepsFinishChunk,
+} from './stream-error-message';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -859,6 +864,10 @@ export function MastraRuntimeProvider({
               tracingOptions: tracingSettings?.tracingOptions,
               onChunk: async chunk => {
                 if (chunk.type === 'finish') {
+                  if (isMaxStepsFinishChunk(chunk)) {
+                    setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, maxSteps)]);
+                  }
+
                   await refreshThreadList?.();
                 }
 

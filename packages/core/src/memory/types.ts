@@ -785,6 +785,7 @@ export interface ObservationalMemoryOptions {
    * @example 300_000
    * @example "5m"
    * @example "1hr"
+   * @example "auto"
    */
   activateAfterIdle?: ObservationalMemoryActivationTTL;
 

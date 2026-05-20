@@ -81,13 +81,16 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
     }));
 
-    // Append a "Custom response..." option so the user can type a free-text answer
-    items.push({
-      value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
-      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
-    });
+    if (this.allowCustomResponse) {
+      items.push({
+        value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
+        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+      });
+    }
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    const selectedIndex = items.findIndex(item => item.value === this.selectedOptionLabel);
+    if (selectedIndex >= 0) this.selectList.setSelectedIndex(selectedIndex);
 
     this.selectList.onSelect = (item: SelectItem) => {
       if (item.value === AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE) {

@@ -90,6 +90,7 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
+    goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
 }
@@ -104,6 +105,7 @@ describe('updateStatusLine', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     process.stdout.columns = originalColumns;
   });
 

@@ -27,7 +27,6 @@ export type TracesListViewTrace = {
   input?: unknown;
   startedAt?: Date | string | null;
   createdAt: Date | string;
-  threadId?: string | null;
 };
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
@@ -56,8 +55,6 @@ export type TracesListViewProps = {
   featuredSpanId?: string | null;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
-  groupByThread?: boolean;
-  threadTitles?: Record<string, string>;
 };
 
 /**
@@ -75,8 +72,6 @@ export function TracesListView({
   featuredTraceId,
   featuredSpanId,
   onTraceClick,
-  groupByThread,
-  threadTitles,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -160,7 +155,6 @@ export function TracesListView({
   return (
     <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>ID</TracesDataList.TopCell>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>

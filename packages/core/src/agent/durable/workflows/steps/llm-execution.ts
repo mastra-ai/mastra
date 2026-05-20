@@ -2,6 +2,8 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
+import { mergeProviderOptions } from '../../../../llm/model/provider-options';
+import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
@@ -35,6 +37,7 @@ const durableLLMInputSchema = z.object({
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
     settings: z.record(z.string(), z.any()).optional(),
+    providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   // Model list for fallback support (when agent configured with array of models)
   modelList: z
@@ -46,6 +49,7 @@ const durableLLMInputSchema = z.object({
           modelId: z.string(),
           specificationVersion: z.string().optional(),
           originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+          providerOptions: z.record(z.string(), z.any()).optional(),
         }),
         maxRetries: z.number(),
         enabled: z.boolean(),
@@ -194,6 +198,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
             let currentActiveTools = execOptions.activeTools;
             let currentModelSettings = { temperature: execOptions.temperature };
+            let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
+              execOptions.providerOptions,
+              modelEntry.config.providerOptions,
+            ) as SharedProviderOptions | undefined;
 
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
@@ -318,6 +326,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const modelResult = execute({
               runId,
               model: currentModel,
+              providerOptions: currentProviderOptions,
               inputMessages,
               tools: currentTools,
               toolChoice: currentToolChoice,

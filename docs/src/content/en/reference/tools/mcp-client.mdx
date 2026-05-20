@@ -143,7 +143,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     type: 'boolean | (params: RequireToolApprovalContext) => boolean | Promise<boolean>',
     isOptional: true,
     description:
-      'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, and request context to dynamically decide whether approval is needed.',
+      'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
 ]}
 />
@@ -169,7 +169,7 @@ const mcp = new MCPClient({
 
 ### Dynamic approval with a function
 
-Pass a function to decide per-call whether approval is needed. The function receives the tool name, the arguments the model passed, and any request context from the incoming request:
+Pass a function to decide per-call whether approval is needed. The function receives the tool name, the arguments the model passed, any request context from the incoming request, and the tool's MCP `annotations` (when the server advertises them):
 
 ```typescript
 const mcp = new MCPClient({
@@ -190,6 +190,31 @@ const mcp = new MCPClient({
 ```
 
 The function can also be async. It receives `requestContext` from the incoming request, which you can use for auth checks or other per-request logic.
+
+### Use tool annotations from a trusted server
+
+If you trust the MCP server, you can use its [tool annotations](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool-annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`) to drive approval decisions:
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: ({ annotations }) => {
+        // Skip approval for tools the server has marked read-only
+        if (annotations?.readOnlyHint) return false
+        // Always require approval for destructive tools
+        if (annotations?.destructiveHint) return true
+        return true
+      },
+    },
+  },
+})
+```
+
+Per the MCP specification, **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints, not a security boundary — a malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
+
+The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
 ## Methods
 

@@ -61,16 +61,6 @@ export function useTokenUsageByAgentMetrics() {
         entry.output = group.value;
         addCost(entry, group);
       }
-      for (const group of cacheReadRes.groups) {
-        const name = group.dimensions.entityName ?? 'unknown';
-        const entry = ensure(name);
-        addCost(entry, group);
-      }
-      for (const group of cacheWriteRes.groups) {
-        const name = group.dimensions.entityName ?? 'unknown';
-        const entry = ensure(name);
-        addCost(entry, group);
-      }
 
       return Array.from(agentMap.entries())
         .map(([name, vals]) => ({

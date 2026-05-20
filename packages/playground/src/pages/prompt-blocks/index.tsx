@@ -67,9 +67,6 @@ export default function PromptBlocks() {
             </Button>
           )}
         </PageLayout.Row>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />
-        </div>
       </PageLayout.TopArea>
 
       <PromptsList promptBlocks={promptBlocks} isLoading={isLoading} search={search} />

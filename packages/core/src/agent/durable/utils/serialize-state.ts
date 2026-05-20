@@ -93,6 +93,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       modelId: model.modelId,
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
+      providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,
     enabled: entry.enabled,
@@ -179,6 +180,7 @@ export function serializeDurableOptions(options: {
   includeRawChunks?: boolean;
   returnScorerData?: boolean;
   hasErrorProcessors?: boolean;
+  providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
 }): SerializableDurableOptions {
@@ -209,6 +211,7 @@ export function serializeDurableOptions(options: {
     includeRawChunks: options.includeRawChunks,
     returnScorerData: options.returnScorerData,
     hasErrorProcessors: options.hasErrorProcessors,
+    providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
   };
