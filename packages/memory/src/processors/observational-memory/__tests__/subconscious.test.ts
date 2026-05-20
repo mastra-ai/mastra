@@ -86,11 +86,21 @@ describe('Subconscious', () => {
   it('normalizes model-natural built-in psyche output shapes', () => {
     expect(
       builtInPsycheDefinitions.learner.schema.parse({
-        skillCandidates: ['research-person-profile'],
+        skillCandidates: [
+          'research-person-profile',
+          { name: 'debug-subconscious', evidence: ['psyche agent stopped before workspace writes'] },
+        ],
         skillUpdates: ['prefer source disambiguation'],
       }),
     ).toMatchObject({
-      skillCandidates: [{ name: 'research-person-profile', reason: 'research-person-profile' }],
+      skillCandidates: [
+        { name: 'research-person-profile', reason: 'research-person-profile' },
+        {
+          name: 'debug-subconscious',
+          reason: 'debug-subconscious',
+          evidence: [{ summary: 'psyche agent stopped before workspace writes' }],
+        },
+      ],
       skillUpdates: [{ name: 'prefer source disambiguation', change: 'prefer source disambiguation' }],
     });
 
@@ -194,6 +204,7 @@ describe('Subconscious', () => {
     expect(stream).toHaveBeenCalledWith(
       expect.stringContaining('Signal: om.subconscious.critic.extracted'),
       expect.objectContaining({
+        maxSteps: 100,
         memory: expect.objectContaining({ resource: 'resource-1', thread: 'subconscious:resource-1:critic' }),
       }),
     );
@@ -223,6 +234,11 @@ describe('Subconscious', () => {
     expect(activityLog).toContain('#### critic');
     expect(activityLog).toContain('"risks": [');
     expect(activityLog).toContain('"needsReview": true');
+    expect(activityLog).toContain('### Psyche activity');
+    expect(activityLog).toContain('- critic ran psyche agent (1 stream part, 1 workspace operation, maxSteps=100)');
+    expect(activityLog).toContain('### Stream parts');
+    expect(activityLog).toContain('#### critic part 1 — tool-result — mastra_workspace_write_file');
+    expect(activityLog).toContain('"result": "Wrote 6 bytes to review/entity-disambiguation.md"');
     expect(activityLog).toContain('- critic created/updated review note `review/entity-disambiguation.md`');
   });
 
@@ -266,7 +282,7 @@ describe('Subconscious', () => {
     expect(activityLog).toContain('- critic created/updated review note `review/entity-disambiguation.md`');
   });
 
-  it('logs why main-agent notification is skipped', async () => {
+  it('skips main-agent notification when psyches run without workspace changes', async () => {
     const agent = createAgent('critic-agent');
     vi.spyOn(agent, 'stream').mockResolvedValue(streamWithParts([]));
     const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
@@ -290,6 +306,35 @@ describe('Subconscious', () => {
     expect(activityLog).toContain('#### critic');
     expect(activityLog).toContain('"risks": [');
     expect(activityLog).toContain('"needsReview": true');
+    expect(activityLog).toContain('### Psyche activity');
+    expect(activityLog).toContain('- critic ran psyche agent (0 stream parts, 0 workspace operations, maxSteps=100)');
+    expect(activityLog).toContain('### Stream parts');
+    expect(activityLog).toContain('- none');
+    expect(activityLog).toContain('- No durable workspace changes detected.');
+  });
+
+  it('logs why main-agent notification is skipped when there is no meaningful extraction or workspace activity', async () => {
+    const agent = createAgent('critic-agent');
+    vi.spyOn(agent, 'stream').mockResolvedValue(streamWithParts([]));
+    const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
+    const subconscious = new Subconscious({
+      model: createModel(),
+      workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: workspacePath }) }),
+      psyches: { critic: { agent } },
+    });
+    const extractor = subconscious.psyches({ active: ['critic'], phase: 'observation' });
+    const context = createContext(extractor);
+    const sendSignal = vi.spyOn(context.mainAgent, 'sendSignal');
+
+    await extractor.onExtracted?.({
+      ...context,
+      extracted: { current: { critic: { risks: [], needsReview: false } } },
+    });
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    const activityLog = await readFile(join(workspacePath, 'activity/subconscious-log.md'), 'utf-8');
+    expect(activityLog).toContain('Notification: `skipped: notification input produced no non-empty text`');
+    expect(activityLog).toContain('- critic: no meaningful payload');
     expect(activityLog).toContain('- No durable workspace changes detected.');
   });
 

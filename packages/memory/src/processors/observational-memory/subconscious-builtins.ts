@@ -4,17 +4,28 @@ export const BUILT_IN_PSYCHES = ['learner', 'integrator', 'critic', 'dreamer', '
 
 export type BuiltInPsycheName = (typeof BUILT_IN_PSYCHES)[number];
 
-const evidenceSchema = z.object({
-  summary: z.string(),
-  source: z.string().optional(),
-  confidence: z.number().min(0).max(1).optional(),
-});
-
 const stringFromUnknown = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (value && typeof value === 'object') return JSON.stringify(value);
   return String(value);
 };
+
+const evidenceSchema = z.union([
+  z.string().transform(value => ({ summary: value })),
+  z
+    .object({
+      summary: z.string().optional(),
+      source: z.string().optional(),
+      confidence: z.number().min(0).max(1).optional(),
+    })
+    .passthrough()
+    .transform(value => ({
+      summary: value.summary ?? stringFromUnknown(value),
+      source: value.source,
+      confidence: value.confidence,
+    })),
+  z.record(z.string(), z.unknown()).transform(value => ({ summary: stringFromUnknown(value) })),
+]);
 
 const textItemSchema = z.union([z.string(), z.record(z.string(), z.unknown()).transform(stringFromUnknown)]);
 

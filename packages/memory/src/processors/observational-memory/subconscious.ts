@@ -29,6 +29,7 @@ export type SubconsciousActivityOperation =
   | 'execute_command'
   | 'read_file'
   | 'search'
+  | 'agent_run'
   | 'other';
 
 export interface SubconsciousActivity {
@@ -40,8 +41,17 @@ export interface SubconsciousActivity {
   includedInSummary: boolean;
 }
 
+export interface SubconsciousStreamPartLog {
+  psyche: PsycheName;
+  index: number;
+  type?: string;
+  toolName?: string;
+  content: string;
+}
+
 export interface SubconsciousActivityReport {
   activities: SubconsciousActivity[];
+  streamParts: SubconsciousStreamPartLog[];
   summary: string;
   observation?: string;
 }
@@ -112,6 +122,7 @@ export interface PsycheHandle<T = unknown> {
 }
 
 const DEFAULT_MODEL = 'default' as unknown as AgentModel;
+const DEFAULT_PSYCHE_MAX_STEPS = 100;
 const ACTIVITY_LOG_DIR = 'activity';
 const ACTIVITY_LOG_PATH = 'activity/subconscious-log.md';
 
@@ -357,6 +368,33 @@ function shouldSummarizeOperation(operation: SubconsciousActivityOperation): boo
   return ['write_file', 'edit_file', 'mkdir', 'delete', 'execute_command'].includes(operation);
 }
 
+function agentRunActivity(
+  psyche: PsycheName,
+  streamPartCount: number,
+  workspaceActivityCount: number,
+): SubconsciousActivity {
+  return {
+    psyche,
+    toolName: 'subconscious_agent',
+    operation: 'agent_run',
+    command: `${streamPartCount} stream part${streamPartCount === 1 ? '' : 's'}, ${workspaceActivityCount} workspace operation${workspaceActivityCount === 1 ? '' : 's'}, maxSteps=${DEFAULT_PSYCHE_MAX_STEPS}`,
+    includedInSummary: false,
+  };
+}
+
+function streamPartLog(psyche: PsycheName, index: number, part: unknown): SubconsciousStreamPartLog {
+  const type = isRecord(part) ? firstString(part.type) : undefined;
+  const toolName = isRecord(part) ? getToolName(part) : undefined;
+  const content = formatExtractedPayload(part);
+  return {
+    psyche,
+    index,
+    type,
+    toolName,
+    content: content.length > 4_000 ? `${content.slice(0, 4_000)}\n... <truncated>` : content,
+  };
+}
+
 function activityFromStreamPart(psyche: PsycheName, part: unknown): SubconsciousActivity | undefined {
   if (!isRecord(part)) return undefined;
   const toolName = getToolName(part);
@@ -438,6 +476,9 @@ function formatActivity(activity: SubconsciousActivity): string {
   if (activity.operation === 'execute_command') {
     return `${activity.psyche} ran workspace command ${activity.command ? `\`${activity.command}\`` : `via \`${activity.toolName}\``}`;
   }
+  if (activity.operation === 'agent_run') {
+    return `${activity.psyche} ran psyche agent${activity.command ? ` (${activity.command})` : ''}`;
+  }
 
   const target = activity.path ? `\`${activity.path}\`` : `via \`${activity.toolName}\``;
   const kind = activity.operation === 'mkdir' ? '' : ` ${pathKind(activity.path)}`;
@@ -496,6 +537,9 @@ function formatActivityLogEntry({
     summarized.length > 0
       ? summarized.map(activity => `- ${formatActivity(activity)}`)
       : ['- No durable workspace changes detected.'];
+  const psycheRunLines = report.activities
+    .filter(activity => activity.operation === 'agent_run')
+    .map(activity => `- ${formatActivity(activity)}`);
   const rawActivityLines =
     report.activities.length > 0
       ? uniqueActivities(report.activities).map(activity => {
@@ -503,6 +547,15 @@ function formatActivityLogEntry({
           const command = activity.command ? ` command=\`${activity.command}\`` : '';
           return `- ${activity.psyche}: ${activity.operation}${target}${command}`;
         })
+      : ['- none'];
+  const streamPartLines =
+    report.streamParts.length > 0
+      ? report.streamParts.flatMap(part => [
+          `#### ${part.psyche} part ${part.index}${part.type ? ` — ${part.type}` : ''}${part.toolName ? ` — ${part.toolName}` : ''}`,
+          '```json',
+          part.content,
+          '```',
+        ])
       : ['- none'];
   const notificationLine =
     notification.status === 'failed'
@@ -525,6 +578,12 @@ function formatActivityLogEntry({
     '',
     '### Extractions',
     ...(extractionLines.length > 0 ? extractionLines : ['- none']),
+    '',
+    '### Psyche activity',
+    ...(psycheRunLines.length > 0 ? psycheRunLines : ['- No psyche agents ran.']),
+    '',
+    '### Stream parts',
+    ...streamPartLines,
     '',
     '### Workspace activity',
     ...activityLines,
@@ -698,6 +757,7 @@ export class Subconscious {
 
   async run(extracted: Record<string, unknown>, context: SubconsciousRunContext): Promise<SubconsciousActivityReport> {
     const activities: SubconsciousActivity[] = [];
+    const streamParts: SubconsciousStreamPartLog[] = [];
     const active = context.active ?? (Object.keys(extracted) as PsycheName[]);
 
     await Promise.all(
@@ -707,15 +767,23 @@ export class Subconscious {
 
         const handle = this.get(psyche);
         const stream = await this.streamPsyche(handle, payload, context);
+        let streamPartCount = 0;
+        let workspaceActivityCount = 0;
         await consumeStreamParts(stream, part => {
+          streamPartCount += 1;
+          streamParts.push(streamPartLog(psyche, streamPartCount, part));
           const activity = activityFromStreamPart(psyche, part);
-          if (activity) activities.push(activity);
+          if (activity) {
+            workspaceActivityCount += 1;
+            activities.push(activity);
+          }
         });
+        activities.push(agentRunActivity(psyche, streamPartCount, workspaceActivityCount));
       }),
     );
 
     const formatted = formatReport(activities);
-    return { activities, ...formatted };
+    return { activities, streamParts, ...formatted };
   }
 
   async sendSignals(extracted: Record<string, unknown>, context: SubconsciousRunContext) {
@@ -840,13 +908,16 @@ export class Subconscious {
       signal.contents,
     ].join('\n');
 
+    const streamOptions = this.options.signal?.ifIdle?.streamOptions as any;
+
     return handle.agent.stream(message, {
-      ...(this.options.signal?.ifIdle?.streamOptions as any),
+      maxSteps: DEFAULT_PSYCHE_MAX_STEPS,
+      ...streamOptions,
       runId: randomUUID(),
       requestContext: context.requestContext,
       ...(inheritedModel ? { model: inheritedModel } : {}),
       memory: {
-        ...(this.options.signal?.ifIdle?.streamOptions as any)?.memory,
+        ...streamOptions?.memory,
         resource: resourceId,
         thread: threadId,
       },
