@@ -1,4 +1,4 @@
-import { AlertDialog, Button, DropdownMenu, toast } from '@mastra/playground-ui';
+import { AlertDialog, DropdownMenu, IconButton, toast } from '@mastra/playground-ui';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -81,17 +81,15 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
 
   return (
     <>
-      <Button
-        size="sm"
-        variant="default"
+      <IconButton
+        tooltip="Delete agent"
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"
-        className="text-error hover:text-error"
+        variant="ghost"
       >
-        <Trash2 className="h-3.5 w-3.5" />
-        <span>Delete agent</span>
-      </Button>
+        <Trash2 />
+      </IconButton>
       <DeleteAgentDialog
         open={open}
         onOpenChange={setOpen}

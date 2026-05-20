@@ -9,7 +9,7 @@ export interface AgentBuilderEditLayoutProps {
 
 export const AgentBuilderEditLayout = ({ topBar, chat, profile }: AgentBuilderEditLayoutProps) => {
   return (
-    <div className={cn('flex flex-1 min-h-0 min-w-0 flex-col', 'lg:grid lg:grid-rows-1 lg:grid-cols-2')}>
+    <div className={cn('flex flex-1 min-h-0 min-w-0 flex-col', 'lg:grid lg:grid-rows-1 lg:grid-cols-[1fr_2fr]')}>
       <div className="flex flex-1 min-h-0 min-w-0 flex-col lg:overflow-hidden ">
         {topBar}
         <div

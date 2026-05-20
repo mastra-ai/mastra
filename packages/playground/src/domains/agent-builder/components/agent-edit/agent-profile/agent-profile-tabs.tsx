@@ -40,11 +40,11 @@ export const AgentProfileTabs = ({
 
   return (
     <div
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] border-t border-border1 overflow-hidden"
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
       data-testid="agent-profile-tabs"
     >
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <TabList variant="line" sticky className="px-2">
+        <TabList variant="line" sticky className="!bg-surface3">
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
           <Tab value="instructions">Instructions</Tab>

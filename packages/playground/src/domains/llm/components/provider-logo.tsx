@@ -1,5 +1,6 @@
 import { Icon, cn } from '@mastra/playground-ui';
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { cleanProviderId as cleanProviderIdUtil } from '../utils';
 import { providerMapToIcon } from '@/domains/agents/components/provider-map-icon';
 
@@ -7,13 +8,14 @@ interface ProviderLogoProps {
   providerId: string;
   className?: string;
   size?: number;
+  style?: CSSProperties;
 }
 
 /**
  * Component to display provider logos from models.dev
  * Falls back to local icons if the logo fails to load
  */
-export const ProviderLogo = ({ providerId, className = '', size = 20 }: ProviderLogoProps) => {
+export const ProviderLogo = ({ providerId, className = '', size = 20, style }: ProviderLogoProps) => {
   const [imageError, setImageError] = useState(false);
 
   // Clean provider ID (remove .chat, .x, .messages, etc. suffixes)
@@ -53,7 +55,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
     return (
       <div
         className={cn('bg-surface4 rounded shrink-0', className)}
-        style={{ width: size, height: size, minWidth: size, minHeight: size }}
+        style={{ width: size, height: size, minWidth: size, minHeight: size, ...style }}
       />
     );
   }

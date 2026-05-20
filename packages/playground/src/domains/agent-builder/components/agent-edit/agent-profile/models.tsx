@@ -64,7 +64,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const visibleEntries = filterProvidersModel(policyAllowedModels, provider, search);
 
   return (
-    <div className="h-full">
+    <div className="h-full pb-4">
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-3" data-testid="model-card-picker">
         <div data-testid="model-card-picker-search" className="shrink-0">
           <Searchbar
