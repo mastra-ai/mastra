@@ -35,7 +35,7 @@ export interface GoalState {
   startedAt: string;
   activeStartedAt?: string;
   activeDurationMs?: number;
-  /** Set when the goal was paused because the judge failed to return a structured decision. */
+  /** Set when the goal was paused because the judge could not complete evaluation. */
   lastPauseWasJudgeFailure?: boolean;
 }
 
@@ -52,6 +52,7 @@ export interface GoalEvaluationResult {
 export interface GoalEvaluationOptions {
   abortSignal?: AbortSignal;
   onActivity?: (line: string) => void;
+  requireAssistantMessage?: boolean;
 }
 
 // =============================================================================
@@ -234,6 +235,18 @@ export class GoalManager {
       return { continuation: null, judgeResult: null };
     }
     if (!context.lastAssistantContent) {
+      if (options.requireAssistantMessage) {
+        const result = {
+          decision: 'paused' as const,
+          reason: 'Judge could not evaluate this turn: no assistant response.',
+        };
+        this.stopActiveTimer();
+        this.goal.status = 'paused';
+        this.goal.lastPauseWasJudgeFailure = true;
+        await this.saveToThread(state);
+        return { continuation: null, judgeResult: result };
+      }
+
       // No assistant message to judge — continue anyway (but check budget)
       if (this.goal.turnsUsed >= this.goal.maxTurns) {
         this.stopActiveTimer();

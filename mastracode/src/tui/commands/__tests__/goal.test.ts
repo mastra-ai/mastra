@@ -260,6 +260,53 @@ describe('handleGoalCommand', () => {
     expect(evaluateAfterTurn).toHaveBeenCalled();
   });
 
+  it('does not send a goal continuation when judge-failure resume has no assistant response to evaluate', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    (goalManager as any).goal = goal;
+    const sendSignal = vi.fn();
+    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
+    const ctx = {
+      state: {
+        goalManager,
+        harness: {
+          sendSignal,
+          saveSystemReminderMessage,
+          listMessages: vi.fn().mockResolvedValue([{ role: 'user', content: [{ type: 'text', text: 'resume goal' }] }]),
+          setThreadSetting: vi.fn(),
+          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          getResourceId: vi.fn(() => 'resource-1'),
+        },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    await vi.waitFor(() => {
+      expect(saveSystemReminderMessage).toHaveBeenCalledWith({
+        reminderType: 'goal-judge',
+        message: 'paused (3/50)\nJudge could not evaluate this turn: no assistant response.',
+      });
+    });
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(goalManager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: true });
+  });
+
   it('creates the pending new thread before saving a new goal', async () => {
     let currentThreadId = 'loaded-thread';
     const goal = {

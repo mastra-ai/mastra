@@ -85,7 +85,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       // The goal was paused because the judge failed — retrigger the judge
       // evaluation instead of prompting the main agent.
       ctx.showInfo(`Goal resumed: "${goal.objective}" — retriggering judge evaluation...`);
-      triggerGoalJudge(ctx);
+      triggerGoalJudge(ctx, { requireAssistantMessage: true });
       return;
     }
 
@@ -309,7 +309,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
  * following a judge failure). Mirrors the UI setup from maybeGoalContinuation in
  * agent-lifecycle.ts but skips queue draining since there's no agent turn to follow up.
  */
-function triggerGoalJudge(ctx: SlashCommandContext): void {
+function triggerGoalJudge(ctx: SlashCommandContext, options: { requireAssistantMessage?: boolean } = {}): void {
   const { state } = ctx;
   const goal = state.goalManager.getGoal();
   if (!goal) return;
@@ -332,6 +332,7 @@ function triggerGoalJudge(ctx: SlashCommandContext): void {
   state.goalManager
     .evaluateAfterTurn(state, {
       abortSignal: abortController.signal,
+      requireAssistantMessage: options.requireAssistantMessage,
       onActivity: line => {
         if (state.activeGoalJudge === activeGoalJudge) {
           judgeComponent.addActivity(line);

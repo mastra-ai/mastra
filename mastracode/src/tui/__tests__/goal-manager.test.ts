@@ -152,6 +152,35 @@ describe('GoalManager', () => {
     expect(manager.getGoal()?.turnsUsed).toBe(0);
   });
 
+  it('pauses instead of sending a continuation when judge resume has no assistant response to evaluate', async () => {
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    const result = await manager.evaluateAfterTurn(
+      createState({
+        listMessages: vi.fn().mockResolvedValue([
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'Continue the goal.' }],
+          },
+        ]),
+      }),
+      { requireAssistantMessage: true },
+    );
+
+    expect(result.continuation).toBeNull();
+    expect(result.judgeResult).toEqual({
+      decision: 'paused',
+      reason: 'Judge could not evaluate this turn: no assistant response.',
+    });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: true });
+    expect(mocks.stream).not.toHaveBeenCalled();
+  });
+
   it('pauses with a specific reason when the judge returns no structured output after retry', async () => {
     mocks.stream.mockResolvedValue({
       consumeStream: vi.fn().mockResolvedValue(undefined),
