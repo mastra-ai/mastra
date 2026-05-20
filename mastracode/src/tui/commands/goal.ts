@@ -381,10 +381,14 @@ function triggerGoalJudge(ctx: SlashCommandContext, options: { requireAssistantM
           const harness = state.harness as typeof state.harness & {
             saveSystemReminderMessage?: (args: { reminderType: string; message: string }) => Promise<unknown>;
           };
-          await harness.saveSystemReminderMessage?.({
-            reminderType: 'goal-judge',
-            message: `${judgeResult.decision} (${currentGoal.turnsUsed}/${currentGoal.maxTurns})\n${judgeResult.reason}`,
-          });
+          try {
+            await harness.saveSystemReminderMessage?.({
+              reminderType: 'goal-judge',
+              message: `${judgeResult.decision} (${currentGoal.turnsUsed}/${currentGoal.maxTurns})\n${judgeResult.reason}`,
+            });
+          } catch (error) {
+            ctx.showError(`Failed to persist goal judge result: ${error instanceof Error ? error.message : String(error)}`);
+          }
         }
         if (currentGoal.status === 'paused') {
           ctx.showInfo(

@@ -349,6 +349,52 @@ describe('handleGoalCommand', () => {
     expect(saveToThread).toHaveBeenCalledTimes(2);
   });
 
+  it('continues goal judge completion handling when judge-result persistence fails', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    (goalManager as any).goal = goal;
+    vi.spyOn(goalManager, 'evaluateAfterTurn').mockImplementation(async () => {
+      const currentGoal = goalManager.getGoal();
+      if (currentGoal) currentGoal.status = 'done';
+      return { continuation: null, judgeResult: { decision: 'done', reason: 'Complete.' } };
+    });
+    const switchMode = vi.fn().mockResolvedValue(undefined);
+    const showError = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        planStartedGoalId: 'goal-1',
+        harness: {
+          saveSystemReminderMessage: vi.fn().mockRejectedValue(new Error('persist failed')),
+          switchMode,
+        },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError,
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('Failed to persist goal judge result: persist failed');
+      expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
+    });
+    expect(ctx.state.planStartedGoalId).toBeUndefined();
+  });
+
   it('creates the pending new thread before saving a new goal', async () => {
     let currentThreadId = 'loaded-thread';
     const goal = {
