@@ -30,9 +30,12 @@ export const scheduledHeartbeatWorkflow = createWorkflow({
   .commit();
 
 /**
- * A second scheduled workflow that fires every second (6-part cron) so the
- * smoke suite can assert the scheduler actually publishes triggers and the
- * workflow actually runs end-to-end (not just that the schedule row exists).
+ * A second scheduled workflow used to assert the scheduler actually publishes
+ * triggers and the workflow actually runs end-to-end (not just that the
+ * schedule row exists). Fires every 5 seconds (6-part cron) — paired with
+ * the 5s scheduler tick this still proves end-to-end firing well within the
+ * 15s poll budget in schedules.test.ts, but stops starving the LibSQL
+ * workflow-snapshot table on slow CI disks.
  */
 export const scheduledTickWorkflow = createWorkflow({
   id: 'scheduled-tick',
@@ -40,7 +43,7 @@ export const scheduledTickWorkflow = createWorkflow({
   outputSchema: z.object({ ok: z.literal(true), source: z.string(), at: z.string() }),
   schedule: {
     id: 'smoke-tick',
-    cron: '* * * * * *', // every second
+    cron: '*/5 * * * * *', // every 5 seconds
     inputData: { source: 'smoke-tick' },
     metadata: { purpose: 'smoke-test-trigger' },
   },

@@ -72,9 +72,10 @@ describe('schedules — actually fires', () => {
     expect(tick, 'scheduled-tick schedule must be registered').toBeDefined();
 
     // Poll the triggers endpoint until the scheduler has actually published at
-    // least one trigger with a successful workflow run. Scheduler tick is 1s
-    // and cron is */1s, so a real fire should land within a few seconds.
-    const deadline = Date.now() + 15_000;
+    // least one trigger with a successful workflow run. Scheduler tick is 5s
+    // and cron is */5s, so a real fire should land within ~10s on a healthy
+    // box; we give it 30s of headroom for slow CI disks.
+    const deadline = Date.now() + 30_000;
     let publishedWithRun: any | undefined;
     while (Date.now() < deadline) {
       const res = await fetchJson<any>(`/api/schedules/${tick.id}/triggers?limit=10`);
@@ -86,14 +87,14 @@ describe('schedules — actually fires', () => {
       await new Promise(r => setTimeout(r, 500));
     }
 
-    expect(publishedWithRun, 'scheduler did not publish a successful run within 15s').toBeDefined();
+    expect(publishedWithRun, 'scheduler did not publish a successful run within 30s').toBeDefined();
     expect(publishedWithRun.outcome).toBe('published');
     expect(typeof publishedWithRun.runId).toBe('string');
     expect(publishedWithRun.run.status).toBe('success');
   });
 
   it('GET /schedules surfaces lastRun after the scheduler fires', async () => {
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + 30_000;
     let withLastRun: any | undefined;
     while (Date.now() < deadline) {
       const res = await fetchJson<any>('/api/schedules?workflowId=scheduled-tick');
@@ -103,7 +104,7 @@ describe('schedules — actually fires', () => {
       if (withLastRun?.lastRun?.status === 'success') break;
       await new Promise(r => setTimeout(r, 500));
     }
-    expect(withLastRun, 'schedule did not record a lastRun within 15s').toBeDefined();
+    expect(withLastRun, 'schedule did not record a lastRun within 30s').toBeDefined();
     expect(withLastRun.lastRun.status).toBe('success');
   });
 });

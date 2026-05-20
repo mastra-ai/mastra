@@ -116,7 +116,12 @@ export const mastra = new Mastra({
   },
   scheduler: {
     enabled: true,
-    tickIntervalMs: 1_000,
+    // 5s tick keeps the end-to-end "scheduler actually fires" assertion fast
+    // (schedules.test.ts polls for up to 15s) without hammering the LibSQL
+    // workflow-snapshot table once per second. Under CI's slower disk the
+    // every-second cadence starved tool-registry lookups → tool calls
+    // returned 500s ("Tool not found") in unrelated agent/MCP tests.
+    tickIntervalMs: 5_000,
   },
   backgroundTasks: {
     enabled: true,

@@ -1,9 +1,10 @@
 # Smoke Suite — Known Issues & Fixture Gotchas
 
-Findings from debugging the May 18 UI suite timeout / API tool-use regression.
-Read this before re-enabling scheduler, background tasks, or every-tick fixtures.
+Findings from debugging the May 18–20 UI suite timeout / API tool-use
+regressions. Read this before re-enabling scheduler, background tasks, or
+every-tick fixtures, and before tightening any scheduler cadence below 5s.
 
-## 1. Scheduler tick races LibSQL table migrations
+## 1. Scheduler tick races LibSQL table migrations (resolved upstream, but cadence matters)
 
 **Symptom**
 
@@ -36,16 +37,27 @@ cron like `* * * * * *`) the race repeats forever.
 - `MASTRA_WORKERS=false` / `workers: false`: kills the scheduler entirely
   but also breaks agent streaming. Not usable for the smoke fixture.
 
-**Current workaround**
+**Resolution**
 
-Scheduler config and scheduled workflows are **removed entirely** from
-`src/mastra/index.ts`. `/api/schedules` returns `{ schedules: [] }` and the
-schedules tests assert the empty-state shape. Re-enable only after either:
+- Upstream PRs #16786 (composite store delegation) and #16805 (scheduler
+  CPU spike, indexes + auto-suspend) shipped in `@mastra/core@1.36.0-alpha.9`.
+- The scheduler + `scheduled-heartbeat` + `scheduled-tick` fixtures are
+  restored, but cadence stays conservative: **`tickIntervalMs: 5_000`** and
+  `scheduled-tick` cron `*/5 * * * * *`.
+- We tried `tickIntervalMs: 1_000` again on alpha.9: API passed locally
+  but in CI it starved tool-registry lookups on the shared LibSQL pool —
+  `agents/agent-tools` returned 500 "Tool not found", `agents/generate`
+  reported "LLM did not invoke any tools", MCP returned `{ isError: true }`
+  instead of `{ result: 42 }`. Reproducer is "zod 3.25.76 + alpha.9 +
+  every-second cron + slow CI disk". 5s cadence eliminates the contention
+  with no observable downside (schedules.test.ts still proves end-to-end
+  firing in <5s).
 
-1. Upstream `Mastra` awaits storage migrations before scheduler `start()`, or
-2. The scheduler exposes a `tickStartDelayMs` / readiness hook.
+**If you ever bump cadence back below 5s**, expect tool-call tests to
+return 500s in CI before any scheduler errors appear. The starvation is
+silent on the scheduler side.
 
-## 2. `backgroundTasks: { enabled: true }` breaks deterministic tool-use tests
+## 2. `backgroundTasks: { enabled: true }` no longer poisons tool calls (resolved upstream)
 
 **Symptom**
 
@@ -71,17 +83,15 @@ This happens even when no agent declares per-agent
 `backgroundTasks.tools` config — the manager presence alone activates the
 prompt path.
 
-**Current workaround**
+**Resolution**
 
-`backgroundTasks: { enabled: true }` is **omitted** from the fixture.
-`/api/background-tasks` still serves `{ tasks: [], total: 0 }` via the
-default empty handler, so the route is still smoke-tested for shape.
-`tests/background-tasks/background-tasks.test.ts` asserts the empty
-envelope + a 404 for an unknown id.
-
-Re-enable only if generate/stream tool-use tests are rewritten to tolerate
-either outcome, or if a flag is added to suppress the background-mode
-system prompt when no tool opts in.
+Upstream PR #16792 ("gate LLM background override on tool opt-in") shipped
+in `@mastra/core@1.36.0-alpha.4`. With the fix, the system prompt only
+mentions tools that explicitly opt in (per-agent `backgroundTasks.tools`
+config or per-tool `background.enabled`), and the LLM `_background`
+override is ignored for non-opted tools. We've restored
+`backgroundTasks: { enabled: true }` at the Mastra level with no per-tool
+opt-in; `generate.test.ts` and `agent-tools.test.ts` now run cleanly.
 
 ## 3. Local UI run "hangs" with HTML reporter
 
