@@ -283,6 +283,8 @@ export class Agent<
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
+  /** Set to true when getAdaptiveModelRouterProcessor() creates a router. */
+  #adaptiveModelRouterActive = false;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -726,6 +728,7 @@ export class Agent<
       router.__registerMastra(this.#mastra);
     }
 
+    this.#adaptiveModelRouterActive = true;
     return [router];
   }
 
@@ -1915,7 +1918,16 @@ export class Agent<
             ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
             : modelSelection;
 
-          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
+          // When the AdaptiveModelRouter is active it fully owns model fallback
+          // logic via processAPIError + processInputStep. Pass only the first
+          // model so executeStreamWithFallbackModels has a single entry and the
+          // processor controls which model is tried on each retry.
+          const modelsForLLM =
+            this.#adaptiveModelRouterActive && Array.isArray(enabledSelection)
+              ? [enabledSelection[0]!]
+              : enabledSelection;
+
+          llm = this.prepareModels(requestContext, modelsForLLM).then(models => {
             return new MastraLLMVNext({
               models,
               mastra: this.#mastra,

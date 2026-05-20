@@ -312,16 +312,16 @@ function getModelId(model: FallbackModel): string {
  * into a single processor with prioritized rules. Uses cache (Redis or in-memory)
  * to persist cooldown state across requests in serverless environments.
  *
- * The router is additive to the existing executeStreamWithFallbackModels retry
- * loop — it does NOT replace it. The old sequential fallback (try model A → fail
- * → try model B) is preserved exactly for reactive failures. The router adds
- * intelligence on top: proactive model selection based on historical signals.
+ * The router fully replaces the old executeStreamWithFallbackModels sequential
+ * retry loop. When the AdaptiveModelRouter is active, the agent passes only a
+ * single model to the LLM layer. The processor controls which model is tried on
+ * each attempt via processInputStep (proactive) and processAPIError (reactive).
  *
  * Lifecycle hooks:
  * - processInputStep: Proactive -- checks cooldowns and evaluates observability rules
  *   before each LLM call to select the best model.
- * - processAPIError: Records failures -- opens circuit for the failed model so future
- *   requests skip it. Does NOT signal retry (the fallback loop handles that).
+ * - processAPIError: Reactive -- on any LLM error, opens circuit for the failed model
+ *   and signals retry so processInputStep switches to the next fallback.
  * - processOutputStep: Monitors -- detects soft failures (empty responses, error
  *   finish reasons) and opens circuits for future requests.
  */
@@ -799,7 +799,8 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
 
     // Observability rules require scope context for data queries.
     // Without scope the router still provides reactive fallback via
-    // processAPIError, but proactive rule evaluation is skipped.
+    // processAPIError (circuit-opening + retry), but proactive rule
+    // evaluation is skipped.
     if (!scopeFilter) return undefined;
 
     // Evaluate rules in priority order -- first rule that fires wins
@@ -831,16 +832,18 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
   }
 
   /**
-   * Reactive error handling: when an LLM call fails, open the circuit for the
-   * failed model so that future requests (via processInputStep) proactively
-   * skip it.
+   * Reactive error handling: when an LLM call fails (any error type — network,
+   * timeout, 429, 500, API rejection, etc.), open the circuit for the failed
+   * model and signal a retry. On retry the agentic loop re-runs processInputStep
+   * which sees the cooldown and picks the next available model.
    *
-   * This hook does NOT signal a retry. The existing executeStreamWithFallbackModels
-   * loop in the LLM execution layer handles immediate reactive fallback by
-   * catching the error and trying the next model in the chain. This preserves
-   * full backwards compatibility with the agent's model fallback behavior —
-   * the processor is purely additive, recording failures for future proactive
-   * routing without altering the reactive retry flow.
+   * This fully replaces the old executeStreamWithFallbackModels sequential retry
+   * — the agent passes only one model to the LLM layer when this processor is
+   * active, so the processor is the sole fallback mechanism.
+   *
+   * Note: despite the hook name, the LLM execution layer routes ALL caught
+   * errors (not just API rejections) through processAPIError. See the catch
+   * block in llm-execution-step.ts for details.
    */
   async processAPIError(
     args: ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata>,
@@ -849,6 +852,14 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     if (!failedModelId) return undefined;
 
     const scopeKey = args.state.__adaptiveRouter_scopeKey as string | undefined;
+
+    // Track which models have already been tried in this request so we don't
+    // loop forever. processInputStep reads this to skip exhausted models.
+    const retriedModels = (args.state.__adaptiveRouter_retriedModels as string[] | undefined) ?? [];
+    if (!retriedModels.includes(failedModelId)) {
+      retriedModels.push(failedModelId);
+      args.state.__adaptiveRouter_retriedModels = retriedModels;
+    }
 
     // Open the circuit for the failed model so processInputStep skips it
     // on subsequent requests. scopeKey may be undefined — getCooldownKey
@@ -866,9 +877,11 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       `API error on '${failedModelId}': ${args.error instanceof Error ? args.error.message : String(args.error)}`,
     );
 
-    // Do not return { retry: true } — let executeStreamWithFallbackModels
-    // handle the reactive fallback to the next model in the chain.
-    return undefined;
+    // Check if there are any untried models left before signaling retry
+    const hasUntried = this.modelIds.some(id => !retriedModels.includes(id));
+    if (!hasUntried) return undefined;
+
+    return { retry: true };
   }
 
   /**
