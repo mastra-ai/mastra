@@ -26,10 +26,10 @@ type ForwardedAgentChannelsOptions = Pick<
  *
  * In addition to the provider-specific fields documented below, this accepts
  * options that are forwarded to the underlying `AgentChannels` instances
- * managed by the provider — for example `handlers`, `inlineMedia`, and
- * `adapterConfig`.
+ * managed by the provider — for example `handlers`, `inlineMedia`, `cards`,
+ * `formatToolCall`, and `streaming`.
  */
-export interface SlackProviderConfig extends ForwardedAgentChannelsOptions {
+export interface SlackProviderConfig extends ForwardedAgentChannelsOptions, SlackAdapterChannelConfig {
   /**
    * Logger forwarded to the underlying `SlackAdapter` for internal error
    * reporting. Defaults to the adapter's `ConsoleLogger`.
@@ -56,6 +56,10 @@ export interface SlackProviderConfig extends ForwardedAgentChannelsOptions {
    * Per-adapter overrides applied to the Slack adapter entry inside
    * `AgentChannels.adapters` — for example `cards`, `formatToolCall`,
    * `formatError`.
+   *
+   * @deprecated Pass these fields at the top level of `SlackProviderConfig`
+   * instead. Top-level fields win; values from `adapterConfig` are merged in
+   * as a fallback for backwards compatibility.
    */
   adapterConfig?: SlackAdapterChannelConfig;
 
