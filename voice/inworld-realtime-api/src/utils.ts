@@ -29,13 +29,15 @@ export const transformTools = (tools?: TTools): ToolDefinition[] => {
       parameters = isZodObject(tool.inputSchema)
         ? zodSchemaToJson(tool.inputSchema)
         : (tool.inputSchema as Record<string, unknown>);
-    } else if ('parameters' in tool) {
+    } else if ('parameters' in tool && tool.parameters) {
       parameters = isZodObject(tool.parameters)
         ? zodSchemaToJson(tool.parameters)
         : (tool.parameters as Record<string, unknown>);
     } else {
-      console.warn(`Tool ${name} has neither inputSchema nor parameters, skipping`);
-      continue;
+      // Zero-arg tool: advertise an empty-object schema so the server knows
+      // the tool exists. `handleFunctionCall` already treats empty/missing
+      // `arguments` as `{}`, so the round-trip works.
+      parameters = { type: 'object', properties: {}, additionalProperties: false };
     }
 
     if (!tool.execute) {

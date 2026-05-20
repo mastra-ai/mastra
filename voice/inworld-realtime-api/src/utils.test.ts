@@ -104,5 +104,25 @@ describe('transformTools', () => {
 
       expect(transformTools({ inertTool: tool })).toHaveLength(0);
     });
+
+    it('should advertise zero-arg tools with an empty-object schema instead of skipping', () => {
+      // A tool with no inputSchema/parameters but a real execute is a valid
+      // zero-arg tool (e.g. `get-current-time`). `handleFunctionCall` already
+      // treats empty arguments as {}, so the server needs to see the tool to
+      // call it at all.
+      const tool = {
+        id: 'zeroArg',
+        description: 'No-arg tool',
+        execute: async () => ({ ok: true }),
+      } as any;
+
+      const transformed = transformTools({ zeroArg: tool });
+      expect(transformed).toHaveLength(1);
+      expect(transformed[0]).toMatchObject({
+        type: 'function',
+        name: 'zeroArg',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      });
+    });
   });
 });

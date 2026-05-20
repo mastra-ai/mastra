@@ -403,13 +403,36 @@ export class InworldRealtimeVoice extends MastraVoice {
     timeoutMs: number = this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const onUpdated = () => {
+      const ws = this.ws;
+      const cleanup = () => {
         clearTimeout(timer);
+        this.client.removeListener('session.updated', onUpdated);
+        ws?.removeListener('close', onClose);
+        ws?.removeListener('error', onError);
+      };
+      const onUpdated = () => {
+        cleanup();
         resolve();
       };
+      // If the socket closes or errors after open but before the ack, fail
+      // immediately instead of sitting until `timeoutMs` expires.
+      const onClose = (code?: number, reason?: Buffer) => {
+        cleanup();
+        reject(
+          new Error(
+            `Inworld realtime websocket closed during handshake (code=${code ?? '?'}, reason=${reason?.toString() || 'n/a'})`,
+          ),
+        );
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
       this.client.once('session.updated', onUpdated);
+      ws?.once('close', onClose);
+      ws?.once('error', onError);
       const timer = setTimeout(() => {
-        this.client.removeListener('session.updated', onUpdated);
+        cleanup();
         reject(new Error(`Inworld realtime session handshake timed out after ${timeoutMs}ms`));
       }, timeoutMs);
     });
@@ -586,7 +609,15 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.writingSource.clear();
 
     this.ws.on('message', message => {
-      const data = JSON.parse(message.toString());
+      // Surface malformed inbound frames as `error` events. Without the try,
+      // a JSON.parse throw escapes the socket listener and crashes the process.
+      let data: any;
+      try {
+        data = JSON.parse(message.toString());
+      } catch (err) {
+        this.emit('error', err instanceof Error ? err : new Error(`Invalid server frame: ${String(err)}`));
+        return;
+      }
       this.client.emit(data.type, data);
 
       if (this.debug) {
@@ -738,13 +769,17 @@ export class InworldRealtimeVoice extends MastraVoice {
       });
     });
 
-    this.client.on('response.done', async ev => {
-      await this.handleFunctionCalls(ev);
+    this.client.on('response.done', ev => {
+      // Emit + clean up FIRST so downstream `response.done` observers and
+      // barge-in logic don't sit behind tool latency, then kick off tool work.
       this.emit('response.done', ev);
       speakerStreams.delete(ev.response.id);
       this.activeResponseIds.delete(ev.response.id);
       this.writingSource.delete(ev.response.id);
       interruptedFor.delete(ev.response.id);
+      void this.handleFunctionCalls(ev).catch(err => {
+        this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      });
     });
 
     this.client.on('error', async ev => {

@@ -571,5 +571,67 @@ describe('InworldRealtimeVoice', () => {
       // Leave the real waitForSessionCreated in place; never emit session.updated.
       await expect(v.connect()).rejects.toThrow(/handshake timed out/i);
     });
+
+    it('should reject waitForSessionCreated immediately if the socket errors during handshake', async () => {
+      // Don't sit until the full timeout when the WS dies mid-handshake.
+      const v = new InworldRealtimeVoice({ apiKey: 'k', connectTimeoutMs: 60_000 });
+      v.waitForOpen = () => Promise.resolve();
+      const promise = v.connect();
+      const { instance } = getLastInstance();
+      setImmediate(() => instance.emit('error', new Error('boom')));
+      await expect(promise).rejects.toThrow(/boom/);
+    });
+
+    it('should reject waitForSessionCreated immediately if the socket closes during handshake', async () => {
+      const v = new InworldRealtimeVoice({ apiKey: 'k', connectTimeoutMs: 60_000 });
+      v.waitForOpen = () => Promise.resolve();
+      const promise = v.connect();
+      const { instance } = getLastInstance();
+      setImmediate(() => instance.emit('close', 1011, Buffer.from('server error')));
+      await expect(promise).rejects.toThrow(/closed during handshake/i);
+    });
+
+    it('should emit an error event (not crash) on a malformed inbound frame', async () => {
+      await connectStubbed(voice);
+      const errorSpy = vi.fn();
+      voice.on('error', errorSpy);
+      const { instance } = getLastInstance();
+      // Simulate the server sending a non-JSON frame.
+      instance.emit('message', Buffer.from('not-json-{'));
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const err = errorSpy.mock.calls[0][0];
+      expect(err).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('response.done ordering', () => {
+    it('should emit response.done before awaiting tool work', async () => {
+      const order: string[] = [];
+      const execute = vi.fn(async () => {
+        order.push('tool-executed');
+        return { ok: true };
+      });
+      voice.addTools({
+        'slow-tool': {
+          id: 'slow-tool',
+          description: 'd',
+          inputSchema: undefined as any,
+          execute,
+        } as any,
+      });
+      await connectStubbed(voice);
+      voice.on('response.done', () => order.push('response.done'));
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('response.done', {
+        response: {
+          id: 'r-order',
+          output: [{ type: 'function_call', call_id: 'c1', name: 'slow-tool', arguments: '' }],
+        },
+      });
+      // Let the microtask queue drain so the tool's async execute runs.
+      await new Promise(r => setImmediate(r));
+      expect(order).toEqual(['response.done', 'tool-executed']);
+    });
   });
 });
