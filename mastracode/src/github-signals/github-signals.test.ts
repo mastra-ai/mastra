@@ -1436,7 +1436,7 @@ describe('GithubSignals', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [notification] = sendSignal.mock.calls[0] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(notification).toMatchObject({
       contents: 'new startup comment',
       attributes: { type: 'github-comment', user: 'reviewer', pr: 123 },
@@ -1479,7 +1479,7 @@ describe('GithubSignals', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [pendingReminder, target] = sendSignal.mock.calls[0] as any[];
+    const [pendingReminder, target] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(pendingReminder).toMatchObject({
       type: 'system-reminder',
       contents: '1 new GitHub notification is pending. Call the github tool with action: "pending" to deliver them.',
@@ -1524,7 +1524,7 @@ describe('GithubSignals', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [pendingReminder] = sendSignal.mock.calls[0] as any[];
+    const [pendingReminder] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(pendingReminder).toMatchObject({
       attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
     });
@@ -1538,7 +1538,7 @@ describe('GithubSignals', () => {
     expect(toolResult).toEqual({ success: true, message: 'notifications will now be delivered' });
     await vi.advanceTimersByTimeAsync(0);
     expect(sendSignal).toHaveBeenCalledTimes(2);
-    const [notification] = sendSignal.mock.calls[1] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[1] as any[];
     expect(notification).toMatchObject({
       contents: '- Validate build outputs: failure (https://checks.example/fail)',
       attributes: { type: 'github-ci-failure', pr: 123, checkCount: 1, url: 'https://checks.example/fail' },
@@ -1548,6 +1548,211 @@ describe('GithubSignals', () => {
     );
     github.destroy();
     vi.useRealTimers();
+  });
+
+  it('claims queued cached comment delivery only after the pending notification is delivered', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'comment-thread',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'CodeRabbit comment',
+        subjectType: 'PullRequest',
+        reason: 'comment',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        latestCommentUrl: 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/1',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        commentAuthor: 'coderabbitai[bot]',
+        commentBody: 'queued cached comment',
+        commentHtmlUrl: 'https://github.com/mastra-ai/mastra/pull/123#discussion_r1',
+      },
+    ]);
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const claimDelivery = vi.spyOn(store, 'claimNotificationDelivery');
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[0] === 'api' && args[1] === 'user') return { stdout: 'TylerBarnes\n' };
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect((sendSignal.mock.calls as any[])[0]?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+    expect(claimDelivery).not.toHaveBeenCalled();
+
+    await github.deliverPendingNotifications(context);
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect((sendSignal.mock.calls as any[])[1]?.[0]).toMatchObject({
+      contents: 'queued cached comment',
+      attributes: { type: 'github-comment', pr: 123 },
+    });
+    expect(claimDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationId: 'comment-thread',
+        notificationUpdatedAt: 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/1',
+      }),
+    );
+    github.destroy();
+  });
+
+  it('claims queued cached PR state delivery only after the pending notification is delivered', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'merged-thread',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'feat: ship it',
+        subjectType: 'PullRequest',
+        reason: 'state_change',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        prState: 'closed',
+        prMerged: true,
+        prClosedAt: '2026-01-02T00:00:00.000Z',
+        prMergedAt: '2026-01-02T00:00:00.000Z',
+        prHtmlUrl: 'https://github.com/mastra-ai/mastra/pull/123',
+      },
+    ]);
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const claimDelivery = vi.spyOn(store, 'claimNotificationDelivery');
+    const commandRunner = vi.fn(async (args: string[]) => {
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastNotificationUpdatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(claimDelivery).not.toHaveBeenCalled();
+
+    await github.deliverPendingNotifications(context);
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect((sendSignal.mock.calls as any[])[1]?.[0]).toMatchObject({
+      contents: 'PR #123 was merged: feat: ship it',
+      attributes: { type: 'github-pr-merged', pr: 123 },
+    });
+    expect(claimDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationId: 'merged-thread',
+        notificationUpdatedAt: 'pr-state:merged:2026-01-02T00:00:00.000Z',
+      }),
+    );
+    github.destroy();
+  });
+
+  it('claims queued cached PR conflict delivery only after the pending notification is delivered', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'conflicted-thread',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'feat: needs merge work',
+        subjectType: 'PullRequest',
+        reason: 'state_change',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        prHtmlUrl: 'https://github.com/mastra-ai/mastra/pull/123',
+        prMergeable: false,
+        prMergeableState: 'dirty',
+        prHeadSha: 'sha-1',
+      },
+    ]);
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const claimDelivery = vi.spyOn(store, 'claimNotificationDelivery');
+    const commandRunner = vi.fn(async (args: string[]) => {
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastNotificationUpdatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(claimDelivery).not.toHaveBeenCalled();
+
+    await github.deliverPendingNotifications(context);
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect((sendSignal.mock.calls as any[])[1]?.[0]).toMatchObject({
+      contents: 'PR #123 has merge conflicts: feat: needs merge work',
+      attributes: { type: 'github-pr-conflict', pr: 123 },
+    });
+    expect(claimDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationId: 'conflicted-thread',
+        notificationUpdatedAt: 'pr-conflict:dirty:sha-1',
+      }),
+    );
+    github.destroy();
   });
 
   it('delivers queued notifications from the github pending tool', async () => {
@@ -1592,7 +1797,7 @@ describe('GithubSignals', () => {
     expect(sendSignal).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(0);
     expect(sendSignal).toHaveBeenCalledTimes(2);
-    const [notification] = sendSignal.mock.calls[1] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[1] as any[];
     expect(notification).toMatchObject({
       contents: 'queued comment',
       attributes: { type: 'github-comment', user: 'reviewer', pr: 123 },
@@ -1667,7 +1872,7 @@ describe('GithubSignals', () => {
     expect(sendSignal).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(0);
     expect(sendSignal).toHaveBeenCalledTimes(3);
-    const [notification] = sendSignal.mock.calls[2] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[2] as any[];
     expect(notification).toMatchObject({ contents: 'second queued comment', attributes: { pr: 456 } });
     github.destroy();
     vi.useRealTimers();
@@ -1716,7 +1921,7 @@ describe('GithubSignals', () => {
     await vi.advanceTimersByTimeAsync(5 * 60_000);
 
     expect(sendSignal).toHaveBeenCalledTimes(2);
-    const [notification] = sendSignal.mock.calls[1] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[1] as any[];
     expect(notification).toMatchObject({ contents: 'flushed comment', attributes: { type: 'github-comment' } });
     github.destroy();
     vi.useRealTimers();
@@ -1739,7 +1944,6 @@ describe('GithubSignals', () => {
       ],
       { reviewer: 'write' },
     );
-    const harness = createHarness();
     const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
     const sendSignal = createSendSignalMock();
     const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
@@ -1758,8 +1962,7 @@ describe('GithubSignals', () => {
     expect(sendSignal).toHaveBeenCalledTimes(1);
     github.removeSubscription({ ...context, repo: 'mastra-ai/mastra', prNumber: 123 });
 
-    const result = await processSignals(github, harness, []);
-    await (result?.tools?.github as any).execute({ action: 'pending' });
+    await github.deliverPendingNotifications(context);
     await vi.advanceTimersByTimeAsync(0);
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
@@ -2065,7 +2268,7 @@ describe('GithubSignals', () => {
       repo: 'mastra-ai/mastra',
       prNumber: 123,
     });
-    const [notification, target] = sendSignal.mock.calls[0] as any[];
+    const [notification, target] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(notification).toMatchObject({
       type: 'system-reminder',
       contents: '- unit tests: FAILURE (https://example.com/check)',
@@ -2178,8 +2381,8 @@ describe('GithubSignals', () => {
     await github.markIdle({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
 
     expect(sendSignal).toHaveBeenCalledTimes(2);
-    const [commentNotification] = sendSignal.mock.calls[0] as any[];
-    const [reviewNotification] = sendSignal.mock.calls[1] as any[];
+    const [commentNotification] = (sendSignal.mock.calls as any[])[0] as any[];
+    const [reviewNotification] = (sendSignal.mock.calls as any[])[1] as any[];
     expect(commentNotification).toMatchObject({
       contents: 'Please fix this',
       attributes: { type: 'github-comment', user: 'reviewer', pr: 123 },
@@ -2233,7 +2436,7 @@ describe('GithubSignals', () => {
     await github.markIdle({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [notification] = sendSignal.mock.calls[0] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(notification).toMatchObject({
       contents: 'bot comment',
       attributes: { type: 'github-comment', user: 'coderabbitai[bot]', pr: 123 },
@@ -2294,7 +2497,7 @@ describe('GithubSignals', () => {
     await github.poll();
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect((sendSignal.mock.calls[0] as any[])?.[0]).toMatchObject({
+    expect(((sendSignal.mock.calls as any[])[0] as any[])?.[0]).toMatchObject({
       attributes: { type: 'github-pending-notifications' },
     });
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
@@ -2330,7 +2533,7 @@ describe('GithubSignals', () => {
     });
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect((sendSignal.mock.calls[0] as any[])?.[0]).toMatchObject({
+    expect(((sendSignal.mock.calls as any[])[0] as any[])?.[0]).toMatchObject({
       type: 'system-reminder',
       attributes: { type: 'github-subscription-hint' },
     });
@@ -2377,7 +2580,7 @@ describe('GithubSignals', () => {
 
     expect(commandRunner).toHaveBeenCalledTimes(1);
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [notification] = sendSignal.mock.calls[0] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(notification).toMatchObject({
       type: 'system-reminder',
       contents: 'GitHub API rate limit exceeded. Polling is paused for this PR until 2026-01-01T01:00:00.000Z.',
@@ -2458,7 +2661,7 @@ describe('GithubSignals', () => {
     await github.poll();
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [notification] = sendSignal.mock.calls[0] as any[];
+    const [notification] = (sendSignal.mock.calls as any[])[0] as any[];
     expect(notification).toMatchObject({
       type: 'system-reminder',
       contents: 'gh auth required',
