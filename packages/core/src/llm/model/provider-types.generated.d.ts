@@ -3301,6 +3301,7 @@ export type ProviderModelsMap = {
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
     'gemini-3.1-pro-preview-customtools',
+    'gemini-3.5-flash',
     'gemini-embedding-001',
     'gemini-flash-latest',
     'gemini-flash-lite-latest',
@@ -3866,6 +3867,7 @@ export type ProviderModelsMap = {
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-v3p1',
     'accounts/fireworks/models/deepseek-v3p2',
+    'accounts/fireworks/models/deepseek-v4-flash',
     'accounts/fireworks/models/deepseek-v4-pro',
     'accounts/fireworks/models/glm-4p5',
     'accounts/fireworks/models/glm-4p5-air',
