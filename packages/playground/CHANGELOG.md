@@ -1,5 +1,26 @@
 # @internal/playground
 
+## 1.9.4-alpha.10
+
+### Patch Changes
+
+- Fixed Studio typecheck compatibility for sidebar links and dataset comparison selects. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Updated dependencies [[`f8eed87`](https://github.com/mastra-ai/mastra/commit/f8eed8768a7f0f31b41f1d8449865a846870ba90), [`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`acdec89`](https://github.com/mastra-ai/mastra/commit/acdec89cbff1a540dd107900e8b670e8be8d9e53), [`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`dcc7078`](https://github.com/mastra-ai/mastra/commit/dcc7078358316174403bf934459f89005aed988f), [`2681e4e`](https://github.com/mastra-ai/mastra/commit/2681e4ea5e558b697c802b7405b915a57cce7e36), [`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/playground-ui@29.0.0-alpha.10
+  - @mastra/client-js@1.20.0-alpha.9
+  - @mastra/core@1.36.0-alpha.9
+  - @mastra/react@0.4.0-alpha.9
+
+## 1.9.4-alpha.9
+
+### Patch Changes
+
+- Removed the unused Primitives and Observability overview pages from the studio. These pages only showed links that already exist in the sidebar, so they were redundant and no longer reachable from the navigation. Also fixed extra padding around the Request Context page content. ([#16813](https://github.com/mastra-ai/mastra/pull/16813))
+
+- Updated dependencies [[`b699688`](https://github.com/mastra-ai/mastra/commit/b699688104e2f78fb2be65a2ddf28f4064504f5c)]:
+  - @mastra/playground-ui@29.0.0-alpha.9
+
 ## 1.9.4-alpha.8
 
 ### Patch Changes

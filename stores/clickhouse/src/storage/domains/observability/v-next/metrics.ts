@@ -706,6 +706,9 @@ export async function getMetricPercentiles(
 // ============================================================================
 // Discovery / Metadata — reads from helper tables, not source tables.
 // Per design: returns empty results until helper tables have been refreshed.
+// Queries use SELECT DISTINCT to stay correct between ReplacingMergeTree
+// background merges, where the same value may briefly appear more than once
+// after a refresh cycle.
 // ============================================================================
 
 export async function getMetricNames(
@@ -725,7 +728,7 @@ export async function getMetricNames(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
     params,
   );
 
@@ -738,7 +741,7 @@ export async function getMetricLabelKeys(
 ): Promise<GetMetricLabelKeysResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'metricLabelKey' AND key1 = {metricName:String} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'metricLabelKey' AND key1 = {metricName:String} ORDER BY value`,
     { metricName: args.metricName },
   );
   return { keys: rows.map(r => r.value) };
@@ -764,7 +767,7 @@ export async function getMetricLabelValues(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
     params,
   );
 

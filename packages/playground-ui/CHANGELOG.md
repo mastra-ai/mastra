@@ -1,5 +1,32 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.10
+
+### Patch Changes
+
+- Fixed a crash in filter menus with nested submenus (such as the Filter on the Agent review page) that showed "`MenuPortal` must be used within `Menu`". The submenu content now uses the design system's `DropdownMenu.SubContent` instead of the underlying library's portal directly. ([#16829](https://github.com/mastra-ai/mastra/pull/16829))
+
+- Fixed type definitions and shared UI component types for `@mastra/playground-ui`. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- `AlertDialog`'s API and behavior are unchanged — `asChild` on `AlertDialog.Trigger`, and `AlertDialog.Action` and `AlertDialog.Cancel`, all work exactly as before. (Internally it now builds on Base UI primitives.) ([#16824](https://github.com/mastra-ai/mastra/pull/16824))
+
+- Moved the `Collapsible` component to Base UI, with a smoother height-based expand and collapse animation. The public API is unchanged — `asChild` on `CollapsibleTrigger` still works. ([#16825](https://github.com/mastra-ai/mastra/pull/16825))
+
+- Upgraded `@base-ui/react` to 1.5, making popups noticeably faster — components built on Base UI such as `Tooltip`, `Popover`, `DropdownMenu` and `ContextMenu` now open and close more quickly. ([#16819](https://github.com/mastra-ai/mastra/pull/16819))
+
+- Fixed the playground memory configuration display for agents using observationalMemory: true. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Updated dependencies [[`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`bd92c15`](https://github.com/mastra-ai/mastra/commit/bd92c154238ce5d05e12d5477da07c7b7292c5e3), [`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/client-js@1.20.0-alpha.9
+  - @mastra/core@1.36.0-alpha.9
+  - @mastra/react@0.4.0-alpha.9
+
+## 29.0.0-alpha.9
+
+### Patch Changes
+
+- Moved the `Dialog` component to Base UI. The public API is unchanged — `asChild` on `DialogTrigger` and `DialogClose` still works the same way, and open/close animations behave as before. ([#16821](https://github.com/mastra-ai/mastra/pull/16821))
+
 ## 29.0.0-alpha.8
 
 ### Minor Changes
