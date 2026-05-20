@@ -29,6 +29,7 @@ export * from './run';
 export * from './serve';
 export * from './types';
 export * from './durable-agent';
+export * from './runner';
 
 type InngestSubAgent<TId extends string = string> = {
   id: TId;

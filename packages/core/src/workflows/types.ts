@@ -39,6 +39,42 @@ export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 export type WorkflowEngineType = string;
 
 /**
+ * WorkflowRunner provides a minimal abstraction for plugging in runner implementations
+ * (like Inngest, Temporal, etc.) transparently without requiring workflow rewrites.
+ *
+ * A runner adapts a standard Workflow instance to its execution model.
+ * Implementations can modify the workflow's execution engine, return a specialized
+ * subclass, or apply runner-specific configuration.
+ *
+ * This enables:
+ * ```typescript
+ * const workflow = createWorkflow({
+ *   id: "example",
+ *   inputSchema: inputSchema,
+ *   outputSchema: outputSchema,
+ *   runner: inngestRunner  // Transparent runner - no InngestWorkflow needed
+ * });
+ * ```
+ *
+ * @see InngestRunner, TemporalRunner for implementation examples
+ */
+export interface WorkflowRunner {
+  /**
+   * Adapts a standard Workflow to this runner's execution model.
+   *
+   * The implementation may:
+   * - Replace the workflow's execution engine with a runner-specific one
+   * - Return a specialized workflow subclass (e.g., InngestWorkflow, TemporalWorkflow)
+   * - Apply runner-specific configuration
+   * - Return the workflow unchanged if the runner layer is thin
+   *
+   * @param workflow - A standard Workflow instance
+   * @returns The adapted workflow (may be the same instance or a new one)
+   */
+  adaptWorkflow<T extends { id: string }>(workflow: T): T;
+}
+
+/**
  * Type of workflow - determines how the workflow is categorized in the UI.
  * - 'default': Standard workflow
  * - 'processor': Workflow used as a processor for agent input/output processing
@@ -830,6 +866,22 @@ export type WorkflowConfig<
    */
   requestContextSchema?: PublicSchema<TRequestContext>;
   executionEngine?: ExecutionEngine;
+  /**
+   * Optional runner for transparent workflow execution.
+   * When provided, the runner adapts this workflow to its execution model (e.g., Inngest, Temporal).
+   * This allows standard workflows to be executed on different runners without code changes.
+   *
+   * @example
+   * ```typescript
+   * const workflow = createWorkflow({
+   *   id: "example",
+   *   inputSchema: z.object({}),
+   *   outputSchema: z.object({}),
+   *   runner: inngestRunner  // Transparent Inngest execution
+   * });
+   * ```
+   */
+  runner?: WorkflowRunner;
   steps?: TSteps;
   retryConfig?: {
     attempts?: number;

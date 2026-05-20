@@ -51,7 +51,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
-import type { AnyWorkflow, Workflow } from '../workflows';
+import type { AnyWorkflow, Workflow, WorkflowRunner } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
@@ -477,6 +477,31 @@ export interface Config<
    * - `MastraWorker[]`: Use exactly these workers
    */
   workers?: MastraWorker[] | false;
+  /**
+   * Optional global workflow runner for transparent runner support.
+   *
+   * When configured, all workflows registered with this Mastra instance will use
+   * this runner unless they have their own runner specified. This allows running
+   * standard workflows on different runners (Inngest, Temporal, etc.) without
+   * code changes.
+   *
+   * Workflow-level runner configuration takes precedence over the global runner.
+   *
+   * @example
+   * ```typescript
+   * import { createInngestRunner } from '@mastra/workflows/inngest';
+   * import { Inngest } from 'inngest';
+   *
+   * const inngest = new Inngest({ id: 'my-app' });
+   * const mastra = new Mastra({
+   *   workflowRunner: createInngestRunner({ inngest }),
+   *   workflows: { myWorkflow },  // Will automatically use Inngest runner
+   * });
+   * ```
+   *
+   * @see WorkflowRunner
+   */
+  workflowRunner?: WorkflowRunner;
 }
 
 /**
@@ -570,6 +595,7 @@ export class Mastra<
   #channels?: TChannels;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
+  #workflowRunner?: WorkflowRunner;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
@@ -731,6 +757,10 @@ export class Mastra<
 
   public getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
     return this.#toolPayloadTransform;
+  }
+
+  public getWorkflowRunner(): WorkflowRunner | undefined {
+    return this.#workflowRunner;
   }
 
   /**
@@ -925,6 +955,7 @@ export class Mastra<
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config?.transform ?? (config as any)?.toolPayloadProjection,
     );
+    this.#workflowRunner = config?.workflowRunner;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;

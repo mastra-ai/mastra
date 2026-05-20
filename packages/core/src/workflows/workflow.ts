@@ -1548,12 +1548,17 @@ export function createWorkflow<
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  // Extract runner before creating the workflow to avoid passing it to the constructor
+  const { runner, ...workflowParams } = params;
+
   // A workflow that declares a `schedule` is auto-promoted to the evented engine.
   // The public Workflow API surface is unchanged — EventedWorkflow extends Workflow
   // and overrides createRun/start/startAsync/streamLegacy/stream/resume with matching
   // signatures. Users keep calling it the same way; manual runs and scheduled fires
   // share a single execution path.
-  if (params.schedule) {
+  let workflow: Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>;
+
+  if (workflowParams.schedule) {
     if (!eventedCreateWorkflow) {
       throw new MastraError({
         id: 'MASTRA_WORKFLOW_SCHEDULE_EVENTED_MODULE_NOT_LOADED',
@@ -1566,7 +1571,7 @@ export function createWorkflow<
         details: { workflowId: String(params.id ?? '') },
       });
     }
-    return eventedCreateWorkflow(params) as unknown as Workflow<
+    workflow = eventedCreateWorkflow(workflowParams) as unknown as Workflow<
       DefaultEngineType,
       TSteps,
       TWorkflowId,
@@ -1576,8 +1581,18 @@ export function createWorkflow<
       TInput,
       TRequestContext
     >;
+  } else {
+    workflow = new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(
+      workflowParams,
+    );
   }
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
+
+  // If a runner is provided, adapt the workflow through it
+  if (runner) {
+    return runner.adaptWorkflow(workflow);
+  }
+
+  return workflow;
 }
 
 export function cloneWorkflow<
