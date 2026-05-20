@@ -44,7 +44,7 @@ export class MockMemory extends MastraMemory {
       options: {
         ...options,
         workingMemory: enableWorkingMemory
-          ? ({ enabled: true, template: workingMemoryTemplate } as WorkingMemory)
+          ? ({ ...options?.workingMemory, enabled: true, template: workingMemoryTemplate } as WorkingMemory)
           : options?.workingMemory,
         lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
       },
@@ -175,10 +175,15 @@ export class MockMemory extends MastraMemory {
       return {};
     }
 
+    const usesMergeSemantics = Boolean(mergedConfig.workingMemory?.schema);
+    const description = usesMergeSemantics
+      ? `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update.`
+      : `Update the working memory with new information. Any data not included will be overwritten.`;
+
     return {
       updateWorkingMemory: createTool({
         id: 'update-working-memory',
-        description: `Update the working memory with new information. Any data not included will be overwritten.`,
+        description,
         inputSchema: z.object({ memory: z.string() }),
         execute: async (inputData, context) => {
           const threadId = context?.agent?.threadId;
@@ -218,8 +223,54 @@ export class MockMemory extends MastraMemory {
             }
           }
 
-          const workingMemory =
-            typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+          let workingMemory: string;
+
+          if (usesMergeSemantics) {
+            const existingRaw = await memory.getWorkingMemory({
+              threadId,
+              resourceId,
+              memoryConfig: _config,
+            });
+
+            let existingData: Record<string, unknown> | null = null;
+            if (existingRaw) {
+              try {
+                existingData = typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw;
+              } catch {
+                existingData = null;
+              }
+            }
+
+            const memoryInput = inputData.memory;
+            let newData: unknown;
+            if (typeof memoryInput === 'string') {
+              try {
+                newData = JSON.parse(memoryInput);
+              } catch {
+                newData = memoryInput;
+              }
+            } else {
+              newData = memoryInput;
+            }
+
+            if (
+              existingData &&
+              typeof existingData === 'object' &&
+              !Array.isArray(existingData) &&
+              newData &&
+              typeof newData === 'object' &&
+              !Array.isArray(newData)
+            ) {
+              workingMemory = JSON.stringify({
+                ...(existingData as Record<string, unknown>),
+                ...(newData as Record<string, unknown>),
+              });
+            } else {
+              workingMemory = typeof newData === 'string' ? newData : JSON.stringify(newData);
+            }
+          } else {
+            workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+          }
 
           await memory.updateWorkingMemory({
             threadId,
