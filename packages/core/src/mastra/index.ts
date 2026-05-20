@@ -3318,6 +3318,11 @@ export class Mastra<
             const schedulesStore = await this.#storage?.getStore('schedules');
             if (!schedulesStore) return;
             await this.#registerDeclarativeSchedules(schedulesStore);
+            // Restart the tick loop if it auto-suspended after all active
+            // schedules were removed in a previous tick.
+            if (this.#scheduler && !this.#scheduler.isRunning) {
+              await this.#scheduler.start();
+            }
           } catch (error) {
             this.#logger?.error('Failed to register declarative schedule for workflow', {
               workflowId: workflow.id,
