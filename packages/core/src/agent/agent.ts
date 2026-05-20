@@ -41,7 +41,6 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
-import { Mastra as MastraClass } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -5466,6 +5465,10 @@ export class Agent<
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
+    // Imported lazily: a static import of `../mastra` would pull the evented
+    // workflow engine into this module's init-time graph and form an ESM cycle
+    // with the base `Workflow` class. See `createEventedWorkflow`.
+    const { Mastra: MastraClass } = await import('../mastra');
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),

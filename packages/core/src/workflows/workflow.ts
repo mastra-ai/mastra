@@ -1540,6 +1540,45 @@ export function __registerEventedCreateWorkflow(fn: EventedCreateWorkflowFn): vo
   eventedCreateWorkflow = fn;
 }
 
+/**
+ * @internal Build a workflow on the evented execution engine without importing
+ * the evented module. Importing `workflows/evented` from code that is itself
+ * reachable from this file forms an ESM init-time cycle (`EventedWorkflow
+ * extends Workflow`). Routing through the registry avoids it: the evented
+ * module registers its factory via `__registerEventedCreateWorkflow` when it
+ * loads, which the `workflows` barrel and `Mastra` both trigger.
+ */
+export function createEventedWorkflow<
+  TWorkflowId extends string = string,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
+  TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
+  TRequestContext extends Record<string, any> | unknown = unknown,
+>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  if (!eventedCreateWorkflow) {
+    throw new MastraError({
+      id: 'MASTRA_EVENTED_WORKFLOW_MODULE_NOT_LOADED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.SYSTEM,
+      text:
+        `Cannot create the evented workflow "${params.id}": the evented execution module has not been loaded. ` +
+        `Import from \`@mastra/core/workflows\`, or add \`import '@mastra/core/workflows/evented';\` to your entry file.`,
+      details: { workflowId: String(params.id ?? '') },
+    });
+  }
+  return eventedCreateWorkflow(params) as unknown as Workflow<
+    DefaultEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    TInput,
+    TRequestContext
+  >;
+}
+
 export function createWorkflow<
   TWorkflowId extends string = string,
   TState = unknown,
