@@ -1458,33 +1458,8 @@ describe('UPDATE_STORED_AGENT_ROUTE — model policy is surface-scoped, not enfo
     expect(result).toMatchObject({ id: 'a1' });
   });
 
-  it('rejects creates whose model is outside the allowlist with HTTP 422', async () => {
-    const agentsStore = createMockAgentsStore(new Map());
-    const storage = createMockStorage(agentsStore);
-    const editor = makeBuilderEditor({
-      allowed: [{ provider: 'openai', modelId: 'gpt-5.5' }],
-    });
-    const mastra = {
-      getStorage: vi.fn().mockReturnValue(storage),
-      getEditor: vi.fn().mockReturnValue(editor),
-    };
-
-    let caught: HTTPException | undefined;
-    try {
-      await CREATE_STORED_AGENT_ROUTE.handler({
-        ...createTestContext(mastra as unknown as MockMastra),
-        name: 'New Agent',
-        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
-      });
-    } catch (e) {
-      caught = e as HTTPException;
-    }
-
-    expect(caught).toBeInstanceOf(HTTPException);
-    expect(caught?.status).toBe(422);
-
-    const body = await caught!.getResponse().json();
-    expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
-    expect(body.error.attempted).toMatchObject({ provider: 'anthropic', modelId: 'claude-opus-4-7' });
-  });
+  // Note: a CREATE-side counterpart test was removed alongside save-path
+  // enforcement. CREATE behavior is covered by the broader create tests above;
+  // the UPDATE assertion in this describe block is enough to lock in the
+  // surface-scoped policy direction.
 });

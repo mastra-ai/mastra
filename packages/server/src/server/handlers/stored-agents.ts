@@ -343,14 +343,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
-      // Enforce admin model allowlist before persisting. Mirrors UPDATE; when
-      // `model` is omitted the builder applies `defaults.model` server-side.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
