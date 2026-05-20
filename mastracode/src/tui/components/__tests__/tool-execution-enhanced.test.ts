@@ -676,6 +676,22 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible.split('\n')).toHaveLength(3);
   });
 
+  it('syntax highlights quiet shell command footers as bash', () => {
+    const command = 'if [ -f package.json ]; then echo "ok"; fi';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(`$ ${command}`);
+    expect(output).toContain(chalk.blue('if'));
+    expect(output).toContain(chalk.cyan('echo'));
+    expect(output).toContain(chalk.hex('#f6c177')('-f'));
+  });
+
   it('wraps long quiet shell commands in the footer instead of truncating them', () => {
     const command = 'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot';
     const component = new ToolExecutionComponentEnhanced(
@@ -689,9 +705,24 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const footerLines = output.split('\n').filter(line => line.startsWith('│') && line.trim() !== '│');
     expect(output).not.toContain('…');
     expect(output).toContain('--reporter=dot');
+    expect(component.render(60).join('\n')).toContain(chalk.hex('#f6c177')('--reporter=dot'));
     expect(footerLines.length).toBeGreaterThan(1);
     expect(footerLines[0]).toContain('│ $ pnpm');
     expect(footerLines[1]).toMatch(/^│   \S/);
+  });
+
+  it('keeps base shell command color on wrapped continuation lines', () => {
+    const command = 'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot && pnpm --filter mastracode lint && pnpm --filter mastracode check';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(120).join('\n');
+    const wrappedLine = output.split('\n').find(line => stripAnsi(line).includes('lint && pnpm --filter'));
+    expect(wrappedLine).toContain(theme.fg('toolArgs', 'lint'));
   });
 
   it('shows same-file continuation paths while edit args are still streaming', () => {

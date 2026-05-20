@@ -74,6 +74,9 @@ const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
   name: chalk.hex('#c4b5fd'),
 };
 
+const SHELL_CONTROL_WORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac', 'in', 'function']);
+const SHELL_BUILTINS = new Set(['cd', 'echo', 'export', 'source', 'alias', 'unalias', 'set', 'unset', 'test', '[', 'printf']);
+
 export interface ToolExecutionOptions {
   showImages?: boolean;
   autoCollapse?: boolean;
@@ -489,6 +492,67 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     } catch {
       return theme.fg('toolArgs', preview);
     }
+  }
+
+  private highlightQuietShellCommandLine(line: string): string {
+    const tokens = line.match(/\s+|&&|\|\||[|;()<>]|[^\s|;&()<>]+/g) ?? [''];
+    let expectsCommand = true;
+
+    return tokens
+      .map(token => {
+        if (/^\s+$/.test(token)) return token;
+        if (token === '&&' || token === '||' || token === '|' || token === ';') {
+          expectsCommand = true;
+          return theme.fg('muted', token);
+        }
+        if (token === '(' || token === ')' || token === '<' || token === '>') {
+          return theme.fg('muted', token);
+        }
+        if (SHELL_CONTROL_WORDS.has(token)) {
+          expectsCommand = token === 'then' || token === 'do' || token === 'else';
+          return chalk.blue(token);
+        }
+        if (/^--?[A-Za-z0-9][\w-]*(?:=.*)?$/.test(token)) {
+          expectsCommand = false;
+          return chalk.hex('#f6c177')(token);
+        }
+        if (expectsCommand || SHELL_BUILTINS.has(token)) {
+          expectsCommand = false;
+          return chalk.cyan(token);
+        }
+        expectsCommand = false;
+        return theme.fg('toolArgs', token);
+      })
+      .join('');
+  }
+
+  private wrapQuietShellCommand(command: string, width: number): string[] {
+    const words = command.match(/\S+/g) ?? [''];
+    const lines: string[] = [];
+    let current = '';
+
+    for (const word of words) {
+      let remaining = word;
+      while (remaining.length > width) {
+        if (current) {
+          lines.push(current);
+          current = '';
+        }
+        lines.push(remaining.slice(0, width));
+        remaining = remaining.slice(width);
+      }
+      if (!current) {
+        current = remaining;
+      } else if (current.length + 1 + remaining.length <= width) {
+        current += ` ${remaining}`;
+      } else {
+        lines.push(current);
+        current = remaining;
+      }
+    }
+
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
   }
 
   private wrapPreviewLines(preview: string, firstLineWidth: number, continuationWidth: number): string[] {
@@ -1261,33 +1325,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const padding = ' '.repeat(Math.max(0, contentWidth - this.stripAnsi(truncated).length));
         return `${border('│')} ${color(truncated)}${padding} ${border('│')}`;
       };
-      const wrapFooter = (text: string, width: number): string[] => {
-        const words = text.split(/\s+/).filter(Boolean);
-        const lines: string[] = [];
-        let current = '';
-        for (const word of words) {
-          let remaining = word;
-          while (remaining.length > width) {
-            if (current) {
-              lines.push(current);
-              current = '';
-            }
-            lines.push(remaining.slice(0, width));
-            remaining = remaining.slice(width);
-          }
-          if (!current) {
-            current = remaining;
-          } else if (current.length + 1 + remaining.length <= width) {
-            current += ` ${remaining}`;
-          } else {
-            lines.push(current);
-            current = remaining;
-          }
-        }
-        if (current) lines.push(current);
-        return lines.length ? lines : [''];
-      };
-
       const displayOutput = outputLines.map(line => renderLine(line)).join('\n');
       const hasOutput = displayOutput.trim() !== '';
 
@@ -1297,17 +1334,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
       const footerWrapWidth = Math.max(1, contentWidth - 2);
-      const footerLines = wrapFooter(command, footerWrapWidth);
+      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
       const footerSuffixWidth = this.stripAnsi(footerSuffix).length;
       footerLines.forEach((footerLine, index) => {
         const prefix = index === 0 ? footerPrompt : '  ';
         const isLast = index === footerLines.length - 1;
-        const suffixFits = isLast && footerLine.length + footerSuffixWidth <= footerWrapWidth;
+        const suffixFits = isLast && this.stripAnsi(footerLine).length + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
-        this.contentBox.addChild(new Text(renderLine(`${prefix}${theme.fg('toolArgs', footerLine)}${suffix}`, value => value), 0, 0));
+        const highlightedFooterLine = this.highlightQuietShellCommandLine(footerLine);
+        this.contentBox.addChild(new Text(renderLine(`${prefix}${highlightedFooterLine}${suffix}`, value => value), 0, 0));
       });
       const lastFooterLine = footerLines[footerLines.length - 1] ?? '';
-      if (lastFooterLine.length + footerSuffixWidth > footerWrapWidth) {
+      if (this.stripAnsi(lastFooterLine).length + footerSuffixWidth > footerWrapWidth) {
         this.contentBox.addChild(new Text(renderLine(`  ${footerSuffix}`, value => value), 0, 0));
       }
       this.contentBox.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, 0, 0));
