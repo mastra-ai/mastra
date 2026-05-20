@@ -87,6 +87,14 @@ test.describe('Memory & Threads', () => {
     await expect(threadLink).not.toBeVisible({ timeout: 10_000 });
   });
 
+  // Working-memory specs hit a real LLM with a tool-call round-trip on each
+  // turn. The flake source is LLM tail latency under suite load, not product
+  // bugs — give them extra retries so we keep real-LLM coverage without
+  // poisoning the smoke signal. The Slack report surfaces flaky-pass counts
+  // so we can track latency trends across alpha bumps.
+  test.describe('working memory [@llm]', () => {
+    test.describe.configure({ retries: 3 });
+
   test('working memory display', async ({ page }) => {
     test.slow();
     await page.goto('/agents/test-agent/chat/new');
@@ -166,5 +174,6 @@ test.describe('Memory & Threads', () => {
     // The saved content should be visible in the working memory display
     await expect(page.getByText('Custom Working Memory')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Edited by smoke test')).toBeVisible();
+  });
   });
 });

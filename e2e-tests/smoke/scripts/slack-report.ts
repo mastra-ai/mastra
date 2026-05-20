@@ -109,6 +109,13 @@ interface FailedTest {
   videoPath: string | null;
 }
 
+interface FlakyTest {
+  source: 'UI';
+  title: string;
+  file: string;
+  retries: number;
+}
+
 // ── Config ─────────────────────────────────────────────────────────
 
 const SLACK_BOT_TOKEN = env('SLACK_BOT_TOKEN');
@@ -244,6 +251,41 @@ function collectPlaywrightFailures(suites: PlaywrightSuite[], parentFile = ''): 
   return failures;
 }
 
+function collectPlaywrightFlakes(suites: PlaywrightSuite[], parentFile = ''): FlakyTest[] {
+  const flakes: FlakyTest[] = [];
+
+  for (const suite of suites) {
+    const file = suite.file || parentFile;
+
+    for (const spec of suite.specs) {
+      // A spec is flaky when ok=true overall but some attempt(s) failed before
+      // a retry passed. Playwright records each attempt in tests[].results.
+      if (!spec.ok) continue;
+
+      const allResults = spec.tests.flatMap(t => t.results);
+      const failedAttempts = allResults.filter(
+        r => r.status === 'failed' || r.status === 'timedOut',
+      ).length;
+      const passedAttempts = allResults.filter(r => r.status === 'passed').length;
+
+      if (failedAttempts > 0 && passedAttempts > 0) {
+        flakes.push({
+          source: 'UI',
+          title: spec.title,
+          file,
+          retries: failedAttempts,
+        });
+      }
+    }
+
+    if (suite.suites) {
+      flakes.push(...collectPlaywrightFlakes(suite.suites, file));
+    }
+  }
+
+  return flakes;
+}
+
 function extractFailureSummary(message: string): string {
   // Strip ANSI color codes
   const stripped = message.replace(/\x1b\[[0-9;]*m/g, '');
@@ -351,6 +393,7 @@ async function main() {
   // Read UI report (Playwright)
   let uiStats = { passed: 0, failed: 0, skipped: 0, flaky: 0, total: 0 };
   let uiFailures: FailedTest[] = [];
+  let uiFlakes: FlakyTest[] = [];
   let uiStartTime: string | null = null;
   let uiDurationMs: number | null = null;
 
@@ -366,7 +409,8 @@ async function main() {
     uiStartTime = uiReport.stats.startTime;
     uiDurationMs = uiReport.stats.duration;
     uiFailures = collectPlaywrightFailures(uiReport.suites);
-    console.log(`UI report: ${uiStats.passed}/${uiStats.total} passed, ${uiStats.failed} failed`);
+    uiFlakes = collectPlaywrightFlakes(uiReport.suites);
+    console.log(`UI report: ${uiStats.passed}/${uiStats.total} passed, ${uiStats.failed} failed, ${uiFlakes.length} flaky`);
   } else {
     console.warn(`UI report not found: ${REPORT_PATH}`);
   }
@@ -494,6 +538,26 @@ async function main() {
         ],
       });
     }
+  }
+
+  // Flaky section — surfaces specs that passed only after retrying. We keep
+  // these in the green count but list them so we can track LLM tail-latency
+  // trends across alpha bumps. Skipped when all-green AND no flakes.
+  if (uiFlakes.length > 0) {
+    blocks.push({ type: 'divider' });
+
+    const header = '*Flaky (passed on retry):*\n\n';
+    const flakyLines = uiFlakes
+      .map(f => `• \`${f.file}\` — ${f.title} _(${f.retries} ${f.retries === 1 ? 'retry' : 'retries'})_`)
+      .join('\n');
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${header}${flakyLines}`,
+      },
+    });
   }
 
   const fallbackText = `${headline} — ${statusLines}`;
