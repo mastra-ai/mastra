@@ -39,6 +39,7 @@ import {
   handleToolEnd,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 import type { TUIState } from './state.js';
 
 /**
@@ -162,9 +163,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
+        state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(currentThread.metadata);
         // Load goal state from thread metadata
         state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
+      } else {
+        state.activeGithubPrSubscriptions = [];
+        state.goalManager?.loadFromThreadMetadata(undefined);
       }
+      ectx.updateStatusLine();
       break;
     }
 
@@ -172,6 +178,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(event.thread.metadata);
+      ectx.updateStatusLine();
       // If /goal started without an existing thread, save that pending goal to the
       // newly-created thread. Otherwise load the thread's own goal metadata so goals
       // do not bleed into unrelated new threads.

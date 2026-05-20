@@ -42,6 +42,8 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
+import { defaultGithubCommandRunner, GithubSignals } from './github-signals/index.js';
+import { GithubNotificationPoller } from './github-signals/notification-poller.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -352,6 +354,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const efficiencyScorer = createEfficiencyScorer();
 
   // Agent
+  const githubNotificationPoller = new GithubNotificationPoller({ commandRunner: defaultGithubCommandRunner });
+  const githubSignals = new GithubSignals({
+    notificationPoller: githubNotificationPoller,
+    commandRunner: defaultGithubCommandRunner,
+  });
   const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
@@ -379,8 +386,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),
+      githubSignals.processor,
       new ProviderHistoryCompat(),
     ],
+    outputProcessors: [githubSignals.processor],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
@@ -658,6 +667,19 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
   });
 
+  githubSignals.addAgent(codeAgent, {
+    getStreamOptions: ({ resourceId, threadId }) => harness.buildSignalStreamOptions({ resourceId, threadId }),
+  });
+  const initGithubSignals = async () => {
+    const threadId = harness.getCurrentThreadId();
+    if (!threadId) return;
+
+    const memoryStore = await storage.getStore('memory');
+    if (memoryStore) {
+      await githubSignals.init({ memory: memoryStore, resourceId: project.resourceId, threadId });
+    }
+  };
+
   // Sync hookManager session ID on thread changes
   if (hookManager) {
     harness.subscribe(event => {
@@ -689,5 +711,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,
+    initGithubSignals,
+    githubSignals,
   };
 }

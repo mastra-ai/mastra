@@ -91,6 +91,37 @@ describe('Harness signal messages', () => {
     ]);
   });
 
+  it('ignores blank numeric reminder attributes', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const thread = await harness.createThread();
+
+    await storage.stores.memory!.saveMessages({
+      messages: [
+        createSignal({
+          id: 'signal-blank-numeric',
+          type: 'system-reminder',
+          contents: 'No queued notifications',
+          attributes: { type: 'github-pending-notifications', prNumber: '', checkCount: ' ', count: '' },
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      ],
+    });
+
+    await expect(harness.listMessages()).resolves.toEqual([
+      expect.objectContaining({
+        content: [
+          expect.objectContaining({
+            type: 'system_reminder',
+            prNumber: undefined,
+            checkCount: undefined,
+            count: undefined,
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('processes sendMessage streams once through the active thread subscription', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);

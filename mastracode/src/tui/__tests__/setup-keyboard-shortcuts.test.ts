@@ -28,6 +28,7 @@ vi.mock('@mariozechner/pi-tui', () => ({
       autocompleteProviders.push({ commands });
     }
   },
+  Container: class {},
   Spacer: class {},
   Text: class {},
 }));
@@ -126,6 +127,19 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
     expect(commandNames).toContain('judge');
+    expect(commandNames).toContain('github');
+    expect(commandNames).toContain('github subscribe');
+    expect(commandNames).toContain('github unsubscribe');
+    expect(commandNames).toContain('github sync');
+    const githubCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'github') as
+      | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
+      | undefined;
+    expect(githubCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
+      'subscribe',
+      'unsubscribe',
+      'sync',
+    ]);
+    expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
       | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
       | undefined;

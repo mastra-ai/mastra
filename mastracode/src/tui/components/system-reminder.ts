@@ -8,7 +8,7 @@ import process from 'node:process';
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
-import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import { BOX_INDENT, extendedColors, getTermWidth, mastraBrand, theme } from '../theme.js';
 
 const MAX_COLLAPSED_LINES = 10;
 const GENERIC_DYNAMIC_REMINDER_PREFIX = 'When using guidance from a discovered instruction file';
@@ -19,6 +19,15 @@ export interface SystemReminderOptions {
   path?: string;
   goalMaxTurns?: number;
   judgeModelId?: string;
+  repo?: string;
+  prNumber?: number;
+  user?: string;
+  reviewState?: string;
+  url?: string;
+  kind?: string;
+  title?: string;
+  checkCount?: number;
+  count?: number;
 }
 
 export class SystemReminderComponent extends Container {
@@ -27,6 +36,14 @@ export class SystemReminderComponent extends Container {
   private readonly path?: string;
   private readonly goalMaxTurns?: number;
   private readonly judgeModelId?: string;
+  private readonly repo?: string;
+  private readonly prNumber?: number;
+  private readonly user?: string;
+  private readonly reviewState?: string;
+  private readonly url?: string;
+  private readonly title?: string;
+  private readonly checkCount?: number;
+  private readonly count?: number;
   private expanded = false;
 
   isExpanded(): boolean {
@@ -47,6 +64,14 @@ export class SystemReminderComponent extends Container {
     this.path = options.path;
     this.goalMaxTurns = options.goalMaxTurns;
     this.judgeModelId = options.judgeModelId;
+    this.repo = options.repo;
+    this.prNumber = options.prNumber;
+    this.user = options.user;
+    this.reviewState = options.reviewState;
+    this.url = options.url;
+    this.title = options.title;
+    this.checkCount = options.checkCount;
+    this.count = options.count;
 
     this.rebuild();
   }
@@ -72,20 +97,39 @@ export class SystemReminderComponent extends Container {
     const titleText = getReminderTitle(this.reminderType, this.path, {
       goalMaxTurns: this.goalMaxTurns,
       judgeModelId: this.judgeModelId,
+      title: this.title,
+      count: this.count,
     });
     const title = accent ? chalk.hex(accent).bold(titleText) : theme.bold(theme.fg('toolTitle', titleText));
     const metadataColor = (text: string) => theme.fg('dim', text);
     const bodyColor = (text: string) => theme.fg('text', text);
     const hintColor = (text: string) => theme.fg('dim', text);
     const termWidth = getTermWidth();
-    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
+    const maxInnerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
+
+    const metadataLines = [
+      this.path ? formatReminderPath(this.path) : undefined,
+      ...getGithubMetadataLines({
+        reminderType: this.reminderType,
+        repo: this.repo,
+        prNumber: this.prNumber,
+        user: this.user,
+        reviewState: this.reviewState,
+        url: this.url,
+        checkCount: this.checkCount,
+        count: this.count,
+      }),
+    ].filter((line): line is string => Boolean(line));
+
+    const messageLines = getDisplayMessageLines(this.reminderType, this.messageLines);
+    const contentWidth = Math.max(
+      20,
+      ...[titleText, ...metadataLines, ...messageLines].map(line => stripAnsi(line).length),
+    );
+    const innerWidth = Math.min(maxInnerWidth, contentWidth);
     const horizontal = '─'.repeat(innerWidth + 1);
 
-    const metadataLines = [this.path ? formatReminderPath(this.path) : undefined].filter((line): line is string =>
-      Boolean(line),
-    );
-
-    const wrappedMessageLines = wrapLines(this.messageLines, innerWidth);
+    const wrappedMessageLines = messageLines.length > 0 ? wrapLines(messageLines, innerWidth) : [];
     const shouldCollapse = wrappedMessageLines.length > MAX_COLLAPSED_LINES;
     const visibleMessageLines =
       shouldCollapse && !this.expanded ? wrappedMessageLines.slice(0, MAX_COLLAPSED_LINES) : wrappedMessageLines;
@@ -105,7 +149,7 @@ export class SystemReminderComponent extends Container {
       this.addChild(new Text(renderRow(bodyColor(line), innerWidth, border), BOX_INDENT, 0));
     }
 
-    if (shouldCollapse && !this.expanded) {
+    if (shouldCollapse && !this.expanded && visibleMessageLines.length > 0) {
       const remaining = wrappedMessageLines.length - visibleMessageLines.length;
       const hint = hintColor(`... ${remaining} more lines (ctrl+e to expand)`);
       this.addChild(new Text(renderRow(hint, innerWidth, border), BOX_INDENT, 0));
@@ -147,8 +191,10 @@ function resolveReminderMessage(message: string | undefined, path: string | unde
 function getReminderTitle(
   reminderType: string | undefined,
   path: string | undefined,
-  metadata: { goalMaxTurns?: number; judgeModelId?: string } = {},
+  metadata: { goalMaxTurns?: number; judgeModelId?: string; title?: string; count?: number } = {},
 ): string {
+  if (reminderType === 'github-pending-notifications') return getPendingGithubReminderTitle(metadata.count);
+  if (isGithubReminderType(reminderType)) return metadata.title ?? getGithubReminderTitle(reminderType);
   if (reminderType === 'goal') {
     const details = [
       typeof metadata.goalMaxTurns === 'number' ? `${metadata.goalMaxTurns} max attempts` : undefined,
@@ -161,7 +207,57 @@ function getReminderTitle(
 }
 
 function getReminderAccent(reminderType: string | undefined): string | undefined {
+  if (isGithubReminderType(reminderType)) return extendedColors.skyBlue;
   return reminderType === 'goal' || reminderType === 'goal-judge' ? mastraBrand.blue : undefined;
+}
+
+function isGithubReminderType(reminderType: string | undefined): boolean {
+  return (
+    reminderType === 'github-ci-failure' ||
+    reminderType === 'github-comment' ||
+    reminderType === 'github-review' ||
+    reminderType === 'github-command-error' ||
+    reminderType === 'github-pending-notifications'
+  );
+}
+
+function getGithubReminderTitle(reminderType: string | undefined): string {
+  if (reminderType === 'github-ci-failure') return 'GitHub CI failure';
+  if (reminderType === 'github-comment') return 'GitHub comment';
+  if (reminderType === 'github-review') return 'GitHub review';
+  if (reminderType === 'github-command-error') return 'GitHub polling error';
+  if (reminderType === 'github-pending-notifications') return getPendingGithubReminderTitle();
+  return 'GitHub notification';
+}
+
+function getPendingGithubReminderTitle(count = 0): string {
+  return `${count} pending GitHub ${count === 1 ? 'notification' : 'notifications'}`;
+}
+
+function getGithubMetadataLines(metadata: {
+  reminderType?: string;
+  repo?: string;
+  prNumber?: number;
+  user?: string;
+  reviewState?: string;
+  url?: string;
+  checkCount?: number;
+  count?: number;
+}): string[] {
+  if (!isGithubReminderType(metadata.reminderType)) return [];
+
+  return [
+    [metadata.repo, metadata.prNumber ? `#${metadata.prNumber}` : undefined].filter(Boolean).join(' '),
+    metadata.user ? `user: ${metadata.user}` : undefined,
+    metadata.reviewState ? `state: ${metadata.reviewState}` : undefined,
+    typeof metadata.checkCount === 'number' ? `failed checks: ${metadata.checkCount}` : undefined,
+    metadata.url,
+  ].filter((line): line is string => Boolean(line));
+}
+
+function getDisplayMessageLines(reminderType: string | undefined, messageLines: string[]): string[] {
+  if (reminderType === 'github-pending-notifications') return [];
+  return messageLines;
 }
 
 function getLoadingMessage(reminderType: string | undefined, path: string | undefined): string {

@@ -1,0 +1,307 @@
+---
+title: "Reference: MastraCode GitHub signals | Signals"
+description: "Reference for MastraCode GitHub PR signal subscriptions and shared notification polling."
+packages:
+  - "mastracode"
+---
+
+# MastraCode GitHub signals
+
+MastraCode GitHub signals connect code-agent threads to GitHub pull request events. The controller is local to MastraCode and powers the built-in `github` tool, PR subscription badge, pending-notification reminders, and shared notification polling.
+
+Use it when the MastraCode agent needs CI failure, PR comment, or review notifications while it continues working in a thread.
+
+## Usage
+
+Use the built-in MastraCode `github` tool to subscribe or unsubscribe the current thread.
+
+```ts
+await github({ action: 'subscribe', prNumber: 1234 })
+await github({ action: 'pending', prNumber: 1234 })
+await github({ action: 'unsubscribe', prNumber: 1234 })
+```
+
+MastraCode rehydrates persisted subscriptions during startup. New subscriptions establish a silent baseline so existing activity is not replayed. After that, MastraCode polls GitHub notifications on the configured interval and filters shared inbox notifications down to the subscribed PR.
+
+## Shared notification cache
+
+MastraCode stores GitHub notification state in its local LibSQL database (`mastra.db`). This intentionally replaces the earlier filesystem-cache design for MastraCode: LibSQL already provides the shared local disk file, atomic writes, indexed per-PR reads, and cross-process lease updates without a separate JSON cache directory or lockfile parser. The cache has two parts:
+
+- `github_notification_accounts` stores the account ETag, last check time, shared rate-limit backoff, and a master lease.
+- `github_notifications` stores bounded per-PR notification rows keyed by account, repository, and PR number.
+
+Only the process that owns the lease polls `gh api /notifications`. Other MastraCode instances read the cached PR rows and do not issue their own GitHub API calls. Polling uses `If-None-Match` when an ETag is available, treats `304 Not Modified` as unchanged, and writes shared `rateLimitedUntil` state when GitHub returns a rate-limit error. The LibSQL lease is the correctness mechanism; there is no Unix socket layer in this implementation, so clients observe updates on the normal polling cadence instead of receiving socket broadcasts.
+
+The cache keeps at most 50 notifications per PR, drops notifications older than 7 days, and prunes rows not touched for 14 days. GitHub inbox notifications are matched locally by repository plus `subject.url` or `latest_comment_url` ending in `/pulls/{number}` or `/issues/{number}`.
+
+### Verification note
+
+A live two-terminal MastraCode smoke test requires two interactive TUI sessions and a real GitHub PR notification arriving during the test, so it was not run in this non-interactive verification environment. The shared-cache behavior is covered by automated smoke-style tests that create separate `GithubNotificationStore`/`GithubNotificationPoller` instances against the same LibSQL database file. Those tests verify that only one instance acquires the master lease and calls `gh api /notifications`, client instances read the cached PR notifications, stale leases recover, ETag/`304` responses avoid reprocessing, shared `rateLimitedUntil` state suppresses additional GitHub calls, and multiple PR subscriptions emit from cached rows without extra inbox polls.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'GithubSignalsOptions',
+    description: 'Configuration for GitHub polling, signal helpers, and the optional agent tool.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'repo',
+        type: 'string',
+        description: 'Default GitHub repository in owner/name format. Signal-level repo values override this value.',
+        isOptional: true,
+      },
+      {
+        name: 'pollIntervalMs',
+        type: 'number',
+        description:
+          'Polling interval for subscribed PRs. The poller continues to fetch updates while a thread is active, but queues full notifications until they are delivered.',
+        isOptional: true,
+        defaultValue: '20000',
+      },
+      {
+        name: 'pendingFlushMs',
+        type: 'number',
+        description: 'How long pending notifications can stay queued before they are delivered automatically.',
+        isOptional: true,
+        defaultValue: '300000',
+      },
+      {
+        name: 'includeTool',
+        type: 'boolean',
+        description:
+          'Whether to add a github tool that lets the agent subscribe, unsubscribe, or deliver pending notifications for the current thread.',
+        isOptional: true,
+        defaultValue: 'true',
+      },
+      {
+        name: 'commandRunner',
+        type: 'GithubCommandRunner',
+        description: 'Function used to run GitHub CLI commands. The default runner calls gh with execFile.',
+        isOptional: true,
+      },
+      {
+        name: 'now',
+        type: '() => Date',
+        description: 'Clock used for metadata timestamps and tests.',
+        isOptional: true,
+      },
+      {
+        name: 'authorizedPermissions',
+        type: "Array<'admin' | 'maintain' | 'write' | 'triage' | 'read'>",
+        description:
+          'Repository permissions allowed to trigger comment and review notifications. Other users are ignored.',
+        isOptional: true,
+        defaultValue: "['admin', 'maintain', 'write']",
+      },
+      {
+        name: 'authorizedBots',
+        type: 'string[]',
+        description:
+          'Bot logins allowed to trigger comment and review notifications, such as coderabbitai[bot]. Bots are denied unless explicitly listed.',
+        isOptional: true,
+        defaultValue: '[]',
+      },
+    ],
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'processor',
+    type: 'Processor',
+    description:
+      'Input processor that detects GitHub subscribe and unsubscribe signals, persists thread metadata, and optionally adds the github tool.',
+  },
+]}
+/>
+
+## Signal helpers
+
+MastraCode uses `ghSignals` internally to record subscribe, unsubscribe, and notification reminders.
+
+### `ghSignals.prSubscribe(input)`
+
+Creates a signal that subscribes the current thread to a GitHub pull request.
+
+```typescript
+await agent.sendSignal(ghSignals.prSubscribe({ prNumber: 1234, repo: 'mastra-ai/mastra' }), {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+```
+
+Returns: `CreatedAgentSignal`.
+
+### `ghSignals.prUnsubscribe(input)`
+
+Creates a signal that unsubscribes the current thread from a GitHub pull request.
+
+```typescript
+await agent.sendSignal(ghSignals.prUnsubscribe({ prNumber: 1234, repo: 'mastra-ai/mastra' }), {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+```
+
+Returns: `CreatedAgentSignal`.
+
+### `ghSignals.prNotification(input)`
+
+Creates an internal notification signal for poller output. Most applications do not need to call this helper directly.
+
+```typescript
+const signal = ghSignals.prNotification({
+  prNumber: 1234,
+  repo: 'mastra-ai/mastra',
+  kind: 'review',
+  title: 'GitHub review',
+  details: 'test2',
+  user: 'TylerBarnes',
+  reviewState: 'COMMENTED',
+})
+```
+
+Returns: `CreatedAgentSignal`.
+
+Notification signals use compact GitHub-specific reminder types such as `github-ci-failure`, `github-comment`, `github-review`, `github-command-error`, and `github-pending-notifications`. Metadata like PR number, repo, user, review state, URL, and failed check count is stored on signal attributes/metadata while the message body stays concise for model context.
+
+Comment and review notifications are authorization-gated. By default, only users with `admin`, `maintain`, or `write` repository permissions can trigger those notifications. Bot users must be explicitly included in `authorizedBots`.
+
+When the processor detects likely PR work in recent shell/tool activity, such as `gh pr` commands or `git push`, and the thread is not subscribed yet, it emits a one-time `github-subscription-hint` reminder asking the agent to use the `github` subscribe tool. MastraCode also shows active PR subscriptions as a sky-blue `PR#123` badge next to the thread title in the status line.
+
+## Methods
+
+### Agent registration
+
+#### `addAgent(agent, options?)`
+
+Registers an agent so the poller can send notification signals to it.
+
+```typescript
+github.addAgent(agent)
+```
+
+Returns: `GithubSignals`.
+
+#### `removeAgent(agentOrId)`
+
+Removes an agent and stops polling subscriptions owned by that agent.
+
+```typescript
+github.removeAgent('code-agent')
+```
+
+### Subscription lifecycle
+
+#### `init(options)`
+
+Explicitly rehydrates persisted subscriptions from memory. Call this during application startup after registering agents.
+
+```typescript
+await github.init({ memory, resourceId: 'user_123' })
+```
+
+Returns: `Promise<GithubPRSubscriptionMetadata[]>`.
+
+#### `start(subscriptions?)`
+
+Adds explicit subscriptions for future idle-time polls.
+
+```typescript
+github.start([
+  {
+    agentId: 'code-agent',
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    repo: 'mastra-ai/mastra',
+    prNumber: 1234,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+])
+```
+
+Returns: `GithubSignals`.
+
+#### `addSubscription(subscription)`
+
+Adds one subscription for future polls.
+
+```typescript
+github.addSubscription({
+  agentId: 'code-agent',
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+  repo: 'mastra-ai/mastra',
+  prNumber: 1234,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+})
+```
+
+#### `removeSubscription(subscription)`
+
+Removes one active subscription.
+
+```typescript
+github.removeSubscription({
+  agentId: 'code-agent',
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+  repo: 'mastra-ai/mastra',
+  prNumber: 1234,
+})
+```
+
+### Polling and pending delivery
+
+#### `markActive(context)` / `markIdle(context)`
+
+Marks a thread as actively running or idle. The processor calls these lifecycle hooks automatically. Active threads are still polled, but full GitHub notifications are queued while the run is active. The thread receives a compact `github-pending-notifications` reminder that tells the agent to call the `github` tool with `action: 'pending'`.
+
+```typescript
+github.markActive({ agentId: 'code-agent', resourceId: 'user_123', threadId: 'thread_456' })
+await github.markIdle({ agentId: 'code-agent', resourceId: 'user_123', threadId: 'thread_456' })
+```
+
+Pending notifications are delivered in either of these cases:
+
+- The agent calls the `github` tool with `action: 'pending'`. The tool returns `notifications will now be delivered`, then sends the queued notifications as normal signals.
+- The oldest pending notification reaches `pendingFlushMs`. The default is five minutes.
+
+```typescript
+await tools.github.execute({ action: 'pending' })
+await tools.github.execute({ action: 'pending', prNumber: 1234 })
+```
+
+#### `poll(context?)`
+
+Runs one REST poll cycle for subscriptions. Pass a thread context to poll only that thread.
+
+```typescript
+await github.poll()
+```
+
+#### `destroy()`
+
+Clears registered agents, active subscriptions, pending notifications, and active-thread state.
+
+```typescript
+github.destroy()
+```
+
+## Thread metadata
+
+The processor stores subscription state under `thread.metadata.mastra.githubSignals`. The metadata includes processed signal IDs and active subscriptions keyed by repository and PR number. Each subscription also stores watermarks for failed checks, latest comment timestamp, and latest review timestamp so the first poll after subscribing only reports future changes.
+
+## GitHub CLI requirements
+
+The default command runner uses `gh api` REST endpoints with `execFile`. It reads PR head metadata, issue comments, PR reviews, commit check runs, and collaborator permissions. The environment running the agent must have the GitHub CLI installed and authenticated. Provide `commandRunner` to use a custom GitHub client or to mock GitHub in tests.

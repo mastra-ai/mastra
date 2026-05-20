@@ -38,6 +38,7 @@ function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIS
     ui: { requestRender: vi.fn() },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
+    activeGithubPrSubscriptions: [],
     editor: { escapeEnabled: false },
     goalManager: {
       getGoal: vi.fn(),
@@ -54,6 +55,7 @@ function createMockEctx(): EventHandlerContext {
     showFormattedError: vi.fn(),
     renderExistingMessages: vi.fn().mockResolvedValue(undefined),
     refreshModelAuthStatus: vi.fn().mockResolvedValue(undefined),
+    updateStatusLine: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
   } as unknown as EventHandlerContext;
@@ -155,6 +157,20 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(state.taskToolInsertIndex).toBe(-1);
+  });
+
+  it('clears stale GitHub PR subscriptions when changed thread metadata is unavailable', async () => {
+    state.activeGithubPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 16515 }];
+
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'missing-thread', previousThreadId: 'old-thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.activeGithubPrSubscriptions).toEqual([]);
+    expect(state.goalManager?.loadFromThreadMetadata).toHaveBeenCalledWith(undefined);
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
   });
 
   it('clears taskProgress UI component on thread_changed', async () => {

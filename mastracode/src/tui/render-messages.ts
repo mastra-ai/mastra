@@ -25,7 +25,9 @@ import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { addGithubPrSubscriptionBadge, removeGithubPrSubscriptionBadge } from './state.js';
 import type { TUIState } from './state.js';
+import { updateStatusLine } from './status-line.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
 // Re-export so existing consumers can still import from here
@@ -139,7 +141,22 @@ function renderTaskTransitionFromHistory(
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+  options: {
+    message?: string;
+    path?: string;
+    gapText?: string;
+    goalMaxTurns?: number;
+    judgeModelId?: string;
+    repo?: string;
+    prNumber?: number;
+    user?: string;
+    reviewState?: string;
+    url?: string;
+    kind?: string;
+    title?: string;
+    checkCount?: number;
+    count?: number;
+  },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -154,6 +171,15 @@ function createReminderComponent(
     path: options.path,
     goalMaxTurns: options.goalMaxTurns,
     judgeModelId: options.judgeModelId,
+    repo: options.repo,
+    prNumber: options.prNumber,
+    user: options.user,
+    reviewState: options.reviewState,
+    url: options.url,
+    kind: options.kind,
+    title: options.title,
+    checkCount: options.checkCount,
+    count: options.count,
   });
 }
 
@@ -293,13 +319,48 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      repo?: string;
+      prNumber?: number;
+      user?: string;
+      reviewState?: string;
+      url?: string;
+      kind?: string;
+      title?: string;
+      checkCount?: number;
+      count?: number;
+    };
+    if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-subscribe') {
+      state.activeGithubPrSubscriptions = addGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
+        prNumber: goalMetadata.prNumber,
+        ...(goalMetadata.repo ? { repo: goalMetadata.repo } : {}),
+      });
+      updateStatusLine(state);
+    } else if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-unsubscribe') {
+      state.activeGithubPrSubscriptions = removeGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
+        prNumber: goalMetadata.prNumber,
+        ...(goalMetadata.repo ? { repo: goalMetadata.repo } : {}),
+      });
+      updateStatusLine(state);
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
       gapText: reminderPart.gapText,
       goalMaxTurns: goalMetadata.goalMaxTurns,
       judgeModelId: goalMetadata.judgeModelId,
+      repo: goalMetadata.repo,
+      prNumber: goalMetadata.prNumber,
+      user: goalMetadata.user,
+      reviewState: goalMetadata.reviewState,
+      url: goalMetadata.url,
+      kind: goalMetadata.kind,
+      title: goalMetadata.title,
+      checkCount: goalMetadata.checkCount,
+      count: goalMetadata.count,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);

@@ -70,7 +70,7 @@ import {
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 
 // =============================================================================
@@ -97,7 +97,9 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
   }
-  state.goalManager.loadFromThreadMetadata(initThread?.metadata as Record<string, unknown> | undefined);
+  const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+  state.goalManager.loadFromThreadMetadata(metadata);
 }
 
 function shouldUseCaffeinate(): boolean {
@@ -511,6 +513,10 @@ export class MastraTUI {
     // Sync current thread metadata — the thread_changed event from
     // promptForThreadSelection fired before we subscribed above.
     await syncInitialThreadState(this.state);
+    updateStatusLine(this.state);
+
+    await this.state.harness.ensureCurrentThreadSubscription();
+    await this.state.options.initGithubSignals?.();
 
     // Start the UI
     this.state.ui.start();
@@ -969,6 +975,7 @@ export class MastraTUI {
       harness: this.state.harness,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      githubSignals: this.state.options.githubSignals,
       analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,

@@ -967,6 +967,15 @@ export type HarnessMessageContent =
       timestamp?: string;
       goalMaxTurns?: number;
       judgeModelId?: string;
+      repo?: string;
+      prNumber?: number;
+      user?: string;
+      reviewState?: string;
+      url?: string;
+      kind?: string;
+      title?: string;
+      checkCount?: number;
+      count?: number;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }

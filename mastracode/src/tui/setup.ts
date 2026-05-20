@@ -337,6 +337,19 @@ export function setupAutocomplete(state: TUIState): void {
       name: 'yolo',
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
+    {
+      name: 'github',
+      description: 'Manage GitHub PR notifications',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to a PR' },
+          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from a PR' },
+          { value: 'sync', label: 'sync', description: 'Sync and deliver pending PR notifications' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    { name: 'github subscribe', description: 'Subscribe this thread to a GitHub PR' },
+    { name: 'github unsubscribe', description: 'Unsubscribe this thread from a GitHub PR' },
+    { name: 'github sync', description: 'Sync GitHub PR notifications for this thread' },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
