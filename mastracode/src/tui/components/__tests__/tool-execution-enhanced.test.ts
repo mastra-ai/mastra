@@ -688,8 +688,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     expect(stripAnsi(output)).toContain(`$ ${command}`);
     expect(output).toContain(chalk.blue('if'));
-    expect(output).toContain(chalk.hex('#93c5fd')('echo'));
-    expect(output).toContain(chalk.hex('#f6c177')('-f'));
+    expect(output).toContain(theme.fg('toolArgs', 'echo'));
+    expect(output).toContain(theme.fg('toolArgs', '-f'));
   });
 
   it('keeps shell keywords inside quoted strings highlighted as strings', () => {
@@ -721,7 +721,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const footerLines = output.split('\n').filter(line => line.startsWith('│') && line.trim() !== '│');
     expect(output).not.toContain('…');
     expect(output).toContain('--reporter=dot');
-    expect(component.render(60).join('\n')).toContain(chalk.hex('#f6c177')('--reporter=dot'));
+    expect(component.render(60).join('\n')).toContain(theme.fg('toolArgs', '--reporter=dot'));
     expect(footerLines.length).toBeGreaterThan(1);
     expect(footerLines[0]).toContain('│ $ pnpm');
     expect(footerLines[1]).toMatch(/^│   \S/);

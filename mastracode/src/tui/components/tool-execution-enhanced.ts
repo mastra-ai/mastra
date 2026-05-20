@@ -518,11 +518,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         }
         if (/^--?[A-Za-z0-9][\w-]*(?:=.*)?$/.test(token)) {
           expectsCommand = false;
-          return chalk.hex('#f6c177')(token);
+          return theme.fg('toolArgs', token);
         }
         if (expectsCommand || SHELL_BUILTINS.has(token)) {
           expectsCommand = false;
-          return chalk.hex('#93c5fd')(token);
+          return theme.fg('toolArgs', token);
         }
         expectsCommand = false;
         return theme.fg('toolArgs', token);
