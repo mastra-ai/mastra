@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "mastra": "link:__WORKTREE_ROOT__/packages/cli",
-    "@types/node": "^22.10.0"
+    "@types/node": "^22.19.19"
   },
   "pnpm": {
     "overrides": {

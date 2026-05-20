@@ -44,7 +44,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/testing": "^10.4.15",
     "@types/express": "^5.0.5",
-    "@types/node": "^20.19.30",
+    "@types/node": "^20.19.41",
     "@ai-sdk/openai": "^2.0.106",
     "cors": "^2.8.5",
     "@types/cors": "^2.8.19",
