@@ -55,9 +55,9 @@ export class WorkflowScheduler extends MastraBase {
     this.#schedulesStore = schedulesStore;
     this.#pubsub = pubsub;
     this.#config = {
+      ...config,
       tickIntervalMs: config?.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS,
       batchSize: config?.batchSize ?? DEFAULT_BATCH_SIZE,
-      ...config,
     };
   }
 

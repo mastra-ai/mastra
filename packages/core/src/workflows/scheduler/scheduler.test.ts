@@ -412,4 +412,39 @@ describe('WorkflowScheduler', () => {
 
     await scheduler.stop();
   });
+
+  it('applies defaults when config values are explicitly undefined', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+
+    // Simulate a user config where optional fields are present but undefined,
+    // e.g. from destructuring a partial object.
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { enabled: true, tickIntervalMs: undefined, batchSize: undefined },
+    });
+
+    const listDue = vi.spyOn(store, 'listDueSchedules');
+    const siSpy = vi.spyOn(globalThis, 'setInterval');
+
+    await scheduler.start();
+
+    // batchSize should fall back to 100 (the default), not undefined/NaN
+    expect(listDue).toHaveBeenCalled();
+    const batchArg = listDue.mock.calls[0]![1];
+    expect(batchArg).toBe(100);
+
+    // tickIntervalMs should fall back to 10_000 (the default), not undefined
+    // setInterval is called once after the warm-up tick
+    const intervalCall = siSpy.mock.calls.find(call => {
+      const cb = call[0];
+      return typeof cb === 'function' && call[1] !== undefined;
+    });
+    expect(intervalCall).toBeDefined();
+    expect(intervalCall![1]).toBe(10_000);
+
+    await scheduler.stop();
+    siSpy.mockRestore();
+  });
 });
