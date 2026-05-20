@@ -1,5 +1,54 @@
 # @mastra/core
 
+## 1.36.0-alpha.8
+
+### Patch Changes
+
+- Fixed type error when a tool calls `suspend(...)` inside `execute` while also declaring an `outputSchema`. The `execute` return type now allows `void` in addition to the declared output shape, so the idiomatic `return await suspend(...)` pattern type-checks correctly. ([#16799](https://github.com/mastra-ai/mastra/pull/16799))
+
+## 1.36.0-alpha.7
+
+### Minor Changes
+
+- Added new editor configuration primitives for browser providers, agent builder integration, and stored-agent visibility. ([#16778](https://github.com/mastra-ai/mastra/pull/16778))
+
+  **New: `BrowserProvider` interface**
+
+  Implement a browser provider to expose browser automation tools to agents via the editor. Each provider declares an id, name, and config schema, then returns a `MastraBrowser` instance from `createBrowser`.
+
+  ```ts
+  import type { BrowserProvider } from '@mastra/core/editor';
+
+  const myProvider: BrowserProvider = {
+    id: 'my-browser',
+    name: 'My Browser',
+    description: 'Custom browser automation',
+    configSchema: z.object({ apiKey: z.string() }),
+    createBrowser: async config => {
+      return createMyBrowser(config.apiKey);
+    },
+  };
+  ```
+
+  **New: `MastraEditorConfig.browsers` and `.builder`**
+
+  Wire browser providers and agent-builder options into the editor:
+
+  ```ts
+  new MastraEditor({
+    browsers: { 'my-browser': myProvider },
+    builder: { features: { agent: { favorites: true } } },
+  });
+  ```
+
+  **New: `visibility` on `updateAgentMeta`**
+
+  Set an agent's visibility (private or public) through the editor namespace:
+
+  ```ts
+  await editor.agent.updateAgentMeta('agent-id', { visibility: 'public' });
+  ```
+
 ## 1.36.0-alpha.6
 
 ### Patch Changes
