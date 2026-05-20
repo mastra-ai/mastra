@@ -114,16 +114,18 @@ describe('AgentChannels', () => {
       expect(channels.channelConfig).toBe(originalConfig);
     });
 
-    it('preserves the streaming option', () => {
+    it('preserves the per-adapter streaming option', () => {
       const adapter = createMockAdapter('test');
       const streaming = new AgentChannels({
-        adapters: { test: adapter },
+        adapters: { test: { adapter, streaming: { updateIntervalMs: 250 } } },
+      });
+      expect(streaming.channelConfig.adapters.test).toMatchObject({
         streaming: { updateIntervalMs: 250 },
-      } as any);
-      expect(streaming.channelConfig.streaming).toEqual({ updateIntervalMs: 250 });
+      });
 
       const buffered = new AgentChannels({ adapters: { test: createMockAdapter('test') } });
-      expect(buffered.channelConfig.streaming).toBeUndefined();
+      // No adapter config wrapping means no streaming opt-in.
+      expect((buffered.channelConfig.adapters.test as any).streaming).toBeUndefined();
     });
 
     it('lets a provider rebuild AgentChannels while preserving existing adapters', () => {
