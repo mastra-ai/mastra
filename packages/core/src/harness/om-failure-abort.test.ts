@@ -84,4 +84,47 @@ describe('Harness OM failure abort behavior', () => {
     expect((harness as any).abortRequested).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
+
+  it('emits OM extraction events without aborting the stream', async () => {
+    const harness = createHarness();
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    await (harness as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-extracted',
+          data: {
+            cycleId: 'c3',
+            operationType: 'observation',
+            extractedValues: { 'active-topic': { topic: 'Subconscious' } },
+          },
+        };
+        yield {
+          type: 'data-om-extraction-failed',
+          data: {
+            cycleId: 'c4',
+            operationType: 'reflection',
+            error: 'Schema mismatch',
+          },
+        };
+        yield { type: 'text-start', payload: { id: 't3' } };
+      })(),
+    });
+
+    expect(events).toContainEqual({
+      type: 'om_extraction_end',
+      cycleId: 'c3',
+      operationType: 'observation',
+      extractedValues: { 'active-topic': { topic: 'Subconscious' } },
+    });
+    expect(events).toContainEqual({
+      type: 'om_extraction_failed',
+      cycleId: 'c4',
+      operationType: 'reflection',
+      error: 'Schema mismatch',
+    });
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'message_start')).toBe(true);
+  });
 });

@@ -1018,6 +1018,8 @@ export type MastraPartType =
   | 'data-om-observation-start'
   | 'data-om-observation-end'
   | 'data-om-observation-failed'
+  | 'data-om-extracted'
+  | 'data-om-extraction-failed'
   | 'data-om-buffering-start'
   | 'data-om-buffering-end'
   | 'data-om-buffering-failed'
