@@ -1,6 +1,5 @@
 ---
 '@mastra/core': patch
-'@internal/storage-test-utils': patch
 ---
 
 Consolidate in-memory observability tests into the shared vNext storage test suite.
