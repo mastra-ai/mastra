@@ -1,5 +1,15 @@
 # @mastra/slack
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- - `SlackProvider.connect()` now merges with existing channel adapters instead of replacing them, preserving adapters the agent author already configured (e.g. Discord). ([#16517](https://github.com/mastra-ai/mastra/pull/16517))
+  - Slack interactive payloads (button clicks, modal submissions) no longer return `400 Malformed JSON body`. The provider only JSON-parses the body for the events callback path and forwards form-urlencoded payloads to the adapter's webhook handler unchanged.
+  - Bumped `chat` to `^4.29.0`.
+- Updated dependencies [[`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb)]:
+  - @mastra/core@1.36.0-alpha.10
+
 ## 1.2.0
 
 ### Minor Changes

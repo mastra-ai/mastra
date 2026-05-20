@@ -1,5 +1,37 @@
 # @mastra/core
 
+## 1.36.0-alpha.10
+
+### Minor Changes
+
+- Enterprise edition now automatically captures PostHog telemetry for EE license checks and feature usage, including license validation status, RBAC access resolution, FGA authorization calls, and EE feature invocation metadata. Telemetry is enabled by default for EE customers and can be disabled with `MASTRA_TELEMETRY_DISABLED=1`; community users are unaffected. ([#16660](https://github.com/mastra-ai/mastra/pull/16660))
+
+### Patch Changes
+
+- Fixed task_update to auto-demote previously in_progress tasks instead of returning an error when moving another task to in_progress. ([#16843](https://github.com/mastra-ai/mastra/pull/16843))
+
+- Channels now serialize messages per thread to keep conversations in order, and the tool approval flow is fixed end-to-end: ([#16517](https://github.com/mastra-ai/mastra/pull/16517))
+  - Messages arriving while the agent is busy are delivered into the running agent loop instead of starting a new, conflicting stream on the same thread. Each Mastra thread shares one subscription, and channel/author facts (platform, message id, author name) are surfaced on the stored message under `providerMetadata.mastra.channels.<platform>`.
+  - Tool approval flow: approving now drains the resumed run so the card is updated with the tool result and any follow-up assistant text is posted. Denying now resumes the run via `declineToolCall` instead of leaving it suspended. `agent.subscribeToThread()` consumers also receive chunks from resumed runs (the subscription used to drop the second registration for a resumed run that kept its original `runId`).
+  - The original `ChannelConfig` is now exposed via the new `AgentChannels.channelConfig` field so channel providers can merge with existing adapters instead of replacing them.
+  - Bumped `chat` to `^4.29.0`.
+
+- Fixed trajectory scorers so tool calls stored only in V2 content.parts are included in extracted eval steps. ([#15439](https://github.com/mastra-ai/mastra/pull/15439))
+
+- Fixed thread metadata updates to merge with existing fields instead of replacing them. Previously, updating a thread's metadata would silently drop any fields not included in the update. Now existing metadata fields are preserved when updating. ([#16846](https://github.com/mastra-ai/mastra/pull/16846))
+
+  Fixed MockMemory working memory tool to support partial JSON updates when using schema-based working memory. Previously, sending a partial update would overwrite all existing data. Now for schema-based configs, unchanged fields are preserved automatically (matching @mastra/memory behavior).
+
+  Fixed MockMemory constructor to preserve workingMemory config options (like schema) when enableWorkingMemory is true.
+
+- Remove hardcoded `/api/` prefix check from `registerApiRoute()`. The check incorrectly rejected custom routes starting with `/api/` even when users configured a different `apiPrefix`. Reserved-path validation is already handled at the server adapter level using the actual configured prefix. ([#16859](https://github.com/mastra-ai/mastra/pull/16859))
+
+- Fixed scheduler performance and correctness issues that could cause excessive Postgres CPU and noisy failed runs. ([#16805](https://github.com/mastra-ai/mastra/pull/16805))
+  - Added missing indexes on the schedules tables that the tick loop polls every 10 seconds: `(status, next_fire_at)` on `mastra_schedules` and `(schedule_id, actual_fire_at)` on `mastra_schedule_triggers`. Without these the scheduler performed a full sequential scan on every tick.
+  - The scheduler tick loop is now only started when at least one workflow declares a schedule (or `scheduler.enabled` is set explicitly), so deployments without scheduled workflows no longer poll the database at all.
+  - The scheduler now validates that a schedule's target workflow is still registered before firing it. Schedules whose target workflow has been removed from the Mastra config are skipped for a short grace window and then deleted, so stale rows stop producing failed workflow runs forever.
+  - The scheduler is now lazily initialized inside `startWorkers()`. Accessing `mastra.scheduler` before `startWorkers()` runs throws a descriptive error instead of returning a half-initialized instance.
+
 ## 1.36.0-alpha.9
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # @mastra/auth-okta
 
+## 0.0.3-alpha.0
+
+### Patch Changes
+
+- Fix endpoint URL construction for Okta org authorization servers. ([#15694](https://github.com/mastra-ai/mastra/pull/15694))
+
+  `MastraAuthOkta` concatenated `/v1/authorize` (and `/token`, `/keys`, `/logout`) directly onto `OKTA_ISSUER`. That yields the right endpoint for a custom authorization server (`https://{domain}/oauth2/default` → `.../oauth2/default/v1/authorize`), but 404s on an Okta org authorization server (`https://{domain}` → `.../v1/authorize`, whereas the real org endpoint is `.../oauth2/v1/authorize`).
+
+  An internal `endpointBase` is now derived from the issuer — verbatim when it already contains `/oauth2/`, otherwise `${issuer}/oauth2` — and used for the authorize, token, keys, and logout URLs. JWT `iss`-claim validation still uses the raw issuer so token validation stays correct on both server types. Trailing slashes on the issuer are also normalized so `OKTA_ISSUER=https://{domain}/` no longer produces `.../oauth2//v1/...`.
+
+- Updated dependencies [[`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb)]:
+  - @mastra/core@1.36.0-alpha.10
+
 ## 0.0.2
 
 ### Patch Changes
