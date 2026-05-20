@@ -15,8 +15,14 @@ const builderFeatures = {
   avatarUpload: true,
   model: true,
   favorites: true,
-  browser: true,
+  browser: false,
 };
+
+const defaultTabsProps = {
+  agentId: 'agent-1',
+};
+
+const channelPlatforms: Array<{ id: string; isConfigured: boolean }> = [];
 
 const modelPolicy = {
   active: false,
@@ -40,6 +46,10 @@ vi.mock('@/domains/llm', () => ({
   useLLMProviders: () => ({ data: [], isPending: false }),
   ProviderLogo: () => null,
   cleanProviderId: (id: string) => id,
+}));
+
+vi.mock('@/domains/agents/hooks/use-channels', () => ({
+  useChannelPlatforms: () => ({ data: channelPlatforms, isLoading: false }),
 }));
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => {
@@ -74,10 +84,11 @@ describe('AgentProfileTabs', () => {
       avatarUpload: true,
       model: true,
       favorites: true,
-      browser: true,
+      browser: false,
     });
     modelPolicy.active = false;
     modelPolicy.pickerVisible = true;
+    channelPlatforms.length = 0;
   });
 
   afterEach(() => {
@@ -88,6 +99,7 @@ describe('AgentProfileTabs', () => {
     const { getAllByRole } = render(
       <Wrapper>
         <AgentProfileTabs
+          {...defaultTabsProps}
           availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]}
           availableSkills={[{ id: 'skill-a', name: 'skill-a' } as never]}
         />
@@ -101,7 +113,7 @@ describe('AgentProfileTabs', () => {
   it('hides the Tools tab when no tools are available', () => {
     const { getAllByRole } = render(
       <Wrapper>
-        <AgentProfileTabs availableAgentTools={[]} availableSkills={[]} />
+        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
       </Wrapper>,
     );
 
@@ -114,7 +126,11 @@ describe('AgentProfileTabs', () => {
     setFeatures({ skills: false });
     const { getAllByRole } = render(
       <Wrapper>
-        <AgentProfileTabs availableAgentTools={[]} availableSkills={[{ id: 'skill-a', name: 'skill-a' } as never]} />
+        <AgentProfileTabs
+          {...defaultTabsProps}
+          availableAgentTools={[]}
+          availableSkills={[{ id: 'skill-a', name: 'skill-a' } as never]}
+        />
       </Wrapper>,
     );
 
@@ -126,7 +142,7 @@ describe('AgentProfileTabs', () => {
     setFeatures({ model: false });
     const { getAllByRole } = render(
       <Wrapper>
-        <AgentProfileTabs availableAgentTools={[]} availableSkills={[]} />
+        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
       </Wrapper>,
     );
 
@@ -135,11 +151,35 @@ describe('AgentProfileTabs', () => {
     expect(tabs).toContain('Instructions');
   });
 
+  it('shows the Integrations tab when Slack is configured', () => {
+    channelPlatforms.push({ id: 'slack', isConfigured: true });
+    const { getAllByRole } = render(
+      <Wrapper>
+        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
+      </Wrapper>,
+    );
+
+    const tabs = getAllByRole('tab').map(tab => tab.textContent);
+    expect(tabs).toContain('Integrations');
+  });
+
+  it('hides the Integrations tab when Slack is not configured', () => {
+    channelPlatforms.push({ id: 'slack', isConfigured: false });
+    const { getAllByRole } = render(
+      <Wrapper>
+        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
+      </Wrapper>,
+    );
+
+    const tabs = getAllByRole('tab').map(tab => tab.textContent);
+    expect(tabs).not.toContain('Integrations');
+  });
+
   it('always renders the Instructions tab', () => {
     setFeatures({ model: false, tools: false, agents: false, workflows: false, skills: false });
     const { getAllByRole } = render(
       <Wrapper>
-        <AgentProfileTabs availableAgentTools={[]} availableSkills={[]} />
+        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
       </Wrapper>,
     );
 

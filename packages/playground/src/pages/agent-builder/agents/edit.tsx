@@ -190,6 +190,7 @@ const ProfileSlot = () => {
         actions={heroActions}
       />
       <AgentProfileTabs
+        agentId={agentId}
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}
         disabled={isRunning}
