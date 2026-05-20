@@ -1,12 +1,11 @@
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
-import { Skeleton, Txt, cn } from '@mastra/playground-ui';
-import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import { Skeleton, Txt } from '@mastra/playground-ui';
+import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentSearchbar } from '../agent-searchbar';
+import { AgentSelectableCard } from '../agent-selectable-card';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { toProviders } from '@/domains/agent-builder/services/to-providers';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
@@ -120,87 +119,21 @@ const ModelList = ({ visibleEntries, selectedProvider, selectedModel, disabled, 
         const cleanedProvider = cleanProviderId(entry.provider);
         const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
 
-        return <ModelListEntry entry={entry} isSelected={isSelected} disabled={disabled} onChange={onChange} />;
+        return (
+          <AgentSelectableCard
+            key={`${entry.provider}__${entry.model}`}
+            icon={<ProviderLogo providerId={entry.provider} size={32} />}
+            title={entry.model}
+            subtitle={entry.providerName}
+            isSelected={isSelected}
+            disabled={disabled}
+            onClick={() => onChange(entry.provider, entry.model)}
+            testId={`model-card-${entry.provider}-${entry.model}`}
+            checkTestId={`model-card-check-${entry.provider}-${entry.model}`}
+          />
+        );
       })}
     </div>
-  );
-};
-
-interface ModelListEntryProps {
-  entry: ModelInfo;
-  isSelected: boolean;
-  disabled: boolean;
-  onChange: (provider: string, model: string) => void;
-}
-
-const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntryProps) => {
-  const agentColor = useAgentColor();
-  const hasAgentColor = agentColor !== null;
-  const useAgentColors = isSelected && hasAgentColor;
-
-  const containerStyle: CSSProperties | undefined = hasAgentColor
-    ? {
-        ['--agent-color-bg' as string]: agentColor.background,
-        ...(isSelected ? { borderColor: agentColor.background } : null),
-      }
-    : undefined;
-
-  const checkStyle: CSSProperties | undefined = useAgentColors
-    ? {
-        borderColor: agentColor.background,
-        backgroundColor: agentColor.background,
-        color: agentColor.foreground,
-      }
-    : undefined;
-
-  return (
-    <button
-      key={`${entry.provider}__${entry.model}`}
-      type="button"
-      onClick={() => onChange(entry.provider, entry.model)}
-      disabled={disabled}
-      aria-pressed={isSelected}
-      data-testid={`model-card-${entry.provider}-${entry.model}`}
-      style={containerStyle}
-      className={cn(
-        'flex items-center gap-3 rounded-lg border bg-surface3 p-4 text-left transition-colors cursor-pointer active:opacity-90',
-        hasAgentColor
-          ? 'focus-visible:!border-[var(--agent-color-bg)] focus-visible:outline-none'
-          : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
-        hasAgentColor && 'hover:bg-surface4',
-        isSelected
-          ? useAgentColors
-            ? 'bg-surface4'
-            : 'border-accent1 bg-surface4 ring-1 ring-accent1'
-          : 'border-border1',
-        disabled && 'cursor-not-allowed opacity-60',
-      )}
-    >
-      <ProviderLogo providerId={entry.provider} size={32} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Txt variant="ui-md" className="truncate font-medium text-neutral6">
-          {entry.model}
-        </Txt>
-        <Txt variant="ui-sm" className="truncate text-neutral3">
-          {entry.providerName}
-        </Txt>
-      </div>
-      <span
-        aria-hidden="true"
-        data-testid={`model-card-check-${entry.provider}-${entry.model}`}
-        style={checkStyle}
-        className={cn(
-          'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-          isSelected
-            ? useAgentColors
-              ? ''
-              : 'border-accent1 bg-accent1 text-surface1'
-            : 'border-border1 bg-transparent',
-        )}
-      >
-        {isSelected && <Check className="h-3 w-3" />}
-      </span>
-    </button>
   );
 };
 
