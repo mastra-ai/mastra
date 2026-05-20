@@ -43,6 +43,9 @@ type CollapsibleContentProps = Omit<CollapsiblePrimitive.Panel.Props, 'className
 
 const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentProps>(
   ({ className, children, ...props }, ref) => (
+    // Base UI animates the panel's `height` between 0 and `--collapsible-panel-height`.
+    // Padding/margin/borders must live on an inner wrapper — if applied to the panel
+    // itself they keep it from collapsing to 0, which makes the animation jump.
     <CollapsiblePrimitive.Panel
       ref={ref}
       data-slot="collapsible-content"
@@ -50,11 +53,10 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
         'overflow-hidden',
         'h-[var(--collapsible-panel-height)] transition-[height] duration-normal ease-out-custom',
         'data-[starting-style]:h-0 data-[ending-style]:h-0',
-        className,
       )}
       {...props}
     >
-      {children}
+      <div className={className}>{children}</div>
     </CollapsiblePrimitive.Panel>
   ),
 );
