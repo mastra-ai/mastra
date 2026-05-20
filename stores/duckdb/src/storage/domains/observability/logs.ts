@@ -14,6 +14,7 @@ import {
 const COLUMNS = [
   'logId',
   'timestamp',
+  'cursorId',
   'level',
   'message',
   'data',
@@ -95,6 +96,7 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
     return `(${[
       v(log.logId),
       v(log.timestamp),
+      "nextval('log_events_cursor_id_seq')",
       v(log.level),
       v(log.message),
       jsonV(log.data),

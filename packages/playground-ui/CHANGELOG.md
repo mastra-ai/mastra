@@ -1,5 +1,65 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.9
+
+### Patch Changes
+
+- Moved the `Dialog` component to Base UI. The public API is unchanged — `asChild` on `DialogTrigger` and `DialogClose` still works the same way, and open/close animations behave as before. ([#16821](https://github.com/mastra-ai/mastra/pull/16821))
+
+## 29.0.0-alpha.8
+
+### Minor Changes
+
+- Added `ContextMenu` for right-click interactions. Supports submenus, checkbox and radio items, keyboard shortcuts, and a `destructive` variant for dangerous actions like delete. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  import { ContextMenu } from '@mastra/playground-ui';
+
+  <ContextMenu>
+    <ContextMenu.Trigger className="…">Right click here</ContextMenu.Trigger>
+    <ContextMenu.Content>
+      <ContextMenu.Item>Rename</ContextMenu.Item>
+      <ContextMenu.Item variant="destructive">Delete</ContextMenu.Item>
+    </ContextMenu.Content>
+  </ContextMenu>;
+  ```
+
+### Patch Changes
+
+- Added a `destructive` variant on `DropdownMenu.Item` to highlight dangerous actions like delete. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  <DropdownMenu.Item variant="destructive">Delete project</DropdownMenu.Item>
+  ```
+
+- `PopoverContent` no longer forwards the underlying library's auto-focus event handlers (`onOpenAutoFocus`, `onCloseAutoFocus`). To control focus when the popover opens or closes, use `initialFocus` and `finalFocus`. ([#16791](https://github.com/mastra-ai/mastra/pull/16791))
+
+  ```tsx
+  // Before
+  <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} />
+
+  // After
+  <PopoverContent initialFocus={false} />
+  ```
+
+- Migrated the Slider component to base-ui with a refined neutral visual design. ([#16788](https://github.com/mastra-ai/mastra/pull/16788))
+
+  **What changed**
+  - Replaced `@radix-ui/react-slider` with `@base-ui/react/slider` as the underlying primitive
+  - Refreshed visuals: thin rounded thumb with white border and neutral inside, opacity-based track that adapts to any surface, neutral filled indicator (no green/accent color)
+  - Larger click target via padded `Slider.Control` and an invisible hit area on the thumb so it is easier to grab
+  - Added `cursor-pointer` on the control and `cursor-not-allowed` when disabled
+  - Removed the now unused `@radix-ui/react-slider` and `@radix-ui/react-tabs` dependencies
+
+  **API compatibility**
+
+  The public API is preserved. `onValueChange` and `onValueCommitted` are wrapped so consumers always receive `number[]`, even though base-ui returns `number | number[]` internally. Existing call sites like `<Slider value={[temperature]} onValueChange={value => setTemperature(value[0])} />` continue to work without changes.
+
+- Updated dependencies [[`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509)]:
+  - @mastra/core@1.36.0-alpha.8
+  - @mastra/client-js@1.20.0-alpha.8
+  - @mastra/react@0.4.0-alpha.8
+
 ## 29.0.0-alpha.7
 
 ### Patch Changes

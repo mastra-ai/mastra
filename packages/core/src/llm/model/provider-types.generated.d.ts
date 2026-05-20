@@ -872,7 +872,17 @@ export type ProviderModelsMap = {
     'route/step-3.5-flash-2603',
     'route/stepfun-3.5-flash',
   ];
-  readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
+  readonly 'the-grid-ai': readonly [
+    'agent-max',
+    'agent-prime',
+    'agent-standard',
+    'code-max',
+    'code-prime',
+    'code-standard',
+    'text-max',
+    'text-prime',
+    'text-standard',
+  ];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
     'anthropic/claude-sonnet-4',
@@ -3346,6 +3356,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-flash-free',
     'gemini-3-flash',
     'gemini-3.1-pro',
+    'gemini-3.5-flash',
     'glm-5',
     'glm-5.1',
     'gpt-5',

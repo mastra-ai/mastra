@@ -1,5 +1,24 @@
 # @internal/playground
 
+## 1.9.4-alpha.9
+
+### Patch Changes
+
+- Removed the unused Primitives and Observability overview pages from the studio. These pages only showed links that already exist in the sidebar, so they were redundant and no longer reachable from the navigation. Also fixed extra padding around the Request Context page content. ([#16813](https://github.com/mastra-ai/mastra/pull/16813))
+
+- Updated dependencies [[`b699688`](https://github.com/mastra-ai/mastra/commit/b699688104e2f78fb2be65a2ddf28f4064504f5c)]:
+  - @mastra/playground-ui@29.0.0-alpha.9
+
+## 1.9.4-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`8d28cb9`](https://github.com/mastra-ai/mastra/commit/8d28cb987379a5e4054db98671592f8723aa41e5), [`8d28cb9`](https://github.com/mastra-ai/mastra/commit/8d28cb987379a5e4054db98671592f8723aa41e5), [`8d28cb9`](https://github.com/mastra-ai/mastra/commit/8d28cb987379a5e4054db98671592f8723aa41e5), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509), [`3d2c12e`](https://github.com/mastra-ai/mastra/commit/3d2c12e8d842df40a1dc20536d71282383dcf68f)]:
+  - @mastra/playground-ui@29.0.0-alpha.8
+  - @mastra/core@1.36.0-alpha.8
+  - @mastra/client-js@1.20.0-alpha.8
+  - @mastra/react@0.4.0-alpha.8
+
 ## 1.9.4-alpha.7
 
 ### Patch Changes
