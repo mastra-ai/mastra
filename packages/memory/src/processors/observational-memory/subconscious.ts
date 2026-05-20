@@ -4,9 +4,10 @@ import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, SendAgentSignalOptions, ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createWorkspaceTools, Workspace, WORKSPACE_TOOLS_PREFIX } from '@mastra/core/workspace';
-import type { WorkspaceConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
+import type { WorkspaceConfig, WorkspaceFilesystem, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { z } from 'zod';
 
+import { omError } from './debug';
 import { Extractor } from './extractor';
 import type { ExtractorOnExtractedContext } from './extractor';
 import { builtInPsycheDefinitions } from './subconscious-builtins';
@@ -45,15 +46,15 @@ export interface SubconsciousActivityReport {
   observation?: string;
 }
 
-export type SubconsciousWriteObservationsInput = string | string[] | SubconsciousActivityReport;
+export type SubconsciousNotificationInput = string | string[] | SubconsciousActivityReport;
 
 export interface SubconsciousRuntime {
   readonly source: Subconscious;
   readonly active: PsycheName[];
   readonly phase?: 'observation' | 'reflection';
   run(extracted?: Record<string, unknown>): Promise<SubconsciousActivityReport>;
-  writeObservations(input: SubconsciousWriteObservationsInput): Promise<void>;
-  runAndWriteObservations(extracted?: Record<string, unknown>): Promise<SubconsciousActivityReport>;
+  notify(input: SubconsciousNotificationInput): Promise<SubconsciousNotificationStatus>;
+  runAndNotify(extracted?: Record<string, unknown>): Promise<SubconsciousActivityReport>;
 }
 
 export interface PsycheDefinition<T = unknown> {
@@ -96,7 +97,7 @@ export interface SubconsciousOptions {
   workspace?: SubconsciousWorkspace;
   workspaceTools?: WorkspaceToolsConfig | false;
   workspaceDomains?: Partial<Record<PsycheName, string | readonly string[]>>;
-  signal?: Pick<Extract<SendAgentSignalOptions, { resourceId: string; threadId: string }>, 'ifIdle'>;
+  signal?: Pick<Extract<SendAgentSignalOptions, { resourceId: string; threadId: string }>, 'ifActive' | 'ifIdle'>;
 }
 
 export interface PsycheHandle<T = unknown> {
@@ -111,6 +112,19 @@ export interface PsycheHandle<T = unknown> {
 }
 
 const DEFAULT_MODEL = 'default' as unknown as AgentModel;
+const ACTIVITY_LOG_DIR = 'activity';
+const ACTIVITY_LOG_PATH = 'activity/subconscious-log.md';
+
+type SubconsciousRunContext = Omit<ExtractorOnExtractedContext<Record<string, unknown>>, 'extracted'> & {
+  phase?: 'observation' | 'reflection';
+  active?: PsycheName[];
+};
+
+export type SubconsciousNotificationStatus = {
+  status: 'sent' | 'skipped' | 'failed';
+  reason?: string;
+  error?: string;
+};
 
 const DEFAULT_WORKSPACE_TOOLS: WorkspaceToolsConfig = {
   enabled: true,
@@ -441,12 +455,99 @@ function formatReport(activities: SubconsciousActivity[]): Pick<SubconsciousActi
   };
 }
 
-function textFromWriteInput(input: SubconsciousWriteObservationsInput): string[] {
+function textFromNotificationInput(input: SubconsciousNotificationInput): string[] {
   if (typeof input === 'string') return [input];
   if (Array.isArray(input)) return input;
   if (input.observation) return [input.observation];
   if (input.summary) return [`<subconscious>\n${input.summary}\n</subconscious>`];
   return [];
+}
+
+function workspaceLocation(workspace: Workspace | undefined): string {
+  const filesystem = workspace?.filesystem as { basePath?: string } | undefined;
+  return filesystem?.basePath ?? workspace?.name ?? 'the configured Subconscious workspace';
+}
+
+function formatExtractedPayload(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatActivityLogEntry({
+  extracted,
+  report,
+  context,
+  active,
+  notification,
+}: {
+  extracted: Record<string, unknown>;
+  report: SubconsciousActivityReport;
+  context: SubconsciousRunContext;
+  active: PsycheName[];
+  notification: SubconsciousNotificationStatus;
+}): string {
+  const timestamp = new Date().toISOString();
+  const phase = context.phase ?? 'unknown';
+  const summarized = uniqueActivities(report.activities.filter(activity => activity.includedInSummary));
+  const activityLines =
+    summarized.length > 0
+      ? summarized.map(activity => `- ${formatActivity(activity)}`)
+      : ['- No durable workspace changes detected.'];
+  const rawActivityLines =
+    report.activities.length > 0
+      ? uniqueActivities(report.activities).map(activity => {
+          const target = activity.path ? ` path=\`${activity.path}\`` : '';
+          const command = activity.command ? ` command=\`${activity.command}\`` : '';
+          return `- ${activity.psyche}: ${activity.operation}${target}${command}`;
+        })
+      : ['- none'];
+  const notificationLine =
+    notification.status === 'failed'
+      ? `failed: ${notification.error ?? 'unknown error'}`
+      : notification.status === 'skipped'
+        ? `skipped: ${notification.reason ?? 'unknown reason'}`
+        : notification.status;
+  const extractionLines = active.flatMap(psyche => {
+    const payload = extracted[psyche];
+    if (!hasMeaningfulValue(payload)) return [`- ${psyche}: no meaningful payload`];
+    return [`#### ${psyche}`, '```json', formatExtractedPayload(payload), '```'];
+  });
+
+  return [
+    `## ${timestamp} — ${phase} — ${active.join(', ') || 'none'}`,
+    '',
+    `Thread: \`${context.threadId}\``,
+    `Resource: \`${context.resourceId ?? context.mainAgent?.id ?? 'global'}\``,
+    `Notification: \`${notificationLine}\``,
+    '',
+    '### Extractions',
+    ...(extractionLines.length > 0 ? extractionLines : ['- none']),
+    '',
+    '### Workspace activity',
+    ...activityLines,
+    '',
+    '### Raw operations',
+    ...rawActivityLines,
+    '',
+  ].join('\n');
+}
+
+async function appendActivityLogFile(filesystem: WorkspaceFilesystem, entry: string): Promise<void> {
+  try {
+    await filesystem.appendFile(ACTIVITY_LOG_PATH, entry);
+    return;
+  } catch (error) {
+    try {
+      const existing = await filesystem.readFile(ACTIVITY_LOG_PATH, { encoding: 'utf-8' });
+      await filesystem.writeFile(ACTIVITY_LOG_PATH, `${existing}${entry}`, { recursive: true });
+      return;
+    } catch {
+      throw error;
+    }
+  }
 }
 
 export class Subconscious {
@@ -518,48 +619,84 @@ export class Subconscious {
           });
           return current;
         }
-        await runtime.runAndWriteObservations(current);
+        await runtime.runAndNotify(current);
         return current;
       },
     });
   }
 
-  createRuntime(
-    extracted: Record<string, unknown>,
-    context: Omit<ExtractorOnExtractedContext<Record<string, unknown>>, 'extracted'> & {
-      phase?: 'observation' | 'reflection';
-      active?: PsycheName[];
-    },
-  ): SubconsciousRuntime {
+  createRuntime(extracted: Record<string, unknown>, context: SubconsciousRunContext): SubconsciousRuntime {
     const active = context.active ?? (Object.keys(extracted) as PsycheName[]);
     return {
       source: this,
       active,
       phase: context.phase,
       run: runExtracted => this.run(runExtracted ?? extracted, { ...context, active }),
-      writeObservations: async input => {
-        const writeObservations = (context as any).writeObservations as
-          | ((text: string | string[]) => Promise<void>)
-          | undefined;
-        if (!writeObservations) return;
-        const text = textFromWriteInput(input).filter(value => value.trim().length > 0);
-        if (text.length > 0) await writeObservations(text);
+      notify: async input => {
+        const text = textFromNotificationInput(input).filter(value => value.trim().length > 0);
+        if (text.length === 0) {
+          return { status: 'skipped', reason: 'notification input produced no non-empty text' };
+        }
+
+        const resourceId = context.resourceId ?? context.mainAgent?.id ?? 'global';
+        const result = context.mainAgent.sendSignal(
+          {
+            type: 'om.subconscious.notification',
+            contents: [
+              'Your subconscious bubbled up an internal thought notification:',
+              '',
+              ...text,
+              '',
+              'Continue with the knowledge your subconscious surfaced, but do not respond directly to this notification or stop what you were doing.',
+            ].join('\n'),
+            attributes: primitiveAttributes({
+              source: 'observational-memory',
+              phase: context.phase,
+              threadId: context.threadId,
+              resourceId,
+              active: active.join(','),
+            }),
+          },
+          {
+            resourceId,
+            threadId: context.threadId,
+            ifActive: this.options.signal?.ifActive ?? { behavior: 'deliver' },
+            ifIdle: {
+              behavior: this.options.signal?.ifIdle?.behavior ?? 'persist',
+              streamOptions: {
+                ...(this.options.signal?.ifIdle?.streamOptions as any),
+                requestContext: context.requestContext,
+                memory: {
+                  ...(this.options.signal?.ifIdle?.streamOptions as any)?.memory,
+                  resource: resourceId,
+                  thread: context.threadId,
+                },
+              },
+            },
+          },
+        );
+        await result.persisted;
+        return { status: 'sent' };
       },
-      runAndWriteObservations: async runExtracted => {
-        const report = await this.run(runExtracted ?? extracted, { ...context, active });
-        await this.createRuntime(runExtracted ?? extracted, { ...context, active }).writeObservations(report);
+      runAndNotify: async runExtracted => {
+        const runInput = runExtracted ?? extracted;
+        const runtimeContext = { ...context, active };
+        const report = await this.run(runInput, runtimeContext);
+        let notification: SubconsciousNotificationStatus;
+        try {
+          notification = await this.createRuntime(runInput, runtimeContext).notify(report);
+        } catch (error) {
+          notification = { status: 'failed', error: error instanceof Error ? error.message : String(error) };
+          await this.appendActivityLog(runInput, report, runtimeContext, notification);
+          throw error;
+        }
+        await this.appendActivityLog(runInput, report, runtimeContext, notification);
         return report;
       },
     };
   }
 
-  async run(
-    extracted: Record<string, unknown>,
-    context: Omit<ExtractorOnExtractedContext<Record<string, unknown>>, 'extracted'> & {
-      phase?: 'observation' | 'reflection';
-      active?: PsycheName[];
-    },
-  ): Promise<SubconsciousActivityReport> {
+  async run(extracted: Record<string, unknown>, context: SubconsciousRunContext): Promise<SubconsciousActivityReport> {
     const activities: SubconsciousActivity[] = [];
     const active = context.active ?? (Object.keys(extracted) as PsycheName[]);
 
@@ -581,14 +718,36 @@ export class Subconscious {
     return { activities, ...formatted };
   }
 
-  async sendSignals(
-    extracted: Record<string, unknown>,
-    context: Omit<ExtractorOnExtractedContext<Record<string, unknown>>, 'extracted'> & {
-      phase?: 'observation' | 'reflection';
-      active?: PsycheName[];
-    },
-  ) {
+  async sendSignals(extracted: Record<string, unknown>, context: SubconsciousRunContext) {
     return this.run(extracted, context);
+  }
+
+  private async appendActivityLog(
+    extracted: Record<string, unknown>,
+    report: SubconsciousActivityReport,
+    context: SubconsciousRunContext,
+    notification: SubconsciousNotificationStatus,
+  ): Promise<void> {
+    const workspace = toWorkspace(this.options.workspace);
+    if (!workspace) return;
+
+    try {
+      const filesystem = await workspace.resolveFilesystem({ requestContext: context.requestContext });
+      if (!filesystem) return;
+      await filesystem.mkdir(ACTIVITY_LOG_DIR, { recursive: true });
+      await appendActivityLogFile(
+        filesystem,
+        `${formatActivityLogEntry({
+          extracted,
+          report,
+          context,
+          active: context.active ?? [],
+          notification,
+        })}\n`,
+      );
+    } catch (error) {
+      omError('[OM] failed to append Subconscious activity log', error);
+    }
   }
 
   async workspaceToolsFor(name: PsycheName, requestContext: RequestContext) {
@@ -603,6 +762,20 @@ export class Subconscious {
       requestContext,
       agentId: `subconscious-${name}`,
     } as any);
+  }
+
+  mainAgentInstructions(): string | undefined {
+    const workspace = toWorkspace(this.options.workspace);
+    if (!workspace) return undefined;
+
+    return [
+      '<subconscious-workspace>',
+      `Your memory includes a subconscious aspect. Your mind will process what is happening in the background and write or update mental artifacts, knowledge, and skills in ${workspaceLocation(workspace)}.`,
+      `A deterministic runtime activity log is kept at ${ACTIVITY_LOG_PATH.replace(/^\//, '')}. Use it to debug whether subconscious processing ran, which psyches executed, what artifacts changed, and whether you were notified.`,
+      'Feel free to ponder in this space as needed; it is your subconscious.',
+      'Treat these artifacts as your own, not as a user-authored source of truth.',
+      '</subconscious-workspace>',
+    ].join('\n');
   }
 
   async workspaceToolsForMainAgent(

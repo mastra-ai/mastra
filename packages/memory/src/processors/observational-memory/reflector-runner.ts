@@ -212,40 +212,6 @@ export class ReflectorRunner {
     return { threadId, resourceId: resourceId ?? threadId };
   }
 
-  private async appendSyntheticObservations(
-    threadId: string,
-    resourceId: string | undefined,
-    observations: string | string[],
-    fallbackActiveObservations = '',
-    recordId?: string,
-  ): Promise<void> {
-    const additions = (Array.isArray(observations) ? observations : [observations])
-      .map(observation => observation.trim())
-      .filter(Boolean);
-    if (additions.length === 0) return;
-
-    const storageIds = this.getStorageIds(threadId, resourceId);
-    const record =
-      ((await (this.storage as any).getObservationalMemory?.(storageIds.threadId, storageIds.resourceId)) as
-        | ObservationalMemoryRecord
-        | null
-        | undefined) ?? undefined;
-    const id = record?.id ?? recordId;
-    if (!id) return;
-
-    const activeObservations = record?.activeObservations ?? fallbackActiveObservations;
-    const mergedObservations = [activeObservations, ...additions].filter(Boolean).join('\n\n');
-
-    await this.storage.updateActiveObservations({
-      id,
-      observations: mergedObservations,
-      tokenCount: this.tokenCounter.countString(mergedObservations),
-      lastObservedAt: new Date(),
-      observedMessageIds: record?.observedMessageIds ?? [],
-      observedTimezone: record?.observedTimezone,
-    });
-  }
-
   private async persistExtractedValues(
     threadId: string,
     resourceId: string | undefined,
@@ -281,14 +247,6 @@ export class ReflectorRunner {
         mainAgent: context.agent!,
         requestContext: context.requestContext ?? new RequestContext(),
         currentModel: context.currentModel,
-        writeObservations: observations =>
-          this.appendSyntheticObservations(
-            threadId,
-            resourceId,
-            observations,
-            context.activeObservations,
-            context.recordId,
-          ),
         previousValues: { extractedValues: priorMeta?.extracted },
       },
       (extractor, error) => omError(`[OM] reflector extractor.onExtracted (${extractor.slug}) threw`, error),

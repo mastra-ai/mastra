@@ -210,6 +210,7 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
+import type { Subconscious } from './subconscious';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -302,6 +303,8 @@ export class ObservationalMemory {
 
   /** Reflector agent runner — handles LLM calls for compressing observations. */
   readonly reflector: ReflectorRunner;
+
+  private readonly subconscious?: Subconscious;
 
   /** Buffering state coordinator — manages static maps and buffering lifecycle. */
   readonly buffering: BufferingCoordinator;
@@ -405,6 +408,7 @@ export class ObservationalMemory {
       );
     }
 
+    this.subconscious = config.subconscious;
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
@@ -2592,8 +2596,11 @@ ${formattedMessages}
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    const subconsciousInstructions = this.subconscious?.mainAgentInstructions();
 
-    if (!record.activeObservations) return undefined;
+    if (!record.activeObservations) {
+      return subconsciousInstructions ? [subconsciousInstructions] : undefined;
+    }
 
     // Read thread metadata for continuation hints
     const thread = await this.storage.getThreadById({ threadId });
@@ -2602,7 +2609,7 @@ ${formattedMessages}
     const suggestedResponse = omMetadata?.suggestedResponse;
     const currentDate = opts.currentDate ?? new Date();
 
-    return this.formatObservationsForContext(
+    const contextMessages = this.formatObservationsForContext(
       record.activeObservations,
       currentTask,
       suggestedResponse,
@@ -2610,6 +2617,8 @@ ${formattedMessages}
       currentDate,
       this.retrieval,
     );
+
+    return subconsciousInstructions ? [...contextMessages, subconsciousInstructions] : contextMessages;
   }
 
   /**

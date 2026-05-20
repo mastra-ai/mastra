@@ -79,9 +79,6 @@ export type ExtractorOnExtractedContext<T> = ExtractorOnExtractedObservationCont
   /** The resolved foreground model context for the actor turn that produced this extraction. */
   currentModel?: ObservationModelContext;
 
-  /** @internal Append synthetic observations to this OM record. */
-  writeObservations?: (observations: string | string[]) => Promise<void>;
-
   /** The resource ID, when this thread belongs to one. */
   resourceId?: string;
 };
@@ -578,7 +575,6 @@ export async function invokeExtractorHooks(
     mainAgent: ProcessorAgent;
     requestContext: RequestContext;
     currentModel?: ObservationModelContext;
-    writeObservations?: (observations: string | string[]) => Promise<void>;
     previousValues?: {
       currentTask?: string;
       suggestedContinuation?: string;
@@ -613,7 +609,6 @@ export async function invokeExtractorHooks(
             mainAgent: ctx.mainAgent,
             requestContext: ctx.requestContext,
             currentModel: ctx.currentModel,
-            writeObservations: ctx.writeObservations,
             resourceId: ctx.resourceId,
           } as ExtractorOnExtractedContext<any>);
           if (returned !== undefined && !isBuiltInExtractorSlug(extractor.slug)) {

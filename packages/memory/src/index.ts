@@ -1478,6 +1478,16 @@ ${workingMemory}`;
           resourceId,
         };
       }
+      if (!omRecord?.activeObservations) {
+        const omSystemMessage = await omEngine.buildContextSystemMessage({
+          threadId,
+          resourceId,
+          record: omRecord ?? undefined,
+        });
+        if (omSystemMessage) {
+          systemParts.push(omSystemMessage);
+        }
+      }
     }
 
     // 2. Working memory system message

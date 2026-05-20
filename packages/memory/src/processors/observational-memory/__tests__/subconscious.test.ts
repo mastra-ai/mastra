@@ -1,6 +1,11 @@
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -38,7 +43,6 @@ function createContext(extractor: Extractor<Record<string, unknown>>) {
     mainAgent: createAgent('main-agent'),
     requestContext: new RequestContext(),
     currentModel: { provider: 'test', modelId: 'model' },
-    writeObservations: vi.fn(async () => undefined),
   };
 }
 
@@ -149,15 +153,15 @@ describe('Subconscious', () => {
           source: subconscious,
           active: ['critic'],
           run: expect.any(Function),
-          writeObservations: expect.any(Function),
-          runAndWriteObservations: expect.any(Function),
+          notify: expect.any(Function),
+          runAndNotify: expect.any(Function),
         }),
       }),
     );
     expect(stream).not.toHaveBeenCalled();
   });
 
-  it('default routing streams matching psyche agents and writes a workspace activity observation', async () => {
+  it('default routing streams matching psyche agents and signals workspace activity to the main agent', async () => {
     const agent = createAgent('critic-agent');
     const stream = vi.spyOn(agent, 'stream').mockResolvedValue(
       streamWithParts([
@@ -168,9 +172,19 @@ describe('Subconscious', () => {
         },
       ]),
     );
-    const subconscious = new Subconscious({ model: createModel(), psyches: { critic: { agent } } });
+    const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
+    const subconscious = new Subconscious({
+      model: createModel(),
+      workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: workspacePath }) }),
+      psyches: { critic: { agent } },
+    });
     const extractor = subconscious.psyches({ active: ['critic'], phase: 'observation' });
     const context = createContext(extractor);
+    const sendSignal = vi.spyOn(context.mainAgent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'signal-run',
+      signal: {} as any,
+    });
 
     await extractor.onExtracted?.({
       ...context,
@@ -185,11 +199,138 @@ describe('Subconscious', () => {
     );
     expect(stream.mock.calls[0]?.[0]).toContain(JSON.stringify({ risks: ['risk'], needsReview: true }));
     expect(stream.mock.calls[0]?.[0]).toContain('"psyche":"critic"');
-    expect(context.writeObservations).toHaveBeenCalledWith([
-      expect.stringContaining(
-        '<subconscious>\n- critic created/updated review note `review/entity-disambiguation.md`\n</subconscious>',
-      ),
-    ]);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'om.subconscious.notification',
+        contents: expect.stringContaining(
+          '<subconscious>\n- critic created/updated review note `review/entity-disambiguation.md`\n</subconscious>',
+        ),
+      }),
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        ifActive: { behavior: 'deliver' },
+        ifIdle: expect.objectContaining({ behavior: 'persist' }),
+      }),
+    );
+
+    const activityLog = await readFile(join(workspacePath, 'activity/subconscious-log.md'), 'utf-8');
+    expect(activityLog).toContain('— observation — critic');
+    expect(activityLog).toContain('Thread: `thread-1`');
+    expect(activityLog).toContain('Resource: `resource-1`');
+    expect(activityLog).toContain('Notification: `sent`');
+    expect(activityLog).toContain('### Extractions');
+    expect(activityLog).toContain('#### critic');
+    expect(activityLog).toContain('"risks": [');
+    expect(activityLog).toContain('"needsReview": true');
+    expect(activityLog).toContain('- critic created/updated review note `review/entity-disambiguation.md`');
+  });
+
+  it('falls back to read and write when appendFile is unavailable', async () => {
+    const agent = createAgent('critic-agent');
+    vi.spyOn(agent, 'stream').mockResolvedValue(
+      streamWithParts([
+        {
+          type: 'tool-result',
+          toolName: 'mastra_workspace_write_file',
+          result: 'Wrote 6 bytes to review/entity-disambiguation.md',
+        },
+      ]),
+    );
+    const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: workspacePath }) });
+    await workspace.filesystem.mkdir('activity', { recursive: true });
+    await workspace.filesystem.writeFile('activity/subconscious-log.md', 'existing log\n', { recursive: true });
+    vi.spyOn(workspace.filesystem, 'appendFile').mockRejectedValue(new Error('append unsupported'));
+    const subconscious = new Subconscious({
+      model: createModel(),
+      workspace,
+      psyches: { critic: { agent } },
+    });
+    const extractor = subconscious.psyches({ active: ['critic'], phase: 'observation' });
+    const context = createContext(extractor);
+    vi.spyOn(context.mainAgent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'signal-run',
+      signal: {} as any,
+    });
+
+    await extractor.onExtracted?.({
+      ...context,
+      extracted: { current: { critic: { risks: ['risk'], needsReview: true } } },
+    });
+
+    const activityLog = await readFile(join(workspacePath, 'activity/subconscious-log.md'), 'utf-8');
+    expect(activityLog).toContain('existing log');
+    expect(activityLog).toContain('Notification: `sent`');
+    expect(activityLog).toContain('- critic created/updated review note `review/entity-disambiguation.md`');
+  });
+
+  it('logs why main-agent notification is skipped', async () => {
+    const agent = createAgent('critic-agent');
+    vi.spyOn(agent, 'stream').mockResolvedValue(streamWithParts([]));
+    const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
+    const subconscious = new Subconscious({
+      model: createModel(),
+      workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: workspacePath }) }),
+      psyches: { critic: { agent } },
+    });
+    const extractor = subconscious.psyches({ active: ['critic'], phase: 'observation' });
+    const context = createContext(extractor);
+    const sendSignal = vi.spyOn(context.mainAgent, 'sendSignal');
+
+    await extractor.onExtracted?.({
+      ...context,
+      extracted: { current: { critic: { risks: ['risk'], needsReview: true } } },
+    });
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    const activityLog = await readFile(join(workspacePath, 'activity/subconscious-log.md'), 'utf-8');
+    expect(activityLog).toContain('Notification: `skipped: notification input produced no non-empty text`');
+    expect(activityLog).toContain('#### critic');
+    expect(activityLog).toContain('"risks": [');
+    expect(activityLog).toContain('"needsReview": true');
+    expect(activityLog).toContain('- No durable workspace changes detected.');
+  });
+
+  it('does not let activity log failures prevent main-agent notification', async () => {
+    const agent = createAgent('critic-agent');
+    vi.spyOn(agent, 'stream').mockResolvedValue(
+      streamWithParts([
+        {
+          type: 'tool-result',
+          toolName: 'mastra_workspace_write_file',
+          result: 'Wrote 6 bytes to review/entity-disambiguation.md',
+        },
+      ]),
+    );
+    const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: workspacePath }) });
+    vi.spyOn(workspace.filesystem, 'appendFile').mockRejectedValue(new Error('disk full'));
+    const subconscious = new Subconscious({
+      model: createModel(),
+      workspace,
+      psyches: { critic: { agent } },
+    });
+    const extractor = subconscious.psyches({ active: ['critic'], phase: 'observation' });
+    const context = createContext(extractor);
+    const sendSignal = vi.spyOn(context.mainAgent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'signal-run',
+      signal: {} as any,
+    });
+
+    await expect(
+      extractor.onExtracted?.({
+        ...context,
+        extracted: { current: { critic: { risks: ['risk'], needsReview: true } } },
+      }),
+    ).resolves.toEqual({ critic: { risks: ['risk'], needsReview: true } });
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'om.subconscious.notification' }),
+      expect.objectContaining({ ifIdle: expect.objectContaining({ behavior: 'persist' }) }),
+    );
   });
 
   it('does not stream a psyche for missing or empty payloads', async () => {
