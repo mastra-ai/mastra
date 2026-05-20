@@ -1,15 +1,19 @@
 import { createClient } from '@libsql/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GithubNotificationPoller } from './notification-poller.js';
 import { GithubNotificationStore } from './notification-store.js';
 
-function createSharedStore(url = `file::memory:`) {
+function createSharedStore(url = `file::memory:`, now = () => new Date('2026-01-01T00:00:00.000Z')) {
   return new GithubNotificationStore({
     client: createClient({ url }),
-    now: () => new Date('2026-01-01T00:00:00.000Z'),
+    now,
   });
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function ghResponse(body: unknown[], etag = '"etag-1"') {
   return `HTTP/2.0 200 OK\netag: ${etag}\n\n${JSON.stringify(body)}`;
@@ -68,6 +72,163 @@ describe('GithubNotificationPoller', () => {
       ]),
     );
     expect(notificationCalls[1]?.[0]).toEqual(expect.arrayContaining(['-F', 'all=true']));
+  });
+
+  it('keeps the master lease alive while a poll is waiting on GitHub', async () => {
+    vi.useFakeTimers();
+    let currentTime = Date.parse('2026-01-01T00:00:00.000Z');
+    const now = () => new Date(currentTime);
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    let releaseUnreadFetch: (() => void) | undefined;
+    let unreadFetchStarted: (() => void) | undefined;
+    const unreadFetchStartedPromise = new Promise<void>(resolve => {
+      unreadFetchStarted = resolve;
+    });
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args.includes('/notifications') && args.includes('all=false')) {
+        unreadFetchStarted?.();
+        await new Promise<void>(resolve => {
+          releaseUnreadFetch = resolve;
+        });
+        return { stdout: ghResponse([notification('n1')]) };
+      }
+      if (args.includes('/notifications') && args.includes('all=true')) return { stdout: ghResponse([]) };
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const clientCommandRunner = vi.fn(async (_args: string[]) => ({ stdout: ghResponse([notification('client')]) }));
+    const master = new GithubNotificationPoller({
+      store: createSharedStore(url, now),
+      commandRunner,
+      accountKey: 'account-1',
+      now,
+    });
+    const client = new GithubNotificationPoller({
+      store: createSharedStore(url, now),
+      commandRunner: clientCommandRunner,
+      accountKey: 'account-1',
+      now,
+    });
+
+    const pollPromise = master.poll();
+    await unreadFetchStartedPromise;
+    currentTime += 46_000;
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await expect(client.poll()).resolves.toMatchObject({ role: 'client', updated: false });
+    expect(clientCommandRunner).not.toHaveBeenCalled();
+
+    releaseUnreadFetch?.();
+    await expect(pollPromise).resolves.toMatchObject({ role: 'master', updated: true });
+  });
+
+  it('stops before writing cache state after losing the master lease', async () => {
+    let currentTime = Date.parse('2026-01-01T00:00:00.000Z');
+    const now = () => new Date(currentTime);
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    const masterStore = createSharedStore(url, now);
+    const competitorStore = createSharedStore(url, now);
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args.includes('/notifications') && args.includes('all=false'))
+        return { stdout: ghResponse([notification('n1')]) };
+      if (args.includes('/notifications') && args.includes('all=true')) {
+        currentTime += 46_000;
+        await competitorStore.acquireMasterLease('account-1', 45_000);
+        return { stdout: ghResponse([]) };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({ store: masterStore, commandRunner, accountKey: 'account-1', now });
+
+    await expect(poller.poll()).resolves.toMatchObject({ role: 'client', updated: false });
+    await expect(masterStore.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toEqual([]);
+  });
+
+  it('allows another instance to poll after a stale master lease expires', async () => {
+    let currentTime = Date.parse('2026-01-01T00:00:00.000Z');
+    const now = () => new Date(currentTime);
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    const staleMasterStore = createSharedStore(url, now);
+    await staleMasterStore.acquireMasterLease('account-1', 45_000);
+    currentTime += 46_000;
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args.includes('/notifications')) return { stdout: ghResponse([]) };
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const failover = new GithubNotificationPoller({
+      store: createSharedStore(url, now),
+      commandRunner,
+      accountKey: 'account-1',
+      now,
+    });
+
+    await expect(failover.poll()).resolves.toMatchObject({ role: 'master', updated: false });
+    expect(commandRunner.mock.calls.filter(call => call[0].includes('/notifications'))).toHaveLength(2);
+  });
+
+  it('does not refresh PR notifications from a non-master instance', async () => {
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    const store = createSharedStore(url);
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'n1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'Stale PR row',
+        subjectType: 'PullRequest',
+        reason: 'author',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    await createSharedStore(url).acquireMasterLease('account-1', 45_000);
+    const commandRunner = vi.fn(async (_args: string[]) => ({ stdout: '{}' }));
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1' });
+
+    await expect(poller.refreshPullRequestNotifications('mastra-ai/mastra', 123)).resolves.toEqual([]);
+    expect(commandRunner).not.toHaveBeenCalled();
+  });
+
+  it('does not upsert refreshed PR notifications after losing the master lease', async () => {
+    let currentTime = Date.parse('2026-01-01T00:06:00.000Z');
+    const now = () => new Date(currentTime);
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    const store = createSharedStore(url, now);
+    const competitorStore = createSharedStore(url, now);
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'n1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'Stale PR row',
+        subjectType: 'PullRequest',
+        reason: 'author',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        prMergeable: true,
+        prMergeableState: 'blocked',
+        prHeadSha: 'old-sha',
+        prMergeabilityCheckedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123') {
+        currentTime += 46_000;
+        await competitorStore.acquireMasterLease('account-1', 45_000);
+        return {
+          stdout: JSON.stringify({
+            mergeable: false,
+            mergeable_state: 'dirty',
+          }),
+        };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now });
+
+    await expect(poller.refreshPullRequestNotifications('mastra-ai/mastra', 123)).resolves.toEqual([]);
+    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
+      { id: 'n1', prMergeable: true, prMergeableState: 'blocked', prHeadSha: 'old-sha' },
+    ]);
   });
 
   it('caches recent read notifications that were cleared outside MastraCode', async () => {

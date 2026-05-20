@@ -9,6 +9,7 @@ import {
 import type { GithubInboxNotification } from './notification-store.js';
 
 const MASTER_LEASE_MS = 45_000;
+const MASTER_HEARTBEAT_INTERVAL_MS = 15_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
 const MERGEABILITY_REFRESH_MS = 5 * 60_000;
 const RECENT_READ_NOTIFICATION_LOOKBACK_MS = 15 * 60_000;
@@ -33,6 +34,12 @@ export type GithubNotificationPollerEvents = {
   'cache-updated': [{ accountKey: string; notifications: GithubInboxNotification[] }];
   'rate-limited': [{ accountKey: string; until: string }];
 };
+
+class LostMasterLeaseError extends Error {}
+
+function isLostMasterLeaseError(error: unknown): error is LostMasterLeaseError {
+  return error instanceof LostMasterLeaseError;
+}
 
 export class GithubNotificationPoller extends EventEmitter<GithubNotificationPollerEvents> {
   readonly store: GithubNotificationStore;
@@ -61,37 +68,48 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     }
 
     try {
-      await this.store.heartbeatMasterLease(this.accountKey, MASTER_LEASE_MS);
-      await this.store.clearInvalidAccountEtag(this.accountKey);
-      const freshState = await this.store.getAccountState(this.accountKey);
-      const response = await this.#fetchNotifications({ etag: freshState.etag, all: false });
-      const recentReadResponse = await this.#fetchNotifications({
-        all: true,
-        since: getRecentReadSince(freshState.checkedAt, this.#now),
-      });
-      const checkedAt = this.#now().toISOString();
+      return await this.#withMasterHeartbeat(async () => {
+        await this.#heartbeatOrAbort();
+        await this.store.clearInvalidAccountEtag(this.accountKey);
+        const freshState = await this.store.getAccountState(this.accountKey);
+        await this.#heartbeatOrAbort();
+        const response = await this.#fetchNotifications({ etag: freshState.etag, all: false });
+        await this.#heartbeatOrAbort();
+        const recentReadResponse = await this.#fetchNotifications({
+          all: true,
+          since: getRecentReadSince(freshState.checkedAt, this.#now),
+        });
+        const checkedAt = this.#now().toISOString();
+        await this.#heartbeatOrAbort();
 
-      const notifications = [...(response.status === 304 ? [] : response.items), ...recentReadResponse.items]
-        .map(normalizeGithubInboxNotification)
-        .filter(Boolean) as GithubInboxNotification[];
-      const uniqueNotifications = dedupeNotifications(notifications);
-      await this.#enrichNotifications(uniqueNotifications);
-      if (uniqueNotifications.length > 0) await this.store.upsertNotifications(this.accountKey, uniqueNotifications);
-      const backfilledNotifications = await this.#backfillMissingEnrichment();
-      const updatedNotifications = [...uniqueNotifications, ...backfilledNotifications];
-      await this.store.updateAccountState(this.accountKey, {
-        checkedAt,
-        updatedAt: updatedNotifications.length > 0 ? checkedAt : freshState.updatedAt,
-        etag: response.etag,
-        rateLimitedUntil: undefined,
+        const notifications = [...(response.status === 304 ? [] : response.items), ...recentReadResponse.items]
+          .map(normalizeGithubInboxNotification)
+          .filter(Boolean) as GithubInboxNotification[];
+        const uniqueNotifications = dedupeNotifications(notifications);
+        await this.#enrichNotifications(uniqueNotifications);
+        await this.#heartbeatOrAbort();
+        if (uniqueNotifications.length > 0) await this.store.upsertNotifications(this.accountKey, uniqueNotifications);
+        const backfilledNotifications = await this.#backfillMissingEnrichment();
+        const updatedNotifications = [...uniqueNotifications, ...backfilledNotifications];
+        await this.#heartbeatOrAbort();
+        await this.store.updateAccountState(this.accountKey, {
+          checkedAt,
+          updatedAt: updatedNotifications.length > 0 ? checkedAt : freshState.updatedAt,
+          etag: response.etag,
+          rateLimitedUntil: undefined,
+        });
+        if (updatedNotifications.length > 0) {
+          this.emit('cache-updated', { accountKey: this.accountKey, notifications: updatedNotifications });
+        }
+        return { role: 'master', updated: updatedNotifications.length > 0, notifications: updatedNotifications };
       });
-      if (updatedNotifications.length > 0) {
-        this.emit('cache-updated', { accountKey: this.accountKey, notifications: updatedNotifications });
-      }
-      return { role: 'master', updated: updatedNotifications.length > 0, notifications: updatedNotifications };
     } catch (error) {
+      if (isLostMasterLeaseError(error)) {
+        return { role: 'client', updated: false, notifications: [] };
+      }
       if (isRateLimitError(error)) {
         const until = getRateLimitedUntil(error, this.#now);
+        if (!(await this.#heartbeatMasterLease())) return { role: 'client', updated: false, notifications: [] };
         await this.store.updateAccountState(this.accountKey, {
           checkedAt: this.#now().toISOString(),
           rateLimitedUntil: until,
@@ -106,15 +124,24 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
   async refreshPullRequestNotifications(repo: string, prNumber: number): Promise<GithubInboxNotification[]> {
     const isMaster = await this.store.acquireMasterLease(this.accountKey, MASTER_LEASE_MS);
     if (!isMaster) return [];
-    const staleBefore = new Date(this.#now().getTime() - MERGEABILITY_REFRESH_MS).toISOString();
-    const notifications = await this.store.readPrNotificationsNeedingMergeabilityRefresh(
-      this.accountKey,
-      repo,
-      prNumber,
-      staleBefore,
-    );
-    if (notifications.length === 0) return [];
-    return this.#refreshNotifications(notifications);
+    try {
+      return await this.#withMasterHeartbeat(async () => {
+        await this.#heartbeatOrAbort();
+        const staleBefore = new Date(this.#now().getTime() - MERGEABILITY_REFRESH_MS).toISOString();
+        const notifications = await this.store.readPrNotificationsNeedingMergeabilityRefresh(
+          this.accountKey,
+          repo,
+          prNumber,
+          staleBefore,
+        );
+        if (notifications.length === 0) return [];
+        await this.#heartbeatOrAbort();
+        return this.#refreshNotifications(notifications);
+      });
+    } catch (error) {
+      if (isLostMasterLeaseError(error)) return [];
+      throw error;
+    }
   }
 
   async #backfillMissingEnrichment(): Promise<GithubInboxNotification[]> {
@@ -127,9 +154,32 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     const before = new Map(
       notifications.map(notification => [notification.id, getEnrichmentFingerprint(notification)]),
     );
+    await this.#heartbeatOrAbort();
     await this.#enrichNotifications(notifications);
+    await this.#heartbeatOrAbort();
     await this.store.upsertNotifications(this.accountKey, notifications);
+    await this.#heartbeatOrAbort();
     return notifications.filter(notification => before.get(notification.id) !== getEnrichmentFingerprint(notification));
+  }
+
+  async #withMasterHeartbeat<T>(operation: () => Promise<T>): Promise<T> {
+    const heartbeatTimer = setInterval(() => {
+      void this.#heartbeatMasterLease();
+    }, MASTER_HEARTBEAT_INTERVAL_MS);
+    heartbeatTimer.unref?.();
+    try {
+      return await operation();
+    } finally {
+      clearInterval(heartbeatTimer);
+    }
+  }
+
+  async #heartbeatMasterLease(): Promise<boolean> {
+    return this.store.heartbeatMasterLease(this.accountKey, MASTER_LEASE_MS);
+  }
+
+  async #heartbeatOrAbort(): Promise<void> {
+    if (!(await this.#heartbeatMasterLease())) throw new LostMasterLeaseError();
   }
 
   async #enrichNotifications(notifications: GithubInboxNotification[]): Promise<void> {
@@ -146,6 +196,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     ];
     await Promise.all(
       latestCommentUrls.map(async latestCommentUrl => {
+        await this.#heartbeatOrAbort();
         try {
           const { stdout } = await this.#commandRunner(['api', latestCommentUrl]);
           const comment = parseJsonObject(stdout);
@@ -158,7 +209,8 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
             notification.commentCreatedAt = getString(comment, ['created_at']);
             notification.commentHtmlUrl = getString(comment, ['html_url']);
           }
-        } catch {
+        } catch (error) {
+          if (isLostMasterLeaseError(error)) throw error;
           // Enrichment is best-effort; the inbox notification itself is still useful.
         }
       }),
@@ -177,6 +229,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
 
     await Promise.all(
       pullRequestUrls.map(async pullRequestUrl => {
+        await this.#heartbeatOrAbort();
         try {
           const { stdout: pullRequestStdout } = await this.#commandRunner(['api', pullRequestUrl]);
           const pullRequest = parseJsonObject(pullRequestStdout);
@@ -200,6 +253,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
           const repoUrl = pullRequestUrl.replace(/\/pulls\/\d+(?:$|[?#].*)/, '');
           if (!headSha || repoUrl === pullRequestUrl) return;
 
+          await this.#heartbeatOrAbort();
           const { stdout: checksStdout } = await this.#commandRunner([
             'api',
             `${repoUrl}/commits/${headSha}/check-runs`,
@@ -213,7 +267,8 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
           for (const notification of notifications.filter(notification => notification.subjectUrl === pullRequestUrl)) {
             notification.failedChecks = checks;
           }
-        } catch {
+        } catch (error) {
+          if (isLostMasterLeaseError(error)) throw error;
           // Enrichment is best-effort; the inbox notification itself is still useful.
         }
       }),
