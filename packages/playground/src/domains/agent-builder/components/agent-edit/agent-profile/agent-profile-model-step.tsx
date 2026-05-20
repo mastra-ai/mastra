@@ -1,5 +1,6 @@
-import { Badge, Button } from '@mastra/playground-ui';
+import { Badge, Button, Icon } from '@mastra/playground-ui';
 
+import { ArrowRightIcon } from 'lucide-react';
 import { useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { Models } from './models';
@@ -43,7 +44,10 @@ export const AgentProfileModelStep = () => {
       }
       cta={
         <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue
+          Continue{' '}
+          <Icon>
+            <ArrowRightIcon />
+          </Icon>
         </Button>
       }
     >

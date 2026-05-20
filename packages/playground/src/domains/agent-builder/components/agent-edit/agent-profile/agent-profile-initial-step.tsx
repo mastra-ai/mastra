@@ -1,4 +1,5 @@
-import { Button, Skeleton } from '@mastra/playground-ui';
+import { Button, Skeleton, Icon } from '@mastra/playground-ui';
+import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -25,7 +26,10 @@ export const AgentProfileInitialStep = ({ avatar, details, isPreparing }: AgentP
     <AgentStepContainer
       cta={
         <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue
+          Continue{' '}
+          <Icon>
+            <ArrowRightIcon />
+          </Icon>
         </Button>
       }
     >

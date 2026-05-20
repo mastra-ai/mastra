@@ -26,7 +26,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
     : undefined;
 
   const switchStyle: CSSProperties | undefined =
-    browserEnabled && agentColor ? { backgroundColor: agentColor.foreground } : undefined;
+    browserEnabled && agentColor ? { backgroundColor: agentColor.tint } : undefined;
 
   return (
     <div className="flex h-full min-h-0 items-center justify-center px-6 py-8" data-testid="browser-detail-picker">

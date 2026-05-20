@@ -16,8 +16,8 @@ export interface AgentBuilderTitleProps {
   disabled?: boolean;
 }
 
-const MODE_BADGE: Record<WorkspaceMode, { label: string; variant: 'success' | 'neutral'; testId: string }> = {
-  build: { label: 'Edit mode', variant: 'success', testId: 'agent-builder-mode-badge-build' },
+const MODE_BADGE: Record<WorkspaceMode, { label: string; variant: 'neutral'; testId: string }> = {
+  build: { label: 'Edit mode', variant: 'neutral', testId: 'agent-builder-mode-badge-build' },
   test: { label: 'View mode', variant: 'neutral', testId: 'agent-builder-mode-badge-test' },
 };
 

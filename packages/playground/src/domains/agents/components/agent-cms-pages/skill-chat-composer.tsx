@@ -166,7 +166,6 @@ export function SkillChatComposer({
         canSubmit={!!trimmed && !isRunning}
         isRunning={isRunning}
         placeholder={hasFields ? 'Ask the agent to refine…' : 'Describe your skill…'}
-        tone="info"
         inputTestId="skill-builder-conversation-input"
         submitTestId="skill-builder-conversation-submit"
         containerTestId="skill-builder-conversation-composer"
