@@ -923,7 +923,13 @@ export class MastraTUI {
 
         if (this.state.harness.isRunning()) {
           if (text.startsWith('/')) {
-            this.queueFollowUpMessage(text);
+            // Run slash commands immediately — they are either settings
+            // commands (no agent interaction) or agent-facing commands the
+            // user explicitly chose to run mid-stream.  Use Ctrl+F to
+            // queue instead.
+            this.handleSlashCommand(text).catch(error => {
+              showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
+            });
             return;
           }
 

@@ -5,7 +5,7 @@
  * Handles git worktrees by finding the main repository.
  */
 
-import { execSync } from 'node:child_process';
+import { execFile, execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -158,6 +158,23 @@ export function detectProject(projectPath: string): ProjectInfo {
  */
 export function getCurrentGitBranch(cwd: string): string | undefined {
   return git('rev-parse --abbrev-ref HEAD', cwd);
+}
+
+/**
+ * Async version of getCurrentGitBranch — avoids blocking the event loop
+ * with execSync.  Falls back to undefined on any failure.
+ */
+export function getCurrentGitBranchAsync(cwd: string): Promise<string | undefined> {
+  return new Promise(resolve => {
+    execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, encoding: 'utf-8' }, (err, stdout) => {
+      if (err) {
+        resolve(undefined);
+        return;
+      }
+      const branch = stdout.trim();
+      resolve(branch || undefined);
+    });
+  });
 }
 
 /**
