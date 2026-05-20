@@ -6084,7 +6084,9 @@ export class Agent<
    * ```
    */
   async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: true }, options);
+    const requestContext = new RequestContext(options.requestContext?.entries());
+    requestContext.set('__mastra_networkToolApprovalResume', true);
+    return this.resumeNetwork({ approved: true }, { ...options, requestContext });
   }
 
   /**
@@ -6103,7 +6105,9 @@ export class Agent<
    * ```
    */
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: false }, options);
+    const requestContext = new RequestContext(options.requestContext?.entries());
+    requestContext.set('__mastra_networkToolApprovalResume', true);
+    return this.resumeNetwork({ approved: false }, { ...options, requestContext });
   }
 
   async generate<

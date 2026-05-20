@@ -1258,13 +1258,16 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    it('should merge idle stream request context before waking a thread with a signal', async () => {
+    it('should merge idle stream requestContext into signal runs without overriding reserved keys', async () => {
       await mockMemory.createThread({
-        threadId: 'signal-thread-with-context',
+        threadId: 'signal-thread-with-body-context',
         resourceId: 'user-a',
-        title: 'Signal Thread With Context',
+        title: 'Signal Thread',
       });
-      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-with-body-context',
+      });
       let capturedTarget: any;
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
@@ -1277,8 +1280,8 @@ describe('Agent Routes Authorization', () => {
         agentId: 'test-agent',
         requestContext,
         signal: { type: 'user-message', contents: 'hello' },
-        resourceId: 'user-a',
-        threadId: 'signal-thread-with-context',
+        resourceId: 'user-b',
+        threadId: 'client-thread',
         ifIdle: {
           streamOptions: {
             requestContext: {
@@ -1290,8 +1293,44 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
-      expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
-      expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+      const streamRequestContext = capturedTarget.ifIdle.streamOptions.requestContext as RequestContext;
+      expect(streamRequestContext.get('fixture')).toBe('text-stream');
+      expect(streamRequestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+      expect(capturedTarget).toMatchObject({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-with-body-context',
+      });
+    });
+
+    it('should use idle stream requestContext for signal-started agent version resolution', async () => {
+      const applyStoredOverrides = vi.fn(async agent => agent);
+      (mastra as any).getEditor = vi.fn(() => ({
+        agent: { applyStoredOverrides },
+      }));
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({ accepted: true, runId: 'signal-run-id' }));
+
+      await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({}),
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'signal-version-thread',
+        ifIdle: {
+          streamOptions: {
+            requestContext: {
+              agentVersionId: 'version-from-signal-body',
+            },
+          },
+        },
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(
+        mockAgent,
+        { versionId: 'version-from-signal-body' },
+        expect.any(RequestContext),
+      );
     });
 
     it('should reject sending a signal to a thread owned by a different resource', async () => {

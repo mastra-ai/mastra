@@ -52,7 +52,16 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams);
+  const effectiveSearchParams = useMemo(() => {
+    if (!scopedEntityId) return searchParams;
+
+    const next = new URLSearchParams(searchParams);
+    if (scopedEntityType) next.set('rootEntityType', scopedEntityType);
+    next.set('filterEntityId', scopedEntityId);
+    return next;
+  }, [scopedEntityId, scopedEntityType, searchParams]);
+
+  const url = useTraceUrlState(effectiveSearchParams, setSearchParams);
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -210,6 +219,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     url.handleSpanChange(id),
   );
 
+  // Persistence should save the real URL params; the scoped overlay is only for first-render reads.
   const persistence = useTraceFilterPersistence(searchParams, setSearchParams, {
     storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
   });

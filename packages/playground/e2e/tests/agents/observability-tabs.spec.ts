@@ -69,8 +69,8 @@ async function mockTraceLists(page: Page, onRequest?: (url: URL) => void) {
 test('requests agent traces when runtime observability is available without package metadata', async ({ page }) => {
   await mockSystemPackages(page, true);
 
-  let tracesUrl: URL | undefined;
-  await mockTraceLists(page, url => (tracesUrl = url));
+  const observabilityUrls: URL[] = [];
+  await mockTraceLists(page, url => observabilityUrls.push(url));
 
   await page.goto('/agents/weather-agent/chat/new');
   await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
@@ -83,8 +83,12 @@ test('requests agent traces when runtime observability is available without pack
   // With the scope filters pre-applied the empty-state copy comes from the list
   // view ("filters applied" variant), not the standalone NoTracesInfo screen.
   await expect(page.getByText(/No traces found for applied filters/i)).toBeVisible();
-  expect(tracesUrl?.searchParams.get('entityId')).toBe('weather-agent');
-  expect(tracesUrl?.searchParams.get('entityType')).toBe('agent');
+  expect(observabilityUrls.length).toBeGreaterThan(0);
+  expect(
+    observabilityUrls.some(
+      url => url.searchParams.get('entityId') === 'weather-agent' && url.searchParams.get('entityType') === 'agent',
+    ),
+  ).toBe(true);
 });
 
 test('keeps agent observability tabs disabled when runtime observability is unavailable', async ({ page }) => {
@@ -99,8 +103,8 @@ test('keeps agent observability tabs disabled when runtime observability is unav
 test('agent traces tab pre-fills the agent filter as URL params on first visit', async ({ page }) => {
   await mockSystemPackages(page, true);
 
-  let tracesUrl: URL | undefined;
-  await mockTraceLists(page, url => (tracesUrl = url));
+  const observabilityUrls: URL[] = [];
+  await mockTraceLists(page, url => observabilityUrls.push(url));
 
   await page.goto('/agents/weather-agent/traces');
 
@@ -110,8 +114,12 @@ test('agent traces tab pre-fills the agent filter as URL params on first visit',
   await expect(page).toHaveURL(/filterEntityId=weather-agent/);
 
   // The API call should reflect those filter params (driven by URL state).
-  expect(tracesUrl?.searchParams.get('entityType')).toBe('agent');
-  expect(tracesUrl?.searchParams.get('entityId')).toBe('weather-agent');
+  expect(observabilityUrls.length).toBeGreaterThan(0);
+  expect(
+    observabilityUrls.some(
+      url => url.searchParams.get('entityType') === 'agent' && url.searchParams.get('entityId') === 'weather-agent',
+    ),
+  ).toBe(true);
 });
 
 test('agent traces tab locks the scope filter pills and hides them from the creator dropdown', async ({ page }) => {
