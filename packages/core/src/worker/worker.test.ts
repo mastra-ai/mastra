@@ -584,7 +584,8 @@ describe('HarnessWakeupWorker', () => {
   it('marks retryable failures failed with a later retry time', async () => {
     const item = sampleWakeup({ attempts: 2 });
     const storage = createWakeupStorage([item]);
-    const worker = new HarnessWakeupWorker({ retryBackoffMs: () => 1234, maxAttempts: 5 });
+    const retryBackoffMs = vi.fn(() => 1234);
+    const worker = new HarnessWakeupWorker({ retryBackoffMs, maxAttempts: 5 });
     const deps = createMockDeps();
     deps._storage.getStore.mockResolvedValue(storage);
     deps.mastra = {
@@ -609,12 +610,16 @@ describe('HarnessWakeupWorker', () => {
       expect.objectContaining({
         id: item.id,
         status: 'failed',
+        attempts: 2,
         nextAttemptAt: expect.any(Number),
         lastError: expect.objectContaining({ code: 'session_locked', retryable: true }),
         claimId: undefined,
       }),
       { claimId: item.claimId },
     );
+    // Storage increments attempts when the row is claimed; the worker must
+    // persist the claimed attempt count instead of double-counting failures.
+    expect(retryBackoffMs).toHaveBeenCalledWith(2);
   });
 
   it('renews ownership before admitting a claimed wakeup', async () => {
