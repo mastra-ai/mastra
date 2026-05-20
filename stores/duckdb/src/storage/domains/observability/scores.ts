@@ -241,7 +241,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
     `INSERT INTO score_events (
-      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
@@ -249,6 +249,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
      VALUES (${[
        v(s.scoreId),
        v(s.timestamp),
+       "nextval('score_events_cursor_id_seq')",
        v(s.traceId),
        v(s.spanId ?? null),
        v(s.experimentId ?? null),
@@ -298,6 +299,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     return `(${[
       v(legacyScore.scoreId),
       v(legacyScore.timestamp),
+      "nextval('score_events_cursor_id_seq')",
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
       v(legacyScore.experimentId ?? null),
@@ -337,7 +339,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope

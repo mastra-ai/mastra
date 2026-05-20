@@ -7,7 +7,7 @@
 import {
   Box,
   Container,
-  getEditorKeybindings,
+  getKeybindings,
   Input,
   Markdown,
   SelectList,
@@ -279,8 +279,8 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     if (this.resolved) return;
 
     if (this.mode === 'feedback' && this.feedbackInput) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.handleReject();
         return;
       }

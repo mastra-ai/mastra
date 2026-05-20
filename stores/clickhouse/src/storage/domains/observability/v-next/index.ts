@@ -100,6 +100,8 @@ import {
   DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
+  TABLE_DISCOVERY_VALUES,
+  TABLE_DISCOVERY_PAIRS,
   buildRetentionEntries,
   parseTtlExpression,
 } from './ddl';
@@ -116,7 +118,7 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { checkSignalTablesMigrationStatus, isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
@@ -228,6 +230,51 @@ async function filterAppliedRetention(
     if (!current) return true;
     return current.column !== e.column || current.days !== e.days;
   });
+}
+
+/**
+ * Reconciles the discovery helper tables with the engine declared in the
+ * current DDL. Skips tables that are already on the expected engine or that
+ * don't exist yet; in those cases the regular `CREATE TABLE IF NOT EXISTS`
+ * in init() handles them.
+ *
+ * When an engine mismatch is found, the refreshable MV is dropped first so
+ * it can't write into the table mid-drop, then the table itself is dropped.
+ * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
+ * recreate both with the current definitions.
+ *
+ * Silently returns if `system.tables` can't be queried — the rest of init
+ * will still run and leave any existing tables untouched.
+ */
+async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void> {
+  let engines: Map<string, string>;
+  try {
+    const result = await client.query({
+      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    engines = new Map(rows.map(r => [r.name, r.engine]));
+  } catch {
+    return;
+  }
+
+  const targets: Array<{ table: string; mv: string }> = [
+    { table: TABLE_DISCOVERY_VALUES, mv: MV_DISCOVERY_VALUES },
+    { table: TABLE_DISCOVERY_PAIRS, mv: MV_DISCOVERY_PAIRS },
+  ];
+
+  // ClickHouse Cloud rewrites `ReplacingMergeTree` to `SharedReplacingMergeTree`
+  // and self-managed replicated clusters rewrite it to `ReplicatedReplacingMergeTree`.
+  // `isReplacingMergeTreeEngine` accepts all three so we don't churn the helper
+  // tables on every init for those deployments.
+  for (const { table, mv } of targets) {
+    const engine = engines.get(table);
+    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
+    await client.command({ query: `DROP VIEW IF EXISTS ${mv}` });
+    await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
+  }
 }
 
 async function queryNamesByTable(
@@ -374,6 +421,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       } else {
         this.#deltaCursorStrategy = await detectDeltaCursorStrategy(this.#client, undefined, existingStrategy);
       }
+
+      // Align the discovery helper tables with the current DDL. The discovery
+      // tables are fully derived from the base signal tables and get
+      // repopulated by the refreshable MV at the end of init(), so it is safe
+      // to recreate them in place when the engine doesn't match.
+      await reconcileDiscoveryTables(this.#client);
 
       // Core tables + incremental MVs (must succeed)
       const coreDdl =

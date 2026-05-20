@@ -1,5 +1,82 @@
 # @mastra/core
 
+## 1.36.0-alpha.8
+
+### Patch Changes
+
+- Fixed type error when a tool calls `suspend(...)` inside `execute` while also declaring an `outputSchema`. The `execute` return type now allows `void` in addition to the declared output shape, so the idiomatic `return await suspend(...)` pattern type-checks correctly. ([#16799](https://github.com/mastra-ai/mastra/pull/16799))
+
+## 1.36.0-alpha.7
+
+### Minor Changes
+
+- Added new editor configuration primitives for browser providers, agent builder integration, and stored-agent visibility. ([#16778](https://github.com/mastra-ai/mastra/pull/16778))
+
+  **New: `BrowserProvider` interface**
+
+  Implement a browser provider to expose browser automation tools to agents via the editor. Each provider declares an id, name, and config schema, then returns a `MastraBrowser` instance from `createBrowser`.
+
+  ```ts
+  import type { BrowserProvider } from '@mastra/core/editor';
+
+  const myProvider: BrowserProvider = {
+    id: 'my-browser',
+    name: 'My Browser',
+    description: 'Custom browser automation',
+    configSchema: z.object({ apiKey: z.string() }),
+    createBrowser: async config => {
+      return createMyBrowser(config.apiKey);
+    },
+  };
+  ```
+
+  **New: `MastraEditorConfig.browsers` and `.builder`**
+
+  Wire browser providers and agent-builder options into the editor:
+
+  ```ts
+  new MastraEditor({
+    browsers: { 'my-browser': myProvider },
+    builder: { features: { agent: { favorites: true } } },
+  });
+  ```
+
+  **New: `visibility` on `updateAgentMeta`**
+
+  Set an agent's visibility (private or public) through the editor namespace:
+
+  ```ts
+  await editor.agent.updateAgentMeta('agent-id', { visibility: 'public' });
+  ```
+
+## 1.36.0-alpha.6
+
+### Patch Changes
+
+- Added a Unix socket PubSub transport and wired the Mastra Code TUI through a per-resource socket so local sessions can coordinate thread streams across processes. Programmatic `createMastraCode` usage remains opt-in: ([#16669](https://github.com/mastra-ai/mastra/pull/16669))
+
+  ```ts
+  await createMastraCode({ unixSocketPubSub: true });
+  ```
+
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Improved MastraCode quiet mode so terminal sessions are easier to scan. ([#16771](https://github.com/mastra-ai/mastra/pull/16771))
+  - Quiet mode is now the default for new installs, and existing classic users get a one-time prompt to choose whether to enable it.
+  - Added compact tool previews with a configurable preview-line limit, including an option to hide previews.
+  - Improved repeated tool-call rendering, path continuation handling, task wrapping, shell/error previews, and spacing between tools, messages, plans, and completed subagents.
+  - Added edited line ranges to workspace edit results so tool UIs can show where replacements happened.
+
+- Fixed `backgroundTasks: { enabled: true }` silently dispatching foreground-only tools to the background. ([#16792](https://github.com/mastra-ai/mastra/pull/16792))
+
+  Previously, enabling `backgroundTasks` on the `Mastra` instance injected a system prompt into every agent that taught the LLM to flip any tool to background by passing `_background: { enabled: true }` in its arguments, and the resolver honored that override unconditionally. Models would readily do this for short, deterministic tools — a plain calculator could return `"Background task started…"` instead of `{ result: 42 }`, breaking `agent.generate()` / `agent.stream()` for tool-using flows.
+
+  The LLM `_background` override is now treated as a _modifier_ on tools the developer has opted in at the tool or agent layer, not a standalone opt-in. If a tool hasn't been opted in via tool-level `background: { enabled: true }` or agent-level `backgroundTasks: { tools: { … } }` (or `tools: 'all'`), `_background.enabled: true` from the model is ignored and the tool runs in the foreground. Opted-in tools continue to honor LLM overrides for `enabled`, `timeoutMs`, and `maxRetries` as documented.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/16783
+
 ## 1.36.0-alpha.4
 
 ### Minor Changes

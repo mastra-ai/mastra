@@ -324,6 +324,32 @@ describe('createMastraCode', () => {
     );
   });
 
+  it('keeps thread locks enabled for configured PubSub unless cross-process mode is explicit', async () => {
+    const pubsub = {} as any;
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub, unixSocketPubSub: true });
+
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
+    expect(harnessConfig?.pubsub).toBe(pubsub);
+    expect(harnessConfig?.threadLock).toBeDefined();
+  });
+
+  it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
+    const pubsub = {} as any;
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub, crossProcessPubSub: true });
+
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
+    expect(harnessConfig?.pubsub).toBe(pubsub);
+    expect(harnessConfig?.threadLock).toBeUndefined();
+  });
+
   it('restores the current thread caveman observation setting at startup', async () => {
     harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
     harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
