@@ -6247,6 +6247,42 @@ export class Agent<
   }
 
   /**
+   * @internal Test-only hook for duck-typed agents that override `stream()`
+   * without going through the normal execution loop. Production `stream()`
+   * registers its output through the same thread-stream runtime path.
+   */
+  _internalRegisterStreamRun<OUTPUT = TOutput>(
+    output: MastraModelOutput<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT>,
+  ): void {
+    agentThreadStreamRuntime.registerRun(this as Agent<any, any, any, any>, output, streamOptions, this.getPubSub());
+  }
+
+  /**
+   * Look up the output for a registered thread-stream run. Returns `undefined`
+   * after the run has finished and the runtime has cleaned it up.
+   */
+  getRunOutput<OUTPUT = TOutput>(runId: string): MastraModelOutput<OUTPUT> | undefined {
+    return agentThreadStreamRuntime.getRunOutput<OUTPUT>(runId, this.getPubSub());
+  }
+
+  /**
+   * Resolves when a thread-stream run registers its output, or immediately if
+   * it is already registered. Useful after `sendSignal()` returns a `runId`
+   * before the idle-wake stream has attached its output.
+   */
+  waitForRunOutput<OUTPUT = TOutput>(
+    runId: string,
+    options?: { abortSignal?: AbortSignal; signal?: AbortSignal },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return agentThreadStreamRuntime.waitForRunOutput<OUTPUT>(
+      runId,
+      this.getPubSub(),
+      options?.abortSignal ?? options?.signal,
+    );
+  }
+
+  /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
