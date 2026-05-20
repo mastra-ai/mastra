@@ -27,6 +27,21 @@ export interface ProjectInfo {
   mainRepoPath?: string;
   /** Whether the resourceId was explicitly overridden (env var or config) */
   resourceIdOverride?: boolean;
+  /**
+   * Other git trees nested inside `rootPath` (worktrees, submodules, vendored
+   * repos). The agent must use `request_access` before reading or writing
+   * inside these subtrees.
+   */
+  nestedGitTrees: NestedGitTree[];
+}
+
+export interface NestedGitTree {
+  /** Path relative to `rootPath`, with forward slashes. */
+  relativePath: string;
+  /** Absolute path on disk. */
+  absolutePath: string;
+  /** Short human-readable description (e.g. "branch foo", "submodule"). */
+  description: string;
 }
 
 /**
@@ -141,6 +156,8 @@ export function detectProject(projectPath: string): ProjectInfo {
 
   const resourceId = `${slugify(baseName)}-${shortHash(resourceIdSource)}`;
 
+  const nestedGitTrees = detectNestedGitTrees(rootPath);
+
   return {
     resourceId,
     name: baseName,
@@ -149,7 +166,143 @@ export function detectProject(projectPath: string): ProjectInfo {
     gitBranch,
     isWorktree,
     mainRepoPath,
+    nestedGitTrees,
   };
+}
+
+/**
+ * Directories that should never be descended into when looking for nested
+ * git trees. These are common dependency / build / cache locations that
+ * sometimes contain `.git` entries (vendored deps, npm git-sources, etc.)
+ * but are not worth flagging individually for the agent.
+ */
+const NESTED_GIT_SCAN_PRUNE = new Set([
+  'node_modules',
+  '.git',
+  '.turbo',
+  '.next',
+  '.nuxt',
+  '.cache',
+  '.parcel-cache',
+  '.svelte-kit',
+  '.vite',
+  '.vercel',
+  '.netlify',
+  '.pnpm-store',
+  '.yarn',
+  'dist',
+  'build',
+  'out',
+  'target',
+  'coverage',
+  '.venv',
+  'venv',
+  '__pycache__',
+  '.tox',
+  '.pytest_cache',
+  '.mypy_cache',
+  '.ruff_cache',
+  '.gradle',
+  '.idea',
+  '.vscode',
+  '.DS_Store',
+]);
+
+/**
+ * Maximum directory depth (relative to `rootPath`) when searching for nested
+ * `.git` entries. Most worktrees-of-worktrees stacks people build by hand
+ * stay well under this depth and we'd rather skip a deep scan than block
+ * startup.
+ */
+const NESTED_GIT_SCAN_MAX_DEPTH = 4;
+/** Hard cap on how many nested trees to surface in case of pathological repos. */
+const NESTED_GIT_SCAN_MAX_RESULTS = 32;
+
+/**
+ * Find git trees nested inside `rootPath`. A nested git tree is any
+ * directory under `rootPath` (other than `rootPath` itself) that contains a
+ * `.git` entry — this includes:
+ *
+ *   - Worktrees of the same repo (`.git` is a *file* pointing into the main
+ *     repo's `.git/worktrees/<name>`).
+ *   - Submodules (`.git` file or dir, depending on git version).
+ *   - Wholly separate repos that happen to live inside the project tree
+ *     (e.g. vendored open-source code with its own `.git/`).
+ *
+ * The scan is bounded in depth and prunes common build / dependency dirs
+ * to keep startup fast. It is intentionally best-effort — false negatives
+ * are acceptable, false positives just add a line to the system prompt.
+ */
+export function detectNestedGitTrees(rootPath: string): NestedGitTree[] {
+  const results: NestedGitTree[] = [];
+  const seen = new Set<string>();
+
+  const walk = (dir: string, depth: number): void => {
+    if (results.length >= NESTED_GIT_SCAN_MAX_RESULTS) return;
+    if (depth > NESTED_GIT_SCAN_MAX_DEPTH) return;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= NESTED_GIT_SCAN_MAX_RESULTS) return;
+      if (NESTED_GIT_SCAN_PRUNE.has(entry.name)) continue;
+
+      // Symlinks are skipped — following them risks infinite loops and they
+      // rarely point at "real" nested git trees we care about.
+      if (entry.isSymbolicLink()) continue;
+      if (!entry.isDirectory()) continue;
+
+      const childPath = path.join(dir, entry.name);
+      const gitEntry = path.join(childPath, '.git');
+
+      let hasGit = false;
+      try {
+        hasGit = fs.existsSync(gitEntry);
+      } catch {
+        hasGit = false;
+      }
+
+      if (hasGit) {
+        if (!seen.has(childPath)) {
+          seen.add(childPath);
+          results.push({
+            relativePath: path.relative(rootPath, childPath).split(path.sep).join('/'),
+            absolutePath: childPath,
+            description: describeNestedGitTree(childPath),
+          });
+        }
+        // Don't descend into a nested git tree — its contents are conceptually
+        // a separate sandbox.
+        continue;
+      }
+
+      walk(childPath, depth + 1);
+    }
+  };
+
+  try {
+    walk(rootPath, 1);
+  } catch {
+    // best-effort
+  }
+
+  return results;
+}
+
+function describeNestedGitTree(absPath: string): string {
+  // `branch --show-current` is preferred over `rev-parse --abbrev-ref HEAD`
+  // because it works on empty (commit-less) repos and returns an empty string
+  // for detached HEAD instead of "HEAD". Available since git 2.22.
+  const branch = git('branch --show-current', absPath);
+  if (branch) {
+    return `branch ${branch}`;
+  }
+  return 'separate git tree';
 }
 
 /**
