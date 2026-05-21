@@ -76,6 +76,8 @@ describe('Select', () => {
       expect(onValueChange).toHaveBeenCalledTimes(1);
     });
     expect(onValueChange.mock.calls[0][0]).toBe('banana');
+    // The Base UI migration adds a second `eventDetails` argument — guard the contract.
+    expect(onValueChange.mock.calls[0][1]).toBeDefined();
 
     // Trigger reflects the new selection.
     await waitFor(() => {
