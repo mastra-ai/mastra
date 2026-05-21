@@ -1062,13 +1062,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // input processor / prepareStep / processLLMRequest work, and that
             // availableTools / toolChoice reflect any per-step mutations.
             const currentStepUsesModelConfig = currentStep.model === modelConfig.model;
+            const stepMaxRetries = (currentStep.modelSettings as { maxRetries?: number } | undefined)?.maxRetries;
             const currentStepModelSettings = {
               ...currentStep.modelSettings,
               ...(currentStepUsesModelConfig ? modelConfig.modelSettings : {}),
               maxRetries: currentStepUsesModelConfig
-                ? modelConfig.maxRetries
-                : ((currentStep.modelSettings as { maxRetries?: number } | undefined)?.maxRetries ??
-                  modelConfig.maxRetries),
+                ? (modelConfig.maxRetries ?? stepMaxRetries)
+                : (stepMaxRetries ?? modelConfig.maxRetries),
             };
 
             modelSpanTracker?.setInferenceContext?.({
