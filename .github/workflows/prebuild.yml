@@ -130,7 +130,6 @@ jobs:
     with:
       head_sha: ${{ github.event.pull_request.head.sha }}
     secrets:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
