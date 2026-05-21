@@ -3,14 +3,33 @@ import type { z } from 'zod';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
-import type { GoalState, PendingResume, PermissionRules, SessionGrants } from '../../storage/domains/harness';
+import type {
+  AttachmentObjectPointer,
+  AttachmentRendererDescriptor,
+  AttachmentSource,
+  GoalState,
+  HarnessAttachmentKind,
+  HarnessPrimitiveType,
+  JsonValue,
+  PendingResume,
+  PermissionRules,
+  SessionGrants,
+} from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { HarnessMode } from './shared';
 
 export type {
+  AttachmentObjectPointer,
   AttachmentRecord,
+  AttachmentRendererDescriptor,
+  AttachmentSemanticMetadata,
+  AttachmentSource,
   GoalJudgeDecision,
   GoalState,
+  HarnessAttachmentKind,
+  HarnessKnownPrimitiveType,
+  HarnessPrimitiveType,
+  JsonValue,
   LoadedAttachment,
   PendingResume,
   PermissionRules,
@@ -76,10 +95,21 @@ export interface HarnessLease {
 }
 
 export interface AttachmentRef {
-  id: string;
-  filename?: string;
-  contentType?: string;
-  url?: string;
+  attachmentId: string;
+  resourceId: string;
+  ownerSessionId?: string;
+  bytes?: number;
+  sha256?: string;
+  source?: AttachmentSource;
+  kind?: HarnessAttachmentKind;
+  name?: string;
+  mimeType?: string;
+  primitiveType?: HarnessPrimitiveType;
+  elementType?: string;
+  renderer?: AttachmentRendererDescriptor;
+  schemaId?: string;
+  metadata?: Record<string, JsonValue>;
+  object?: AttachmentObjectPointer;
 }
 
 export interface PendingBase {
@@ -281,16 +311,49 @@ export interface SessionLoadByIdOptions {
   includeClosed?: boolean;
 }
 
-export interface AttachmentUploadOptions {
-  resourceId: string;
-  data: Buffer | ReadableStream<Uint8Array>;
+export interface FileAttachmentUploadOptions {
+  sessionId: string;
+  resourceId?: string;
+  kind?: 'file';
+  data: Buffer | Uint8Array | ReadableStream<Uint8Array>;
   filename: string;
   contentType: string;
+  metadata?: Record<string, JsonValue>;
 }
+
+export interface PrimitiveAttachmentUploadOptions {
+  sessionId: string;
+  resourceId?: string;
+  kind: 'primitive';
+  name: string;
+  primitiveType: HarnessPrimitiveType;
+  value: JsonValue;
+  mimeType?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ElementAttachmentUploadOptions {
+  sessionId: string;
+  resourceId?: string;
+  kind: 'element';
+  name: string;
+  elementType: string;
+  payload: JsonValue;
+  renderer?: AttachmentRendererDescriptor;
+  schemaId?: string;
+  mimeType?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export type AttachmentUploadOptions =
+  | FileAttachmentUploadOptions
+  | PrimitiveAttachmentUploadOptions
+  | ElementAttachmentUploadOptions;
 
 export interface AttachmentDeleteOptions {
   attachmentId: string;
-  resourceId: string;
+  sessionId: string;
+  resourceId?: string;
 }
 
 export interface ShutdownOptions {

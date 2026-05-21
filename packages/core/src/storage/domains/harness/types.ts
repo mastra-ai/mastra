@@ -147,6 +147,43 @@ export interface GoalState {
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
+export type AttachmentSource = 'inline' | 'preupload' | 'url' | 'provider';
+
+export type HarnessAttachmentKind = 'file' | 'primitive' | 'element';
+
+export type HarnessKnownPrimitiveType =
+  | 'text'
+  | 'markdown'
+  | 'json'
+  | 'table'
+  | 'chart-data'
+  | 'selection'
+  | 'citation';
+
+export type HarnessPrimitiveType = HarnessKnownPrimitiveType | (string & {});
+
+export interface AttachmentRendererDescriptor {
+  id: string;
+  version?: string;
+}
+
+export interface AttachmentObjectPointer {
+  providerId: string;
+  objectKey: string;
+  etag?: string;
+  storageClass?: string;
+}
+
+export interface AttachmentSemanticMetadata {
+  kind?: HarnessAttachmentKind;
+  primitiveType?: HarnessPrimitiveType;
+  elementType?: string;
+  renderer?: AttachmentRendererDescriptor;
+  schemaId?: string;
+  metadata?: Record<string, JsonValue>;
+  object?: AttachmentObjectPointer;
+}
+
 /**
  * Per-session workspace state, only populated under a resumable per-session
  * workspace provider.
@@ -226,6 +263,8 @@ export interface SessionSummary {
  * Metadata index row for a persisted file attachment.
  */
 export interface AttachmentRecord {
+  /** Session that owns the attachment bytes. */
+  ownerSessionId: string;
   /** Stable identifier referenced by `PersistedAttachment.attachmentId`. */
   attachmentId: string;
   /** Owning session - bytes are deleted with the session. */
@@ -235,7 +274,19 @@ export interface AttachmentRecord {
   /** MIME type, validated at upload. */
   mimeType: string;
   /** Size of the underlying bytes. */
-  sizeBytes: number;
+  bytes: number;
+  /** Hex SHA-256 digest of the underlying bytes. */
+  sha256: string;
+  /** Where the attachment came from. */
+  source: AttachmentSource;
+  /** Semantic class for UI/replay consumers. Defaults to `file` for legacy rows. */
+  kind?: HarnessAttachmentKind;
+  primitiveType?: HarnessPrimitiveType;
+  elementType?: string;
+  renderer?: AttachmentRendererDescriptor;
+  schemaId?: string;
+  metadata?: Record<string, JsonValue>;
+  object?: AttachmentObjectPointer;
   /** Epoch ms. */
   createdAt: number;
 }
@@ -374,11 +425,22 @@ export interface SaveAttachmentInput {
   attachmentId: string;
   name: string;
   mimeType: string;
+  source: AttachmentSource;
   data: Uint8Array;
+  semantic?: AttachmentSemanticMetadata;
+}
+
+export interface SaveAttachmentResult {
+  attachmentId: string;
+  bytes: number;
+  sha256: string;
 }
 
 export interface LoadedAttachment {
   name: string;
   mimeType: string;
+  bytes: number;
+  sha256: string;
   data: Uint8Array;
+  semantic?: AttachmentSemanticMetadata;
 }

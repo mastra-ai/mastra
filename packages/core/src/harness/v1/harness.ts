@@ -3,7 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import type {
+  AttachmentSemanticMetadata,
+  HarnessPrimitiveType,
   HarnessStorage,
+  JsonValue,
   PermissionRules,
   SessionGrants,
   SessionRecord,
@@ -26,6 +29,7 @@ import {
   HarnessSessionNotFoundError,
   HarnessStorageError,
   HarnessThreadNotFoundError,
+  HarnessValidationError,
   HarnessWorkspaceProviderMismatchError,
 } from './errors';
 import { EventEmitter } from './events';
@@ -85,6 +89,8 @@ export class Harness<TState = unknown> {
   private readonly _sessionResolutions = new Map<string, Promise<Session>>();
   private readonly _leaseTtlMs: number;
   private readonly _maxQueueDepth: number;
+  private readonly _maxAttachmentBytes?: number;
+  private readonly _allowedAttachmentContentTypes?: readonly string[];
   private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
   private readonly _subagentMaxDepth: number;
   private readonly _goalDefaults: { defaultJudgeModel?: string; defaultMaxTurns: number };
@@ -119,6 +125,21 @@ export class Harness<TState = unknown> {
     this._initialState = config.initialState;
     this._configuredIntervals = config.intervals ?? [];
     this._resolveModel = config.resolveModel;
+    if (config.files?.maxAttachmentBytes !== undefined) {
+      if (!Number.isSafeInteger(config.files.maxAttachmentBytes) || config.files.maxAttachmentBytes < 1) {
+        throw new HarnessConfigError('files.maxAttachmentBytes', 'must be a positive safe integer');
+      }
+      this._maxAttachmentBytes = config.files.maxAttachmentBytes;
+    }
+    if (config.files?.allowedContentTypes !== undefined) {
+      if (
+        !Array.isArray(config.files.allowedContentTypes) ||
+        config.files.allowedContentTypes.some(type => typeof type !== 'string' || type.length === 0)
+      ) {
+        throw new HarnessConfigError('files.allowedContentTypes', 'must be an array of non-empty strings');
+      }
+      this._allowedAttachmentContentTypes = [...config.files.allowedContentTypes];
+    }
 
     if (this._leaseTtlMs < 1) {
       throw new HarnessConfigError('sessions.leaseTtlMs', 'must be a positive integer');
@@ -1332,13 +1353,109 @@ export class Harness<TState = unknown> {
   };
 
   attachments = {
-    upload: async (_opts: AttachmentUploadOptions): Promise<AttachmentRef> => {
-      throw new Error('Harness.attachments.upload: not implemented');
+    upload: async (opts: AttachmentUploadOptions): Promise<AttachmentRef> => {
+      const storage = this._requireStorage('attachments.upload()');
+      const payload = await normalizeAttachmentUpload(opts, this._maxAttachmentBytes);
+      this.validateAttachmentPayload(payload);
+      const lease = await this.loadSessionForAttachment('attachments.upload()', opts.sessionId, opts.resourceId);
+      try {
+        let saved;
+        try {
+          saved = await storage.saveAttachment({
+            sessionId: lease.record.id,
+            attachmentId: `att-${randomUUID()}`,
+            name: payload.name,
+            mimeType: payload.mimeType,
+            source: 'preupload',
+            data: payload.data,
+            semantic: payload.semantic,
+          });
+        } catch (err) {
+          throw new HarnessStorageError(lease.record.id, 'attachment', err);
+        }
+        return {
+          attachmentId: saved.attachmentId,
+          resourceId: lease.record.resourceId,
+          ownerSessionId: lease.record.id,
+          bytes: saved.bytes,
+          sha256: saved.sha256,
+          source: 'preupload',
+          ...(payload.semantic?.kind ? { kind: payload.semantic.kind } : {}),
+          name: payload.name,
+          mimeType: payload.mimeType,
+          ...(payload.semantic?.primitiveType ? { primitiveType: payload.semantic.primitiveType } : {}),
+          ...(payload.semantic?.elementType ? { elementType: payload.semantic.elementType } : {}),
+          ...(payload.semantic?.renderer ? { renderer: { ...payload.semantic.renderer } } : {}),
+          ...(payload.semantic?.schemaId ? { schemaId: payload.semantic.schemaId } : {}),
+          ...(payload.semantic?.metadata ? { metadata: structuredClone(payload.semantic.metadata) } : {}),
+          ...(payload.semantic?.object ? { object: { ...payload.semantic.object } } : {}),
+        };
+      } finally {
+        await lease.release();
+      }
     },
-    delete: async (_opts: AttachmentDeleteOptions): Promise<void> => {
-      throw new Error('Harness.attachments.delete: not implemented');
+    delete: async (opts: AttachmentDeleteOptions): Promise<void> => {
+      const storage = this._requireStorage('attachments.delete()');
+      const lease = await this.loadSessionForAttachment('attachments.delete()', opts.sessionId, opts.resourceId);
+      try {
+        try {
+          await storage.deleteAttachment({ sessionId: lease.record.id, attachmentId: opts.attachmentId });
+        } catch (err) {
+          throw new HarnessStorageError(lease.record.id, 'attachment', err);
+        }
+      } finally {
+        await lease.release();
+      }
     },
   };
+
+  private async loadSessionForAttachment(
+    callsite: string,
+    sessionId: string,
+    resourceId: string | undefined,
+  ): Promise<{ record: SessionRecord; release: () => Promise<void> }> {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) {
+      throw new HarnessValidationError(`${callsite}.sessionId`, 'sessionId must be a non-empty string');
+    }
+    const storage = this._requireStorage(callsite);
+    const record = await storage.loadSession({ sessionId });
+    if (!record) throw new HarnessSessionNotFoundError(sessionId);
+    if (record.closedAt !== undefined) throw new HarnessSessionClosedError(sessionId);
+    if (resourceId !== undefined && record.resourceId !== resourceId) {
+      throw new HarnessSessionNotFoundError(sessionId);
+    }
+    const live = this._liveSessions.get(sessionId);
+    if (live) {
+      if (live.resourceId !== record.resourceId) throw new HarnessSessionNotFoundError(sessionId);
+      return { record, release: async () => undefined };
+    }
+    await this._acquireLease(storage, sessionId);
+    return {
+      record,
+      release: async () => {
+        await storage.releaseSessionLease({ sessionId, ownerId: this.ownerId }).catch(() => undefined);
+      },
+    };
+  }
+
+  private validateAttachmentPayload(payload: NormalizedAttachmentUpload): void {
+    if (this._maxAttachmentBytes !== undefined && payload.data.byteLength > this._maxAttachmentBytes) {
+      throw new HarnessValidationError(
+        'attachments.upload().data',
+        `attachment size ${payload.data.byteLength} exceeds configured limit ${this._maxAttachmentBytes}`,
+      );
+    }
+
+    if (
+      this._allowedAttachmentContentTypes !== undefined &&
+      !matchesAllowedContentType(payload.mimeType, this._allowedAttachmentContentTypes)
+    ) {
+      throw new HarnessValidationError(
+        'attachments.upload().contentType',
+        `content type "${payload.mimeType}" is not allowed by files.allowedContentTypes`,
+      );
+    }
+  }
 
   private _requireStorage(callsite: string): HarnessStorage {
     if (this._storageOverride) return this._storageOverride;
@@ -1507,6 +1624,203 @@ export class Harness<TState = unknown> {
   get _internalGoalDefaults(): Readonly<{ defaultJudgeModel?: string; defaultMaxTurns: number }> {
     return this._goalDefaults;
   }
+}
+
+type NormalizedAttachmentUpload = {
+  name: string;
+  mimeType: string;
+  data: Uint8Array;
+  semantic: AttachmentSemanticMetadata;
+};
+
+async function normalizeAttachmentUpload(
+  opts: AttachmentUploadOptions,
+  maxBytes?: number,
+): Promise<NormalizedAttachmentUpload> {
+  if (opts.kind === 'primitive') {
+    if (!opts.name) throw new HarnessValidationError('attachments.upload().name', 'name must be a non-empty string');
+    const primitiveType = assertAttachmentPrimitiveType(opts.primitiveType);
+    const value = assertAttachmentJsonValue(opts.value, 'attachments.upload().value');
+    const data = new TextEncoder().encode(stableJsonStringify(value));
+    return {
+      name: opts.name,
+      mimeType: opts.mimeType ?? 'application/json',
+      data,
+      semantic: {
+        kind: 'primitive',
+        primitiveType,
+        ...(opts.metadata !== undefined
+          ? { metadata: assertAttachmentJsonRecord(opts.metadata, 'attachments.upload().metadata') }
+          : {}),
+      },
+    };
+  }
+
+  if (opts.kind === 'element') {
+    if (!opts.name) throw new HarnessValidationError('attachments.upload().name', 'name must be a non-empty string');
+    if (!opts.elementType) {
+      throw new HarnessValidationError('attachments.upload().elementType', 'elementType must be a non-empty string');
+    }
+    const payload = assertAttachmentJsonValue(opts.payload, 'attachments.upload().payload');
+    const data = new TextEncoder().encode(stableJsonStringify(payload));
+    return {
+      name: opts.name,
+      mimeType: opts.mimeType ?? 'application/json',
+      data,
+      semantic: {
+        kind: 'element',
+        elementType: opts.elementType,
+        ...(opts.renderer ? { renderer: { ...opts.renderer } } : {}),
+        ...(opts.schemaId ? { schemaId: opts.schemaId } : {}),
+        ...(opts.metadata !== undefined
+          ? { metadata: assertAttachmentJsonRecord(opts.metadata, 'attachments.upload().metadata') }
+          : {}),
+      },
+    };
+  }
+
+  if (!opts.filename) {
+    throw new HarnessValidationError('attachments.upload().filename', 'filename must be a non-empty string');
+  }
+  if (!opts.contentType) {
+    throw new HarnessValidationError('attachments.upload().contentType', 'contentType must be a non-empty string');
+  }
+  return {
+    name: opts.filename,
+    mimeType: opts.contentType,
+    data: await readAttachmentBytes(opts.data, maxBytes),
+    semantic: {
+      kind: 'file',
+      ...(opts.metadata !== undefined
+        ? { metadata: assertAttachmentJsonRecord(opts.metadata, 'attachments.upload().metadata') }
+        : {}),
+    },
+  };
+}
+
+function matchesAllowedContentType(mimeType: string, allowed: readonly string[]): boolean {
+  return allowed.some(pattern => {
+    if (pattern === mimeType || pattern === '*/*') return true;
+    if (!pattern.endsWith('/*')) return false;
+    return mimeType.startsWith(`${pattern.slice(0, -2)}/`);
+  });
+}
+
+function assertAttachmentPrimitiveType(value: unknown): HarnessPrimitiveType {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError('attachments.upload().primitiveType', 'primitiveType must be a non-empty string');
+  }
+  return value as HarnessPrimitiveType;
+}
+
+async function readAttachmentBytes(
+  data: Buffer | Uint8Array | ReadableStream<Uint8Array>,
+  maxBytes?: number,
+): Promise<Uint8Array> {
+  if (data instanceof Uint8Array) {
+    if (maxBytes !== undefined && data.byteLength > maxBytes) {
+      throw new HarnessValidationError(
+        'attachments.upload().data',
+        `attachment size ${data.byteLength} exceeds configured limit ${maxBytes}`,
+      );
+    }
+    return new Uint8Array(data);
+  }
+  const reader = data.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      chunks.push(next.value);
+      total += next.value.byteLength;
+      if (maxBytes !== undefined && total > maxBytes) {
+        throw new HarnessValidationError(
+          'attachments.upload().data',
+          `attachment stream exceeds configured limit ${maxBytes}`,
+        );
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+function assertAttachmentJsonRecord(value: unknown, field: string): Record<string, JsonValue> {
+  if (!isPlainRecord(value)) {
+    throw new HarnessValidationError(field, 'attachment metadata must be a JSON object');
+  }
+  return assertAttachmentJsonValue(value, field) as Record<string, JsonValue>;
+}
+
+function assertAttachmentJsonValue(value: unknown, field: string, seen: WeakSet<object> = new WeakSet()): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new HarnessValidationError(field, 'attachment JSON values must be finite numbers');
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new HarnessValidationError(field, 'attachment value must not contain cycles');
+    seen.add(value);
+    const out: JsonValue[] = [];
+    try {
+      for (let index = 0; index < value.length; index += 1) {
+        if (!(index in value)) {
+          throw new HarnessValidationError(`${field}[${index}]`, 'attachment arrays must not contain holes');
+        }
+        out.push(assertAttachmentJsonValue(value[index], `${field}[${index}]`, seen));
+      }
+    } finally {
+      seen.delete(value);
+    }
+    return out;
+  }
+  if (isPlainRecord(value)) {
+    if (seen.has(value)) throw new HarnessValidationError(field, 'attachment value must not contain cycles');
+    seen.add(value);
+    const out = Object.create(null) as Record<string, JsonValue>;
+    try {
+      for (const [key, child] of Object.entries(value)) {
+        Object.defineProperty(out, key, {
+          value: assertAttachmentJsonValue(child, `${field}.${key}`, seen),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+    } finally {
+      seen.delete(value);
+    }
+    return out;
+  }
+  throw new HarnessValidationError(field, 'attachment value must be JSON-serializable');
+}
+
+function stableJsonStringify(value: JsonValue): string {
+  if (Array.isArray(value)) return `[${value.map(item => stableJsonStringify(item)).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableJsonStringify(value[key]!)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function toThreadRecord(thread: {

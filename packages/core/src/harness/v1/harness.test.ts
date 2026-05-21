@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
@@ -15,8 +17,10 @@ import {
   HarnessSessionNotFoundError,
   HarnessStorageError,
   HarnessThreadNotFoundError,
+  HarnessValidationError,
   HarnessWorkspaceProviderMismatchError,
 } from './errors';
+import { snapshotHarnessEventForJson } from './events';
 import { Harness } from './harness';
 import { nonDurableProvider } from './workspace-provider';
 
@@ -42,6 +46,21 @@ class LeaseStealingStorage extends InMemoryHarness {
       await super.acquireSessionLease({ ...opts, ownerId: 'other-owner' });
     }
     return super.acquireSessionLease(opts);
+  }
+}
+
+class FailingAttachmentStorage extends InMemoryHarness {
+  failSaveAttachment = false;
+  failDeleteAttachment = false;
+
+  override async saveAttachment(opts: Parameters<InMemoryHarness['saveAttachment']>[0]) {
+    if (this.failSaveAttachment) throw new Error('save attachment failed');
+    return super.saveAttachment(opts);
+  }
+
+  override async deleteAttachment(opts: Parameters<InMemoryHarness['deleteAttachment']>[0]) {
+    if (this.failDeleteAttachment) throw new Error('delete attachment failed');
+    return super.deleteAttachment(opts);
   }
 }
 
@@ -144,6 +163,414 @@ describe('Harness v1 construction', () => {
           sessions: { storage: makeStorage() },
         }),
     ).toThrow(HarnessConfigError);
+  });
+
+  it('validates attachment limit configuration up front', () => {
+    expect(() =>
+      makeHarness({
+        files: { maxAttachmentBytes: 0 },
+      }),
+    ).toThrow(HarnessConfigError);
+
+    expect(() =>
+      makeHarness({
+        files: { allowedContentTypes: ['text/plain', 'image/*'] },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      makeHarness({
+        files: { allowedContentTypes: [''] },
+      }),
+    ).toThrow(HarnessConfigError);
+  });
+});
+
+describe('Harness.attachments', () => {
+  it('uploads attachments with digest metadata and deletes them by attachment id', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const source = Buffer.from('hello attachment');
+    const expectedSha256 = createHash('sha256').update(source).digest('hex');
+
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      data: source,
+      filename: 'note.txt',
+      contentType: 'text/plain',
+    });
+
+    expect(result).toMatchObject({
+      resourceId: 'u',
+      ownerSessionId: session.id,
+      bytes: source.length,
+      sha256: expectedSha256,
+      source: 'preupload',
+      kind: 'file',
+      name: 'note.txt',
+      mimeType: 'text/plain',
+    });
+
+    source[0] = 'j'.charCodeAt(0);
+    await expect(storage.loadAttachment({ sessionId: session.id, attachmentId: result.attachmentId })).resolves.toEqual(
+      expect.objectContaining({
+        name: 'note.txt',
+        mimeType: 'text/plain',
+        bytes: Buffer.byteLength('hello attachment'),
+        sha256: expectedSha256,
+        data: new Uint8Array(Buffer.from('hello attachment')),
+        semantic: { kind: 'file' },
+      }),
+    );
+
+    await harness.attachments.delete({ attachmentId: result.attachmentId, sessionId: session.id });
+    await expect(
+      storage.loadAttachment({ sessionId: session.id, attachmentId: result.attachmentId }),
+    ).resolves.toBeNull();
+  });
+
+  it('uploads arbitrary binary files such as images, videos, and documents', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const inputs = [
+      { filename: 'diagram.png', contentType: 'image/png', data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) },
+      { filename: 'clip.mp4', contentType: 'video/mp4', data: new Uint8Array([0x00, 0x00, 0x00, 0x18]) },
+      { filename: 'brief.pdf', contentType: 'application/pdf', data: Buffer.from('%PDF-1.7') },
+      {
+        filename: 'notes.docx',
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        data: new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+      },
+    ];
+
+    for (const input of inputs) {
+      const result = await harness.attachments.upload({ sessionId: session.id, ...input });
+      const expected = createHash('sha256').update(input.data).digest('hex');
+
+      expect(result).toMatchObject({
+        name: input.filename,
+        mimeType: input.contentType,
+        kind: 'file',
+        bytes: input.data.byteLength,
+        sha256: expected,
+      });
+      await expect(
+        storage.loadAttachment({ sessionId: session.id, attachmentId: result.attachmentId }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          name: input.filename,
+          mimeType: input.contentType,
+          data: new Uint8Array(input.data),
+        }),
+      );
+    }
+  });
+
+  it('enforces configured attachment size and content type limits', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({
+      sessions: { storage },
+      files: { maxAttachmentBytes: 64, allowedContentTypes: ['image/*', 'application/json'] },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        data: new Uint8Array(65),
+        filename: 'too-big.png',
+        contentType: 'image/png',
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().data' });
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        data: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(32));
+            controller.enqueue(new Uint8Array(33));
+            controller.close();
+          },
+        }),
+        filename: 'too-big-stream.png',
+        contentType: 'image/png',
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().data' });
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        data: new Uint8Array([1]),
+        filename: 'note.txt',
+        contentType: 'text/plain',
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().contentType' });
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'flags',
+        primitiveType: 'custom.agentic.value',
+        value: { ok: true },
+      }),
+    ).resolves.toMatchObject({ mimeType: 'application/json', primitiveType: 'custom.agentic.value' });
+  });
+
+  it('uploads primitive attachments as canonical bytes with semantic metadata', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      kind: 'primitive',
+      name: 'selection.json',
+      primitiveType: 'selection',
+      value: { z: 1, a: ['paper-1', 'paper-2'] },
+      metadata: { label: 'Selected papers' },
+    });
+
+    const expectedBytes = Buffer.from('{"a":["paper-1","paper-2"],"z":1}');
+    expect(result).toMatchObject({
+      resourceId: 'u',
+      ownerSessionId: session.id,
+      kind: 'primitive',
+      name: 'selection.json',
+      mimeType: 'application/json',
+      primitiveType: 'selection',
+      metadata: { label: 'Selected papers' },
+      bytes: expectedBytes.length,
+      sha256: createHash('sha256').update(expectedBytes).digest('hex'),
+    });
+
+    const loaded = await storage.loadAttachment({ sessionId: session.id, attachmentId: result.attachmentId });
+    expect(Buffer.from(loaded!.data).toString()).toBe('{"a":["paper-1","paper-2"],"z":1}');
+    expect(loaded?.semantic).toMatchObject({ kind: 'primitive', primitiveType: 'selection' });
+  });
+
+  it('preserves JSON keys that would otherwise mutate object prototypes', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const value = JSON.parse('{"__proto__":{"x":1},"a":2}') as Record<string, unknown>;
+
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      kind: 'primitive',
+      name: 'proto.json',
+      primitiveType: 'json',
+      value: value as never,
+    });
+
+    const loaded = await storage.loadAttachment({ sessionId: session.id, attachmentId: result.attachmentId });
+    expect(Buffer.from(loaded!.data).toString()).toBe('{"__proto__":{"x":1},"a":2}');
+  });
+
+  it('rejects invalid primitive and element attachment JSON payloads', async () => {
+    const harness = makeHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const cyclicPrimitive: Record<string, unknown> = { title: 'loop' };
+    cyclicPrimitive.self = cyclicPrimitive;
+    const cyclicElement: unknown[] = [];
+    cyclicElement.push(cyclicElement);
+    const sparsePrimitive: unknown[] = [];
+    sparsePrimitive[1] = 'missing zero';
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'loop.json',
+        primitiveType: 'json',
+        value: cyclicPrimitive as never,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().value.self' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'element',
+        name: 'loop-element.json',
+        elementType: 'loop',
+        payload: cyclicElement as never,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().payload[0]' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'sparse.json',
+        primitiveType: 'json',
+        value: sparsePrimitive as never,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().value[0]' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        data: new Uint8Array([1]),
+        filename: 'metadata.bin',
+        contentType: 'application/octet-stream',
+        metadata: ['not-a-record'] as never,
+      }),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'null-metadata.json',
+        primitiveType: 'json',
+        value: {},
+        metadata: null as never,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().metadata' });
+  });
+
+  it('accepts custom primitive attachment types and rejects missing ones', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const uploaded = await harness.attachments.upload({
+      sessionId: session.id,
+      kind: 'primitive',
+      name: 'agent-card.json',
+      primitiveType: 'agent-card',
+      value: { agentId: 'researcher' },
+    });
+
+    expect(uploaded).toMatchObject({ primitiveType: 'agent-card' });
+    await expect(
+      storage.loadAttachment({ sessionId: session.id, attachmentId: uploaded.attachmentId }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        semantic: expect.objectContaining({ primitiveType: 'agent-card' }),
+      }),
+    );
+  });
+
+  it('rejects primitive attachments with missing primitive types', async () => {
+    const harness = makeHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'missing-type.json',
+        primitiveType: undefined as never,
+        value: {},
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().primitiveType' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'empty-type.json',
+        primitiveType: '' as never,
+        value: {},
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().primitiveType' });
+  });
+
+  it('wraps attachment storage failures with harness storage errors', async () => {
+    const storage = new FailingAttachmentStorage({ db: new InMemoryDB() });
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    storage.failSaveAttachment = true;
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        data: new Uint8Array([1]),
+        filename: 'fail.bin',
+        contentType: 'application/octet-stream',
+      }),
+    ).rejects.toMatchObject({
+      sessionId: session.id,
+      operation: 'attachment',
+      cause: expect.any(Error),
+    });
+
+    storage.failSaveAttachment = false;
+    const uploaded = await harness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([1]),
+      filename: 'ok.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    storage.failDeleteAttachment = true;
+    await expect(
+      harness.attachments.delete({ sessionId: session.id, attachmentId: uploaded.attachmentId }),
+    ).rejects.toBeInstanceOf(HarnessStorageError);
+    await expect(
+      harness.attachments.delete({ sessionId: session.id, attachmentId: uploaded.attachmentId }),
+    ).rejects.toMatchObject({ sessionId: session.id, operation: 'attachment' });
+  });
+
+  it('uses the explicit owning session instead of the most recent resource session', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const older = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const newer = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const result = await harness.attachments.upload({
+      sessionId: older.id,
+      resourceId: 'u',
+      data: new Uint8Array([1, 2, 3]),
+      filename: 'older.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    await expect(
+      storage.getAttachmentRecord({ sessionId: older.id, attachmentId: result.attachmentId }),
+    ).resolves.toMatchObject({
+      ownerSessionId: older.id,
+    });
+    await expect(
+      storage.getAttachmentRecord({ sessionId: newer.id, attachmentId: result.attachmentId }),
+    ).resolves.toBeNull();
+
+    await harness.attachments.delete({ sessionId: older.id, attachmentId: result.attachmentId });
+    await expect(
+      storage.getAttachmentRecord({ sessionId: older.id, attachmentId: result.attachmentId }),
+    ).resolves.toBeNull();
+  });
+
+  it('requires the attachment caller to hold or acquire the session lease', async () => {
+    const storage = makeStorage();
+    const ownerHarness = makeHarness({ sessions: { storage } });
+    const competingHarness = makeHarness({ sessions: { storage } });
+    const session = await ownerHarness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await expect(
+      competingHarness.attachments.upload({
+        sessionId: session.id,
+        data: new Uint8Array([1]),
+        filename: 'locked.bin',
+        contentType: 'application/octet-stream',
+      }),
+    ).rejects.toBeInstanceOf(HarnessSessionLockedError);
+
+    await ownerHarness.shutdown();
+    const uploaded = await competingHarness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([1]),
+      filename: 'released.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    await expect(
+      storage.getAttachmentRecord({ sessionId: session.id, attachmentId: uploaded.attachmentId }),
+    ).resolves.toMatchObject({ name: 'released.bin' });
+    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({
+      ownerId: undefined,
+      leaseExpiresAt: undefined,
+    });
   });
 });
 
@@ -335,15 +762,28 @@ describe('Harness v1 session resolution', () => {
   });
 
   it('renews the live session lease before another harness can take it', async () => {
-    const session = await makeHarness({ sessions: { storage, leaseTtlMs: 25 } }).session({
-      threadId: 'thread-a',
-      resourceId: 'resource-a',
-    });
-    const competingHarness = makeHarness({ sessions: { storage, leaseTtlMs: 25 } });
+    vi.useFakeTimers();
+    const ownerHarness = makeHarness({ sessions: { storage, leaseTtlMs: 25 } });
+    try {
+      const session = await ownerHarness.session({
+        threadId: 'thread-a',
+        resourceId: 'resource-a',
+      });
+      const firstLeaseExpiresAt = session.getRecord().leaseExpiresAt;
+      const competingHarness = makeHarness({ sessions: { storage, leaseTtlMs: 25 } });
 
-    await new Promise(resolve => setTimeout(resolve, 80));
+      await vi.advanceTimersByTimeAsync(13);
 
-    await expect(competingHarness.session({ sessionId: session.id })).rejects.toThrow(HarnessSessionLockedError);
+      await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({
+        ownerId: ownerHarness.ownerId,
+        leaseExpiresAt: expect.any(Number),
+      });
+      expect(session.getRecord().leaseExpiresAt).toBeGreaterThan(firstLeaseExpiresAt ?? 0);
+      await expect(competingHarness.session({ sessionId: session.id })).rejects.toThrow(HarnessSessionLockedError);
+    } finally {
+      await ownerHarness.shutdown();
+      vi.useRealTimers();
+    }
   });
 
   it('does not delete a newly inserted session when another owner wins the lease race', async () => {
@@ -456,6 +896,33 @@ describe('Harness v1 lifecycle and discovery', () => {
     await expect(harness.getWorkspace()).rejects.toThrow('Harness is shut down');
     expect(workspace.init).toHaveBeenCalledTimes(1);
     expect(workspace.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits serializable shared workspace status events without undefined optional fields', async () => {
+    const workspace = {
+      init: vi.fn(async () => undefined),
+      destroy: vi.fn(async () => undefined),
+    } as unknown as Workspace;
+    const harness = new Harness({
+      modes: [],
+      workspace: { kind: 'shared', workspace },
+    });
+    const events: unknown[] = [];
+    harness.subscribe(event => events.push(event));
+
+    await harness.getWorkspace();
+
+    const readyEvent = events.find(
+      event =>
+        (event as { type?: string; status?: string }).type === 'workspace_status_changed' &&
+        (event as { status?: string }).status === 'ready',
+    );
+    expect(snapshotHarnessEventForJson(readyEvent)).toMatchObject({
+      type: 'workspace_status_changed',
+      status: 'ready',
+    });
+    expect(readyEvent).not.toHaveProperty('resourceId');
+    expect(readyEvent).not.toHaveProperty('providerId');
   });
 
   it('destroys a shared workspace that finishes acquiring during shutdown', async () => {

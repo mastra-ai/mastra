@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryDB } from '../inmemory-db';
@@ -211,12 +213,35 @@ describe('InMemoryHarness', () => {
 
   it('stores attachment metadata and copied bytes', async () => {
     const data = new Uint8Array([1, 2, 3]);
-    await storage.saveAttachment({
-      sessionId: 'session-1',
+    const expectedSha256 = createHash('sha256').update(data).digest('hex');
+    await expect(
+      storage.saveAttachment({
+        sessionId: 'session-1',
+        attachmentId: 'attachment-1',
+        name: 'file.txt',
+        mimeType: 'text/plain',
+        source: 'preupload',
+        data,
+        semantic: { kind: 'primitive', primitiveType: 'selection', metadata: { label: 'Selected' } },
+      }),
+    ).resolves.toEqual({
       attachmentId: 'attachment-1',
-      name: 'file.txt',
-      mimeType: 'text/plain',
-      data,
+      bytes: 3,
+      sha256: expectedSha256,
+    });
+    await expect(
+      storage.saveAttachment({
+        sessionId: 'session-1',
+        attachmentId: 'attachment-1',
+        name: 'ignored.txt',
+        mimeType: 'application/octet-stream',
+        source: 'inline',
+        data: new Uint8Array([9]),
+      }),
+    ).resolves.toEqual({
+      attachmentId: 'attachment-1',
+      bytes: 3,
+      sha256: expectedSha256,
     });
     data[0] = 9;
 
@@ -224,14 +249,19 @@ describe('InMemoryHarness', () => {
     expect(loaded).toEqual({
       name: 'file.txt',
       mimeType: 'text/plain',
+      bytes: 3,
+      sha256: expectedSha256,
       data: new Uint8Array([1, 2, 3]),
+      semantic: { kind: 'primitive', primitiveType: 'selection', metadata: { label: 'Selected' } },
     });
 
     loaded!.data[1] = 9;
+    loaded!.semantic!.metadata!.label = 'Changed';
     await expect(
       storage.loadAttachment({ sessionId: 'session-1', attachmentId: 'attachment-1' }),
     ).resolves.toMatchObject({
       data: new Uint8Array([1, 2, 3]),
+      semantic: { metadata: { label: 'Selected' } },
     });
 
     await expect(
@@ -239,12 +269,33 @@ describe('InMemoryHarness', () => {
     ).resolves.toEqual(
       expect.objectContaining({
         attachmentId: 'attachment-1',
+        ownerSessionId: 'session-1',
         sessionId: 'session-1',
         name: 'file.txt',
         mimeType: 'text/plain',
-        sizeBytes: 3,
+        bytes: 3,
+        sha256: expectedSha256,
+        source: 'preupload',
+        kind: 'primitive',
+        primitiveType: 'selection',
+        metadata: { label: 'Selected' },
       }),
     );
+  });
+
+  it('stores attachment bytes when semantic metadata is omitted', async () => {
+    const data = new Uint8Array([1, 2, 3]);
+    await storage.saveAttachment({
+      sessionId: 'session-1',
+      attachmentId: 'attachment-1',
+      name: 'file.txt',
+      mimeType: 'text/plain',
+      source: 'preupload',
+      data,
+    });
+
+    const loaded = await storage.loadAttachment({ sessionId: 'session-1', attachmentId: 'attachment-1' });
+    expect(loaded?.semantic).toBeUndefined();
   });
 
   it('deletes single attachments, session attachments, and attachments on session delete', async () => {
@@ -254,6 +305,7 @@ describe('InMemoryHarness', () => {
       attachmentId: 'a',
       name: 'a.txt',
       mimeType: 'text/plain',
+      source: 'preupload',
       data: new Uint8Array([1]),
     });
     await storage.saveAttachment({
@@ -261,6 +313,7 @@ describe('InMemoryHarness', () => {
       attachmentId: 'b',
       name: 'b.txt',
       mimeType: 'text/plain',
+      source: 'preupload',
       data: new Uint8Array([2]),
     });
 
@@ -659,6 +712,7 @@ describe('InMemoryHarness', () => {
       attachmentId: 'attachment-1',
       name: 'file.txt',
       mimeType: 'text/plain',
+      source: 'preupload',
       data: new Uint8Array([1]),
     });
 

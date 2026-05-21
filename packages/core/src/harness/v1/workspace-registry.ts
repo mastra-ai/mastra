@@ -495,8 +495,8 @@ export class WorkspaceRegistry {
     this._emit.emit(
       {
         type: 'workspace_status_changed',
-        resourceId: opts.resourceId,
-        providerId: opts.providerId,
+        ...(opts.resourceId !== undefined ? { resourceId: opts.resourceId } : {}),
+        ...(opts.providerId !== undefined ? { providerId: opts.providerId } : {}),
         status: opts.status,
       },
       opts.sessionId !== undefined ? { sessionId: opts.sessionId } : undefined,

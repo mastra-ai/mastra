@@ -12,6 +12,7 @@ import type {
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
+  SaveAttachmentResult,
   SaveSessionOptions,
   SaveSessionResult,
   SessionLeaseResult,
@@ -159,7 +160,7 @@ export abstract class HarnessStorage extends StorageDomain {
   /**
    * Persist an attachment's bytes and index row.
    */
-  abstract saveAttachment(opts: SaveAttachmentInput): Promise<void>;
+  abstract saveAttachment(opts: SaveAttachmentInput): Promise<SaveAttachmentResult>;
 
   /**
    * Load an attachment by (sessionId, attachmentId). Returns null when the row
