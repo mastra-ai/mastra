@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage, seedDatasetWithItems } from '../__utils__';
 
-const BASE_URL = 'http://localhost:4111';
+const PORT = process.env.E2E_PORT || '4111';
+const BASE_URL = `http://localhost:${PORT}`;
 
 test.afterEach(async () => {
   await resetStorage();
@@ -86,6 +87,9 @@ test.describe('Dataset Items List - Behavior Tests', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'Empty E2E Dataset' }),
     });
+    if (!datasetRes.ok) {
+      throw new Error(`Failed to create empty dataset: ${datasetRes.status} ${datasetRes.statusText}`);
+    }
     const dataset = (await datasetRes.json()) as { id: string };
 
     await page.goto(`/datasets/${dataset.id}`);
