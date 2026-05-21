@@ -1,13 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { ReadableStream } from 'node:stream/web';
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { ReadableStreamDefaultController } from 'node:stream/web';
 
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
 import type { MessageListInput } from '../agent/message-list';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
+import { EntityType, SpanType } from '../observability';
+import type { AIModelGenerationSpan, IModelSpanTracker, Span, UsageStats } from '../observability';
+import { executeWithContext, getOrCreateSpan } from '../observability/utils';
+import { RequestContext } from '../request-context';
 import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '../stream';
 import { ChunkFrom, MastraModelOutput } from '../stream';
+import type { MastraModelOutputOptions } from '../stream/types';
 
 export type SDKAgentRunOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   signal?: AbortSignal;
@@ -110,12 +116,14 @@ export function createMastraOutput<OUTPUT>({
   modelId,
   provider,
   stream,
+  options,
 }: {
   messages: MessageListInput;
   runId: string;
   modelId: string;
   provider: string;
   stream: ReadableStream<ChunkType>;
+  options?: Partial<MastraModelOutputOptions<OUTPUT>>;
 }): MastraModelOutput<OUTPUT> {
   const messageList = new MessageList();
   messageList.add(messages, 'input');
@@ -131,6 +139,7 @@ export function createMastraOutput<OUTPUT>({
     messageList,
     messageId: randomUUID(),
     options: {
+      ...options,
       runId,
     },
   });
@@ -141,11 +150,13 @@ export function toFullOutput<OUTPUT>({
   runId,
   provider,
   result,
+  options,
 }: {
   messages: MessageListInput;
   runId: string;
   provider: string;
   result: SDKModelGenerateResult;
+  options?: Partial<MastraModelOutputOptions<OUTPUT>>;
 }): Promise<FullOutput<OUTPUT>> {
   const text = result.content.map(part => part.text).join('');
   const stream = createCompletedMastraStream({
@@ -164,7 +175,267 @@ export function toFullOutput<OUTPUT>({
     modelId: result.response.modelId,
     provider,
     stream,
+    options,
   }).getFullOutput();
+}
+
+export type SDKAgentTelemetryOptions<OUTPUT = unknown> = {
+  agentId: string;
+  agentName: string;
+  provider: string;
+  modelId: string;
+  messages: MessageListInput;
+  prompt: string;
+  runId: string;
+  streaming: boolean;
+  options?: SDKAgentRunOptions<OUTPUT>;
+  mastra?: Mastra;
+};
+
+export type SDKAgentTelemetry<OUTPUT = unknown> = {
+  execute<T>(fn: () => Promise<T>): Promise<T>;
+  endGenerate(result: SDKModelGenerateResult): void;
+  fail(error: unknown): void;
+  wrapStream(stream: ReadableStream<ChunkType>): ReadableStream<ChunkType>;
+  outputOptions(): Partial<MastraModelOutputOptions<OUTPUT>>;
+};
+
+export function createSDKAgentTelemetry<OUTPUT>({
+  agentId,
+  agentName,
+  provider,
+  modelId,
+  messages,
+  prompt,
+  runId,
+  streaming,
+  options,
+  mastra,
+}: SDKAgentTelemetryOptions<OUTPUT>): SDKAgentTelemetry<OUTPUT> {
+  const requestContext = options?.requestContext ?? new RequestContext();
+  const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
+  const agentSpan = getOrCreateSpan({
+    type: SpanType.AGENT_RUN,
+    name: `agent run: '${agentId}'`,
+    entityType: EntityType.AGENT,
+    entityId: agentId,
+    entityName: agentName,
+    input: messages,
+    attributes: {
+      prompt,
+      instructions,
+      maxSteps: options?.maxSteps,
+    },
+    metadata: {
+      runId,
+    },
+    tracingOptions: options?.tracingOptions,
+    tracingContext: options?.tracingContext,
+    requestContext,
+    mastra,
+  });
+
+  const modelSpan = agentSpan?.createChildSpan({
+    type: SpanType.MODEL_GENERATION,
+    name: `llm: '${modelId}'`,
+    input: {
+      messages,
+    },
+    attributes: {
+      model: modelId,
+      provider,
+      streaming,
+    },
+    metadata: {
+      runId,
+    },
+    requestContext,
+  });
+  const modelSpanTracker = getModelSpanTracker(modelSpan);
+
+  let ended = false;
+
+  const endModel = ({
+    text,
+    usage,
+    providerMetadata,
+    finishReason = 'stop',
+    responseId,
+    responseModel,
+  }: {
+    text: string;
+    usage?: LanguageModelUsage;
+    providerMetadata?: ProviderMetadata;
+    finishReason?: string;
+    responseId?: string;
+    responseModel?: string;
+  }) => {
+    if (modelSpanTracker) {
+      modelSpanTracker.endGeneration({
+        output: {
+          text,
+        },
+        attributes: {
+          finishReason,
+          responseId,
+          responseModel,
+        },
+        usage,
+        providerMetadata,
+      });
+      return;
+    }
+
+    modelSpan?.end({
+      output: {
+        text,
+      },
+      attributes: {
+        finishReason,
+        responseId,
+        responseModel,
+        usage: usage ? toUsageStats(usage) : undefined,
+      },
+    });
+  };
+
+  const end = (result: {
+    text: string;
+    usage?: LanguageModelUsage;
+    providerMetadata?: ProviderMetadata;
+    finishReason?: string;
+    responseId?: string;
+    responseModel?: string;
+  }) => {
+    if (ended) {
+      return;
+    }
+
+    ended = true;
+    endModel(result);
+    agentSpan?.end({
+      output: {
+        text: result.text,
+      },
+    });
+  };
+
+  const fail = (error: unknown) => {
+    if (ended) {
+      return;
+    }
+
+    ended = true;
+    const normalized = error instanceof Error ? error : new Error(String(error));
+    if (modelSpanTracker) {
+      modelSpanTracker.reportGenerationError({ error: normalized });
+    } else {
+      modelSpan?.error({ error: normalized });
+    }
+    agentSpan?.error({ error: normalized });
+  };
+
+  return {
+    execute: fn => executeWithContext({ span: modelSpan ?? agentSpan, fn }),
+    endGenerate(result) {
+      end({
+        text: result.content.map(part => part.text).join(''),
+        usage: toLanguageModelUsage(result.usage),
+        providerMetadata: result.providerMetadata,
+        finishReason: result.finishReason.unified,
+        responseId: result.response.id,
+        responseModel: result.response.modelId,
+      });
+    },
+    fail,
+    wrapStream(stream) {
+      const trackedStream = (modelSpanTracker?.wrapStream(stream) ?? stream) as ReadableStream<ChunkType>;
+      return wrapStreamForAgentSpan(trackedStream, {
+        end,
+        fail,
+      });
+    },
+    outputOptions() {
+      return {
+        onFinish: options?.onFinish,
+        onStepFinish: options?.onStepFinish,
+        requestContext,
+        tracingContext: agentSpan ? { currentSpan: agentSpan } : options?.tracingContext,
+      };
+    },
+  };
+}
+
+function getModelSpanTracker(
+  modelSpan: Span<SpanType.MODEL_GENERATION> | AIModelGenerationSpan | undefined,
+): IModelSpanTracker | undefined {
+  if (!modelSpan || !('createTracker' in modelSpan)) {
+    return undefined;
+  }
+
+  return modelSpan.createTracker();
+}
+
+function wrapStreamForAgentSpan(
+  stream: ReadableStream<ChunkType>,
+  telemetry: {
+    end: (result: {
+      text: string;
+      usage?: LanguageModelUsage;
+      providerMetadata?: ProviderMetadata;
+      finishReason?: string;
+      responseId?: string;
+      responseModel?: string;
+    }) => void;
+    fail: (error: unknown) => void;
+  },
+): ReadableStream<ChunkType> {
+  let text = '';
+
+  return stream.pipeThrough(
+    new TransformStream<ChunkType, ChunkType>({
+      transform(chunk, controller) {
+        if (chunk.type === 'text-delta') {
+          text += chunk.payload.text;
+        }
+
+        if (chunk.type === 'finish') {
+          telemetry.end({
+            text,
+            usage: chunk.payload.output.usage,
+            providerMetadata: chunk.payload.providerMetadata,
+            finishReason: chunk.payload.stepResult.reason,
+            responseId: chunk.payload.response?.id,
+            responseModel: chunk.payload.response?.modelId,
+          });
+        }
+
+        if (chunk.type === 'error') {
+          telemetry.fail(chunk.payload.error);
+        }
+
+        controller.enqueue(chunk);
+      },
+      flush() {
+        telemetry.end({ text });
+      },
+    }),
+  );
+}
+
+function toUsageStats(usage: LanguageModelUsage): UsageStats {
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    inputDetails: {
+      cacheRead: usage.cachedInputTokens,
+      cacheWrite: usage.cacheCreationInputTokens,
+    },
+    outputDetails: {
+      text: usage.outputTokens,
+      reasoning: usage.reasoningTokens,
+    },
+  };
 }
 
 export function enqueueStartChunks(

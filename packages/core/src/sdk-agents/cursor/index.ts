@@ -13,12 +13,14 @@ import type {
 
 import { Agent } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
+import type { Mastra } from '../../mastra';
 import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '../../stream';
 import { ChunkFrom } from '../../stream';
 import {
   createMastraOutput,
   createNoopModel,
   createProviderMetadata,
+  createSDKAgentTelemetry,
   enqueueFinishChunks,
   enqueueStartChunks,
   enqueueTextDelta,
@@ -53,6 +55,7 @@ export type CursorAgentOptions = {
 
 export class CursorSDKAgent extends Agent {
   readonly options: CursorAgentOptions;
+  #mastra?: Mastra;
 
   constructor(options: CursorAgentOptions) {
     super({
@@ -68,18 +71,44 @@ export class CursorSDKAgent extends Agent {
     this.options = options;
   }
 
+  override __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
+    this.#mastra = mastra;
+  }
+
   async generate<OUTPUT = undefined>(
     messages: MessageListInput,
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
-    const result = await runCursorGenerate(promptToText(messages), this.options);
-    const runId = options?.runId ?? result.response.id;
+    const prompt = promptToText(messages);
+    const runId = options?.runId ?? randomUUID();
+    const telemetry = createSDKAgentTelemetry({
+      agentId: this.id,
+      agentName: this.name,
+      provider: PROVIDER,
+      modelId: getModelId(getRequestedModel(this.options)),
+      messages,
+      prompt,
+      runId,
+      streaming: false,
+      options,
+      mastra: this.#mastra,
+    });
+    let result: SDKModelGenerateResult;
+    try {
+      result = await telemetry.execute(() => runCursorGenerate(prompt, this.options));
+      telemetry.endGenerate(result);
+    } catch (error) {
+      telemetry.fail(error);
+      throw error;
+    }
 
     return toFullOutput<OUTPUT>({
       messages,
       runId,
       provider: PROVIDER,
       result,
+      options: telemetry.outputOptions(),
     });
   }
 
@@ -89,13 +118,27 @@ export class CursorSDKAgent extends Agent {
   ): Promise<MastraModelOutput<OUTPUT>> {
     const runId = options?.runId ?? randomUUID();
     const prompt = promptToText(messages);
+    const modelId = getModelId(getRequestedModel(this.options));
+    const telemetry = createSDKAgentTelemetry({
+      agentId: this.id,
+      agentName: this.name,
+      provider: PROVIDER,
+      modelId,
+      messages,
+      prompt,
+      runId,
+      streaming: true,
+      options,
+      mastra: this.#mastra,
+    });
 
     return createMastraOutput<OUTPUT>({
       messages,
       runId,
-      modelId: getModelId(getRequestedModel(this.options)),
+      modelId,
       provider: PROVIDER,
-      stream: runCursorAsMastraStream(prompt, this.options, runId),
+      stream: telemetry.wrapStream(runCursorAsMastraStream(prompt, this.options, runId)),
+      options: telemetry.outputOptions(),
     });
   }
 }

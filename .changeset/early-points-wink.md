@@ -3,6 +3,7 @@
 ---
 
 Added SDK agent wrappers for Claude and Cursor. Developers can wrap initialized SDK clients and call `generate` or `stream` through Mastra-compatible outputs.
+SDK agent runs create Mastra agent/model observability spans and attach vendor usage metadata from Cursor turn updates and Claude result messages.
 
 ```ts
 const claudeAgent = new ClaudeSDKAgent({
