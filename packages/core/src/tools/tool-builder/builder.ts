@@ -71,6 +71,72 @@ function isZodV4Schema(schema: unknown): boolean {
   return !!def && typeof def.type === 'string' && !def.typeName;
 }
 
+/**
+ * Build a Standard Schema that:
+ *  - exposes the spliced JSON Schema (with `_background`/`suspendedToolRunId`/
+ *    `resumeData` properties added) so provider compat layers see the override
+ *    fields when serializing the tool to an LLM, and
+ *  - delegates runtime `validate` to the *original* schema so Zod v3
+ *    `.transform()` / `.default()` / `.refine()` and other Standard Schema
+ *    parsing behavior still run before `execute()` sees the args.
+ *
+ * Injected override keys (`_background`, `suspendedToolRunId`, `resumeData`)
+ * are stripped from the input before delegating, then merged back into the
+ * validated value so the inner `execute()` still receives them — matching the
+ * Zod v4 `.extend()` path's behavior.
+ *
+ * If the original schema has no `~standard.validate` (e.g. a raw JSON Schema
+ * with no Standard Schema wrapper), fall back to validating against the
+ * spliced JSON Schema directly.
+ */
+function buildJsonOverrideSchema(
+  originalSchema: unknown,
+  splicedJsonSchema: JSONSchema7Definition,
+  injectedKeys: readonly string[],
+): StandardSchemaWithJSON {
+  const fallback = toStandardSchema(splicedJsonSchema as any);
+  const original = originalSchema as { '~standard'?: { validate?: (v: unknown) => any } } | undefined;
+  const originalValidate = original?.['~standard']?.validate?.bind(original['~standard']);
+
+  const stripInjected = (input: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return { stripped: input, injected: {} };
+    const injected: Record<string, unknown> = {};
+    const stripped: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      if (injectedKeys.includes(k)) injected[k] = v;
+      else stripped[k] = v;
+    }
+    return { stripped, injected };
+  };
+
+  const validate = (input: unknown) => {
+    if (!originalValidate) return fallback['~standard'].validate(input);
+    const { stripped, injected } = stripInjected(input);
+    const result = originalValidate(stripped) as
+      | { value: unknown }
+      | { issues: readonly unknown[] }
+      | Promise<{ value: unknown } | { issues: readonly unknown[] }>;
+    const merge = (r: { value: unknown } | { issues: readonly unknown[] }) => {
+      if ('value' in r && r.value && typeof r.value === 'object' && !Array.isArray(r.value)) {
+        return { value: { ...(r.value as Record<string, unknown>), ...injected } };
+      }
+      return r;
+    };
+    return result && typeof (result as Promise<unknown>).then === 'function'
+      ? (result as Promise<{ value: unknown } | { issues: readonly unknown[] }>).then(merge)
+      : merge(result as { value: unknown } | { issues: readonly unknown[] });
+  };
+
+  return {
+    '~standard': {
+      version: 1,
+      vendor: 'mastra-json-override',
+      validate,
+      jsonSchema: fallback['~standard'].jsonSchema,
+    },
+  } as StandardSchemaWithJSON;
+}
+
 export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
@@ -143,9 +209,11 @@ export class CoreToolBuilder extends MastraBase {
 
           if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
             const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
+            const injectedKeys: string[] = [];
 
             if (isBackgroundEligible) {
               properties._background = backgroundOverrideJsonSchema;
+              injectedKeys.push('_background');
             }
             if (isResumableTool) {
               // Match the pre-PR JSON Schema shape so existing provider compat
@@ -157,9 +225,18 @@ export class CoreToolBuilder extends MastraBase {
               properties.resumeData = {
                 description: 'The resumeData object created from the resumeSchema of suspended tool',
               };
+              injectedKeys.push('suspendedToolRunId', 'resumeData');
             }
 
-            this.originalTool.inputSchema = toStandardSchema({ ...jsonSchema, properties });
+            // Preserve the original schema's runtime validator (Zod v3
+            // `.transform()` / `.default()` / `.refine()` etc.) while exposing
+            // the spliced JSON Schema for provider serialization. See
+            // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282520408
+            this.originalTool.inputSchema = buildJsonOverrideSchema(
+              schema,
+              { ...jsonSchema, properties },
+              injectedKeys,
+            );
           }
         }
       }
