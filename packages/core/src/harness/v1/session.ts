@@ -105,6 +105,8 @@ import type {
   AgentStream,
   AttachmentRef,
   GoalOptions,
+  HarnessMcpServerDescriptor,
+  HarnessMcpToolDescriptor,
   HarnessMode,
   InboxResponseOptions,
   InboxResponseResult,
@@ -183,6 +185,47 @@ const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'items',
   'additionalProperties',
 ]);
+const RESERVED_MCP_SERVER_KEYS = new Set([...Object.getOwnPropertyNames(Object.prototype), '__proto__']);
+
+function cloneMcpCatalogValue(value: unknown): unknown | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return structuredClone(value);
+  } catch {
+    try {
+      return JSON.parse(JSON.stringify(value)) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+function isPlainMcpCatalogObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (Object.prototype.toString.call(value) !== '[object Object]') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function cloneMcpCatalogRecord(value: unknown): Record<string, unknown> | undefined {
+  const cloned = cloneMcpCatalogValue(value);
+  return isPlainMcpCatalogObject(cloned) ? cloned : undefined;
+}
+
+function cloneMcpCatalogRecordArray(value: unknown): readonly Record<string, unknown>[] | undefined {
+  const cloned = cloneMcpCatalogValue(value);
+  if (!Array.isArray(cloned) || cloned.some(item => !isPlainMcpCatalogObject(item))) {
+    return undefined;
+  }
+  return cloned as Record<string, unknown>[];
+}
+
+function cloneMcpSchemaLike(value: unknown): unknown | undefined {
+  if (value && typeof value === 'object' && 'jsonSchema' in value) {
+    return cloneMcpCatalogValue((value as { jsonSchema?: unknown }).jsonSchema);
+  }
+  return cloneMcpCatalogValue(value);
+}
 
 export type SessionLifecycleState = 'live' | 'closing' | 'closed' | 'deleted' | 'evicted';
 
@@ -1306,6 +1349,104 @@ export class Session {
      */
     use: (ref: string, opts?: UseSkillOptions): Promise<AgentResult> => this._skillsUse(ref, opts),
   });
+
+  // -------------------------------------------------------------------------
+  // MCP catalog — PF-562 / PF-552 desktop integration inventory.
+  //
+  // This is an inventory snapshot over MCP servers registered on the Harness
+  // Mastra instance. Tool descriptors use MCPServerBase.getToolListInfo() so
+  // lazy MCP client proxies can populate remote tool catalogs on demand.
+  // Execution permission remains enforced by the MCP tool runtime; this
+  // catalog only lets desktop hosts render integrations.
+  // -------------------------------------------------------------------------
+
+  readonly mcp = Object.freeze({
+    /** List MCP servers registered on the Harness Mastra instance. */
+    listServers: (): HarnessMcpServerDescriptor[] => this._mcpListServers(),
+    /** Look up one MCP server by Mastra registration key. */
+    getServer: (key: string): HarnessMcpServerDescriptor | undefined => this._mcpGetServer(key),
+    /** List MCP tool descriptors for one registered server key. */
+    listTools: (key: string): Promise<HarnessMcpToolDescriptor[] | undefined> => {
+      this._assertLive('mcp.listTools()');
+      this._assertMcpServerKey('mcp.listTools()', key);
+      return this._mcpListTools(key);
+    },
+  });
+
+  private _mcpListServers(): HarnessMcpServerDescriptor[] {
+    this._assertLive('mcp.listServers()');
+    return this._harness._listMcpServers().map(([key, server]) => this._projectMcpServer(key, server));
+  }
+
+  private _mcpGetServer(key: string): HarnessMcpServerDescriptor | undefined {
+    this._assertLive('mcp.getServer()');
+    this._assertMcpServerKey('mcp.getServer()', key);
+    const server = this._harness._getMcpServer(key);
+    return server ? this._projectMcpServer(key, server) : undefined;
+  }
+
+  private async _mcpListTools(key: string): Promise<HarnessMcpToolDescriptor[] | undefined> {
+    const server = this._harness._getMcpServer(key);
+    if (!server) return undefined;
+    const requestContext = await this._buildRequestContext({
+      modeId: this._record.modeId,
+      modelId: this._record.modelId,
+      abortSignal: new AbortController().signal,
+    });
+    const toolList = await server.getToolListInfo(requestContext);
+    const convertedTools = server.tools();
+    return toolList.tools.map(toolInfo => {
+      const infoWithId = toolInfo as typeof toolInfo & { id?: unknown };
+      const toolName = typeof infoWithId.id === 'string' && infoWithId.id.length > 0 ? infoWithId.id : toolInfo.name;
+      const convertedTool = convertedTools[toolName];
+      const inputSchema = cloneMcpSchemaLike(toolInfo.inputSchema ?? convertedTool?.parameters);
+      const outputSchema = cloneMcpSchemaLike(toolInfo.outputSchema ?? convertedTool?.outputSchema);
+      const meta = cloneMcpCatalogRecord(toolInfo._meta ?? convertedTool?.mcp?._meta);
+      const toolType = toolInfo.toolType ?? convertedTool?.mcp?.toolType;
+      return {
+        serverKey: key,
+        name: toolName,
+        ...(toolInfo.description ? { description: toolInfo.description } : {}),
+        ...(inputSchema !== undefined ? { inputSchema } : {}),
+        ...(outputSchema !== undefined ? { outputSchema } : {}),
+        ...(toolType ? { toolType } : {}),
+        ...(meta ? { meta } : {}),
+        ...(convertedTool?.strict !== undefined ? { strict: convertedTool.strict } : {}),
+      };
+    });
+  }
+
+  private _assertMcpServerKey(method: string, key: unknown): asserts key is string {
+    if (typeof key !== 'string' || key.length === 0) {
+      throw new HarnessValidationError(method, 'key must be a non-empty string');
+    }
+    if (RESERVED_MCP_SERVER_KEYS.has(key)) {
+      throw new HarnessValidationError(method, 'key must not be a reserved object property name');
+    }
+  }
+
+  private _projectMcpServer(
+    key: string,
+    server: NonNullable<ReturnType<Harness['_getMcpServer']>>,
+  ): HarnessMcpServerDescriptor {
+    const repository = cloneMcpCatalogRecord(server.repository);
+    const packages = cloneMcpCatalogRecordArray(server.packages);
+    const remotes = cloneMcpCatalogRecordArray(server.remotes);
+    return {
+      key,
+      id: server.id,
+      name: server.name,
+      version: server.version,
+      ...(server.description ? { description: server.description } : {}),
+      ...(server.instructions ? { instructions: server.instructions } : {}),
+      releaseDate: server.releaseDate,
+      isLatest: server.isLatest,
+      ...(repository ? { repository } : {}),
+      ...(server.packageCanonical ? { packageCanonical: server.packageCanonical } : {}),
+      ...(packages ? { packages } : {}),
+      ...(remotes ? { remotes } : {}),
+    };
+  }
 
   private async _skillsList(): Promise<HarnessSkill[]> {
     this._assertLive('skills.list()');

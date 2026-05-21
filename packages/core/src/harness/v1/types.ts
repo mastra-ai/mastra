@@ -597,6 +597,62 @@ export interface HarnessSkillActionPermissionHints {
 }
 
 /**
+ * Read-only MCP server descriptor for Harness desktop catalogs.
+ *
+ * The catalog is an inventory snapshot of servers registered on the Harness
+ * Mastra instance. It does not imply execution permission; tool execution and
+ * auth filtering remain owned by the MCP server/tool runtime.
+ */
+export interface HarnessMcpServerDescriptor {
+  /** Mastra registration key used for `session.mcp.getServer(key)`. */
+  key: string;
+  /** Logical MCP server id, which may be shared by versioned registrations. */
+  id: string;
+  /** Display name from the registered MCP server. */
+  name: string;
+  /** Server version. */
+  version: string;
+  /** Optional human-readable description. */
+  description?: string;
+  /** Optional usage instructions from the server. */
+  instructions?: string;
+  /** Release date as exposed by the server. */
+  releaseDate: string;
+  /** Whether this registration represents the server's latest version. */
+  isLatest: boolean;
+  /** Optional repository metadata. */
+  repository?: Record<string, unknown>;
+  /** Optional canonical package ecosystem label. */
+  packageCanonical?: string;
+  /** Optional installable package descriptors. */
+  packages?: readonly Record<string, unknown>[];
+  /** Optional remote endpoint descriptors. */
+  remotes?: readonly Record<string, unknown>[];
+}
+
+/**
+ * Read-only MCP tool descriptor for Harness desktop catalogs.
+ */
+export interface HarnessMcpToolDescriptor {
+  /** Registered MCP server key that owns this tool. */
+  serverKey: string;
+  /** Tool id/name within the server. */
+  name: string;
+  /** Optional human-readable tool description. */
+  description?: string;
+  /** JSON-schema-like input descriptor when safely cloneable. */
+  inputSchema?: unknown;
+  /** JSON-schema-like output descriptor when safely cloneable. */
+  outputSchema?: unknown;
+  /** MCP tool type when the server exposes one. */
+  toolType?: string;
+  /** MCP metadata when safely cloneable. */
+  meta?: Record<string, unknown>;
+  /** Whether the underlying Mastra tool is strict. */
+  strict?: boolean;
+}
+
+/**
  * Options for {@link Session.skills.use}. See §4.6.
  */
 export interface UseSkillOptions {

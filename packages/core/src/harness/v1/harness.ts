@@ -22,6 +22,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { MCPServerBase } from '../../mcp';
 import type {
   PermissionRules,
   SessionGrants,
@@ -1293,6 +1294,19 @@ export class Harness {
     const byName = this._codeSkills.get(ref);
     if (byName) return cloneHarnessSkill(byName);
     return undefined;
+  }
+
+  /** @internal — Session reads registered MCP servers for read-only desktop catalogs. */
+  _listMcpServers(): Array<[string, MCPServerBase]> {
+    const servers = this.mastra.listMCPServers();
+    if (!servers) return [];
+    return Object.entries(servers);
+  }
+
+  /** @internal — Session resolves one registered MCP server by Mastra registration key. */
+  _getMcpServer(key: string): MCPServerBase | undefined {
+    const server = this.mastra.getMCPServer(key as never) as unknown;
+    return server instanceof MCPServerBase ? server : undefined;
   }
 
   /** @internal — Session enforces the subagent depth cap inside the spawn tool. */
