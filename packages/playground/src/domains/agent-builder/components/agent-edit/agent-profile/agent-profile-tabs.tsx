@@ -1,5 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import type { CSSProperties } from 'react';
+import { useAgentColor } from '../../../contexts/agent-color-context';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../../types/agent-tool';
 import { Browser } from './browser';
@@ -34,6 +36,11 @@ export const AgentProfileTabs = ({
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
   const { data: channelPlatforms = [] } = useChannelPlatforms();
+  const agentColor = useAgentColor();
+
+  const tabListStyle: CSSProperties | undefined = agentColor
+    ? ({ '--tab-indicator-color': agentColor.background } as CSSProperties)
+    : undefined;
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
@@ -49,7 +56,7 @@ export const AgentProfileTabs = ({
   return (
     <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <TabList variant="line" sticky className="!bg-surface3 px-6">
+        <TabList variant="line" sticky className="!bg-surface3 px-6" style={tabListStyle}>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
           <Tab value="instructions">Instructions</Tab>
