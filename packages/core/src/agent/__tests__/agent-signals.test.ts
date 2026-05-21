@@ -1,6 +1,12 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -800,18 +806,168 @@ describe('Agent signals', () => {
     expect(JSON.stringify(prompts)).not.toContain('discard while running');
   });
 
-  it('supports cross-instance thread subscriptions through the shared runtime without Mastra', async () => {
+  it('routes active-run signals across runtime instances through PubSub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const owner = new Agent({
+      id: 'remote-signal-agent',
+      name: 'Remote Signal Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+    });
+    const sender = new Agent({
+      id: 'remote-signal-agent',
+      name: 'Remote Signal Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+    });
+    let finishRun!: () => void;
+    const output = {
+      runId: 'remote-run-1',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+    } as any;
+
+    const ownerSubscription = await ownerRuntime.subscribeToThread(
+      owner,
+      {
+        resourceId: 'remote-resource',
+        threadId: 'remote-thread',
+      },
+      pubsub,
+    );
+    const senderSubscription = await senderRuntime.subscribeToThread(
+      sender,
+      {
+        resourceId: 'remote-resource',
+        threadId: 'remote-thread',
+      },
+      pubsub,
+    );
+
+    ownerRuntime.registerRun(
+      owner,
+      output,
+      { runId: 'remote-run-1', memory: { resource: 'remote-resource', thread: 'remote-thread' } } as any,
+      pubsub,
+    );
+    await waitForCondition(() => senderSubscription.activeRunId() === 'remote-run-1');
+
+    let waitResolved = false;
+    const waitForRemoteRun = senderRuntime
+      .waitForCrossAgentThreadRun(
+        new Agent({
+          id: 'remote-other-agent',
+          name: 'Remote Other Agent',
+          instructions: 'Test',
+          model: createTextStreamModel('other response'),
+        }),
+        { memory: { resource: 'remote-resource', thread: 'remote-thread' } },
+        pubsub,
+      )
+      .then(() => {
+        waitResolved = true;
+      });
+    await nextTick();
+    expect(waitResolved).toBe(false);
+
+    const result = senderRuntime.sendSignal(
+      sender,
+      { type: 'user-message', contents: [{ role: 'user', content: 'remote follow-up' }] },
+      { resourceId: 'remote-resource', threadId: 'remote-thread' },
+      pubsub,
+    );
+
+    expect(result.accepted).toBe(true);
+    await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
+
+    finishRun();
+    await waitForRemoteRun;
+    ownerSubscription.unsubscribe();
+    senderSubscription.unsubscribe();
+  });
+
+  it.runIf(process.platform !== 'win32')(
+    'broadcasts subscribed thread stream parts across UnixSocketPubSub runtime instances',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-signals-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = new Agent({
+        id: 'unix-stream-agent',
+        name: 'Unix Stream Owner Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('owner response'),
+      });
+      const follower = new Agent({
+        id: 'unix-stream-agent',
+        name: 'Unix Stream Follower Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('follower response'),
+      });
+      let finishRun!: () => void;
+      const output = {
+        runId: 'unix-run-1',
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId: 'unix-run-1', payload: { text: 'hello over uds' } };
+          yield { type: 'finish', runId: 'unix-run-1', payload: {} };
+        })(),
+        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+      } as any;
+
+      try {
+        const ownerSubscription = await ownerRuntime.subscribeToThread(
+          owner,
+          { resourceId: 'unix-resource', threadId: 'unix-thread' },
+          ownerPubSub,
+        );
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'unix-resource', threadId: 'unix-thread' },
+          followerPubSub,
+        );
+        const ownerRun = readNextRunWithParts(ownerSubscription.stream[Symbol.asyncIterator]());
+        const followerRun = readNextRunWithParts(followerSubscription.stream[Symbol.asyncIterator]());
+
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId: 'unix-run-1', memory: { resource: 'unix-resource', thread: 'unix-thread' } } as any,
+          ownerPubSub,
+        );
+
+        await expect(ownerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
+        await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
+        finishRun();
+        ownerSubscription.unsubscribe();
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('supports cross-instance thread subscriptions through an injected PubSub without Mastra', async () => {
+    const pubsub = new EventEmitterPubSub();
     const runner = new Agent({
       id: 'standalone-shared-agent',
       name: 'Standalone Shared Runner Agent',
       instructions: 'Test',
       model: createTextStreamModel('standalone shared response'),
+      pubsub,
     });
     const observer = new Agent({
       id: 'standalone-shared-agent',
       name: 'Standalone Shared Observer Agent',
       instructions: 'Test',
       model: createTextStreamModel('standalone observer response'),
+      pubsub,
     });
 
     const subscription = await observer.subscribeToThread({
@@ -848,7 +1004,82 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('propagates standalone parent pubsub to child agents without their own pubsub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const child = new Agent({
+      id: 'standalone-child-agent',
+      name: 'Standalone Child Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('child response'),
+    });
+    const parent = new Agent({
+      id: 'standalone-parent-agent',
+      name: 'Standalone Parent Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('parent response'),
+      pubsub,
+      agents: { child },
+    });
+
+    await parent.listAgents();
+
+    expect(child.getPubSub()).toBe(pubsub);
+
+    const secondPubSub = new EventEmitterPubSub();
+    const secondParent = new Agent({
+      id: 'second-standalone-parent-agent',
+      name: 'Second Standalone Parent Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('second parent response'),
+      pubsub: secondPubSub,
+      agents: { child },
+    });
+
+    await secondParent.listAgents();
+
+    expect(child.getPubSub()).toBe(secondPubSub);
+  });
+
+  it('isolates standalone agents that use different injected pubsubs', async () => {
+    const runner = new Agent({
+      id: 'standalone-isolated-agent',
+      name: 'Standalone Isolated Runner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('isolated response'),
+      pubsub: new EventEmitterPubSub(),
+    });
+    const observer = new Agent({
+      id: 'standalone-isolated-agent',
+      name: 'Standalone Isolated Observer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('isolated observer response'),
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    const subscription = await observer.subscribeToThread({
+      threadId: 'standalone-isolated-thread',
+      resourceId: 'standalone-isolated-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const nextRunPromise = readNextRun(iterator);
+
+    await runner.stream('Hello', {
+      memory: { thread: 'standalone-isolated-thread', resource: 'standalone-isolated-user' },
+    });
+
+    await runner.getPubSub()?.flush?.();
+    const result = await Promise.race([
+      nextRunPromise.then(() => 'delivered'),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 100)),
+    ]);
+    expect(result).toBe('timeout');
+
+    subscription.unsubscribe();
+    await nextRunPromise;
+  });
+
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
+    const pubsub = new EventEmitterPubSub();
     const runner = new Agent({
       id: 'shared-agent',
       name: 'Shared Runner Agent',
@@ -861,7 +1092,9 @@ describe('Agent signals', () => {
       instructions: 'Test',
       model: createTextStreamModel('observer response'),
     });
-    new Mastra({ agents: { runner, observer }, logger: false });
+    new Mastra({ agents: { runner, observer }, logger: false, pubsub });
+    expect(runner.getPubSub()).toBe(pubsub);
+    expect(observer.getPubSub()).toBe(pubsub);
 
     const subscription = await observer.subscribeToThread({
       threadId: 'shared-thread',

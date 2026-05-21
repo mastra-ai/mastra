@@ -49,9 +49,7 @@ async function main() {
         scoreSums[name] = (scoreSums[name] ?? 0) + score;
       }
     }
-    const aggregate = Object.fromEntries(
-      Object.entries(scoreSums).map(([n, s]) => [n, s / perItem.length]),
-    );
+    const aggregate = Object.fromEntries(Object.entries(scoreSums).map(([n, s]) => [n, s / perItem.length]));
 
     console.log('[runeval-per-item] aggregate scores:', aggregate);
     for (const { thread } of perItem) {

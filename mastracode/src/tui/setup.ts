@@ -13,6 +13,7 @@ import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
+import { IdleCounterComponent } from './components/idle-counter.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -252,8 +253,11 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
+  state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
   state.ui.addChild(state.editorContainer);
+  state.idleCounter = new IdleCounterComponent();
+  state.editorContainer.addChild(state.idleCounter);
   state.editorContainer.addChild(state.editor);
 
   // Add footer with two-line status

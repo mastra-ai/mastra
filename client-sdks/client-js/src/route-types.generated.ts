@@ -167,6 +167,10 @@ export type GetAgentsProviders_Response = {
     name: string;
     label?: string | undefined;
     description?: string | undefined;
+    envVar: string | string[];
+    connected: boolean;
+    docUrl?: string | undefined;
+    models: string[];
   }[];
 };
 
@@ -11892,6 +11896,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'mcp_tool_call'
             | 'processor_run'
             | 'tool_call'
+            | 'client_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -12094,6 +12099,7 @@ export type GetObservabilityTraces_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -12301,6 +12307,7 @@ export type GetObservabilityTracesLight_QueryParams = {
             | 'mcp_tool_call'
             | 'processor_run'
             | 'tool_call'
+            | 'client_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -12468,6 +12475,7 @@ export type GetObservabilityTracesLight_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -12591,6 +12599,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'mcp_tool_call'
             | 'processor_run'
             | 'tool_call'
+            | 'client_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -12773,6 +12782,7 @@ export type GetObservabilityBranches_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -12964,6 +12974,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13148,6 +13159,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13326,6 +13338,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13425,6 +13438,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13730,6 +13744,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'mcp_tool_call'
           | 'processor_run'
           | 'tool_call'
+          | 'client_tool_call'
           | 'workflow_run'
           | 'workflow_step'
           | 'workflow_conditional'
@@ -75337,6 +75352,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     datasetVersion: number;
     input: unknown;
     groundTruth?: unknown | undefined;
+    expectedTrajectory?: unknown | undefined;
     metadata?:
       | {
           [key: string]: unknown;
