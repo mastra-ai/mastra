@@ -125,7 +125,7 @@ export function TracesListView({
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
       </TracesDataList.Top>
 
-      {items.length === 0 ? (
+      {traces.length === 0 ? (
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
         />
@@ -150,7 +150,8 @@ export function TracesListView({
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 onClick={() => onTraceClick(trace)}
-                className={cn(isFeatured && 'bg-surface4', isRecentlyAdded && 'animate-row-highlight')}
+                featured={isFeatured}
+                className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />
