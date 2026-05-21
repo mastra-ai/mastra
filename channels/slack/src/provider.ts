@@ -760,6 +760,9 @@ export class SlackProvider implements ChannelProvider {
       this.#channelConfig;
     const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, typingStatus, toolDisplay };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
+    const filteredAdapterConfig = Object.fromEntries(
+      Object.entries(adapterConfig ?? {}).filter(([, value]) => value !== undefined),
+    );
     // SlackProvider opinionated defaults — these render well in Slack's AI Assistant UI
     // but aren't appropriate for every platform, so they live here rather than in core.
     //   - `streaming: true`         — Slack supports native message streaming.
@@ -771,7 +774,7 @@ export class SlackProvider implements ChannelProvider {
       streaming: true,
       toolDisplay: 'grouped',
       typingStatus: false,
-      ...adapterConfig,
+      ...filteredAdapterConfig,
       ...filteredTopLevel,
     } as SlackAdapterChannelConfig;
   }

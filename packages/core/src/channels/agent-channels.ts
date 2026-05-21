@@ -1698,13 +1698,15 @@ export class AgentChannels {
           this.logger?.warn('[CHANNEL] streaming post failed, falling back to buffered text', { error: e });
           // Drain whatever was queued plus anything pushed after the failure
           // and post it as a single buffered message. Drop non-string chunks
-          // (task_update etc.) since the buffered fallback is text-only.
-          let fallback = buffer.filter((p): p is string => typeof p === 'string').join('');
-          buffer = [];
-          if (!closed) {
-            await waitForNext();
+          // (task_update etc.) since the buffered fallback is text-only. Keep
+          // draining until the stream actually closes so late text-deltas
+          // don't get dropped from the fallback message.
+          let fallback = '';
+          while (true) {
             fallback += buffer.filter((p): p is string => typeof p === 'string').join('');
             buffer = [];
+            if (closed) break;
+            await waitForNext();
           }
           const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
           if (cleaned) {
