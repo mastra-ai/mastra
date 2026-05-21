@@ -163,6 +163,16 @@ describe('CoreToolBuilder background override injection', () => {
       expect(properties).toHaveProperty('message');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
+
+      // The injected JSON Schema must match the pre-PR shape so existing
+      // provider-compat layers and LLM-recording hashes stay stable.
+      expect(properties.suspendedToolRunId).toEqual({
+        type: ['string', 'null'],
+        description: 'The runId of the suspended tool',
+      });
+      expect(properties.resumeData).toEqual({
+        description: 'The resumeData object created from the resumeSchema of suspended tool',
+      });
     });
 
     it('injects resume fields for workflow- tools as well', () => {

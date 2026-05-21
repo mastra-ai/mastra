@@ -14,7 +14,7 @@ import {
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
-import { backgroundOverrideJsonSchema } from '../../background-tasks';
+import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -27,6 +27,7 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
+import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
@@ -57,6 +58,17 @@ interface LogMessageOptions {
   start: string;
   error: string;
   logData: Record<string, unknown>;
+}
+
+/**
+ * Detect Zod v4 schemas. Zod v3 stores the type name as `_def.typeName`
+ * (e.g. "ZodObject"); Zod v4 stores it as `_def.type` (e.g. "object"). We
+ * cannot use `instanceof` here because both Zod versions may be loaded in the
+ * same process and the prototype identity is not guaranteed.
+ */
+function isZodV4Schema(schema: unknown): boolean {
+  const def = (schema as any)?._def;
+  return !!def && typeof def.type === 'string' && !def.typeName;
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -96,33 +108,59 @@ export class CoreToolBuilder extends MastraBase {
           schema = z.object({});
         }
 
-        // Unified JSON-schema path: normalize the user's input schema (Zod v3,
-        // Zod v4, or a JsonSchemaWrapper) into a Standard Schema, extract its
-        // JSON Schema, add the framework's override fields, and re-wrap. This
-        // matches the codebase's general schema-interop pattern and avoids
-        // splicing a Zod v4 ZodOptional into a Zod v3 ZodObject's shape, which
-        // would crash later in `ZodObject._parse` with
-        // `keyValidator._parse is not a function`.
-        const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
-        const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
-
-        if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-          const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
-
+        // Preferred path: when the user's input schema is a Zod v4 ZodObject
+        // (the common case for tools authored with `zod` / `zod/v4`), keep using
+        // `.extend()`. This preserves the exact JSON Schema shape that existing
+        // provider compat layers + LLM recordings expect.
+        //
+        // Fallback path: for everything else (Zod v3 ZodObject, raw JSON Schema,
+        // `JsonSchemaWrapper`, etc.) splice the override fields directly into a
+        // JSON Schema. Mixing a Zod v4 wrapper (`backgroundOverrideZodSchema`,
+        // `.nullable()`, `.optional()`) into a Zod v3 ZodObject's `.shape` is
+        // what triggered the original crash:
+        //   `TypeError: keyValidator._parse is not a function`.
+        if (isZodObject(schema) && isZodV4Schema(schema)) {
+          let nextSchema: z.ZodObject<any> = schema as z.ZodObject<any>;
           if (isBackgroundEligible) {
-            properties._background = backgroundOverrideJsonSchema;
+            nextSchema = nextSchema.extend({
+              _background: backgroundOverrideZodSchema,
+            });
           }
           if (isResumableTool) {
-            properties.suspendedToolRunId = {
-              type: ['string', 'null'],
-              description: 'The runId of the suspended tool',
-            };
-            properties.resumeData = {
-              description: 'The resumeData object created from the resumeSchema of suspended tool',
-            };
+            nextSchema = nextSchema.extend({
+              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+              resumeData: z
+                .any()
+                .describe('The resumeData object created from the resumeSchema of suspended tool')
+                .optional(),
+            });
           }
+          this.originalTool.inputSchema = nextSchema;
+        } else {
+          // Normalize to Standard Schema, extract JSON Schema, splice overrides.
+          const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
+          const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
 
-          this.originalTool.inputSchema = toStandardSchema({ ...jsonSchema, properties });
+          if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
+            const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
+
+            if (isBackgroundEligible) {
+              properties._background = backgroundOverrideJsonSchema;
+            }
+            if (isResumableTool) {
+              // Match the pre-PR JSON Schema shape so existing provider compat
+              // layers + LLM recordings collapse it identically.
+              properties.suspendedToolRunId = {
+                type: ['string', 'null'],
+                description: 'The runId of the suspended tool',
+              };
+              properties.resumeData = {
+                description: 'The resumeData object created from the resumeSchema of suspended tool',
+              };
+            }
+
+            this.originalTool.inputSchema = toStandardSchema({ ...jsonSchema, properties });
+          }
         }
       }
     }
