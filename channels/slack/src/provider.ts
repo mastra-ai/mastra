@@ -767,13 +767,11 @@ export class SlackProvider implements ChannelProvider {
     // but aren't appropriate for every platform, so they live here rather than in core.
     //   - `streaming: true`         — Slack supports native message streaming.
     //   - `toolDisplay: 'grouped'`  — tools collapse into a single "Thinking Steps" widget.
-    //   - `typingStatus: false`     — the grouped widget already shows progress, typing indicators are redundant.
     // Users can opt out of any of these by passing the field at the top level (or via `adapterConfig`).
     // Keep in sync with the `@default` JSDoc on `SlackAdapterChannelConfig` in ./types.ts.
     return {
       streaming: true,
       toolDisplay: 'grouped',
-      typingStatus: false,
       ...filteredAdapterConfig,
       ...filteredTopLevel,
     } as SlackAdapterChannelConfig;

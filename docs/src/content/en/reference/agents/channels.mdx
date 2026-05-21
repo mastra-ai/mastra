@@ -202,9 +202,9 @@ const agent = new Agent({
     name: 'typingStatus',
     type: 'boolean | ((chunk: AgentChunkType, ctx: TypingStatusContext) => string | false | null | undefined | void)',
     isOptional: true,
-    defaultValue: 'true (false for Slack)',
+    defaultValue: 'true',
     description:
-      'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle. Slack defaults to `false`; other adapters default to `true`.',
+      'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle.',
   },
 ]}
 />

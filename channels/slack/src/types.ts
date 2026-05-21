@@ -69,11 +69,7 @@ export interface SlackAdapterChannelConfig {
    *   `defaultTypingStatus` (exported from `@mastra/core/channels`) to
    *   fall back to defaults for chunks you don't handle.
    *
-   * SlackProvider defaults this to `false` because the default
-   * `toolDisplay: 'grouped'` already shows live progress inside the
-   * "Thinking Steps" widget, making typing indicators redundant.
-   *
-   * @default false
+   * @default true
    */
   typingStatus?: ChannelAdapterConfig['typingStatus'];
 
@@ -168,11 +164,7 @@ export interface SlackProviderConfig {
    *   `defaultTypingStatus` (exported from `@mastra/core/channels`) to
    *   fall back to defaults for chunks you don't handle.
    *
-   * SlackProvider defaults this to `false` because the default
-   * `toolDisplay: 'grouped'` already shows live progress inside the
-   * "Thinking Steps" widget, making typing indicators redundant.
-   *
-   * @default false
+   * @default true
    */
   typingStatus?: ChannelAdapterConfig['typingStatus'];
 
