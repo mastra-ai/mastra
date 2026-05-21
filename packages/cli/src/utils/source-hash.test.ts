@@ -1,7 +1,10 @@
 import { mkdir, mkdtemp, open, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } from './source-hash';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('node:fs/promises', async importOriginal => importOriginal());
+
+const { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } = await import('./source-hash');
 
 // Use a local .test-tmp dir instead of os.tmpdir() — some CI runners
 // (e.g. starsling-ubuntu) have flaky /tmp behaviour with rapid write/read cycles.
