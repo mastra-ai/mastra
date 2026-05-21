@@ -55,6 +55,10 @@ export type PersistedAttachment =
  */
 export interface QueuedItem {
   id: string;
+  /** Idempotency key captured when the queue item was admitted. */
+  admissionId?: string;
+  /** Stable hash of the admitted queue inputs. */
+  admissionHash?: string;
   enqueuedAt: number;
   content: string;
   attachments: PersistedAttachment[];
@@ -188,6 +192,7 @@ export interface SessionRecord {
     observerModelId?: string;
     reflectorModelId?: string;
   };
+  queueAdmissionReceipts?: Record<string, QueueAdmissionReceipt>;
   goal?: GoalState;
   workspace?: SessionWorkspaceState;
   state: unknown;
@@ -281,6 +286,88 @@ export interface SessionLeaseResult {
   /** Epoch ms when the lease expires if not renewed. */
   expiresAt: number;
 }
+
+export type HarnessOperationKind = 'message' | 'queue';
+
+export interface HarnessStoredPublicError {
+  code: string;
+  message: string;
+}
+
+export type AgentSignalResultStatus =
+  | { status: 'pending'; signalId: string; runId?: string }
+  | { status: 'completed'; signalId: string; runId: string; result: unknown }
+  | { status: 'failed'; signalId: string; runId?: string; error: HarnessStoredPublicError };
+
+export interface AgentSignalAccepted {
+  runId: string;
+  signalId: string;
+  duplicate: boolean;
+  admissionId?: string;
+  admissionHash?: string;
+}
+
+export type AgentSignalResultEvidence = AgentSignalResultStatus & {
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  admissionId?: string;
+  admissionHash?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export interface HarnessRuntimeDependencyRefs {
+  modeId: string;
+  agentId?: string;
+  modelId?: string;
+  workspaceProviderId?: string | null;
+}
+
+export interface QueueAdmissionReceipt {
+  admissionId: string;
+  admissionHash: string;
+  queuedItemId: string;
+  modeId?: string;
+  runtimeDependencies?: HarnessRuntimeDependencyRefs;
+  status: 'queued' | 'admitting' | 'accepted' | 'completed' | 'admission_failed' | 'failed' | 'dead';
+  runId?: string;
+  signalId?: string;
+  result?: unknown;
+  error?: HarnessStoredPublicError;
+  attempts: number;
+  enqueuedAt: number;
+  admittingAt?: number;
+  acceptedAt?: number;
+  postRunFinalizedAt?: number;
+  completedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  nextAttemptAt?: number;
+  updatedAt: number;
+}
+
+export interface OperationAdmissionTombstone {
+  kind: HarnessOperationKind;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  admissionId?: string;
+  admissionHash?: string;
+  queuedItemId?: string;
+  signalId?: string;
+  runId?: string;
+  terminalAt: number;
+  compactedAt: number;
+  expiresAt: number;
+}
+
+export type OperationAdmissionEvidence =
+  | AgentSignalAccepted
+  | AgentSignalResultEvidence
+  | AgentSignalResultStatus
+  | QueueAdmissionReceipt
+  | OperationAdmissionTombstone;
 
 export interface SaveAttachmentInput {
   sessionId: string;

@@ -21,7 +21,12 @@ import type {
   ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
-import type { AttachmentRecord, SessionRecord } from './harness';
+import type {
+  AgentSignalResultEvidence,
+  AttachmentRecord,
+  OperationAdmissionTombstone,
+  SessionRecord,
+} from './harness';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
@@ -104,6 +109,8 @@ export class InMemoryDB {
   readonly harnessSessions = new Map<string, SessionRecord>();
   readonly harnessAttachmentRecords = new Map<string, AttachmentRecord>();
   readonly harnessAttachmentBytes = new Map<string, Uint8Array>();
+  readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
+  readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
 
   /**
    * Clears all data from all collections.
@@ -154,5 +161,7 @@ export class InMemoryDB {
     this.harnessSessions.clear();
     this.harnessAttachmentRecords.clear();
     this.harnessAttachmentBytes.clear();
+    this.harnessMessageResultEvidence.clear();
+    this.harnessOperationTombstones.clear();
   }
 }

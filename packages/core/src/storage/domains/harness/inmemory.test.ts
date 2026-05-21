@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryDB } from '../inmemory-db';
 import {
+  HarnessStorageAdmissionConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
@@ -272,6 +273,385 @@ describe('InMemoryHarness', () => {
     await expect(storage.loadAttachment({ sessionId: 'session-1', attachmentId: 'b' })).resolves.toBeNull();
   });
 
+  it('deletes admission evidence on session delete', async () => {
+    await storage.saveSession(makeSession(), { ownerId: 'owner-1', ifVersion: 0 });
+    await storage.writeMessageResultEvidence({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      status: 'pending',
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await storage.writeOperationAdmissionTombstone({
+      kind: 'message',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-2',
+      admissionId: 'admission-2',
+      admissionHash: 'hash-2',
+      terminalAt: 1_100,
+      compactedAt: 1_200,
+      expiresAt: 1_300,
+    });
+
+    await storage.deleteSession({ sessionId: 'session-1' });
+
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-1',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        kind: 'message',
+        admissionId: 'admission-2',
+        attemptedAdmissionHash: 'hash-2',
+      }),
+    ).resolves.toEqual({ status: 'none' });
+  });
+
+  it('stores message admission evidence and detects duplicate admission hashes', async () => {
+    const evidence = {
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      status: 'pending' as const,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    };
+
+    await expect(storage.writeMessageResultEvidence(evidence)).resolves.toEqual({ created: true });
+    await expect(
+      storage.writeMessageResultEvidence({
+        ...evidence,
+        status: 'completed',
+        runId: 'run-1',
+        result: { ok: true },
+        updatedAt: 1_100,
+      }),
+    ).resolves.toMatchObject({
+      created: false,
+      evidence: { createdAt: 1_000, updatedAt: 1_100 },
+    });
+
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        kind: 'message',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'hash-1',
+      }),
+    ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        kind: 'message',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'hash-2',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict', storedAdmissionHash: 'hash-1' });
+
+    await expect(
+      storage.writeMessageResultEvidence({
+        ...evidence,
+        signalId: 'signal-2',
+        status: 'pending',
+        updatedAt: 1_200,
+      }),
+    ).resolves.toMatchObject({
+      created: false,
+      evidence: { signalId: 'signal-1', admissionId: 'admission-1' },
+    });
+
+    await expect(storage.writeMessageResultEvidence({ ...evidence, admissionHash: 'hash-2' })).rejects.toBeInstanceOf(
+      HarnessStorageAdmissionConflictError,
+    );
+    await expect(
+      storage.writeMessageResultEvidence({
+        ...evidence,
+        signalId: 'signal-3',
+        admissionHash: 'hash-2',
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageAdmissionConflictError);
+  });
+
+  it('compacts terminal message evidence into tombstones', async () => {
+    await storage.writeMessageResultEvidence({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-1',
+      runId: 'run-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      status: 'completed',
+      result: { ok: true },
+      createdAt: 1_000,
+      updatedAt: 1_200,
+    });
+
+    await expect(
+      storage.compactOperationResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        kind: 'message',
+        signalId: 'signal-1',
+        now: 2_000,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'message',
+      sessionId: 'session-1',
+      signalId: 'signal-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      terminalAt: 1_200,
+      compactedAt: 2_000,
+    });
+
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-1',
+      }),
+    ).resolves.toMatchObject({ kind: 'message', admissionId: 'admission-1' });
+
+    await expect(
+      storage.writeMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-2',
+        admissionId: 'admission-1',
+        admissionHash: 'hash-1',
+        status: 'pending',
+        createdAt: 2_100,
+        updatedAt: 2_100,
+      }),
+    ).resolves.toMatchObject({
+      created: false,
+      evidence: { kind: 'message', admissionId: 'admission-1' },
+    });
+    await expect(
+      storage.writeMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-3',
+        admissionId: 'admission-1',
+        admissionHash: 'hash-2',
+        status: 'pending',
+        createdAt: 2_200,
+        updatedAt: 2_200,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageAdmissionConflictError);
+  });
+
+  it('rejects conflicting tombstones for the same admission id', async () => {
+    await storage.writeOperationAdmissionTombstone({
+      kind: 'message',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      terminalAt: 1_000,
+      compactedAt: 1_000,
+      expiresAt: 1_000,
+    });
+
+    await expect(
+      storage.writeOperationAdmissionTombstone({
+        kind: 'message',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-2',
+        admissionId: 'admission-1',
+        admissionHash: 'hash-2',
+        terminalAt: 1_100,
+        compactedAt: 1_100,
+        expiresAt: 1_100,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageAdmissionConflictError);
+
+    await expect(
+      storage.writeOperationAdmissionTombstone({
+        kind: 'message',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-2',
+        admissionId: 'admission-1',
+        admissionHash: 'hash-1',
+        terminalAt: 1_100,
+        compactedAt: 1_100,
+        expiresAt: 1_100,
+      }),
+    ).resolves.toBeUndefined();
+    expect(db.harnessOperationTombstones.size).toBe(1);
+  });
+
+  it('resolves queue admission receipts and compacts terminal queue evidence', async () => {
+    await storage.saveSession(
+      makeSession({
+        queueAdmissionReceipts: {
+          'queued-1': {
+            admissionId: 'admission-1',
+            admissionHash: 'hash-1',
+            queuedItemId: 'queued-1',
+            status: 'completed',
+            runId: 'run-1',
+            signalId: 'signal-1',
+            result: { ok: true },
+            attempts: 1,
+            enqueuedAt: 1_000,
+            completedAt: 1_500,
+            updatedAt: 1_500,
+          },
+        },
+      }),
+      { ownerId: 'owner-1', ifVersion: 0 },
+    );
+
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        kind: 'queue',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'hash-1',
+      }),
+    ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+
+    await expect(
+      storage.loadQueueResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        queuedItemId: 'queued-1',
+      }),
+    ).resolves.toMatchObject({ status: 'completed', admissionId: 'admission-1' });
+
+    const compacted = storage.compactOperationResultEvidence({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      kind: 'queue',
+      queuedItemId: 'queued-1',
+      now: 2_000,
+    });
+    await expect(storage.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+      version: 2,
+      queueAdmissionReceipts: undefined,
+    });
+    await expect(compacted).resolves.toMatchObject({
+      kind: 'queue',
+      queuedItemId: 'queued-1',
+      admissionId: 'admission-1',
+      terminalAt: 1_500,
+    });
+
+    await expect(
+      storage.loadQueueResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        queuedItemId: 'queued-1',
+      }),
+    ).resolves.toMatchObject({ kind: 'queue', admissionId: 'admission-1' });
+
+    await expect(
+      storage.saveSession(
+        makeSession({
+          version: 1,
+          queueAdmissionReceipts: {
+            'queued-1': {
+              admissionId: 'admission-1',
+              admissionHash: 'hash-1',
+              queuedItemId: 'queued-1',
+              status: 'completed',
+              attempts: 1,
+              enqueuedAt: 1_000,
+              updatedAt: 1_500,
+            },
+          },
+        }),
+        { ownerId: 'owner-1', ifVersion: 1 },
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
+  });
+
+  it('deletes admission evidence scoped to a session and resource', async () => {
+    await storage.writeMessageResultEvidence({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-1',
+      runId: 'run-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      status: 'completed',
+      result: {},
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await storage.writeOperationAdmissionTombstone({
+      kind: 'message',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-2',
+      admissionId: 'admission-2',
+      admissionHash: 'hash-2',
+      terminalAt: 1_000,
+      compactedAt: 1_000,
+      expiresAt: 1_000,
+    });
+
+    await storage.deleteOperationAdmissionTombstonesForSession({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-1',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-2',
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('clears all harness records from the shared in-memory database', async () => {
     await storage.saveSession(makeSession(), { ownerId: 'owner-1', ifVersion: 0 });
     await storage.saveAttachment({
@@ -287,5 +667,7 @@ describe('InMemoryHarness', () => {
     expect(db.harnessSessions.size).toBe(0);
     expect(db.harnessAttachmentRecords.size).toBe(0);
     expect(db.harnessAttachmentBytes.size).toBe(0);
+    expect(db.harnessMessageResultEvidence.size).toBe(0);
+    expect(db.harnessOperationTombstones.size).toBe(0);
   });
 });

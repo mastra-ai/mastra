@@ -1,9 +1,14 @@
 import { StorageDomain } from '../base';
 import type {
   AcquireSessionLeaseInput,
+  AgentSignalResultEvidence,
+  AgentSignalResultStatus,
   AttachmentRecord,
   ListSessionsInput,
   LoadedAttachment,
+  OperationAdmissionEvidence,
+  OperationAdmissionTombstone,
+  QueueAdmissionReceipt,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
@@ -13,6 +18,11 @@ import type {
   SessionRecord,
   SessionSummary,
 } from './types';
+
+export interface WriteMessageResultEvidenceResult {
+  created: boolean;
+  evidence?: AgentSignalResultEvidence | OperationAdmissionTombstone;
+}
 
 /**
  * Thrown by `saveSession` when `ifVersion` does not match the record's
@@ -57,6 +67,19 @@ export class HarnessStorageSessionNotFoundError extends Error {
 
   constructor(public readonly sessionId: string) {
     super(`Session "${sessionId}" not found in harness storage`);
+  }
+}
+
+export class HarnessStorageAdmissionConflictError extends Error {
+  readonly name = 'HarnessStorageAdmissionConflictError';
+  readonly code = 'harness.storage.admission_conflict' as const;
+
+  constructor(
+    public readonly sessionId: string,
+    public readonly kind: 'message' | 'queue',
+    public readonly admissionId: string,
+  ) {
+    super(`Admission "${admissionId}" for ${kind} in session "${sessionId}" conflicts with stored evidence`);
   }
 }
 
@@ -158,6 +181,52 @@ export abstract class HarnessStorage extends StorageDomain {
    * Look up the index row only, without bytes.
    */
   abstract getAttachmentRecord(opts: { sessionId: string; attachmentId: string }): Promise<AttachmentRecord | null>;
+
+  abstract loadMessageResultEvidence(opts: {
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+    signalId: string;
+  }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null>;
+
+  abstract writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<WriteMessageResultEvidenceResult>;
+
+  abstract loadQueueResultEvidence(opts: {
+    sessionId: string;
+    resourceId: string;
+    queuedItemId: string;
+  }): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | null>;
+
+  abstract resolveOperationAdmissionEvidence(opts: {
+    sessionId: string;
+    resourceId: string;
+    threadId?: string;
+    kind: 'message' | 'queue';
+    admissionId: string;
+    attemptedAdmissionHash: string;
+  }): Promise<{
+    status: 'none' | 'duplicate' | 'conflict';
+    evidence?: OperationAdmissionEvidence;
+    storedAdmissionHash?: string;
+  }>;
+
+  abstract writeOperationAdmissionTombstone(record: OperationAdmissionTombstone): Promise<void>;
+
+  abstract compactOperationResultEvidence(opts: {
+    sessionId: string;
+    resourceId: string;
+    kind: 'message' | 'queue';
+    signalId?: string;
+    queuedItemId?: string;
+    now: number;
+  }): Promise<OperationAdmissionTombstone | null>;
+
+  abstract deleteOperationAdmissionTombstonesForSession(opts: {
+    sessionId: string;
+    resourceId: string;
+    threadId?: string;
+    signalId?: string;
+  }): Promise<void>;
 
   /**
    * Drop all session records, leases, and attachments held by this domain.

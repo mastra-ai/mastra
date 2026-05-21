@@ -1,15 +1,22 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   HarnessStorage,
+  HarnessStorageAdmissionConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
 } from './base';
+import type { WriteMessageResultEvidenceResult } from './base';
 import type {
   AcquireSessionLeaseInput,
+  AgentSignalResultEvidence,
+  AgentSignalResultStatus,
   AttachmentRecord,
   ListSessionsInput,
   LoadedAttachment,
+  OperationAdmissionEvidence,
+  OperationAdmissionTombstone,
+  QueueAdmissionReceipt,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
@@ -103,6 +110,7 @@ export class InMemoryHarness extends HarnessStorage {
   async deleteSession({ sessionId }: { sessionId: string }): Promise<void> {
     this.db.harnessSessions.delete(sessionId);
     await this.deleteAttachmentsForSession({ sessionId });
+    this.deleteAdmissionEvidenceForSession({ sessionId });
   }
 
   async acquireSessionLease({ sessionId, ownerId, ttlMs }: AcquireSessionLeaseInput): Promise<SessionLeaseResult> {
@@ -215,15 +223,384 @@ export class InMemoryHarness extends HarnessStorage {
     return this.db.harnessAttachmentRecords.get(attachmentKey(sessionId, attachmentId)) ?? null;
   }
 
+  async loadMessageResultEvidence({
+    sessionId,
+    resourceId,
+    threadId,
+    signalId,
+  }: {
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+    signalId: string;
+  }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null> {
+    const retained = this.db.harnessMessageResultEvidence.get(messageEvidenceKey(sessionId, signalId));
+    if (retained && retained.resourceId === resourceId && retained.threadId === threadId) {
+      return clone(retained);
+    }
+    const tombstone = this.findTombstone(
+      t =>
+        t.kind === 'message' &&
+        t.sessionId === sessionId &&
+        t.resourceId === resourceId &&
+        t.threadId === threadId &&
+        t.signalId === signalId,
+    );
+    return tombstone ? clone(tombstone) : null;
+  }
+
+  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<WriteMessageResultEvidenceResult> {
+    const key = messageEvidenceKey(record.sessionId, record.signalId);
+    if (record.admissionId !== undefined) {
+      for (const [existingKey, existing] of this.db.harnessMessageResultEvidence) {
+        if (existingKey === key) continue;
+        if (
+          existing.sessionId !== record.sessionId ||
+          existing.resourceId !== record.resourceId ||
+          existing.threadId !== record.threadId ||
+          existing.admissionId !== record.admissionId
+        ) {
+          continue;
+        }
+        if (existing.admissionHash !== record.admissionHash) {
+          throw new HarnessStorageAdmissionConflictError(record.sessionId, 'message', record.admissionId);
+        }
+        return { created: false, evidence: clone(existing) };
+      }
+
+      const tombstone = this.findTombstone(
+        existing =>
+          existing.kind === 'message' &&
+          existing.sessionId === record.sessionId &&
+          existing.resourceId === record.resourceId &&
+          existing.threadId === record.threadId &&
+          existing.admissionId === record.admissionId,
+      );
+      if (tombstone) {
+        if (tombstone.admissionHash !== record.admissionHash) {
+          throw new HarnessStorageAdmissionConflictError(record.sessionId, 'message', record.admissionId);
+        }
+        return { created: false, evidence: clone(tombstone) };
+      }
+    }
+    const existing = this.db.harnessMessageResultEvidence.get(key);
+    if (existing && !sameMessageEvidenceIdentity(existing, record)) {
+      throw new HarnessStorageAdmissionConflictError(
+        record.sessionId,
+        'message',
+        record.admissionId ?? record.signalId,
+      );
+    }
+    if (existing && isTerminalMessageEvidence(existing)) {
+      return { created: false, evidence: clone(existing) };
+    }
+    const stored = {
+      ...record,
+      createdAt: existing?.createdAt ?? record.createdAt,
+    };
+    this.db.harnessMessageResultEvidence.set(key, clone(stored));
+    return existing === undefined ? { created: true } : { created: false, evidence: clone(stored) };
+  }
+
+  async loadQueueResultEvidence({
+    sessionId,
+    resourceId,
+    queuedItemId,
+  }: {
+    sessionId: string;
+    resourceId: string;
+    queuedItemId: string;
+  }): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | null> {
+    const session = this.db.harnessSessions.get(sessionId);
+    if (session && session.resourceId !== resourceId) return null;
+    const receipt = session?.queueAdmissionReceipts?.[queuedItemId];
+    if (receipt) return clone(receipt);
+    const tombstone = this.findTombstone(
+      t =>
+        t.kind === 'queue' &&
+        t.sessionId === sessionId &&
+        t.resourceId === resourceId &&
+        t.queuedItemId === queuedItemId,
+    );
+    return tombstone ? clone(tombstone) : null;
+  }
+
+  async resolveOperationAdmissionEvidence({
+    sessionId,
+    resourceId,
+    threadId,
+    kind,
+    admissionId,
+    attemptedAdmissionHash,
+  }: {
+    sessionId: string;
+    resourceId: string;
+    threadId?: string;
+    kind: 'message' | 'queue';
+    admissionId: string;
+    attemptedAdmissionHash: string;
+  }): Promise<{
+    status: 'none' | 'duplicate' | 'conflict';
+    evidence?: OperationAdmissionEvidence;
+    storedAdmissionHash?: string;
+  }> {
+    if (kind === 'message') {
+      for (const evidence of this.db.harnessMessageResultEvidence.values()) {
+        if (
+          evidence.sessionId !== sessionId ||
+          evidence.resourceId !== resourceId ||
+          (threadId !== undefined && evidence.threadId !== threadId) ||
+          evidence.admissionId !== admissionId
+        ) {
+          continue;
+        }
+        if (evidence.admissionHash !== attemptedAdmissionHash) {
+          return { status: 'conflict', evidence: clone(evidence), storedAdmissionHash: evidence.admissionHash };
+        }
+        return { status: 'duplicate', evidence: clone(evidence), storedAdmissionHash: evidence.admissionHash };
+      }
+    }
+
+    if (kind === 'queue') {
+      const session = this.db.harnessSessions.get(sessionId);
+      if (session && (session.resourceId !== resourceId || (threadId !== undefined && session.threadId !== threadId))) {
+        return { status: 'none' };
+      }
+      for (const receipt of Object.values(session?.queueAdmissionReceipts ?? {})) {
+        if (receipt.admissionId !== admissionId) continue;
+        if (receipt.admissionHash !== attemptedAdmissionHash) {
+          return { status: 'conflict', evidence: clone(receipt), storedAdmissionHash: receipt.admissionHash };
+        }
+        return { status: 'duplicate', evidence: clone(receipt), storedAdmissionHash: receipt.admissionHash };
+      }
+    }
+
+    const tombstone = this.findTombstone(
+      t =>
+        t.sessionId === sessionId &&
+        t.resourceId === resourceId &&
+        (threadId === undefined || t.threadId === threadId) &&
+        t.kind === kind &&
+        t.admissionId === admissionId,
+    );
+    if (!tombstone) return { status: 'none' };
+    if (tombstone.admissionHash !== attemptedAdmissionHash) {
+      return { status: 'conflict', evidence: clone(tombstone), storedAdmissionHash: tombstone.admissionHash };
+    }
+    return { status: 'duplicate', evidence: clone(tombstone), storedAdmissionHash: tombstone.admissionHash };
+  }
+
+  async writeOperationAdmissionTombstone(record: OperationAdmissionTombstone): Promise<void> {
+    this.writeOperationAdmissionTombstoneSync(record);
+  }
+
+  private writeOperationAdmissionTombstoneSync(record: OperationAdmissionTombstone): void {
+    const key = tombstoneKey(record);
+    if (record.admissionId !== undefined) {
+      for (const [existingKey, existing] of this.db.harnessOperationTombstones) {
+        if (existingKey === key) continue;
+        if (
+          existing.sessionId !== record.sessionId ||
+          existing.resourceId !== record.resourceId ||
+          existing.threadId !== record.threadId ||
+          existing.kind !== record.kind ||
+          existing.admissionId !== record.admissionId
+        ) {
+          continue;
+        }
+        if (existing.admissionHash !== record.admissionHash) {
+          throw new HarnessStorageAdmissionConflictError(record.sessionId, record.kind, record.admissionId);
+        }
+        return;
+      }
+    }
+    const existing = this.db.harnessOperationTombstones.get(key);
+    if (existing && !sameTombstoneIdentity(existing, record)) {
+      throw new HarnessStorageAdmissionConflictError(record.sessionId, record.kind, record.admissionId ?? key);
+    }
+    this.db.harnessOperationTombstones.set(key, clone(record));
+  }
+
+  async compactOperationResultEvidence({
+    sessionId,
+    resourceId,
+    kind,
+    signalId,
+    queuedItemId,
+    now,
+  }: {
+    sessionId: string;
+    resourceId: string;
+    kind: 'message' | 'queue';
+    signalId?: string;
+    queuedItemId?: string;
+    now: number;
+  }): Promise<OperationAdmissionTombstone | null> {
+    if (kind === 'message') {
+      const key = signalId ? messageEvidenceKey(sessionId, signalId) : undefined;
+      const retained = key ? this.db.harnessMessageResultEvidence.get(key) : undefined;
+      if (!retained || retained.resourceId !== resourceId || retained.status === 'pending') return null;
+      const tombstone: OperationAdmissionTombstone = {
+        kind: 'message',
+        sessionId,
+        resourceId,
+        threadId: retained.threadId,
+        ...(retained.admissionId !== undefined ? { admissionId: retained.admissionId } : {}),
+        ...(retained.admissionHash !== undefined ? { admissionHash: retained.admissionHash } : {}),
+        signalId: retained.signalId,
+        ...(retained.runId !== undefined ? { runId: retained.runId } : {}),
+        terminalAt: retained.updatedAt,
+        compactedAt: now,
+        expiresAt: now,
+      };
+      this.writeOperationAdmissionTombstoneSync(tombstone);
+      this.db.harnessMessageResultEvidence.delete(messageEvidenceKey(sessionId, retained.signalId));
+      return clone(tombstone);
+    }
+
+    const session = this.db.harnessSessions.get(sessionId);
+    if (session && session.resourceId !== resourceId) return null;
+    const receipt = queuedItemId ? session?.queueAdmissionReceipts?.[queuedItemId] : undefined;
+    if (!session || !receipt) return null;
+    if (!isTerminalQueueReceipt(receipt)) return null;
+    const tombstone: OperationAdmissionTombstone = {
+      kind: 'queue',
+      sessionId,
+      resourceId,
+      threadId: session.threadId,
+      admissionId: receipt.admissionId,
+      admissionHash: receipt.admissionHash,
+      queuedItemId: receipt.queuedItemId,
+      ...(receipt.signalId !== undefined ? { signalId: receipt.signalId } : {}),
+      ...(receipt.runId !== undefined ? { runId: receipt.runId } : {}),
+      terminalAt: receipt.completedAt ?? receipt.failedAt ?? receipt.deadAt ?? now,
+      compactedAt: now,
+      expiresAt: now,
+    };
+    this.writeOperationAdmissionTombstoneSync(tombstone);
+    const nextReceipts = { ...(session.queueAdmissionReceipts ?? {}) };
+    delete nextReceipts[queuedItemId!];
+    this.db.harnessSessions.set(sessionId, {
+      ...session,
+      queueAdmissionReceipts: Object.keys(nextReceipts).length > 0 ? nextReceipts : undefined,
+      version: session.version + 1,
+    });
+    return clone(tombstone);
+  }
+
+  async deleteOperationAdmissionTombstonesForSession({
+    sessionId,
+    resourceId,
+    threadId,
+    signalId,
+  }: {
+    sessionId: string;
+    resourceId: string;
+    threadId?: string;
+    signalId?: string;
+  }): Promise<void> {
+    for (const [key, evidence] of this.db.harnessMessageResultEvidence) {
+      if (
+        evidence.sessionId === sessionId &&
+        evidence.resourceId === resourceId &&
+        (threadId === undefined || evidence.threadId === threadId) &&
+        (signalId === undefined || evidence.signalId === signalId)
+      ) {
+        this.db.harnessMessageResultEvidence.delete(key);
+      }
+    }
+    for (const [key, tombstone] of this.db.harnessOperationTombstones) {
+      if (
+        tombstone.sessionId === sessionId &&
+        tombstone.resourceId === resourceId &&
+        (threadId === undefined || tombstone.threadId === threadId) &&
+        (signalId === undefined || tombstone.signalId === signalId)
+      ) {
+        this.db.harnessOperationTombstones.delete(key);
+      }
+    }
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.harnessSessions.clear();
     this.db.harnessAttachmentRecords.clear();
     this.db.harnessAttachmentBytes.clear();
+    this.db.harnessMessageResultEvidence.clear();
+    this.db.harnessOperationTombstones.clear();
+  }
+
+  private deleteAdmissionEvidenceForSession({ sessionId }: { sessionId: string }): void {
+    for (const [key, evidence] of this.db.harnessMessageResultEvidence) {
+      if (evidence.sessionId === sessionId) {
+        this.db.harnessMessageResultEvidence.delete(key);
+      }
+    }
+
+    for (const [key, tombstone] of this.db.harnessOperationTombstones) {
+      if (tombstone.sessionId === sessionId) {
+        this.db.harnessOperationTombstones.delete(key);
+      }
+    }
+  }
+
+  private findTombstone(
+    predicate: (tombstone: OperationAdmissionTombstone) => boolean,
+  ): OperationAdmissionTombstone | null {
+    for (const tombstone of this.db.harnessOperationTombstones.values()) {
+      if (predicate(tombstone)) return tombstone;
+    }
+    return null;
   }
 }
 
 function attachmentKey(sessionId: string, attachmentId: string): string {
   return `${sessionId}\u0000${attachmentId}`;
+}
+
+function messageEvidenceKey(sessionId: string, signalId: string): string {
+  return `${sessionId}\u0000${signalId}`;
+}
+
+function tombstoneKey(record: OperationAdmissionTombstone): string {
+  const publicId = record.kind === 'message' ? record.signalId : record.queuedItemId;
+  return `${record.sessionId}\u0000${record.kind}\u0000${publicId ?? record.admissionId ?? record.compactedAt}`;
+}
+
+function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
+  return record.status === 'completed' || record.status === 'failed';
+}
+
+function isTerminalQueueReceipt(receipt: QueueAdmissionReceipt): boolean {
+  return receipt.status === 'completed' || receipt.status === 'failed' || receipt.status === 'dead';
+}
+
+function sameMessageEvidenceIdentity(a: AgentSignalResultEvidence, b: AgentSignalResultEvidence): boolean {
+  return (
+    a.sessionId === b.sessionId &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId &&
+    a.signalId === b.signalId &&
+    a.admissionId === b.admissionId &&
+    a.admissionHash === b.admissionHash
+  );
+}
+
+function sameTombstoneIdentity(a: OperationAdmissionTombstone, b: OperationAdmissionTombstone): boolean {
+  return (
+    a.kind === b.kind &&
+    a.sessionId === b.sessionId &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId &&
+    a.admissionId === b.admissionId &&
+    a.admissionHash === b.admissionHash &&
+    a.queuedItemId === b.queuedItemId &&
+    a.signalId === b.signalId &&
+    a.runId === b.runId
+  );
+}
+
+function clone<T>(value: T): T {
+  return structuredClone(value);
 }
 
 function assertLeaseHolder(existing: SessionRecord, ownerId: string): void {
