@@ -8,6 +8,7 @@ export { HarnessLegacy as Harness } from './harness';
 export {
   askUserTool,
   assignTaskIds,
+  createSubagentTool,
   parseSubagentMeta,
   submitPlanTool,
   taskCheckTool,

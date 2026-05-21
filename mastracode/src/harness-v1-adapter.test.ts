@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MastraCodeHarnessV1 } from './harness-v1-adapter.js';
@@ -210,6 +211,58 @@ describe('MastraCodeHarnessV1', () => {
     expect(agent.calls).toHaveLength(1);
   });
 
+  it('restores persisted token usage when switching back to a thread', async () => {
+    const { harness, agent } = createHarness();
+    agent.enqueueRun({ usage: { inputTokens: 4, outputTokens: 6, totalTokens: 10 } });
+    await harness.init();
+
+    const first = await harness.createThread();
+    await harness.sendMessage({ content: 'count usage' });
+    expect(harness.getTokenUsage()).toMatchObject({ promptTokens: 4, completionTokens: 6, totalTokens: 10 });
+
+    await harness.createThread();
+    expect(harness.getTokenUsage()).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+
+    await harness.switchThread({ threadId: first.id });
+    expect(harness.getTokenUsage()).toMatchObject({ promptTokens: 4, completionTokens: 6, totalTokens: 10 });
+  });
+
+  it('clears pending display state when a pending item is answered', async () => {
+    const { harness } = createHarness();
+    const respondToPlanApproval = vi.fn(async () => ({ status: 'applied' }));
+    (harness as any).session = { respondToPlanApproval };
+    (harness as any).compatDisplayState.pendingPlanApproval = {
+      planId: 'plan-1',
+      title: 'Plan',
+      plan: 'do work',
+    };
+
+    await harness.respondToPlanApproval({ planId: 'plan-1', response: { action: 'rejected', feedback: 'revise' } });
+
+    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
+    expect(respondToPlanApproval).toHaveBeenCalledWith({
+      approved: false,
+      revision: 'revise',
+      transitionToMode: undefined,
+    });
+  });
+
+  it('retries transient active-delivery races for legacy sendMessage', async () => {
+    const { harness } = createHarness();
+    const session = {
+      signal: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('active run ended before the message could be delivered; retry the message'))
+        .mockResolvedValueOnce({ runId: 'retry-run', result: Promise.resolve({ runId: 'retry-run' }) }),
+    };
+    (harness as any).ensureSession = vi.fn(async () => session);
+    (harness as any).refreshRuntimeForCurrentMode = vi.fn(async () => undefined);
+
+    await harness.sendMessage({ content: 'retry me' });
+
+    expect(session.signal).toHaveBeenCalledTimes(2);
+  });
+
   it('maps v1 request_access suspension back to legacy sandbox_access_request', async () => {
     const { harness, agent } = createHarness();
     agent.enqueueRun({
@@ -266,6 +319,71 @@ describe('MastraCodeHarnessV1', () => {
     await harness.sendMessage({ content: 'Use app context', requestContext });
 
     expect(agent.calls[0]?.options.requestContext.get('app')).toEqual({ source: 'test' });
+  });
+
+  it('resolves dynamic memory through the adapter request context', async () => {
+    const memory = { id: 'memory' };
+    const memoryFactory = vi.fn(({ requestContext }: { requestContext: RequestContext }) => {
+      const harnessCtx = requestContext.get('harness') as { getState: () => Record<string, unknown> };
+      return harnessCtx.getState().memoryEnabled ? memory : undefined;
+    });
+    const harness = new MastraCodeHarnessV1({
+      id: 'adapter-harness-memory',
+      storage: new InMemoryStore({ id: 'adapter-storage-memory' }),
+      memory: memoryFactory,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: new AdapterFakeAgent() }],
+      initialState: { currentModelId: 'openai/gpt-4o-mini', memoryEnabled: true },
+    } as any);
+
+    await expect(harness.getResolvedMemory()).resolves.toBe(memory);
+    expect(memoryFactory).toHaveBeenCalledOnce();
+  });
+
+  it('persists system reminder messages on the active v1 thread', async () => {
+    const { harness } = createHarness();
+    await harness.createThread();
+
+    const saved = await harness.saveSystemReminderMessage({
+      reminderType: 'goal',
+      message: 'continue',
+      metadata: { gapText: 'after idle' },
+    });
+
+    expect(saved).toMatchObject({
+      role: 'user',
+      content: [{ type: 'system_reminder', reminderType: 'goal', message: 'continue', gapText: 'after idle' }],
+    });
+    await expect(harness.listMessages()).resolves.toEqual([
+      expect.objectContaining({
+        content: [expect.objectContaining({ type: 'system_reminder', reminderType: 'goal', message: 'continue' })],
+      }),
+    ]);
+  });
+
+  it('keeps OM model helpers on adapter state instead of legacy internals', async () => {
+    const harness = new MastraCodeHarnessV1({
+      id: 'adapter-harness-om',
+      storage: new InMemoryStore({ id: 'adapter-storage-om' }),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: new AdapterFakeAgent() }],
+      initialState: { currentModelId: 'openai/gpt-4o-mini' },
+      resolveModel: (modelId: string) => ({ modelId }),
+    } as any);
+    const events: any[] = [];
+    harness.subscribe(event => events.push(event));
+    await harness.createThread();
+
+    await harness.switchObserverModel({ modelId: 'openai/gpt-5.2' });
+    await harness.switchReflectorModel({ modelId: 'anthropic/claude-opus-4-6' });
+
+    expect(harness.getObserverModelId()).toBe('openai/gpt-5.2');
+    expect(harness.getReflectorModelId()).toBe('anthropic/claude-opus-4-6');
+    expect(harness.getResolvedObserverModel()).toEqual({ modelId: 'openai/gpt-5.2' });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'om_model_changed', role: 'observer', modelId: 'openai/gpt-5.2' }),
+        expect.objectContaining({ type: 'om_model_changed', role: 'reflector', modelId: 'anthropic/claude-opus-4-6' }),
+      ]),
+    );
   });
 
   it('routes legacy system-reminder signals to the v1 reminder channel', async () => {
@@ -358,6 +476,19 @@ describe('MastraCodeHarnessV1', () => {
     expect(release).toHaveBeenNthCalledWith(2, second.id);
   });
 
+  it('does not re-acquire the previous thread lock when the next lock fails', async () => {
+    const acquire = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('locked'));
+    const release = vi.fn();
+    const { harness } = createHarness();
+    (harness as any).configCompat.threadLock = { acquire, release };
+
+    await harness.createThread();
+    await expect(harness.createThread()).rejects.toThrow('locked');
+
+    expect(acquire).toHaveBeenCalledTimes(2);
+    expect(release).not.toHaveBeenCalled();
+  });
+
   it('creates constrained v1 modes for legacy subagent definitions', () => {
     const { harness } = createHarness();
     const subagentHarness = new MastraCodeHarnessV1({
@@ -390,5 +521,103 @@ describe('MastraCodeHarnessV1', () => {
       modeId: '__mastracode_subagent_explore',
     });
     expect(harness.v1.listModes()).toHaveLength(1);
+  });
+
+  it('registers legacy subagents against the synthetic v1 agent id for dynamic parent agents', () => {
+    const dynamicAgent = new AdapterFakeAgent('dynamic-parent-agent');
+    const harness = new MastraCodeHarnessV1({
+      id: 'adapter-harness-dynamic-subagent',
+      storage: new InMemoryStore({ id: 'adapter-storage-dynamic-subagent' }),
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: () => dynamicAgent,
+        },
+      ],
+      initialState: { currentModelId: 'openai/gpt-4o-mini' },
+      subagents: [
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'Read-only explorer',
+          instructions: 'Explore only',
+        },
+      ],
+    } as any);
+
+    expect((harness.v1 as any)._getSubagentType('explore')).toMatchObject({
+      agentId: 'mastracode-default-agent',
+      modeId: '__mastracode_subagent_explore',
+    });
+  });
+
+  it('preserves legacy forked subagent cloning through the subagent alias', async () => {
+    const agent = new AdapterFakeAgent();
+    agent.enqueueRun({ text: 'forked result' });
+    const harness = new MastraCodeHarnessV1({
+      id: 'adapter-harness-forked-subagent',
+      storage: new InMemoryStore({ id: 'adapter-storage-forked-subagent' }),
+      modes: [{ id: 'default', name: 'Default', default: true, agent, defaultModelId: 'openai/gpt-4o-mini' }],
+      initialState: { currentModelId: 'openai/gpt-4o-mini' },
+      subagents: [
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'Read-only explorer',
+          instructions: 'Explore only',
+        },
+      ],
+    } as any);
+    await harness.createThread();
+    const parentThreadId = harness.getCurrentThreadId()!;
+    const parentMode = harness.v1.listModes().find(item => item.id === 'default') as any;
+    const subagent = parentMode.additionalTools.subagent;
+    const events: any[] = [];
+    const requestContext = new RequestContext([
+      [
+        'harness',
+        {
+          threadId: parentThreadId,
+          resourceId: harness.getResourceId(),
+          abortSignal: new AbortController().signal,
+          getSubagentModelId: () => null,
+          emitEvent: (event: unknown) => events.push(event),
+        },
+      ],
+    ]);
+
+    const result = await subagent.execute({ agentType: 'explore', task: 'inspect parent context', forked: true }, {
+      requestContext,
+      agent: { toolCallId: 'tc-fork', flushMessages: vi.fn(async () => undefined) },
+    } as any);
+
+    expect(result).toMatchObject({ content: 'forked result', isError: false });
+    expect(agent.calls[0]?.options.memory.thread).not.toBe(parentThreadId);
+    expect(agent.calls[0]?.options.memory.resource).toBe(harness.getResourceId());
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'subagent_start', forked: true })]));
+    expect(await harness.listThreads()).toHaveLength(1);
+    expect(await harness.listThreads({ includeForkedSubagents: true })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metadata: expect.objectContaining({ forkedSubagent: true, parentThreadId }),
+        }),
+      ]),
+    );
+  });
+
+  it('normalizes WorkspaceConfig before propagating workspace to agents', async () => {
+    const agent = new AdapterFakeAgent();
+    const harness = new MastraCodeHarnessV1({
+      id: 'adapter-harness-workspace-config',
+      storage: new InMemoryStore({ id: 'adapter-storage-workspace-config' }),
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { currentModelId: 'openai/gpt-4o-mini' },
+      workspace: { name: 'workspace-config', skills: ['/tmp/test-skills'] },
+    } as any);
+
+    expect(harness.getWorkspace()).toBeInstanceOf(Workspace);
+    await expect(agent.getWorkspace()).resolves.toBe(harness.getWorkspace());
   });
 });

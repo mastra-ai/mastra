@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/harness';
 import {
   createEmptyTokenUsage,
+  createSubagentTool,
   defaultDisplayState,
   defaultOMProgressState,
   taskCompleteTool,
@@ -28,7 +29,6 @@ import {
 import {
   Harness as HarnessV1,
   askUserTool,
-  createSpawnSubagentTool,
   submitPlanTool,
   taskCheckTool,
   taskWriteTool,
@@ -43,7 +43,6 @@ import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { createTool } from '@mastra/core/tools';
 import { Workspace } from '@mastra/core/workspace';
 import { z } from 'zod';
 
@@ -204,6 +203,11 @@ export class MastraCodeHarnessV1<
     this.compatResourceId = config.resourceId ?? config.id;
     this.compatDefaultResourceId = this.compatResourceId;
     this.compatBrowser = config.browser && typeof config.browser !== 'function' ? config.browser : undefined;
+    if (config.workspace instanceof Workspace) {
+      this.compatWorkspace = config.workspace;
+    } else if (config.workspace && typeof config.workspace !== 'function') {
+      this.compatWorkspace = new Workspace(config.workspace as never);
+    }
 
     const { agents, modes } = this.buildV1Modes();
     const mastraApp = new Mastra({
@@ -384,6 +388,14 @@ export class MastraCodeHarnessV1<
     return this.compatDefaultResourceId;
   }
 
+  async getResolvedMemory(): Promise<any | null> {
+    const memory = this.configCompat.memory;
+    if (!memory) return null;
+    if (typeof memory !== 'function') return memory;
+    const requestContext = this.buildCompatRequestContext();
+    return (await memory({ requestContext, mastra: this.getMastra() } as never)) ?? null;
+  }
+
   setResourceId({ resourceId }: { resourceId: string }): void {
     void this.releaseThreadLock(this.compatCurrentThreadId);
     this.sessionUnsubscribe?.();
@@ -513,11 +525,11 @@ export class MastraCodeHarnessV1<
       await this.refreshRuntimeForCurrentMode(requestContext);
       const result =
         type === 'system-reminder'
-          ? await session.injectSystemReminder(textFromContent(content), {
+          ? await this.injectSystemReminderWithRetry(session, textFromContent(content), {
               ...('attributes' in input && input.attributes ? { attributes: input.attributes } : {}),
               ...('metadata' in input && input.metadata ? { metadata: input.metadata } : {}),
             })
-          : await session.signal({
+          : await this.signalWithRetry(session, {
               content: content as never,
               ...('type' in input ? { type: input.type } : {}),
               ...('attributes' in input && input.attributes ? { attributes: input.attributes } : {}),
@@ -540,7 +552,7 @@ export class MastraCodeHarnessV1<
   }): Promise<void> {
     const session = await this.ensureSession();
     await this.refreshRuntimeForCurrentMode(requestContext);
-    const result = await session.signal({
+    const result = await this.signalWithRetry(session, {
       content: contentWithFiles(content, files) as never,
       requestContext,
     });
@@ -550,6 +562,64 @@ export class MastraCodeHarnessV1<
   async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
     if (!this.compatCurrentThreadId) return [];
     return this.listMessagesForThread({ threadId: this.compatCurrentThreadId, limit: options?.limit });
+  }
+
+  async saveSystemReminderMessage({
+    message,
+    reminderType,
+    role = 'user',
+    metadata,
+  }: {
+    message: string;
+    reminderType: string;
+    role?: 'user' | 'assistant' | 'system';
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessMessage | null> {
+    if (!this.compatCurrentThreadId) return null;
+    const memoryStorage = await this.compatGetMemoryStorage();
+    if (!memoryStorage?.saveMessages) return null;
+
+    const dbMessage = {
+      id: randomUUID(),
+      role,
+      threadId: this.compatCurrentThreadId,
+      resourceId: this.compatResourceId,
+      createdAt: new Date(),
+      content: {
+        format: 2 as const,
+        parts: [],
+        content: '',
+        metadata: {
+          systemReminder: {
+            type: reminderType,
+            message,
+            ...metadata,
+          },
+        },
+      },
+    };
+
+    const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
+    const saved = result?.messages?.[0] ?? dbMessage;
+    return {
+      id: saved.id,
+      role: saved.role === 'signal' ? 'user' : saved.role,
+      content: [
+        {
+          type: 'system_reminder',
+          message,
+          reminderType,
+          ...(metadata?.path && typeof metadata.path === 'string' ? { path: metadata.path } : {}),
+          ...(metadata?.precedesMessageId && typeof metadata.precedesMessageId === 'string'
+            ? { precedesMessageId: metadata.precedesMessageId }
+            : {}),
+          ...(metadata?.gapText && typeof metadata.gapText === 'string' ? { gapText: metadata.gapText } : {}),
+          ...(typeof metadata?.gapMs === 'number' ? { gapMs: metadata.gapMs } : {}),
+          ...(metadata?.timestamp && typeof metadata.timestamp === 'string' ? { timestamp: metadata.timestamp } : {}),
+        } as never,
+      ],
+      createdAt: saved.createdAt,
+    };
   }
 
   async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
@@ -633,16 +703,22 @@ export class MastraCodeHarnessV1<
       const category = this.getToolCategory({ toolName: pending.toolName });
       if (category) void this.grantSessionCategory({ category });
     }
+    this.clearPendingDisplayState();
+    this.compatDispatchDisplayStateChanged();
     void this.session?.respondToToolApproval({ approved: decision !== 'decline' }).catch(error => {
       this.compatEmit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
     });
   }
 
   async respondToToolSuspension({ resumeData }: { resumeData: unknown }): Promise<void> {
+    this.clearPendingDisplayState();
+    this.compatDispatchDisplayStateChanged();
     await this.session?.respondToToolSuspension({ resumeData });
   }
 
   respondToQuestion({ questionId, answer }: { questionId: string; answer: HarnessQuestionAnswer }): void {
+    this.clearPendingDisplayState();
+    this.compatDispatchDisplayStateChanged();
     void this.session?.respondToQuestion({ itemId: questionId, answer }).catch(error => {
       this.compatEmit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
     });
@@ -654,6 +730,8 @@ export class MastraCodeHarnessV1<
     planId: string;
     response: { action: 'approved' | 'rejected'; feedback?: string };
   }): Promise<void> {
+    this.clearPendingDisplayState();
+    this.compatDispatchDisplayStateChanged();
     await this.session?.respondToPlanApproval({
       approved: response.action === 'approved',
       revision: response.feedback,
@@ -682,20 +760,64 @@ export class MastraCodeHarnessV1<
     this.compatEmit({ type: 'om_status', ...this.emptyOmStatusEvent() } as HarnessEvent);
   }
 
+  async getObservationalMemoryRecord(): Promise<any | null> {
+    if (!this.compatCurrentThreadId) return null;
+    try {
+      const memoryStorage = await this.compatGetMemoryStorage();
+      return (await memoryStorage?.getObservationalMemory?.(this.compatCurrentThreadId, this.compatResourceId)) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   getObserverModelId(): string | undefined {
-    return this.compatState.observerModelId as string | undefined;
+    return (
+      (this.compatState.observerModelId as string | undefined) ??
+      (this.configCompat as any).omConfig?.defaultObserverModelId
+    );
   }
 
   getReflectorModelId(): string | undefined {
-    return this.compatState.reflectorModelId as string | undefined;
+    return (
+      (this.compatState.reflectorModelId as string | undefined) ??
+      (this.configCompat as any).omConfig?.defaultReflectorModelId
+    );
   }
 
   getObservationThreshold(): number | undefined {
-    return this.compatState.observationThreshold as number | undefined;
+    return (
+      (this.compatState.observationThreshold as number | undefined) ??
+      (this.configCompat as any).omConfig?.defaultObservationThreshold
+    );
   }
 
   getReflectionThreshold(): number | undefined {
-    return this.compatState.reflectionThreshold as number | undefined;
+    return (
+      (this.compatState.reflectionThreshold as number | undefined) ??
+      (this.configCompat as any).omConfig?.defaultReflectionThreshold
+    );
+  }
+
+  getResolvedObserverModel(): any {
+    const modelId = this.getObserverModelId();
+    return modelId ? (this.configCompat as any).resolveModel?.(modelId) : undefined;
+  }
+
+  getResolvedReflectorModel(): any {
+    const modelId = this.getReflectorModelId();
+    return modelId ? (this.configCompat as any).resolveModel?.(modelId) : undefined;
+  }
+
+  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
+    await this.setState({ observerModelId: modelId } as unknown as Partial<TState>);
+    await this.setThreadSetting({ key: 'observerModelId', value: modelId });
+    this.compatEmit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
+  }
+
+  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
+    await this.setState({ reflectorModelId: modelId } as unknown as Partial<TState>);
+    await this.setThreadSetting({ key: 'reflectorModelId', value: modelId });
+    this.compatEmit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
   }
 
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
@@ -829,6 +951,32 @@ export class MastraCodeHarnessV1<
     return this.bindSession(this.compatCurrentThreadId!);
   }
 
+  private async signalWithRetry(session: Session, opts: Parameters<Session['signal']>[0]) {
+    try {
+      return await session.signal(opts);
+    } catch (error) {
+      if (!this.isActiveDeliveryRace(error)) throw error;
+      return session.signal(opts);
+    }
+  }
+
+  private async injectSystemReminderWithRetry(
+    session: Session,
+    content: string,
+    opts: Parameters<Session['injectSystemReminder']>[1],
+  ) {
+    try {
+      return await session.injectSystemReminder(content, opts);
+    } catch (error) {
+      if (!this.isActiveDeliveryRace(error)) throw error;
+      return session.injectSystemReminder(content, opts);
+    }
+  }
+
+  private isActiveDeliveryRace(error: unknown): boolean {
+    return error instanceof Error && /active run ended before .* could be delivered/.test(error.message);
+  }
+
   private async bindSession(threadId: string): Promise<Session> {
     if (this.session?.threadId === threadId && this.session.resourceId === this.compatResourceId) return this.session;
     this.sessionUnsubscribe?.();
@@ -853,9 +1001,6 @@ export class MastraCodeHarnessV1<
     try {
       await lock.acquire(nextThreadId);
     } catch (error) {
-      if (previousThreadId) {
-        await Promise.resolve(lock.acquire(previousThreadId)).catch(() => undefined);
-      }
       throw error;
     }
     if (previousThreadId) {
@@ -900,7 +1045,7 @@ export class MastraCodeHarnessV1<
     });
     const defaultAgentId =
       modes.find(mode => mode.id === this.modeId)?.agentId ?? modes[0]?.agentId ?? this.getCurrentAgentId();
-    for (const subagent of this.configCompat.subagents ?? []) {
+    for (const subagent of this.subagentsEnabled() ? (this.configCompat.subagents ?? []) : []) {
       const modeId = this.subagentModeId(subagent.id);
       const v1Mode = {
         id: modeId,
@@ -972,57 +1117,59 @@ export class MastraCodeHarnessV1<
   }
 
   private buildLegacySubagentAlias(mode: HarnessMode<TState>) {
-    if (!this.configCompat.subagents?.length) return undefined;
-    return createTool({
-      id: 'subagent',
-      description:
-        'Delegate a focused task to a specialized subagent. Accepts the legacy MastraCode subagent input shape and routes it through Harness v1 subagents.',
-      inputSchema: z.object({
-        agentType: z.enum(this.configCompat.subagents.map(subagent => subagent.id) as [string, ...string[]]),
-        task: z.string(),
-        modelId: z.string().optional(),
-        forked: z.boolean().optional(),
-      }),
-      execute: async (input, context) => {
-        const session = this.session;
-        if (!session) {
-          return { result: 'No active Harness v1 session is available for subagent delegation.', isError: true };
-        }
-        const spawn = createSpawnSubagentTool(session);
-        if (!spawn?.execute) {
-          return { result: 'No Harness v1 subagents are configured.', isError: true };
-        }
-        const configured = this.configCompat.subagents?.find(subagent => subagent.id === input.agentType);
-        const modelOverride =
-          input.forked === true
-            ? this.getCurrentModelId() || mode.defaultModelId
-            : (input.modelId ?? configured?.defaultModelId);
-        return spawn.execute(
-          {
-            agentType: input.agentType,
-            task:
-              input.forked === true
-                ? `${input.task}\n\nRun this as a forked MastraCode subagent task using the parent model context where available.`
-                : input.task,
-            ...(modelOverride ? { modelOverride } : {}),
-          },
-          context,
-        );
+    if (!this.subagentsEnabled() || !this.configCompat.subagents?.length) return undefined;
+    return createSubagentTool({
+      subagents: this.configCompat.subagents,
+      resolveModel: (modelId: string) => (this.configCompat as any).resolveModel?.(modelId),
+      harnessTools: this.resolveStaticCompatTools(),
+      fallbackModelId: mode.defaultModelId ?? this.getCurrentModelId(),
+      getParentModelId: () => this.getCurrentModelId() || mode.defaultModelId || '',
+      getParentAgent: () => {
+        const currentMode = this.getCurrentMode();
+        return typeof currentMode.agent === 'function'
+          ? currentMode.agent(this.compatState)
+          : (currentMode.agent as never);
       },
+      cloneThreadForFork: async ({
+        sourceThreadId,
+        resourceId,
+        title,
+      }: {
+        sourceThreadId: string;
+        resourceId?: string;
+        title?: string;
+      }) => {
+        const cloned = await this.v1.threads.clone({
+          resourceId: resourceId ?? this.compatResourceId,
+          threadId: sourceThreadId,
+          title,
+          metadata: {
+            forkedSubagent: true,
+            parentThreadId: sourceThreadId,
+          },
+        });
+        return { id: cloned.id, resourceId: cloned.resourceId };
+      },
+      getParentToolsets: async (requestContext?: RequestContext) => ({
+        harnessBuiltIn: await this.buildModeAdditionalTools(mode, requestContext),
+      }),
     });
   }
 
   private buildV1Subagents() {
-    if (!this.configCompat.subagents?.length) return undefined;
+    if (!this.subagentsEnabled() || !this.configCompat.subagents?.length) return undefined;
     const types: Record<string, SubagentDefinition> = {};
-    const defaultAgentId = this.getCurrentAgentId();
+    const defaultAgentId =
+      (this.compatV1ModesById.get(this.getDefaultModeId()) as { agentId?: string } | undefined)?.agentId ??
+      this.compatModeAgentIds.get(this.getDefaultModeId()) ??
+      this.getCurrentAgentId();
     for (const subagent of this.configCompat.subagents) {
       types[subagent.id] = {
         agentId: defaultAgentId,
         modeId: this.subagentModeId(subagent.id),
         description: subagent.description,
         defaultModelId: subagent.defaultModelId,
-        workspace: subagent.forked ? 'fresh' : 'inherit',
+        workspace: 'inherit',
       };
     }
     return { maxDepth: 1, types };
@@ -1030,6 +1177,10 @@ export class MastraCodeHarnessV1<
 
   private subagentModeId(subagentId: string): string {
     return `__mastracode_subagent_${subagentId}`;
+  }
+
+  private subagentsEnabled(): boolean {
+    return !this.configCompat.disableBuiltinTools?.includes('subagent');
   }
 
   private getDefaultModeId(): string {
@@ -1055,17 +1206,18 @@ export class MastraCodeHarnessV1<
   private buildV1Workspace(): HarnessWorkspaceConfig | undefined {
     const workspace = this.configCompat.workspace;
     if (!workspace) return undefined;
-    if (workspace instanceof Workspace) return { kind: 'shared', workspace };
+    if (this.compatWorkspace) return { kind: 'shared', workspace: this.compatWorkspace, eager: true };
     if (typeof workspace === 'function') {
       return {
         kind: 'per-resource',
         provider: async () => {
+          if (this.compatWorkspace) return this.compatWorkspace;
           const requestContext = this.buildCompatRequestContext();
           return workspace({ requestContext, mastra: this.getMastra() } as never) as Workspace | Promise<Workspace>;
         },
       };
     }
-    return { kind: 'shared', workspace: new Workspace(workspace as never) };
+    return undefined;
   }
 
   private async refreshRuntimeForCurrentMode(requestContext?: RequestContext): Promise<void> {
@@ -1138,7 +1290,9 @@ export class MastraCodeHarnessV1<
   private propagateAgent(agent: AgentLike): void {
     if (this.configCompat.memory && !agent.hasOwnMemory?.()) agent.__setMemory?.(this.configCompat.memory);
     if (this.configCompat.pubsub && !agent.hasOwnPubSub?.()) agent.__setPubSub?.(this.configCompat.pubsub);
-    if (this.configCompat.workspace && !agent.hasOwnWorkspace?.()) agent.__setWorkspace?.(this.configCompat.workspace);
+    const workspaceForAgent =
+      typeof this.configCompat.workspace === 'function' ? this.configCompat.workspace : this.compatWorkspace;
+    if (workspaceForAgent && !agent.hasOwnWorkspace?.()) agent.__setWorkspace?.(workspaceForAgent);
     if (this.compatBrowser && !agent.hasOwnBrowser?.()) agent.setBrowser?.(this.compatBrowser);
   }
 
@@ -1146,10 +1300,19 @@ export class MastraCodeHarnessV1<
     switch (event.type) {
       case 'agent_start':
         this.compatDisplayState.isRunning = true;
+        this.compatDisplayState.activeTools = new Map();
+        this.compatDisplayState.toolInputBuffers = new Map();
+        this.compatDisplayState.currentMessage = null;
+        this.compatDisplayState.pendingApproval = null;
+        this.compatDisplayState.pendingSuspension = null;
         this.compatEmit({ type: 'agent_start' });
         break;
       case 'agent_end':
         this.compatDisplayState.isRunning = false;
+        this.compatDisplayState.pendingApproval = null;
+        if (event.reason !== 'suspended') this.compatDisplayState.pendingSuspension = null;
+        this.compatDisplayState.pendingQuestion = null;
+        this.compatDisplayState.pendingPlanApproval = null;
         if (this.session) {
           const usage = this.session.getDisplayState().tokenUsage as TokenUsage;
           this.compatTokenUsage = {
@@ -1157,6 +1320,7 @@ export class MastraCodeHarnessV1<
             totalTokens: usage.totalTokens || usage.promptTokens + usage.completionTokens,
           };
           this.compatDisplayState.tokenUsage = this.compatTokenUsage;
+          await this.compatPersistTokenUsage();
         }
         this.compatEmit({ type: 'agent_end', reason: event.reason });
         if (this.compatFollowUpQueue.length > 0) {
@@ -1251,6 +1415,7 @@ export class MastraCodeHarnessV1<
           toolCallId: event.toolCallId,
           agentType: event.agentType,
           subToolName: event.toolName,
+          subToolArgs: (event as { args?: unknown }).args,
         } as HarnessEvent);
         break;
       case 'subagent_tool_end':
@@ -1259,6 +1424,7 @@ export class MastraCodeHarnessV1<
           toolCallId: event.toolCallId,
           agentType: event.agentType,
           subToolName: event.toolName,
+          subToolArgs: (event as { args?: unknown }).args,
           subToolResult: event.output,
           isError: event.isError,
         } as HarnessEvent);
@@ -1268,7 +1434,7 @@ export class MastraCodeHarnessV1<
           type: 'subagent_end',
           toolCallId: event.toolCallId,
           agentType: event.agentType,
-          result: event.output,
+          result: typeof event.output === 'string' ? event.output : JSON.stringify(event.output),
           isError: event.isError,
           durationMs: event.durationMs,
         } as HarnessEvent);
@@ -1409,6 +1575,13 @@ export class MastraCodeHarnessV1<
     };
   }
 
+  private clearPendingDisplayState(): void {
+    this.compatDisplayState.pendingApproval = null;
+    this.compatDisplayState.pendingSuspension = null;
+    this.compatDisplayState.pendingQuestion = null;
+    this.compatDisplayState.pendingPlanApproval = null;
+  }
+
   private compatStartHeartbeats(): void {
     for (const handler of this.configCompat.heartbeatHandlers ?? []) {
       this.registerHeartbeat(handler);
@@ -1435,6 +1608,18 @@ export class MastraCodeHarnessV1<
       if (meta[key] !== undefined) updates[key] = meta[key];
     }
     if (Object.keys(updates).length > 0) await this.setState(updates as unknown as Partial<TState>);
+    const savedUsage = meta.tokenUsage as Partial<TokenUsage> | undefined;
+    this.compatTokenUsage = savedUsage
+      ? {
+          ...createEmptyTokenUsage(),
+          ...savedUsage,
+          promptTokens: savedUsage.promptTokens ?? 0,
+          completionTokens: savedUsage.completionTokens ?? 0,
+          totalTokens: savedUsage.totalTokens ?? 0,
+          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
+        }
+      : createEmptyTokenUsage();
   }
 
   private async compatLoadModeModelId(modeId: string): Promise<string | null> {
@@ -1447,13 +1632,19 @@ export class MastraCodeHarnessV1<
   }
 
   private async listResourceIdsFromStorage(): Promise<string[]> {
-    const storage = this.configCompat.storage as MastraCompositeStore | undefined;
-    const memory = await storage?.getStore('memory');
+    const memory = await this.compatGetMemoryStorage();
     if (!memory) return [this.compatResourceId];
     const result = await memory.listThreads({ perPage: false });
-    const ids = new Set(result.threads.map(thread => thread.resourceId));
+    const ids = new Set<string>(
+      result.threads.map((thread: { resourceId?: unknown }) => String(thread.resourceId ?? '')).filter(Boolean),
+    );
     ids.add(this.compatResourceId);
     return [...ids];
+  }
+
+  private async compatGetMemoryStorage(): Promise<any | undefined> {
+    const storage = this.configCompat.storage as MastraCompositeStore | undefined;
+    return storage?.getStore('memory');
   }
 
   private async toV1AuthStatus(modelId: string) {
@@ -1469,6 +1660,20 @@ export class MastraCodeHarnessV1<
     const config = (PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>)[provider];
     const envVars = config?.apiKeyEnvVar;
     return Array.isArray(envVars) ? envVars[0] : envVars;
+  }
+
+  private async compatPersistTokenUsage(): Promise<void> {
+    if (!this.compatCurrentThreadId) return;
+    const memory = await this.compatGetMemoryStorage();
+    const thread = await memory?.getThreadById?.({ threadId: this.compatCurrentThreadId });
+    if (!thread) return;
+    await memory.saveThread?.({
+      thread: {
+        ...thread,
+        metadata: { ...thread.metadata, tokenUsage: this.compatTokenUsage },
+        updatedAt: new Date(),
+      },
+    });
   }
 
   private emptyOmStatusEvent() {

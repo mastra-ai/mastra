@@ -67,6 +67,43 @@ describe('Session.injectSystemReminder()', () => {
     await firstPromise;
   });
 
+  it('rejects if the active run ends before the reminder dispatch lands', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    const hold = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold });
+
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const firstPromise = session.message({ content: 'first' });
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    const originalSendSignal = agent.sendSignal.bind(agent);
+    agent.sendSignal = ((signal, opts) => {
+      if ((signal as { type?: string }).type === 'system-reminder') {
+        return {
+          accepted: true,
+          runId: 'stale-run',
+          signal: originalSendSignal(signal as never, {
+            ...(opts as any),
+            ifActive: { behavior: 'discard' },
+            ifIdle: { behavior: 'discard' },
+          }).signal,
+          delivery: 'discarded',
+        };
+      }
+      return originalSendSignal(signal as never, opts as never);
+    }) as typeof agent.sendSignal;
+
+    await expect(session.injectSystemReminder('reminder')).rejects.toThrow(/active run ended/);
+
+    release();
+    await firstPromise;
+  });
+
   it('passes attributes and metadata through to the signal envelope', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

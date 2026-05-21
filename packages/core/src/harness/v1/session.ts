@@ -911,6 +911,7 @@ export class Session {
     }
     if (this._currentTurnAbortController === controller) {
       this._currentTurnAbortController = undefined;
+      this._pendingAbortReason = undefined;
       this._currentRunId = undefined;
       this._currentMessageId = undefined;
       this._currentTraceId = undefined;
@@ -3834,9 +3835,15 @@ export class Session {
       {
         resourceId: this.resourceId,
         threadId: this.threadId,
-        ifIdle: { behavior: 'wake', streamOptions: {} as never },
+        ifIdle: { behavior: 'discard' },
       },
     );
+    if (dispatched.delivery !== 'active') {
+      throw new HarnessValidationError(
+        'injectSystemReminder()',
+        'active run ended before the reminder could be delivered; retry the reminder',
+      );
+    }
 
     return {
       id: dispatched.signal.id,
@@ -4075,7 +4082,9 @@ export class Session {
   private _modelsGetSubagent(opts: { agentType: string }): string | null {
     this._assertLive('models.getSubagent()');
     assertAgentType('models.getSubagent', opts.agentType);
-    return this._record.subagentModelOverrides?.[opts.agentType] ?? null;
+    return (
+      this._record.subagentModelOverrides?.[opts.agentType] ?? this._record.subagentModelOverrides?.default ?? null
+    );
   }
 
   // -------------------------------------------------------------------------
