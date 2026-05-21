@@ -1,14 +1,14 @@
-import { Button } from '@mastra/playground-ui';
-import { ArrowLeftIcon } from 'lucide-react';
+import { Breadcrumb, Button, Crumb } from '@mastra/playground-ui';
+import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import type { WorkspaceMode } from '../../layouts/types';
 import { AgentBuilderTitle } from '../agent-edit/agent-builder-title';
 
 export interface ViewTopBarProps {
   /**
-   * The current workspace mode. When omitted, no mode badge or mode-toggle is
-   * rendered (e.g. for non-owners viewing a public agent).
+   * The current workspace mode. When omitted, no mode-toggle is rendered
+   * (e.g. for non-owners viewing a public agent).
    */
   mode?: WorkspaceMode;
   /** Called when the user clicks the mode-toggle button to switch to Edit. */
@@ -28,33 +28,38 @@ export const ViewTopBar = ({
   ownerActions,
   mobileMenu,
 }: ViewTopBarProps) => {
-  const navigate = useNavigate();
+  const toggleLabel = mode === 'test' ? 'Switch to Edit mode' : 'Switch to View mode';
 
   return (
     <div
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10"
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10"
       data-testid="agent-builder-view-top-bar"
     >
-      <div className="justify-self-start">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          tooltip="Agents list"
-          onClick={() => navigate('/agent-builder/agents', { viewTransition: true })}
-        >
-          <ArrowLeftIcon />
-        </Button>
-      </div>
-      <AgentBuilderTitle
-        className="min-w-0 justify-self-start"
-        isLoading={false}
-        mode={mode}
-        onModeToggle={onModeToggle}
-        disabled={modeToggleDisabled}
-      />
+      <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
+        <Crumb as={Link} to="/agent-builder/agents">
+          Agent list
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          <AgentBuilderTitle isLoading={false} />
+        </Crumb>
+      </Breadcrumb>
       <div className="justify-self-end flex items-center gap-2 shrink-0">
         {ownerActions && <div className="shrink-0 hidden lg:flex items-center gap-2">{ownerActions}</div>}
         {mobileMenu && <div className="shrink-0 lg:hidden">{mobileMenu}</div>}
+        {mode && onModeToggle && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onModeToggle}
+            disabled={modeToggleDisabled}
+            className="hidden lg:inline-flex shrink-0"
+            data-testid="agent-builder-mode-toggle"
+            aria-label={toggleLabel}
+          >
+            <RefreshCwIcon />
+            {toggleLabel}
+          </Button>
+        )}
       </div>
     </div>
   );

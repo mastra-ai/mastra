@@ -4,7 +4,6 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import { AgentChatPanelChat } from '@/domains/agent-builder/components/agent-edit/agent-chat-panel';
-import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
 import { ViewTopBar } from '@/domains/agent-builder/components/agent-view/view-top-bar';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -19,7 +18,6 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export default function AgentBuilderAgentView() {
@@ -85,29 +83,17 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
 
 const ViewTopBarSlot = () => {
   const { canModify, onModeToggle, isOwner, agentId, agent } = useViewPage();
-  const { data: capabilities } = useAuthCapabilities();
   const isRunning = useStreamRunning();
-
-  const showVisibilitySelect = Boolean(isOwner && capabilities?.enabled);
 
   return (
     <ViewTopBar
       mode={canModify ? 'test' : undefined}
       onModeToggle={onModeToggle}
       modeToggleDisabled={isRunning}
-      ownerActions={
-        isOwner &&
-        showVisibilitySelect && (
-          <span style={{ viewTransitionName: 'agent-visibility-select' }}>
-            <VisibilitySelect agentId={agentId} />
-          </span>
-        )
-      }
       mobileMenu={
         isOwner && (
           <AgentBuilderMobileMenu
             agentId={agentId}
-            showSetVisibility={Boolean(capabilities?.enabled)}
             showDelete
             agentName={agent.name}
             disabled={isRunning}

@@ -2,10 +2,10 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
-import { ViewTopBar } from '../view-top-bar';
+import { EditTopBar } from '../edit-top-bar';
 
 const FormWrapper = ({ children, initialPath = '/' }: { children: React.ReactNode; initialPath?: string }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
@@ -20,51 +20,41 @@ const FormWrapper = ({ children, initialPath = '/' }: { children: React.ReactNod
   );
 };
 
-const LocationProbe = () => {
-  const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
-};
-
-describe('ViewTopBar', () => {
+describe('EditTopBar', () => {
   afterEach(() => {
     cleanup();
   });
 
-  it('renders a breadcrumb with "Agent list" linking to the agents list and the current agent name', () => {
+  it('renders a breadcrumb with "Agent list" link and the current agent name', () => {
     render(
       <FormWrapper initialPath="/agent-builder/agents/abc">
-        <Routes>
-          <Route
-            path="/agent-builder/agents/:id"
-            element={
-              <>
-                <ViewTopBar />
-                <LocationProbe />
-              </>
-            }
-          />
-          <Route path="/agent-builder/agents" element={<LocationProbe />} />
-        </Routes>
+        <EditTopBar isLoading={false} />
       </FormWrapper>,
     );
 
     const link = screen.getByRole('link', { name: /agent list/i });
     expect(link.getAttribute('href')).toBe('/agent-builder/agents');
     expect(screen.getByText('Support agent')).toBeTruthy();
+  });
 
-    fireEvent.click(link);
-    expect(screen.getByTestId('location').textContent).toBe('/agent-builder/agents');
+  it('shows the skeleton placeholder in the current crumb while loading', () => {
+    render(
+      <FormWrapper>
+        <EditTopBar isLoading={true} />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-builder-title-skeleton')).toBeTruthy();
   });
 
   it('renders the mode-toggle button when mode is "test" and invokes the callback', () => {
     const onModeToggle = vi.fn();
     render(
       <FormWrapper>
-        <ViewTopBar mode="test" onModeToggle={onModeToggle} />
+        <EditTopBar isLoading={false} mode="test" onModeToggle={onModeToggle} />
       </FormWrapper>,
     );
 
-    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
     const toggle = screen.getByTestId('agent-builder-mode-toggle');
     expect(toggle.textContent).toContain('Switch to Edit');
     fireEvent.click(toggle);
@@ -74,46 +64,36 @@ describe('ViewTopBar', () => {
   it('renders no mode toggle when mode is undefined', () => {
     render(
       <FormWrapper>
-        <ViewTopBar />
+        <EditTopBar isLoading={false} />
       </FormWrapper>,
     );
 
-    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-mode-badge-build')).toBeNull();
     expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
   });
 
-  it('renders owner actions in a desktop-only container', () => {
+  it('renders the primaryAction, rightAside and mobileExtra slots', () => {
     render(
       <FormWrapper>
-        <ViewTopBar ownerActions={<button data-testid="owner-action">Publish</button>} />
+        <EditTopBar
+          isLoading={false}
+          rightAside={<span data-testid="right-aside">aside</span>}
+          primaryAction={<button data-testid="primary-action">Publish</button>}
+          mobileExtra={<button data-testid="mobile-extra">Menu</button>}
+        />
       </FormWrapper>,
     );
 
-    const action = screen.getByTestId('owner-action');
-    expect(action).toBeTruthy();
-    const wrapper = action.parentElement!;
-    expect(wrapper.className).toContain('hidden');
-    expect(wrapper.className).toContain('lg:flex');
-  });
-
-  it('renders the mobile menu in a mobile-only container', () => {
-    render(
-      <FormWrapper>
-        <ViewTopBar mobileMenu={<button data-testid="mobile-menu">Menu</button>} />
-      </FormWrapper>,
-    );
-
-    const menu = screen.getByTestId('mobile-menu');
-    const wrapper = menu.parentElement!;
-    expect(wrapper.className).toContain('lg:hidden');
+    expect(screen.getByTestId('right-aside')).toBeTruthy();
+    expect(screen.getByTestId('primary-action')).toBeTruthy();
+    const mobile = screen.getByTestId('mobile-extra');
+    expect(mobile.parentElement!.className).toContain('lg:hidden');
   });
 
   it('disables the toggle when modeToggleDisabled is true', () => {
     const onModeToggle = vi.fn();
     render(
       <FormWrapper>
-        <ViewTopBar mode="test" onModeToggle={onModeToggle} modeToggleDisabled />
+        <EditTopBar isLoading={false} mode="test" onModeToggle={onModeToggle} modeToggleDisabled />
       </FormWrapper>,
     );
 

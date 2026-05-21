@@ -2,6 +2,7 @@ import { Avatar, toast } from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import { useAgentColor } from '../../../contexts/agent-color-context';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { downscaleImageToDataUrl } from '../../../services/downscale-avatar';
@@ -16,8 +17,11 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const draftName = useWatch({ control, name: 'name' }) ?? '';
   const draftAvatarUrl = useWatch({ control, name: 'avatarUrl' });
+  const agentColor = useAgentColor();
 
   const interactive = !disabled && features.avatarUpload;
+  const avatarColor = agentColor?.background;
+  const avatarTextColor = agentColor?.foreground;
 
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,7 +48,14 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
             aria-label="Upload avatar"
             data-testid="agent-configure-avatar-trigger"
           >
-            <Avatar src={draftAvatarUrl} name={draftName} size="lg" interactive />
+            <Avatar
+              src={draftAvatarUrl}
+              name={draftName}
+              size="lg"
+              interactive
+              color={avatarColor}
+              textColor={avatarTextColor}
+            />
             <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity">
               <Plus className="h-5 w-5 text-neutral5" />
             </span>
@@ -60,7 +71,13 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
         </>
       ) : (
         <div data-testid="agent-configure-avatar-display">
-          <Avatar src={draftAvatarUrl} name={draftName} size="lg" />
+          <Avatar
+            src={draftAvatarUrl}
+            name={draftName}
+            size="lg"
+            color={avatarColor}
+            textColor={avatarTextColor}
+          />
         </div>
       )}
     </div>

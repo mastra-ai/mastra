@@ -69,8 +69,8 @@ function VisibilityMenuItem({ agentId, disabled }: VisibilityMenuItemProps) {
         <DropdownMenu.Item
           data-testid="agent-builder-mobile-menu-visibility-add"
           disabled={disabled}
-          onSelect={event => {
-            event.preventDefault();
+          closeOnClick={false}
+          onSelect={() => {
             requestChange('public');
           }}
         >
@@ -81,8 +81,8 @@ function VisibilityMenuItem({ agentId, disabled }: VisibilityMenuItemProps) {
         <DropdownMenu.Item
           data-testid="agent-builder-mobile-menu-visibility-remove"
           disabled={disabled}
-          onSelect={event => {
-            event.preventDefault();
+          closeOnClick={false}
+          onSelect={() => {
             requestChange('private');
           }}
         >

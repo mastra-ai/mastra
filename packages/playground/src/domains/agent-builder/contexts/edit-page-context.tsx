@@ -88,7 +88,6 @@ export const EditPageProvider = ({
         availableAgentTools={availableAgentTools}
         availableWorkspaces={availableWorkspaces}
         availableSkills={availableSkills}
-        canPublishToChannel={canPublishToChannel}
         initialUserMessage={initialUserMessage}
         isFreshThread={isFreshThread}
         toolsReady
