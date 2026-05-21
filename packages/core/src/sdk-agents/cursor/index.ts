@@ -128,7 +128,7 @@ export class CursorSDKAgent extends Agent {
       description: options.description,
       instructions: '',
       model: createNoopModel({
-        modelId: getModelId(options.sendOptions?.model),
+        modelId: getModelId(getRequestedModel(options)),
         provider: PROVIDER,
       }),
     });
@@ -216,7 +216,10 @@ export class CursorSDKAgent extends Agent {
       return resolveCursorAgent(this.options.agent);
     }
 
-    this.#createdAgent ??= createCursorAgent(this.options);
+    this.#createdAgent ??= createCursorAgent(this.options).catch(error => {
+      this.#createdAgent = undefined;
+      throw error;
+    });
     return this.#createdAgent;
   }
 }
@@ -458,7 +461,7 @@ function toV3Usage(usage: CursorUsageTotals): V3Usage {
 }
 
 function getRequestedModel(options: CursorAgentOptions): ModelSelection | undefined {
-  return options.sendOptions?.model;
+  return options.sendOptions?.model ?? options.model;
 }
 
 function getModelId(model: ModelSelection | undefined): string {

@@ -158,6 +158,33 @@ describe('CursorSDKAgent', () => {
     }
   });
 
+  it('uses the inline Cursor model for wrapper model metadata', async () => {
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      model: { id: 'gpt-5.5' },
+    });
+
+    expect((await agent.getModel()).modelId).toBe('gpt-5.5');
+  });
+
+  it('retries inline Cursor SDK agent creation after a failure', async () => {
+    const { sdkAgent } = createSDKAgent(createRun({ id: 'retry-run', result: 'retried text' }));
+    createCursorAgent.mockRejectedValueOnce(new Error('create failed')).mockResolvedValueOnce(sdkAgent);
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      model: { id: 'gpt-5.5' },
+    });
+
+    await expect(agent.generate('Generate prompt')).rejects.toThrow('create failed');
+
+    const result = await agent.generate('Generate prompt');
+
+    expect(result.text).toBe('retried text');
+    expect(createCursorAgent).toHaveBeenCalledTimes(2);
+  });
+
   it('generate calls the provided Cursor SDK agent directly and returns Mastra output', async () => {
     const onDelta = vi.fn();
     const { sdkAgent, send } = createSDKAgent(createRun({ id: 'generate-run', result: 'generated text' }));
