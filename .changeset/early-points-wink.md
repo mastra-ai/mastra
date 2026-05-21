@@ -4,7 +4,7 @@
 
 Added Mastra SDK agent wrappers for Claude Agent SDK and Cursor Agent SDK.
 
-Developers can now use Claude Agent SDK and Cursor Agent SDK agents inside Mastra. They can initialize the vendor SDK client themselves or let Mastra create the Cursor SDK agent from Cursor options.
+Developers can now use Claude Agent SDK and Cursor Agent SDK agents inside Mastra. They can pass an initialized vendor SDK client or a factory that creates one.
 
 These agents support `generate` and `stream` with Mastra-compatible outputs, so they can be registered and called like other Mastra agents. Their runs also show up in Mastra observability with usage data, and Claude SDK cost estimates are preserved for cost reporting.
 
@@ -31,4 +31,4 @@ const cursorAgent = new CursorSDKAgent({
 });
 ```
 
-`CursorSDKAgent` can also receive a pre-created Cursor SDK agent through `agent`. When `apiKey` is not passed to the wrapper, it falls back to `process.env.CURSOR_API_KEY` before calling an agent factory.
+`CursorSDKAgent` can also receive a pre-created Cursor SDK agent through `agent`. Factory functions receive the Cursor options from the wrapper, so callers can split options between `new CursorSDKAgent(...)` and their own `CursorAgent.create(...)` call. When `apiKey` is not passed to the wrapper, it falls back to `process.env.CURSOR_API_KEY` before calling the factory.

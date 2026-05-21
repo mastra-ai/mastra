@@ -153,6 +153,62 @@ describe('CursorSDKAgent', () => {
     }
   });
 
+  it('lets an agent factory compose wrapper options with factory-owned options', async () => {
+    const originalApiKey = process.env['CURSOR_API_KEY'];
+    process.env['CURSOR_API_KEY'] = 'cursor-env-key';
+    const { sdkAgent } = createSDKAgent(createRun({ id: 'composed-run', result: 'composed text' }));
+    createCursorAgent.mockResolvedValueOnce(sdkAgent);
+    const agentFactory = vi.fn(options =>
+      createCursorAgent({
+        ...options,
+        model: { id: 'gpt-5.5' },
+        local: {
+          cwd: '/repo',
+        },
+      }),
+    );
+
+    try {
+      const agent = new CursorSDKAgent({
+        id: 'cursor-agent',
+        name: 'Cursor Agent',
+        description: 'Cursor',
+        agent: agentFactory,
+        mcpServers: {
+          filesystem: { command: 'node', args: ['server.js'] },
+        },
+      });
+
+      const result = await agent.generate('Generate prompt');
+
+      expect(result.text).toBe('composed text');
+      expect(agentFactory).toHaveBeenCalledWith({
+        apiKey: 'cursor-env-key',
+        name: 'Cursor Agent',
+        mcpServers: {
+          filesystem: { command: 'node', args: ['server.js'] },
+        },
+      });
+      expect(createCursorAgent).toHaveBeenCalledWith({
+        apiKey: 'cursor-env-key',
+        name: 'Cursor Agent',
+        model: { id: 'gpt-5.5' },
+        local: {
+          cwd: '/repo',
+        },
+        mcpServers: {
+          filesystem: { command: 'node', args: ['server.js'] },
+        },
+      });
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env['CURSOR_API_KEY'];
+      } else {
+        process.env['CURSOR_API_KEY'] = originalApiKey;
+      }
+    }
+  });
+
   it('uses the inline Cursor model for wrapper model metadata', async () => {
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
