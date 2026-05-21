@@ -85,6 +85,7 @@ export type {
   AgentSignalType,
   AgentSignalDataPart,
   CreatedAgentSignal,
+  SignalDeliveryAttributes,
 } from './signals';
 
 /**

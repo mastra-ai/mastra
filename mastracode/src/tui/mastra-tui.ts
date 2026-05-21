@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
+import type { SignalDeliveryAttributes } from '@mastra/core/agent';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -82,6 +83,16 @@ export type { MastraTUIOptions } from './state.js';
 // =============================================================================
 // MastraTUI Class
 // =============================================================================
+
+/**
+ * Delivery attributes applied to user-message signals. When the signal is delivered to an
+ * active run it is tagged as an interjection; when it starts a new run it is a new-message.
+ * The LLM sees these as XML attributes on the `<user-message>` element.
+ */
+const USER_SIGNAL_DELIVERY_ATTRIBUTES: SignalDeliveryAttributes = {
+  ifActive: { deliveryType: 'interjection' },
+  ifIdle: { deliveryType: 'new-message' },
+};
 
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
@@ -363,7 +374,10 @@ export class MastraTUI {
         pendingNewThread,
       });
 
-      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        deliveryAttributes: USER_SIGNAL_DELIVERY_ATTRIBUTES,
+      });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
         this.removeOptimisticUserMessage(signal.id);
@@ -388,7 +402,10 @@ export class MastraTUI {
 
     const send = () => {
       this.clearIdleCounter();
-      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        deliveryAttributes: USER_SIGNAL_DELIVERY_ATTRIBUTES,
+      });
 
       if (hasActiveRun) {
         addPendingUserMessage(this.state, signal.id, content, images);

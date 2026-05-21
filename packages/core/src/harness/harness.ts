@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput, SignalDeliveryAttributes } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
@@ -1708,13 +1708,19 @@ export class Harness<TState = {}> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
+          deliveryAttributes?: SignalDeliveryAttributes;
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
-    const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
+    const deliveryAttributes = 'content' in input ? input.deliveryAttributes : input.deliveryAttributes;
+    const signal = createSignal(
+      'content' in input
+        ? { type: 'user-message', contents: input.content, ...(deliveryAttributes ? { deliveryAttributes } : {}) }
+        : input,
+    );
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
         const thread = await this.createThread();

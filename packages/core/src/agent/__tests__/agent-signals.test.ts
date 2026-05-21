@@ -14,6 +14,7 @@ import {
   createSignal,
   dataPartToSignal,
   mastraDBMessageToSignal,
+  resolveDeliveryAttributes,
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
@@ -2075,5 +2076,163 @@ describe('Agent signals', () => {
           ),
       ),
     ).toBe(true);
+  });
+
+  describe('deliveryAttributes', () => {
+    it('resolveDeliveryAttributes merges ifActive attributes when delivery is active', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        attributes: { existing: 'yes' },
+        deliveryAttributes: {
+          ifActive: { deliveryType: 'interjection' },
+          ifIdle: { deliveryType: 'new-message' },
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'active');
+      expect(resolved.attributes).toEqual({ existing: 'yes', deliveryType: 'interjection' });
+      expect(resolved.deliveryAttributes).toBeUndefined();
+    });
+
+    it('resolveDeliveryAttributes merges ifIdle attributes when delivery is idle', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        deliveryAttributes: {
+          ifActive: { deliveryType: 'interjection' },
+          ifIdle: { deliveryType: 'new-message' },
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'idle');
+      expect(resolved.attributes).toEqual({ deliveryType: 'new-message' });
+      expect(resolved.deliveryAttributes).toBeUndefined();
+    });
+
+    it('resolveDeliveryAttributes strips deliveryAttributes when selected branch is empty', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        deliveryAttributes: {
+          ifActive: { deliveryType: 'interjection' },
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'idle');
+      expect(resolved.attributes).toBeUndefined();
+      expect(resolved.deliveryAttributes).toBeUndefined();
+    });
+
+    it('resolveDeliveryAttributes returns same signal when no deliveryAttributes', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'active');
+      expect(resolved).toBe(signal);
+    });
+
+    it('resolved delivery attributes appear in toLLMMessage XML', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'fix the bug',
+        deliveryAttributes: {
+          ifActive: { deliveryType: 'interjection' },
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'active');
+      expect(resolved.toLLMMessage()).toEqual({
+        role: 'user',
+        content: '<user-message deliveryType="interjection">fix the bug</user-message>',
+      });
+    });
+
+    it('resolved delivery attributes appear in toDBMessage and toDataPart', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'fix the bug',
+        deliveryAttributes: {
+          ifActive: { deliveryType: 'interjection' },
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'active');
+      const db = resolved.toDBMessage({ threadId: 't', resourceId: 'r' });
+      expect((db.content.metadata!.signal as Record<string, unknown>).attributes).toEqual({
+        deliveryType: 'interjection',
+      });
+
+      const dataPart = resolved.toDataPart();
+      expect(dataPart.data.attributes).toEqual({ deliveryType: 'interjection' });
+    });
+
+    it('idle-resolved user-message without attributes renders as plain text', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        deliveryAttributes: {
+          ifActive: { deliveryType: 'interjection' },
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'idle');
+      expect(resolved.toLLMMessage()).toEqual({
+        role: 'user',
+        content: 'hello',
+      });
+    });
+
+    it('thread-stream-runtime resolves deliveryAttributes on active signal delivery', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const model = createTextStreamModel('response');
+      const agent = new Agent({
+        id: 'delivery-test-agent',
+        name: 'Delivery Test Agent',
+        instructions: 'Test agent.',
+        model,
+      });
+
+      // Start a run so the thread is active
+      const output = await agent.stream('start', {
+        runId: 'delivery-run',
+        memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+        maxSteps: 1,
+      });
+      // Consume the stream
+      for await (const _ of output.fullStream) {
+        // drain
+      }
+
+      // Send a signal with deliveryAttributes to an active run
+      const idleResult = runtime.sendSignal(
+        agent,
+        {
+          type: 'user-message',
+          contents: 'interjection test',
+          deliveryAttributes: {
+            ifActive: { deliveryType: 'interjection' },
+            ifIdle: { deliveryType: 'new-message' },
+          },
+        },
+        {
+          resourceId: 'delivery-resource',
+          threadId: 'delivery-thread',
+          ifIdle: {
+            streamOptions: {
+              memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+            },
+          },
+        },
+        pubsub,
+      );
+
+      // Since no active run, it should go idle path and get 'new-message'
+      expect(idleResult.signal.attributes).toEqual({ deliveryType: 'new-message' });
+      expect(idleResult.signal.deliveryAttributes).toBeUndefined();
+    });
   });
 });
