@@ -460,7 +460,7 @@ interface ProviderCapabilityFile {
 
 const providerCapCache = new Map<string, string[] | null>();
 
-function findCapabilitiesDir(_useDynamicLoading: boolean): string | null {
+function findCapabilitiesDirs(_useDynamicLoading: boolean): string[] {
   const packageRoot = getPackageRoot();
   const candidates = [
     path.join(packageRoot, 'dist', 'capabilities'),
@@ -468,42 +468,38 @@ function findCapabilitiesDir(_useDynamicLoading: boolean): string | null {
     path.join(process.cwd(), 'packages/core/src/llm/model/capabilities'),
   ];
 
-  for (const dir of candidates) {
+  return candidates.filter(dir => {
     try {
-      if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
-        return dir;
-      }
+      return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
     } catch {
-      continue;
+      return false;
     }
-  }
-  return null;
+  });
 }
 
-let capabilitiesDirCache: string | null | undefined;
+let capabilitiesDirCache: string[] | undefined;
 
 function loadProviderAttachmentModels(provider: string, useDynamicLoading: boolean): string[] | null {
   if (providerCapCache.has(provider)) return providerCapCache.get(provider)!;
 
   if (capabilitiesDirCache === undefined) {
-    capabilitiesDirCache = findCapabilitiesDir(useDynamicLoading);
+    capabilitiesDirCache = findCapabilitiesDirs(useDynamicLoading);
   }
 
-  if (!capabilitiesDirCache) {
-    providerCapCache.set(provider, null);
-    return null;
+  for (const capabilitiesDir of capabilitiesDirCache) {
+    const filePath = path.join(capabilitiesDir, `${provider}.json`);
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content) as ProviderCapabilityFile;
+      providerCapCache.set(provider, data.attachment);
+      return data.attachment;
+    } catch {
+      continue;
+    }
   }
 
-  const filePath = path.join(capabilitiesDirCache, `${provider}.json`);
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const data = JSON.parse(content) as ProviderCapabilityFile;
-    providerCapCache.set(provider, data.attachment);
-    return data.attachment;
-  } catch {
-    providerCapCache.set(provider, null);
-    return null;
-  }
+  providerCapCache.set(provider, null);
+  return null;
 }
 
 /**

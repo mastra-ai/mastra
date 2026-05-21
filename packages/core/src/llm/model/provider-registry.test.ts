@@ -6,28 +6,26 @@ import type { ProviderConfig } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import { GatewayRegistry } from './provider-registry.js';
+import { GatewayRegistry, modelSupportsAttachments } from './provider-registry.js';
 
 describe('modelSupportsAttachments', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.resetModules();
   });
 
-  it('falls back to checked-in source capabilities when dist capabilities are absent', async () => {
-    vi.resetModules();
-
+  it('falls back to checked-in source capabilities when dist capability files are absent', async () => {
     const originalExistsSync = fs.existsSync;
-    const distCapabilitiesDir = path.join(process.cwd(), 'dist', 'capabilities');
+    const packageRoot = process.cwd();
+    const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
+    const distOpenRouterCapabilities = path.join(distCapabilitiesDir, 'openrouter.json');
 
     vi.spyOn(fs, 'existsSync').mockImplementation(filePath => {
-      if (typeof filePath === 'string' && path.normalize(filePath) === path.normalize(distCapabilitiesDir)) {
-        return false;
-      }
+      if (typeof filePath !== 'string') return originalExistsSync(filePath);
+      const normalizedPath = path.normalize(filePath);
+      if (normalizedPath === path.normalize(distCapabilitiesDir)) return true;
+      if (normalizedPath === path.normalize(distOpenRouterCapabilities)) return false;
       return originalExistsSync(filePath);
     });
-
-    const { modelSupportsAttachments } = await import('./provider-registry.js');
 
     expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
