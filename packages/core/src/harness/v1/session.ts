@@ -29,7 +29,11 @@ import type {
   MessageOptionsStream,
   MessageOptionsStructured,
   ModelAuthStatus,
+  SessionInjectSystemReminderOptions,
+  SessionInjectSystemReminderResult,
   SessionLifecycleState,
+  SessionSignalOptions,
+  SessionSignalResult,
   TokenUsage,
 } from './types';
 
@@ -288,6 +292,91 @@ export class Session {
       } finally {
         this.endTurn(turnAbortController);
       }
+    } catch (err) {
+      this.endTurn(turnAbortController);
+      throw err;
+    }
+  }
+
+  async signal(opts: SessionSignalOptions): Promise<SessionSignalResult> {
+    this.assertLive('signal()');
+    this.assertCanStartTurn('signal()');
+    if (typeof opts.content !== 'string' || opts.content.length === 0) {
+      throw new HarnessValidationError('signal().content', 'content must be a non-empty string');
+    }
+
+    const effectiveModeId = opts.mode ?? this.record.modeId;
+    const mode = this.harness._getMode(effectiveModeId);
+    const agent = this.harness.getAgentForMode(effectiveModeId);
+    const turnAbortController = this.beginTurn(opts.abortSignal);
+
+    try {
+      const execOptions = this.buildExecutionOptions({
+        mode,
+        modeId: effectiveModeId,
+        modelId: this.record.modelId,
+        abortSignal: turnAbortController.signal,
+        additionalTools: opts.additionalTools,
+      });
+      const signal = createSignal({ type: 'user-message', contents: opts.content });
+      this._emit({ type: 'agent_start' });
+      const output = (await agent.stream(signal, execOptions as never)) as MastraModelOutput<unknown>;
+      this.currentRunId = output.runId;
+      const result = this.finishSignalResultTurn(output, turnAbortController);
+      void result.catch(() => undefined);
+      return {
+        id: signal.id,
+        runId: output.runId,
+        willInterleave: false,
+        accepted: true,
+        signal,
+        result,
+      };
+    } catch (err) {
+      this.endTurn(turnAbortController);
+      throw err;
+    }
+  }
+
+  async injectSystemReminder(
+    content: string,
+    opts?: SessionInjectSystemReminderOptions,
+  ): Promise<SessionInjectSystemReminderResult> {
+    this.assertLive('injectSystemReminder()');
+    this.assertCanStartTurn('injectSystemReminder()');
+    if (typeof content !== 'string' || content.length === 0) {
+      throw new HarnessValidationError('injectSystemReminder().content', 'content must be a non-empty string');
+    }
+
+    const mode = this.harness._getMode(this.record.modeId);
+    const agent = this.harness.getAgentForMode(this.record.modeId);
+    const turnAbortController = this.beginTurn(undefined);
+
+    try {
+      const execOptions = this.buildExecutionOptions({
+        mode,
+        modeId: this.record.modeId,
+        modelId: this.record.modelId,
+        abortSignal: turnAbortController.signal,
+      });
+      const signal = createSignal({
+        type: 'system-reminder',
+        contents: content,
+        ...(opts?.attributes ? { attributes: opts.attributes } : {}),
+        ...(opts?.metadata ? { metadata: opts.metadata } : {}),
+      });
+      this._emit({ type: 'agent_start' });
+      const output = (await agent.stream(signal, execOptions as never)) as MastraModelOutput<unknown>;
+      this.currentRunId = output.runId;
+      const result = this.finishSignalResultTurn(output, turnAbortController);
+      void result.catch(() => undefined);
+      return {
+        id: signal.id,
+        runId: output.runId,
+        willInterleave: false,
+        accepted: true,
+        signal,
+      };
     } catch (err) {
       this.endTurn(turnAbortController);
       throw err;
@@ -617,6 +706,24 @@ export class Session {
     return Object.keys(toolsets).length === 0 ? undefined : toolsets;
   }
 
+  private buildExecutionOptions(opts: {
+    mode: HarnessMode;
+    modeId: string;
+    modelId?: string;
+    abortSignal: AbortSignal;
+    additionalTools?: ToolsInput;
+  }): AgentExecutionOptionsBase<unknown> {
+    const toolsets = this.buildToolsets(opts.mode, opts.additionalTools);
+    return {
+      memory: { thread: this.threadId, resource: this.resourceId },
+      abortSignal: opts.abortSignal,
+      requestContext: this.buildRequestContext({ modeId: opts.modeId, abortSignal: opts.abortSignal }),
+      ...(opts.modelId ? { model: opts.modelId as never } : {}),
+      ...(toolsets ? { toolsets } : {}),
+      ...(opts.mode.instructions ? { instructions: opts.mode.instructions } : {}),
+    };
+  }
+
   private async buildSignalContents(content: string, attachments: AttachmentRef[]) {
     if (attachments.length === 0) return content;
 
@@ -736,6 +843,26 @@ export class Session {
       this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
     } catch {
       this._emit({ type: 'agent_end', reason: 'error', runId: output.runId });
+    }
+  }
+
+  private async finishSignalResultTurn(
+    output: MastraModelOutput<unknown>,
+    controller: AbortController,
+  ): Promise<AgentResult> {
+    const streamDrain = this.consumeAgentStream(output);
+    void streamDrain.catch(() => undefined);
+    try {
+      const full = (await output.getFullOutput()) as FullOutput<unknown>;
+      await streamDrain;
+      await this.recordTurnCompletion(full);
+      this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+      return full as AgentResult;
+    } catch (err) {
+      this._emit({ type: 'agent_end', reason: 'error', runId: output.runId });
+      throw err;
+    } finally {
+      this.endTurn(controller);
     }
   }
 
