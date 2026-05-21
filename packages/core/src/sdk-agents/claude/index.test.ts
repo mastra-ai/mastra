@@ -123,6 +123,7 @@ describe('ClaudeSDKAgent', () => {
       model: 'claude-sonnet-4-6',
       maxTurns: 1,
       permissionMode: 'acceptEdits',
+      tools: ['Read', 'Bash'],
       allowedTools: ['Read'],
       disallowedTools: ['Bash'],
       env: {
@@ -160,6 +161,7 @@ describe('ClaudeSDKAgent', () => {
         model: 'claude-sonnet-4-6',
         maxTurns: 1,
         permissionMode: 'acceptEdits',
+        tools: ['Read', 'Bash'],
         allowedTools: ['Read'],
         disallowedTools: ['Bash'],
         env: {

@@ -45,6 +45,7 @@ export type ClaudeQueryOptions = {
   model?: string;
   maxTurns?: number;
   permissionMode?: ClaudePermissionMode;
+  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
   allowedTools?: string[];
   disallowedTools?: string[];
   env?: Record<string, string>;
@@ -90,6 +91,10 @@ export type ClaudeAgentOptions = {
    * Claude Agent SDK permission mode for tool and edit approval behavior.
    */
   permissionMode?: ClaudePermissionMode;
+  /**
+   * Built-in Claude Agent SDK tools made available to the run.
+   */
+  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
   /**
    * Tool names Claude Agent SDK is allowed to use.
    */
@@ -325,6 +330,7 @@ function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSi
       model: options.model,
       maxTurns: options.maxTurns,
       permissionMode: options.permissionMode,
+      tools: options.tools,
       allowedTools: options.allowedTools,
       disallowedTools: options.disallowedTools,
       env: options.env,
