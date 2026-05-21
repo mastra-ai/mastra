@@ -64,6 +64,8 @@ export default defineConfig({
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
+    'src/sdk-agents/claude/index.ts',
+    'src/sdk-agents/cursor/index.ts',
     'src/auth/ee/index.ts',
     'src/agent-builder/ee/index.ts',
     'src/storage/domains/agents/index.ts',

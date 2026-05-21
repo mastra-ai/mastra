@@ -1,0 +1,171 @@
+import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { describe, expect, it, vi } from 'vitest';
+
+import { isAgentCompatible } from '../../agent';
+import { ClaudeSDKAgent } from './index';
+import type { ClaudeQueryFunction } from './index';
+
+function createQuery(messages: SDKMessage[]): Query {
+  return (async function* () {
+    for (const message of messages) {
+      yield message;
+    }
+  })() as Query;
+}
+
+function createStreamEvent(text: string): SDKMessage {
+  return {
+    type: 'stream_event',
+    event: {
+      type: 'content_block_delta',
+      delta: {
+        type: 'text_delta',
+        text,
+      },
+    },
+  } as SDKMessage;
+}
+
+function createResultMessage(result: string): SDKMessage {
+  return {
+    type: 'result',
+    subtype: 'success',
+    duration_ms: 25,
+    duration_api_ms: 20,
+    is_error: false,
+    num_turns: 1,
+    result,
+    stop_reason: 'end_turn',
+    total_cost_usd: 0.0123,
+    usage: {
+      input_tokens: 10,
+      output_tokens: 4,
+      cache_read_input_tokens: 2,
+      cache_creation_input_tokens: 3,
+    },
+    modelUsage: {
+      'claude-sonnet-4-6': {
+        inputTokens: 10,
+        outputTokens: 4,
+        cacheReadInputTokens: 2,
+        cacheCreationInputTokens: 3,
+        webSearchRequests: 0,
+        costUSD: 0.0123,
+        contextWindow: 200000,
+        maxOutputTokens: 64000,
+      },
+    },
+    permission_denials: [],
+    uuid: 'message-uuid',
+    session_id: 'session-id',
+  } as SDKMessage;
+}
+
+describe('ClaudeSDKAgent', () => {
+  it('is compatible with the Agent/SubAgent contract', () => {
+    const query = vi.fn<ClaudeQueryFunction>(() => createQuery([createResultMessage('ok')]));
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      name: 'Claude Agent',
+      description: 'Use Claude Agent as a Mastra agent.',
+      agent: query,
+      model: 'claude-sonnet-4-6',
+    });
+
+    expect(agent.id).toBe('claude-agent');
+    expect(agent.name).toBe('Claude Agent');
+    expect(agent.getDescription()).toBe('Use Claude Agent as a Mastra agent.');
+    expect(isAgentCompatible(agent)).toBe(true);
+  });
+
+  it('generate calls the provided query function directly and returns Mastra output', async () => {
+    const query = vi.fn<ClaudeQueryFunction>(() => createQuery([createResultMessage('generated text')]));
+    const abortController = new AbortController();
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      agent: query,
+      cwd: '/tmp/project',
+      model: 'claude-sonnet-4-6',
+      maxTurns: 1,
+      permissionMode: 'acceptEdits',
+      allowedTools: ['Read'],
+      disallowedTools: ['Bash'],
+      env: {
+        CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
+      },
+      pathToClaudeCodeExecutable: '/usr/local/bin/claude',
+    });
+
+    const result = await agent.generate('Generate prompt', {
+      runId: 'mastra-run',
+      abortSignal: abortController.signal,
+      maxSteps: 1,
+    });
+
+    expect(result.text).toBe('generated text');
+    expect(result.runId).toBe('mastra-run');
+    expect(result.usage.inputTokens).toBe(15);
+    expect(result.usage.outputTokens).toBe(4);
+    expect(result.usage.totalTokens).toBe(19);
+    expect(result.providerMetadata).toMatchObject({
+      claude: {
+        totalCostUsd: 0.0123,
+        model: 'claude-sonnet-4-6',
+        cwd: '/tmp/project',
+        permissionMode: 'acceptEdits',
+        maxTurns: 1,
+        allowedTools: ['Read'],
+        disallowedTools: ['Bash'],
+      },
+    });
+    expect(query).toHaveBeenCalledWith({
+      prompt: 'Generate prompt',
+      options: expect.objectContaining({
+        cwd: '/tmp/project',
+        model: 'claude-sonnet-4-6',
+        maxTurns: 1,
+        permissionMode: 'acceptEdits',
+        allowedTools: ['Read'],
+        disallowedTools: ['Bash'],
+        env: {
+          CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
+        },
+        pathToClaudeCodeExecutable: '/usr/local/bin/claude',
+        abortController: expect.any(AbortController),
+      }),
+    });
+  });
+
+  it('stream emits Mastra chunks and resolves text from Claude stream events', async () => {
+    const query = vi.fn<ClaudeQueryFunction>(() =>
+      createQuery([createStreamEvent('streamed '), createStreamEvent('text'), createResultMessage('streamed text')]),
+    );
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      agent: { query },
+      model: 'claude-sonnet-4-6',
+    });
+
+    const stream = await agent.stream('Stream prompt', { runId: 'stream-mastra-run' });
+    const chunks = [];
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    expect(await stream.text).toBe('streamed text');
+    expect((await stream.usage).inputTokens).toBe(15);
+    expect(chunks.map(chunk => chunk.type)).toEqual([
+      'start',
+      'step-start',
+      'response-metadata',
+      'text-start',
+      'text-delta',
+      'text-delta',
+      'text-end',
+      'step-finish',
+      'finish',
+    ]);
+  });
+});
