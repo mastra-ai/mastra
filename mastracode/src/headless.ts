@@ -401,6 +401,20 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     return 1;
   }
 
+  async function validateConfiguredModel(modelId: string, context?: string): Promise<string | 1> {
+    const available = await harness.listAvailableModels();
+    const match = available.find(m => m.id === modelId);
+    const suffix = context ? ` ${context}` : '';
+    if (!match) {
+      return failEarly(`Unknown model "${modelId}"${suffix}`);
+    }
+    if (!match.hasApiKey) {
+      const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+      return failEarly(`Model "${modelId}"${suffix} has no API key configured.${keyHint}`);
+    }
+    return modelId;
+  }
+
   // --- Pre-flight checks (before subscribing to events) ---
 
   // --- Resolve model ---
@@ -414,36 +428,34 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   if (args.model) {
     // Highest priority: explicit --model flag
-    const available = await harness.listAvailableModels();
-    const match = available.find(m => m.id === args.model);
-    if (!match) {
-      return failEarly(`Unknown model: "${args.model}"`);
-    }
-    if (!match.hasApiKey) {
-      const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-      return failEarly(`Model "${args.model}" has no API key configured.${keyHint}`);
-    }
+    const validated = await validateConfiguredModel(args.model);
+    if (validated === 1) return validated;
     await harness.switchModel({ modelId: args.model });
     if (!emit) process.stderr.write(`[model] ${args.model}\n`);
   } else if (args.mode) {
-    // --mode flag: look up model from effectiveDefaults (resolved from settings at startup)
+    await harness.switchMode({ modeId: args.mode });
+    if (!emit) process.stderr.write(`[mode] ${args.mode}\n`);
+
+    // --mode flag: look up model from effectiveDefaults (resolved from settings at startup),
+    // then fall back to the mode's selected/default model.
     const modelId = effectiveDefaults?.[args.mode];
     if (modelId) {
-      const available = await harness.listAvailableModels();
-      const match = available.find(m => m.id === modelId);
-      if (!match) {
-        return failEarly(`Unknown model "${modelId}" configured for mode "${args.mode}"`);
-      }
-      if (!match.hasApiKey) {
-        const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-        return failEarly(`Model "${modelId}" (mode: ${args.mode}) has no API key configured.${keyHint}`);
-      }
+      const validated = await validateConfiguredModel(modelId, `(mode: ${args.mode})`);
+      if (validated === 1) return validated;
       await harness.switchModel({ modelId });
       if (!emit) process.stderr.write(`[model] ${modelId} (mode: ${args.mode})\n`);
     } else {
-      const warnMsg = `--mode ${args.mode} has no configured model, using default`;
-      if (emit) emit({ type: 'warning', message: warnMsg });
-      else process.stderr.write(`Warning: ${warnMsg}\n`);
+      const currentModelId = harness.getCurrentModelId();
+      const defaultModelId = harness.getCurrentMode().defaultModelId;
+      const fallbackModelId = currentModelId || defaultModelId;
+      if (fallbackModelId) {
+        const validated = await validateConfiguredModel(fallbackModelId, `(mode: ${args.mode})`);
+        if (validated === 1) return validated;
+      } else {
+        const warnMsg = `--mode ${args.mode} has no configured model, using default`;
+        if (emit) emit({ type: 'warning', message: warnMsg });
+        else process.stderr.write(`Warning: ${warnMsg}\n`);
+      }
     }
   }
 

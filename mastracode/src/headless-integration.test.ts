@@ -362,6 +362,7 @@ describe('headless mode — event-driven auto-resolution', () => {
 function createHarnessWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
+  modes?: Array<{ id: string; name: string; default?: boolean; defaultModelId?: string }>;
 }) {
   const agent = new Agent({
     id: 'test-agent',
@@ -383,7 +384,7 @@ function createHarnessWithModels(opts: {
   const harness = new Harness({
     id: 'test-harness',
     storage,
-    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    modes: (opts.modes ?? [{ id: 'default', name: 'Default', default: true }]).map(mode => ({ ...mode, agent })),
     initialState: { yolo: true } as any,
     customModelCatalogProvider: () =>
       (opts.customModels ?? []).map(m => ({
@@ -668,6 +669,10 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     const harness = createHarnessWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [{ id: 'cerebras/zai-glm-4.7', provider: 'cerebras', modelName: 'zai-glm-4.7', hasApiKey: true }],
+      modes: [
+        { id: 'build', name: 'Build', default: true },
+        { id: 'fast', name: 'Fast' },
+      ],
     });
 
     await harness.init();
@@ -688,6 +693,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     );
 
     expect(exitCode).toBe(0);
+    expect(harness.getCurrentModeId()).toBe('fast');
     expect(harness.getCurrentModelId()).toBe('cerebras/zai-glm-4.7');
   });
 
@@ -697,6 +703,10 @@ describe('headless mode — --mode with effectiveDefaults', () => {
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
         { id: 'cerebras/zai-glm-4.7', provider: 'cerebras', modelName: 'zai-glm-4.7', hasApiKey: true },
+      ],
+      modes: [
+        { id: 'build', name: 'Build', default: true },
+        { id: 'fast', name: 'Fast' },
       ],
     });
 
@@ -717,6 +727,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     expect(exitCode).toBe(0);
     // --model should win over effectiveDefaults
+    expect(harness.getCurrentModeId()).toBe('build');
     expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
   });
 
@@ -724,6 +735,10 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     const harness = createHarnessWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [], // No models available
+      modes: [
+        { id: 'build', name: 'Build', default: true },
+        { id: 'fast', name: 'Fast' },
+      ],
     });
 
     await harness.init();
@@ -767,6 +782,10 @@ describe('headless mode — --mode with effectiveDefaults', () => {
           apiKeyEnvVar: 'OPENAI_API_KEY',
         },
       ],
+      modes: [
+        { id: 'build', name: 'Build', default: true },
+        { id: 'fast', name: 'Fast' },
+      ],
     });
 
     await harness.init();
@@ -797,10 +816,14 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     expect(stderrCalls.join('')).toContain('OPENAI_API_KEY');
   });
 
-  it('no effectiveDefaults warns and falls back to default', async () => {
+  it('no effectiveDefaults switches mode and warns only when no mode/default model is configured', async () => {
     const harness = createHarnessWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [],
+      modes: [
+        { id: 'build', name: 'Build', default: true },
+        { id: 'fast', name: 'Fast' },
+      ],
     });
 
     await harness.init();
@@ -827,9 +850,57 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     stderrSpy.mockRestore();
 
     expect(exitCode).toBe(0);
+    expect(harness.getCurrentModeId()).toBe('fast');
     expect(stderrCalls.join('')).toContain('--mode fast has no configured model, using default');
     // No model_changed event should have been emitted
     expect(events.find(e => e.type === 'model_changed')).toBeUndefined();
+  });
+
+  it('no effectiveDefaults validates the selected mode default model before starting a run', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [
+        {
+          id: 'cerebras/zai-glm-4.7',
+          provider: 'cerebras',
+          modelName: 'zai-glm-4.7',
+          hasApiKey: false,
+          apiKeyEnvVar: 'CEREBRAS_API_KEY',
+        },
+      ],
+      modes: [
+        { id: 'build', name: 'Build', default: true },
+        { id: 'fast', name: 'Fast', defaultModelId: 'cerebras/zai-glm-4.7' },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const stderrCalls: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
+      stderrCalls.push(String(args[0]));
+      return origWrite(...(args as Parameters<typeof origWrite>));
+    });
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      mode: 'fast',
+    });
+
+    stderrSpy.mockRestore();
+
+    expect(exitCode).toBe(1);
+    expect(harness.getCurrentModeId()).toBe('fast');
+    expect(events.find(e => e.type === 'agent_start')).toBeUndefined();
+    expect(stderrCalls.join('')).toContain('Model "cerebras/zai-glm-4.7" (mode: fast) has no API key configured');
+    expect(stderrCalls.join('')).toContain('CEREBRAS_API_KEY');
   });
 });
 

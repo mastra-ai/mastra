@@ -1009,6 +1009,53 @@ export class Session {
     }
   }
 
+  private _agentEndReasonFor(full: FullOutput<unknown>): 'complete' | 'aborted' | 'error' | 'suspended' {
+    if (full.finishReason === 'suspended') return 'suspended';
+    if (full.finishReason === 'error') return 'error';
+    if (full.finishReason === 'aborted') return 'aborted';
+    return 'complete';
+  }
+
+  private _settleRunAsAborted(runId: string, reason: unknown): void {
+    const waiter = this._runCompletionPromises.get(runId);
+    if (!waiter && this._completedRuns.has(runId)) return;
+    this._runCompletionPromises.delete(runId);
+    const full = {
+      text: '',
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      steps: [],
+      finishReason: 'aborted',
+      warnings: [],
+      providerMetadata: undefined,
+      request: {},
+      reasoning: [],
+      reasoningText: undefined,
+      toolCalls: [],
+      toolResults: [],
+      sources: [],
+      files: [],
+      response: {
+        id: runId,
+        timestamp: new Date(),
+        modelId: this._record.modelId,
+        messages: [],
+        uiMessages: [],
+      },
+      totalUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      object: undefined,
+      error: reason instanceof Error ? reason : new Error(String(reason)),
+      tripwire: undefined,
+      traceId: undefined,
+      spanId: undefined,
+      runId,
+      suspendPayload: undefined,
+      messages: [],
+      rememberedMessages: [],
+    } as unknown as FullOutput<unknown>;
+    this._rememberCompletedRun(runId, { ok: true, full });
+    waiter?.resolve(full);
+  }
+
   /**
    * True while a turn (message or queued) is in flight against the agent.
    * Goes back to false on terminal completion, suspension, or abort.
@@ -1181,6 +1228,15 @@ export class Session {
     const controller = this._currentTurnAbortController;
     if (controller) {
       controller.abort(reason);
+      const runId = this._currentRunId;
+      if (runId) {
+        try {
+          this._harness.getAgentForMode(this._record.modeId).abortRunStream(runId);
+        } catch {
+          // Best-effort: the per-turn AbortSignal above is still authoritative.
+        }
+        this._settleRunAsAborted(runId, reason);
+      }
       return;
     }
     if (this._pendingMessageAdmissions > 0) {
@@ -2630,7 +2686,7 @@ export class Session {
         ]);
         this._emitTurnEvent({
           type: 'agent_end',
-          reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+          reason: this._agentEndReasonFor(full),
           runId: full.runId,
         });
         await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -2918,7 +2974,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: this._agentEndReasonFor(full),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -2994,7 +3050,7 @@ export class Session {
       ]);
       this._emitTurnEvent({
         type: 'agent_end',
-        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+        reason: this._agentEndReasonFor(full),
         runId: full.runId,
       });
       await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -3638,7 +3694,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: this._agentEndReasonFor(full),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -3805,7 +3861,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: this._agentEndReasonFor(full),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -5411,7 +5467,7 @@ export class Session {
       if (full.finishReason !== 'suspended') {
         this._emitTurnEvent({
           type: 'agent_end',
-          reason: full.finishReason === 'error' ? 'error' : 'complete',
+          reason: this._agentEndReasonFor(full),
           runId: full.runId,
         });
 
@@ -6759,7 +6815,7 @@ export class Session {
     );
     this._emitTurnEvent({
       type: 'agent_end',
-      reason: full.finishReason === 'suspended' ? 'suspended' : full.finishReason === 'error' ? 'error' : 'complete',
+      reason: this._agentEndReasonFor(full),
       runId: full.runId,
     });
     await this._raceActiveTurnWaiter(this._runGoalJudge(full, (item.source ?? 'user') === 'goal'), activeTurnWaiter);
