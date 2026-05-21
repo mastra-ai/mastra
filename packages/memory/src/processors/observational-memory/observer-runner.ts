@@ -98,17 +98,49 @@ export class ObserverRunner {
   }
 
   /**
+   * Extract a router-style model ID (`provider/model`) from a model config.
+   * Handles strings, LanguageModel objects, and function-based models.
+   */
+  private extractModelRouterId(model: ConcreteObservationModel, requestContext?: RequestContext): string | undefined {
+    if (typeof model === 'string') return model;
+
+    // Function-based model — resolve it with requestContext to get the actual model
+    if (typeof model === 'function') {
+      if (!requestContext) return undefined;
+      try {
+        const resolved = model({ requestContext });
+        // Recursion handles the resolved value (string or LanguageModel object)
+        if (resolved instanceof Promise) return undefined; // can't await in sync context
+        return this.extractModelRouterId(resolved as ConcreteObservationModel);
+      } catch {
+        return undefined;
+      }
+    }
+
+    // LanguageModel object — check for provider/modelId properties
+    const obj = model as Record<string, unknown>;
+    if (typeof obj.provider === 'string' && typeof obj.modelId === 'string') {
+      return `${obj.provider}/${obj.modelId}`;
+    }
+
+    return undefined;
+  }
+
+  /**
    * Resolve the attachment filter for a given model. When set to `'auto'`,
    * the provider capabilities registry is consulted to decide whether the
    * model accepts multimodal input.
    */
-  private resolveAttachmentFilter(model: ConcreteObservationModel): ObserverAttachmentFilter {
+  private resolveAttachmentFilter(
+    model: ConcreteObservationModel,
+    requestContext?: RequestContext,
+  ): ObserverAttachmentFilter {
     const raw = this.observationConfig.observeAttachments;
     if (raw !== 'auto') return raw;
 
-    const modelId = typeof model === 'string' ? model : String(model);
-    const supports = modelSupportsAttachments(modelId);
-    // When capabilities data is unavailable, default to true (forward attachments)
+    const routerId = this.extractModelRouterId(model, requestContext);
+    if (!routerId) return true; // can't determine — default to forwarding
+    const supports = modelSupportsAttachments(routerId);
     return supports ?? true;
   }
 
@@ -151,7 +183,7 @@ export class ObserverRunner {
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model);
 
-    const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model);
+    const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
     const observerMessages = [
       {
@@ -278,7 +310,7 @@ export class ObserverRunner {
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true);
 
-    const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model);
+    const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
     const observerMessages = [
       {
