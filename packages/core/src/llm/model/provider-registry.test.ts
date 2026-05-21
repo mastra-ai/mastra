@@ -8,6 +8,32 @@ import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import { GatewayRegistry } from './provider-registry.js';
 
+describe('modelSupportsAttachments', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('falls back to checked-in source capabilities when dist capabilities are absent', async () => {
+    vi.resetModules();
+
+    const originalExistsSync = fs.existsSync;
+    const distCapabilitiesDir = path.join(process.cwd(), 'dist', 'capabilities');
+
+    vi.spyOn(fs, 'existsSync').mockImplementation(filePath => {
+      if (typeof filePath === 'string' && path.normalize(filePath) === path.normalize(distCapabilitiesDir)) {
+        return false;
+      }
+      return originalExistsSync(filePath);
+    });
+
+    const { modelSupportsAttachments } = await import('./provider-registry.js');
+
+    expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
+  });
+});
+
 describe('GatewayRegistry Auto-Refresh', () => {
   const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
   const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');

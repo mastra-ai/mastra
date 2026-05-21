@@ -111,6 +111,9 @@ export default defineConfig({
       if (!fs.existsSync(distCapDir)) {
         fs.mkdirSync(distCapDir, { recursive: true });
       }
+      for (const file of fs.readdirSync(distCapDir).filter((f: string) => f.endsWith('.json'))) {
+        fs.unlinkSync(path.join(distCapDir, file));
+      }
       const capFiles = fs.readdirSync(srcCapDir).filter((f: string) => f.endsWith('.json'));
       for (const file of capFiles) {
         fs.copyFileSync(path.join(srcCapDir, file), path.join(distCapDir, file));

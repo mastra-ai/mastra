@@ -460,15 +460,13 @@ interface ProviderCapabilityFile {
 
 const providerCapCache = new Map<string, string[] | null>();
 
-function findCapabilitiesDir(useDynamicLoading: boolean): string | null {
+function findCapabilitiesDir(_useDynamicLoading: boolean): string | null {
   const packageRoot = getPackageRoot();
-  const candidates = useDynamicLoading
-    ? [
-        path.join(packageRoot, 'dist', 'capabilities'),
-        path.join(packageRoot, 'src', 'llm', 'model', 'capabilities'),
-        path.join(process.cwd(), 'packages/core/src/llm/model/capabilities'),
-      ]
-    : [path.join(packageRoot, 'dist', 'capabilities')];
+  const candidates = [
+    path.join(packageRoot, 'dist', 'capabilities'),
+    path.join(packageRoot, 'src', 'llm', 'model', 'capabilities'),
+    path.join(process.cwd(), 'packages/core/src/llm/model/capabilities'),
+  ];
 
   for (const dir of candidates) {
     try {
