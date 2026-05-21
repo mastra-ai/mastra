@@ -3,6 +3,7 @@ import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,
   AgentSignalResultStatus,
+  AppendWorkspaceActionJournalEntryResult,
   AttachmentReference,
   AttachmentRecord,
   ChannelActionInitialClaim,
@@ -32,6 +33,7 @@ import type {
   ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
+  ListWorkspaceActionJournalInput,
   LoadedAttachment,
   OperationAdmissionEvidence,
   OperationAdmissionTombstone,
@@ -50,6 +52,7 @@ import type {
   SessionSummary,
   ThreadDeleteFenceLease,
   WithThreadDeleteFenceInput,
+  WorkspaceActionJournalEntry,
 } from './types';
 
 export interface WriteMessageResultEvidenceResult {
@@ -201,6 +204,14 @@ export class HarnessStorageSessionEventReplayUnsupportedError extends Error {
   readonly code = 'harness.storage.session_event_replay_unsupported' as const;
   constructor() {
     super('HarnessStorage session event replay must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageWorkspaceActionJournalUnsupportedError extends Error {
+  readonly name = 'HarnessStorageWorkspaceActionJournalUnsupportedError';
+  readonly code = 'harness.storage.workspace_action_journal_unsupported' as const;
+  constructor() {
+    super('HarnessStorage workspace action journal must be implemented by this storage adapter');
   }
 }
 
@@ -726,6 +737,31 @@ export abstract class HarnessStorage extends StorageDomain {
     limit: number;
   }): Promise<HarnessSessionEventRecord[]> {
     throw new HarnessStorageSessionEventReplayUnsupportedError();
+  }
+
+  // -------------------------------------------------------------------------
+  // Workspace action journal
+  // -------------------------------------------------------------------------
+
+  /**
+   * Append one immutable workspace policy/action audit row.
+   *
+   * Implementations return `{ created: false }` without mutating when the
+   * owning session is missing, the `(resourceId, threadId)` fence does not
+   * match the session, or the same `(harnessName, sessionId, id)` was already
+   * written. Existing rows are never updated; callers that need multi-phase
+   * evidence should append a separate row per phase.
+   */
+  async appendWorkspaceActionJournalEntry(
+    _record: WorkspaceActionJournalEntry,
+  ): Promise<AppendWorkspaceActionJournalEntryResult> {
+    throw new HarnessStorageWorkspaceActionJournalUnsupportedError();
+  }
+
+  async listWorkspaceActionJournalEntries(
+    _opts: ListWorkspaceActionJournalInput,
+  ): Promise<WorkspaceActionJournalEntry[]> {
+    throw new HarnessStorageWorkspaceActionJournalUnsupportedError();
   }
 
   // -------------------------------------------------------------------------

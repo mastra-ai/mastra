@@ -689,6 +689,7 @@ export class Harness {
   private readonly _modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
   private readonly _codeSkills: ReadonlyMap<string, HarnessSkill>;
   private readonly _channelRegistry: HarnessChannelRegistry;
+  private readonly _runtimeCompatibilityGeneration?: string;
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -698,11 +699,22 @@ export class Harness {
   readonly _workspaceRegistry: WorkspaceRegistry;
   /** Snapshot of the workspace kind for fast read paths. `undefined` when not configured. */
   readonly _workspaceKind?: 'shared' | 'per-resource' | 'per-session';
+  private readonly _workspaceEager: boolean;
 
+  private _initialized = false;
+  private _initPromise?: Promise<void>;
   private _shutdown = false;
 
   constructor(config: HarnessConfig) {
     this.ownerId = `harness-${randomUUID()}`;
+    const runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration;
+    if (
+      runtimeCompatibilityGeneration !== undefined &&
+      (typeof runtimeCompatibilityGeneration !== 'string' || runtimeCompatibilityGeneration.trim().length === 0)
+    ) {
+      throw new HarnessConfigError('runtimeCompatibilityGeneration', 'must be a non-empty string when provided');
+    }
+    this._runtimeCompatibilityGeneration = runtimeCompatibilityGeneration?.trim();
     this._leaseTtlMs = DEFAULT_LEASE_TTL_MS;
     this._storageOverride = config.sessions?.storage;
     this._maxQueueDepth = config.sessions?.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
@@ -892,19 +904,11 @@ export class Harness {
     // Workspace (§2.7). Three ownership models; registry handles lifecycle.
     // Cross-checks against the subagent registry happen below.
     this._workspaceKind = config.workspace?.kind;
+    this._workspaceEager = Boolean(config.workspace?.eager);
     this._workspaceRegistry = new WorkspaceRegistry({
       config: config.workspace,
       emitter: this._emitter,
     });
-
-    // Eager provisioning for `kind: 'shared'`. Per-resource and per-session
-    // are eagerly provisioned at session creation when `eager: true`
-    // (handled in Session._resolve / Session._construct).
-    if (config.workspace?.kind === 'shared' && config.workspace.eager) {
-      void this._workspaceRegistry.acquireShared().catch(() => {
-        // Errors surface through the workspace_error event; swallow here.
-      });
-    }
 
     // Subagent `workspace: 'fresh'` is only valid under `per-session`. Validate
     // at config time so misconfigurations don't reach the runtime spawn path.
@@ -999,6 +1003,54 @@ export class Harness {
       );
     }
     return this._mastra;
+  }
+
+  /**
+   * Mastra lifecycle readiness hook. Validates that the harness is bound and
+   * materializes eager shared workspace dependencies before server routes are
+   * admitted.
+   */
+  async init(): Promise<void> {
+    if (this._shutdown) {
+      throw new HarnessConfigError('shutdown', 'harness cannot be initialized after shutdown');
+    }
+    if (this._initialized) return;
+    if (this._initPromise) return this._initPromise;
+
+    this._initPromise = this._initOnce();
+    try {
+      await this._initPromise;
+    } catch (error) {
+      this._initPromise = undefined;
+      throw error;
+    }
+  }
+
+  private async _initOnce(): Promise<void> {
+    // Accessor intentionally provides the existing bound-Mastra error shape.
+    this.mastra;
+
+    let acquiredSharedWorkspace = false;
+    if (this._workspaceKind === 'shared' && this._workspaceEager) {
+      try {
+        await this._workspaceRegistry.acquireShared();
+      } catch (error) {
+        if (this._shutdown) {
+          throw new HarnessConfigError('shutdown', 'harness cannot be initialized after shutdown');
+        }
+        throw error;
+      }
+      acquiredSharedWorkspace = true;
+    }
+
+    if (this._shutdown) {
+      if (acquiredSharedWorkspace) {
+        await this._workspaceRegistry.destroyShared();
+      }
+      throw new HarnessConfigError('shutdown', 'harness cannot be initialized after shutdown');
+    }
+
+    this._initialized = true;
   }
 
   /**
@@ -1214,6 +1266,9 @@ export class Harness {
     return {
       modeId,
       agentId: mode.agentId,
+      ...(this._runtimeCompatibilityGeneration
+        ? { runtimeCompatibilityGeneration: this._runtimeCompatibilityGeneration }
+        : {}),
       ...(modelId ? { modelId } : {}),
       workspaceProviderId: this._workspaceDependencyId(),
     };
@@ -1249,6 +1304,17 @@ export class Harness {
         'agent',
         agentId,
         'is not registered on this Mastra instance',
+        context,
+      );
+    }
+    if (
+      refs.runtimeCompatibilityGeneration !== undefined &&
+      refs.runtimeCompatibilityGeneration !== this._runtimeCompatibilityGeneration
+    ) {
+      throw new HarnessRuntimeDependencyDriftError(
+        'runtime_compatibility_generation',
+        refs.runtimeCompatibilityGeneration,
+        `was recorded, but the current generation is "${this._runtimeCompatibilityGeneration ?? 'unconfigured'}"`,
         context,
       );
     }
@@ -2846,12 +2912,22 @@ export class Harness {
     if (this._shutdown) return;
     this._shutdown = true;
 
+    const pendingInit = this._initPromise;
+    if (pendingInit) {
+      await Promise.allSettled([pendingInit]);
+    }
+
     let storage: HarnessStorage;
     try {
       storage = this._requireStorage('shutdown()');
     } catch {
       // No storage bound — nothing to release. Idempotent.
       this._liveSessions.clear();
+      try {
+        await this._workspaceRegistry.shutdown();
+      } catch {
+        // Best-effort: errors surface through the workspace_error event.
+      }
       this._untrackBoundStorage();
       return;
     }

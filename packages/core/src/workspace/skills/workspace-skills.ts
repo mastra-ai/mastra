@@ -100,6 +100,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   /** Currently resolved skills paths (used to detect changes) */
   #resolvedPaths: string[] = [];
+  #pathsResolved = false;
 
   /** Cached glob-resolved directories and per-pattern resolve timestamps */
   #globDirCache: Map<string, string[]> = new Map();
@@ -269,6 +270,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   async refresh(): Promise<void> {
+    if (!this.#pathsResolved) {
+      this.#resolvedPaths = await this.#resolvePaths();
+      this.#pathsResolved = true;
+    }
     // Remove only skill entries from the shared search engine (not workspace content)
     for (const candidates of this.#skills.values()) {
       for (const skill of candidates) {
@@ -294,6 +299,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (pathsChanged) {
       // Paths changed - need full refresh with new paths
       this.#resolvedPaths = currentPaths;
+      this.#pathsResolved = true;
       await this.refresh();
       return;
     }
@@ -574,8 +580,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#initPromise = (async () => {
       try {
         // Resolve paths on first initialization (uses empty context)
-        if (this.#resolvedPaths.length === 0) {
+        if (!this.#pathsResolved) {
           this.#resolvedPaths = await this.#resolvePaths();
+          this.#pathsResolved = true;
         }
         await this.#discoverSkills();
         this.#initialized = true;

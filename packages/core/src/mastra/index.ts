@@ -608,6 +608,11 @@ export class Mastra<
   #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
+  #channelInitializationPromise?: Promise<void>;
+  #channelInitializationError?: unknown;
+  #agentChannelInstances = new Map<string, AgentChannels>();
+  #agentChannelInitializationPromises = new Map<string, Promise<void>>();
+  #agentChannelInitializationErrors = new Map<string, unknown>();
   #environment?: string;
   #harnesses: Record<string, HarnessV1> = {};
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
@@ -620,6 +625,10 @@ export class Mastra<
   #workerStartSequence = 0;
   #allWorkersStartPromise?: Promise<void>;
   #workersStopPromise?: Promise<void>;
+  #initPromise?: Promise<void>;
+  #shutdownPromise?: Promise<void>;
+  #shutdownStarted = false;
+  #lifecycleState: 'constructed' | 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed' = 'constructed';
   #pendingWorkerStarts = new Set<PendingWorkerStart>();
   #workerStartPromises = new WeakMap<MastraWorker, Promise<void>>();
   #latestWorkerStartTokens = new WeakMap<MastraWorker, number>();
@@ -1302,20 +1311,63 @@ export class Mastra<
       this.#ensureScheduler();
     }
 
-    // Initialize channels asynchronously (auto-provision apps, etc.)
-    // This runs after all agents are registered so configs are available
-    if (this.#channels) {
-      void Promise.resolve().then(async () => {
-        for (const [key, channel] of Object.entries(this.#channels ?? {})) {
-          if (channel.initialize) {
-            try {
-              await channel.initialize();
-            } catch (err) {
-              console.error(`[Mastra] Failed to initialize channel "${key}":`, err);
-            }
-          }
-        }
-      });
+    // Channel initialization is deferred to init() so readiness owns startup side effects.
+  }
+
+  #startChannelInitialization(): void {
+    this.#channelInitializationError = undefined;
+    this.#channelInitializationPromise = this.#initializeChannels().catch(error => {
+      this.#channelInitializationError = error;
+    });
+  }
+
+  async #initializeChannels(): Promise<void> {
+    for (const [key, channel] of Object.entries(this.#channels ?? {})) {
+      if (!channel?.initialize) continue;
+      try {
+        await channel.initialize();
+      } catch (err) {
+        this.#logger?.error(`[Mastra] Failed to initialize channel "${key}"`, err);
+        throw err;
+      }
+    }
+  }
+
+  #startAgentChannelInitialization(agentKey: string, agentChannelsInstance: AgentChannels): void {
+    this.#agentChannelInitializationErrors.delete(agentKey);
+    const init = agentChannelsInstance.initialize(this).catch(error => {
+      this.#logger?.error(`[Mastra] Failed to initialize agent channels "${agentKey}"`, error);
+      this.#agentChannelInitializationErrors.set(agentKey, error);
+      if (this.#lifecycleState === 'ready') {
+        this.#lifecycleState = 'failed';
+      }
+    });
+    this.#agentChannelInitializationPromises.set(agentKey, init);
+  }
+
+  #deleteAgentChannelInitialization(agentKey: string): void {
+    this.#agentChannelInstances.delete(agentKey);
+    this.#agentChannelInitializationPromises.delete(agentKey);
+    this.#agentChannelInitializationErrors.delete(agentKey);
+  }
+
+  async #awaitAgentChannelInitialization(): Promise<void> {
+    for (const [agentKey, agentChannelsInstance] of this.#agentChannelInstances) {
+      if (
+        !this.#agentChannelInitializationPromises.has(agentKey) ||
+        this.#agentChannelInitializationErrors.has(agentKey)
+      ) {
+        this.#startAgentChannelInitialization(agentKey, agentChannelsInstance);
+      }
+    }
+
+    for (const [agentKey, init] of this.#agentChannelInitializationPromises) {
+      await init;
+      this.#assertInitNotInterrupted();
+      const error = this.#agentChannelInitializationErrors.get(agentKey);
+      if (error) {
+        throw error;
+      }
     }
   }
 
@@ -2025,7 +2077,10 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannelsInstance.initialize(this);
+      this.#agentChannelInstances.set(String(agentKey), agentChannelsInstance);
+      if (this.#lifecycleState === 'ready') {
+        this.#startAgentChannelInitialization(String(agentKey), agentChannelsInstance);
+      }
     }
   }
 
@@ -2052,6 +2107,7 @@ export class Mastra<
     if (agents[keyOrId]) {
       const agentId = agents[keyOrId]?.id;
       delete agents[keyOrId];
+      this.#deleteAgentChannelInitialization(keyOrId);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -2064,6 +2120,7 @@ export class Mastra<
     if (key) {
       const agentId = agents[key]?.id;
       delete agents[key];
+      this.#deleteAgentChannelInitialization(key);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -2478,6 +2535,90 @@ export class Mastra<
    */
   public getHarnesses(): Record<string, HarnessV1> {
     return { ...this.#harnesses };
+  }
+
+  #createInitAfterShutdownError(): MastraError {
+    return new MastraError({
+      id: 'MASTRA_INIT_AFTER_SHUTDOWN',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: 'Mastra cannot be initialized after shutdown has started',
+    });
+  }
+
+  #assertInitNotInterrupted(): void {
+    if (this.#shutdownStarted || this.#lifecycleState === 'stopping' || this.#lifecycleState === 'stopped') {
+      throw this.#createInitAfterShutdownError();
+    }
+  }
+
+  /**
+   * Initialize Mastra runtime dependencies that must be ready before a server
+   * accepts Harness traffic.
+   */
+  public async init(): Promise<void> {
+    this.#assertInitNotInterrupted();
+
+    const init = this.#initPromise ?? this.#init();
+    this.#initPromise = init;
+    try {
+      await init;
+    } catch (error) {
+      if (this.#initPromise === init && !this.#shutdownStarted) {
+        this.#initPromise = undefined;
+      }
+      throw error;
+    }
+  }
+
+  async #init(): Promise<void> {
+    this.#lifecycleState = 'starting';
+    const hasHarnesses = Object.keys(this.#harnesses).length > 0;
+
+    try {
+      if (this.#channels && (!this.#channelInitializationPromise || this.#channelInitializationError)) {
+        this.#startChannelInitialization();
+      }
+
+      if (this.#channelInitializationPromise) {
+        await this.#channelInitializationPromise;
+        this.#assertInitNotInterrupted();
+        if (this.#channelInitializationError) {
+          throw this.#channelInitializationError;
+        }
+      }
+
+      await this.#awaitAgentChannelInitialization();
+
+      if (hasHarnesses) {
+        for (const harness of Object.values(this.#harnesses)) {
+          await harness.init();
+          this.#assertInitNotInterrupted();
+        }
+      }
+
+      this.#lifecycleState = 'ready';
+    } catch (error) {
+      if (!['stopping', 'stopped'].includes(this.#lifecycleState)) {
+        this.#lifecycleState = 'failed';
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Current Mastra lifecycle status for server and diagnostic readiness checks.
+   */
+  public getLifecycleStatus(): 'constructed' | 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed' {
+    return this.#lifecycleState;
+  }
+
+  /**
+   * Returns true only when the named Harness exists and the Mastra lifecycle is
+   * ready to accept Harness traffic.
+   */
+  public isHarnessReady(name = 'default'): boolean {
+    return this.#lifecycleState === 'ready' && this.#harnesses[name] !== undefined;
   }
 
   __registerInternalWorkflow(workflow: Workflow) {
@@ -4158,6 +4299,24 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
+    if (this.#lifecycleState === 'constructed' || this.#lifecycleState === 'starting') {
+      await this.init();
+    }
+
+    if (
+      this.#shutdownStarted ||
+      this.#lifecycleState === 'failed' ||
+      this.#lifecycleState === 'stopping' ||
+      this.#lifecycleState === 'stopped'
+    ) {
+      throw new MastraError({
+        id: 'MASTRA_START_WORKERS_AFTER_SHUTDOWN',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Mastra workers cannot be started after shutdown has started or readiness failed',
+      });
+    }
+
     if (this.#workersStopPromise) {
       await this.#workersStopPromise;
     }
@@ -5001,6 +5160,25 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    this.#shutdownStarted = true;
+    if (this.#shutdownPromise) {
+      return this.#shutdownPromise;
+    }
+
+    const shutdown = this.#shutdown();
+    this.#shutdownPromise = shutdown;
+    try {
+      await shutdown;
+    } catch (error) {
+      if (this.#shutdownPromise === shutdown) {
+        this.#shutdownPromise = undefined;
+      }
+      throw error;
+    }
+  }
+
+  async #shutdown(): Promise<void> {
+    this.#lifecycleState = 'stopping';
     // Stop legacy scheduler if it was started via #ensureScheduler
     if (this.#schedulerInitPromise) {
       try {
@@ -5061,18 +5239,23 @@ export class Mastra<
       this.#logger?.error('Failed to shutdown observability', error);
     }
     if (hasStopWorkersError) {
+      this.#lifecycleState = 'failed';
       throw stopWorkersError;
     }
     if (hasBackgroundTaskShutdownError) {
+      this.#lifecycleState = 'failed';
       throw backgroundTaskShutdownError;
     }
     if (hasHarnessShutdownError) {
+      this.#lifecycleState = 'failed';
       throw harnessShutdownError;
     }
     if (hasObservabilityShutdownError) {
+      this.#lifecycleState = 'failed';
       throw observabilityShutdownError;
     }
 
+    this.#lifecycleState = 'stopped';
     this.#logger?.info('Mastra shutdown completed');
   }
 

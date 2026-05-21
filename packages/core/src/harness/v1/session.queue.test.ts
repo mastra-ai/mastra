@@ -1770,6 +1770,89 @@ describe('Session.queue() — crash replay', () => {
     });
   });
 
+  it('fails closed when queued work replays after runtime compatibility generation drift', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-queued-generation-drift';
+    const queuedItemId = 'q-queued-generation-drift';
+    const now = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-queued-generation-drift',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [
+          {
+            id: queuedItemId,
+            admissionId: 'queue-generation-drift',
+            admissionHash: 'hash-generation-drift',
+            enqueuedAt: now,
+            content: 'do not run after generation drift',
+            attachments: [],
+          },
+        ],
+        queueAdmissionReceipts: {
+          [queuedItemId]: {
+            admissionId: 'queue-generation-drift',
+            admissionHash: 'hash-generation-drift',
+            queuedItemId,
+            modeId: 'default',
+            runtimeDependencies: {
+              modeId: 'default',
+              agentId: 'default',
+              modelId: 'default',
+              runtimeCompatibilityGeneration: 'generation-a',
+            },
+            status: 'accepted',
+            runId: 'stale-run',
+            signalId: 'stale-signal',
+            attempts: 1,
+            enqueuedAt: now,
+            acceptedAt: now,
+            updatedAt: now,
+          },
+        },
+        state: undefined,
+        createdAt: now,
+        lastActivityAt: now,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+
+    const replayAgent = new MockAgent({ id: 'default' });
+    const replayHarness = new Harness({
+      agents: { default: replayAgent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      runtimeCompatibilityGeneration: 'generation-b',
+    });
+
+    const replaySession = await replayHarness.session({ sessionId });
+    await replaySession.waitForIdle({ timeoutMs: 1000 });
+
+    expect(replayAgent.streamCalls).toHaveLength(0);
+    expect(replaySession.getRecord().pendingQueue).toEqual([]);
+    expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'harness.runtime_dependency_drifted',
+        message: expect.stringContaining('runtime_compatibility_generation "generation-a"'),
+      },
+    });
+  });
+
   it('replays an accepted receipt when pending signal evidence has no persisted memory signal', async () => {
     const storage = new InMemoryStore();
     const harnessStore = await storage.getStore('harness');

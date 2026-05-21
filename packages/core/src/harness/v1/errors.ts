@@ -23,7 +23,7 @@ export class HarnessConfigError extends Error {
   }
 }
 
-export type HarnessRuntimeDependencyKind = 'mode' | 'agent' | 'workspace_provider';
+export type HarnessRuntimeDependencyKind = 'mode' | 'agent' | 'workspace_provider' | 'runtime_compatibility_generation';
 
 export class HarnessRuntimeDependencyDriftError extends Error {
   readonly name = 'HarnessRuntimeDependencyDriftError';
