@@ -5,7 +5,7 @@ For work in packages read package local packages/<name>/AGENTS.md first
 turborepo pnpm workspace
 packages use strict TypeScript
 vitest tests are colocated with source
-Never use gpt-4o or other outdated models in examples, changesets, or comments — always use a current model (e.g. gpt-4.1-mini)
+Never use gpt-4o or other outdated models in examples, changesets, or comments — always use a current model (e.g. openai/gpt-5)
 
 Prefer narrowest build test lint typecheck for packages
 when package splits unit integration or E2E coverage run narrowest suite first
