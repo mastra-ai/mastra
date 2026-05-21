@@ -194,9 +194,17 @@ const agent = new Agent({
     name: 'toolDisplay',
     type: "'cards' | 'timeline' | 'grouped' | 'hidden'",
     isOptional: true,
-    defaultValue: "'cards'",
+    defaultValue: "'cards' ('grouped' for Slack)",
     description:
       'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards. `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Approve/deny prompts always render as a separate card regardless of mode.',
+  },
+  {
+    name: 'typingStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true (false for Slack)',
+    description:
+      'Show the platform typing indicator while the agent is generating text or running tools. Set to `false` to suppress typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Slack defaults to `false`; other adapters default to `true`.',
   },
 ]}
 />
