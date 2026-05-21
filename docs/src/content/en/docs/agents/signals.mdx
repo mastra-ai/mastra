@@ -189,7 +189,7 @@ When the agent is idle:
 
 Top-level `attributes` always apply. The selected branch's `attributes` are merged into them at delivery time. The `ifActive.attributes` branch merges when the signal is delivered to a running agent loop. The `ifIdle.attributes` branch merges when the signal wakes an idle thread. If the selected branch or its `attributes` field is `undefined`, no extra attributes are added.
 
-Delivery attributes work with any signal type and can carry any key-value pairs — the `delivery` attribute shown above is just a convention used by mastracode.
+Delivery attributes work with any signal type and can carry any key-value pairs. The `delivery` name shown above is not a special Mastra API field. It is a custom attribute name used for this example; you can use any attribute names that fit your application.
 
 :::note
 Visit [Agent.sendSignal() reference](/reference/agents/agent#sendsignalsignal-options) for the full `AgentSignalInput` type.
