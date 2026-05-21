@@ -1,5 +1,15 @@
 # @mastra/posthog
 
+## 1.0.26-alpha.0
+
+### Patch Changes
+
+- Fixed negative PostHog cost calculations when cache tokens are present. ([#16876](https://github.com/mastra-ai/mastra/pull/16876))
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+  - @mastra/observability@1.14.0-alpha.0
+
 ## 1.0.25
 
 ### Patch Changes

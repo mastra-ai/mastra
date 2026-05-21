@@ -1,5 +1,113 @@
 # @mastra/playground-ui
 
+## 30.0.0-alpha.1
+
+### Patch Changes
+
+- Migrated the Switch component to Base UI for smoother animations and consistent behavior. No API changes — `checked`, `defaultChecked`, `onCheckedChange`, and `disabled` work exactly as before. ([#16891](https://github.com/mastra-ai/mastra/pull/16891))
+
+- Added `DataList` primitives and props for building selection-aware, condensed list rows that match the Traces/Logs visual style. ([#16820](https://github.com/mastra-ai/mastra/pull/16820))
+
+  **New cells** on `DataList`:
+  - `IdCell` — compact mono cell that truncates long IDs to 8 chars.
+  - `MonoCell` — compact mono + truncate text cell (for input previews, JSON summaries, etc.).
+  - `DateCell` — compact date cell rendering "Today" or "MMM dd".
+  - `TimeCell` — compact mono time cell rendering `HH:mm:ss.SSS` with the millisecond portion tinted.
+  - `SelectCell` — labelled checkbox cell with a shift-key range-select handler.
+  - `TopSelectCell` — header version with `indeterminate` support for "select all".
+  - `TopCells` — non-interactive header sibling of `RowButton`, for hosting top cells beside a leading select cell.
+
+  **New props** on `DataList.RowButton` and `DataList.RowLink`:
+  - `flushLeft` — drops the default left margin when wrapped beside a leading cell.
+  - `colStart` — places the row starting at a column line (e.g. `colStart={2}` to leave column 1 for a leading cell).
+  - `featured` — applies the highlighted background to mark the active row.
+
+  **New props** on existing wrappers:
+  - `as` on `DataList.Cell` and `DataList.TopCell` — render the cell as any HTML element (e.g. `<label>` so the whole cell is clickable).
+  - `hasLeadingCell` on `DataList.Top` — drops default gap and left padding so a leading cell sits flush, mirroring how `Row` + `RowButton` compose.
+
+  **Example** — selection row with a checkbox in column 1 and an interactive button spanning the rest:
+
+  ```tsx
+  <DataList.Row>
+    <DataList.SelectCell checked={isSelected} onToggle={shiftKey => toggle(id, shiftKey)} />
+    <DataList.RowButton flushLeft colStart={2} featured={isFeatured} onClick={onRowClick}>
+      <DataList.IdCell id={item.id} />
+      <DataList.MonoCell>{item.input}</DataList.MonoCell>
+    </DataList.RowButton>
+  </DataList.Row>
+  ```
+
+  Internally the Traces and Logs list views now use the shared primitives — no behavior change for those consumers.
+
+- Added support for trailing cells in `DataList` rows. `DataList.RowButton` and `DataList.RowLink` now accept `colEnd` and `flushRight` (mirrors of the existing `colStart`/`flushLeft`), so a row can sit beside a non-interactive trailing cell (e.g. an actions column) and stay aligned with the header. Rows wrapped in `DataList.Row` now render a full-width separator that extends through the leading and trailing cells. `DataList.MonoCell` also gained an optional `height` prop so non-compact lists can use it without forcing compact padding. ([#16888](https://github.com/mastra-ai/mastra/pull/16888))
+
+  **Usage**
+
+  ```tsx
+  <DataList.Row>
+    <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={onClick}>
+      {/* main row content */}
+    </DataList.RowButton>
+    <DataList.Cell>
+      {/* trailing actions, e.g. icon buttons */}
+    </DataList.Cell>
+  </DataList.Row>
+
+  <DataList.MonoCell height="default">long mono text…</DataList.MonoCell>
+  ```
+
+- Migrated the Label component off Radix UI. It now renders a native `<label>` element with the same props and styling — `htmlFor`, `className`, and children behave exactly as before. ([#16892](https://github.com/mastra-ai/mastra/pull/16892))
+
+- Removed `EntryList` and its sub-components (`EntryList.Header`, `EntryList.Entries`, `EntryList.Entry`, `EntryList.EntryText`, `EntryList.Pagination`, `EntryList.NoMatch`, `EntryListSkeleton`, etc.) from the public API. All in-repo list views have migrated to `DataList`, which is the recommended replacement. ([#16910](https://github.com/mastra-ai/mastra/pull/16910))
+
+  **Migration:**
+
+  ```tsx
+  // Before
+  import { EntryList, EntryListSkeleton } from '@mastra/playground-ui';
+
+  <EntryList>
+    <EntryList.Trim>
+      <EntryList.Header columns={columns} />
+      <EntryList.Entries>
+        {items.map(item => (
+          <EntryList.Entry key={item.id} columns={columns} entry={item} onClick={…}>
+            {columns.map(col => <EntryList.EntryText key={col.name}>{item[col.name]}</EntryList.EntryText>)}
+          </EntryList.Entry>
+        ))}
+      </EntryList.Entries>
+    </EntryList.Trim>
+    <EntryList.Pagination …/>
+  </EntryList>
+
+  // After
+  import { DataList } from '@mastra/playground-ui';
+
+  <DataList columns={gridColumns}>
+    <DataList.Top>
+      {columns.map(col => <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>)}
+    </DataList.Top>
+    {items.map(item => (
+      <DataList.RowButton key={item.id} onClick={…}>
+        {columns.map(col => <DataList.Cell key={col.name}>{item[col.name]}</DataList.Cell>)}
+      </DataList.RowButton>
+    ))}
+    <DataList.Pagination …/>
+  </DataList>
+  ```
+
+- Improved the Checkbox component by migrating it to Base UI. The public API is unchanged — `checked` (including the `'indeterminate'` value), `defaultChecked`, `onCheckedChange`, and `disabled` all behave as before. ([#16905](https://github.com/mastra-ai/mastra/pull/16905))
+
+- Fixed MetricsDataTable sticky header and column backgrounds to use surface3 token, matching DashboardCard surface ([#16828](https://github.com/mastra-ai/mastra/pull/16828))
+
+- Improved the RadioGroup component by migrating it to Base UI. The public API (`RadioGroup`, `RadioGroupItem`, `value`, `onValueChange`, `disabled`) is unchanged. Also fixes the radio indicator sizing/centering — the control now stays square and the inner dot is properly centered. ([#16904](https://github.com/mastra-ai/mastra/pull/16904))
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/client-js@1.21.0-alpha.1
+  - @mastra/core@1.37.0-alpha.1
+  - @mastra/react@0.4.1-alpha.1
+
 ## 29.0.1-alpha.0
 
 ### Patch Changes
