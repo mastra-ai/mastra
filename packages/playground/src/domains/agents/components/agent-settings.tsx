@@ -111,7 +111,6 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
       <section className="space-y-7 @container">
         <Entry label="Chat Method">
           <RadioGroup
-            orientation="horizontal"
             value={radioValue}
             disabled={!canEditSettings}
             onValueChange={(value: string) =>
