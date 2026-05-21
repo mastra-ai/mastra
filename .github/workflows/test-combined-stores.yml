@@ -37,11 +37,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.head_sha }}
+          persist-credentials: false
       - id: set-stores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
+          INVALID_STORES=$(echo "$STORES" | jq -r '.[] | select(test("^[a-zA-Z0-9_-]+$") | not)')
+          if [[ -n "$INVALID_STORES" ]]; then
+            echo "::error::Invalid store names: $INVALID_STORES"
+            exit 1
+          fi
 
           # Check if we should include vectorize tests
           # Only run vectorize tests for dane-ai-mastra bot's version packages PRs
@@ -82,6 +88,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.head_sha }}
+          persist-credentials: false
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
