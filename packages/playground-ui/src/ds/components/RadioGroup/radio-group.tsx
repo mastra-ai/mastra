@@ -34,7 +34,8 @@ const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({
         transitions.all,
         'hover:border-neutral5 hover:shadow-md',
         formElementFocus,
-        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-neutral3 disabled:hover:shadow-sm',
+        // Base UI's Radio.Root is a `<span>`, so `:disabled` never matches — target `data-disabled`.
+        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:border-neutral3 data-[disabled]:hover:shadow-sm',
         // Base UI exposes `data-checked`/`data-unchecked` instead of Radix's `data-state`.
         'data-[checked]:border-accent1 data-[checked]:shadow-glow-accent1',
         className,
