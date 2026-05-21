@@ -639,12 +639,23 @@ export class AgentChannels {
           let toolArgs: Record<string, unknown> | undefined;
           for (const msg of messages) {
             const pending = msg.content?.metadata?.pendingToolApprovals as
-              | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
+              | Record<
+                  string,
+                  {
+                    toolCallId: string;
+                    runId: string;
+                    parentRunId?: string;
+                    toolName: string;
+                    args: Record<string, unknown>;
+                  }
+                >
               | undefined;
             if (pending) {
               for (const toolData of Object.values(pending)) {
                 if (toolData.toolCallId === toolCallId) {
-                  runId = toolData.runId;
+                  // Sub-agent approvals store the nested run in `runId` and the channel-owning
+                  // parent run in `parentRunId`. Resume through the parent agent + parent run.
+                  runId = toolData.parentRunId ?? toolData.runId;
                   toolName = toolData.toolName;
                   toolArgs = toolData.args;
                   break;
