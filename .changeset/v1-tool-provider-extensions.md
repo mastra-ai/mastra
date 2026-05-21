@@ -166,3 +166,14 @@ caller-supplied (Studio agent editor) Composio connections resolve
 correctly at execute time. Without this, agents saved through either
 surface persisted their Composio selections but the LLM never saw any of
 those tools.
+
+Drop the redundant "Mark caller-supplied" button from `ConnectionPicker`.
+Previously the Studio agent editor showed a warning card + button to
+"mark" the toolkit as caller-supplied, which was leftover UX from a
+short-lived 3-way visibility radio that no longer exists. With `scope`
+now a required prop, the editor is hard-locked to `caller-supplied` and
+has no choice to make — so the picker now auto-stamps the sentinel pin
+on mount via `useEffect` and renders it as a normal pinned row with the
+existing "Shared (caller-supplied)" badge. The `handleAddCallerSupplied`
+guard keeps the effect idempotent on re-mount with persisted state. The
+Agent Builder (`per-author`) empty state is unchanged.

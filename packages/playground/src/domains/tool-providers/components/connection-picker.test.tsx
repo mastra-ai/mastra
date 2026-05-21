@@ -782,7 +782,7 @@ describe('ConnectionPicker', () => {
     expect(deleteRequests[0].url).toContain('force=true');
   });
 
-  it('creates a sentinel caller-supplied pin without invoking authorize', async () => {
+  it('auto-stamps a sentinel caller-supplied pin on mount without invoking authorize', async () => {
     const changes: PickerConnection[][] = [];
     renderPicker({
       initial: [],
@@ -790,18 +790,39 @@ describe('ConnectionPicker', () => {
       onChange: next => changes.push(next),
     });
 
-    const markBtn = screen.getByTestId(`connection-mark-caller-supplied-${TOOL_SERVICE}`);
-    await act(async () => {
-      fireEvent.click(markBtn);
+    // No user click required — the effect stamps the pin on mount.
+    await waitFor(() => {
+      expect(changes.length).toBeGreaterThan(0);
     });
 
     expect(authorizeMock).not.toHaveBeenCalled();
     const last = changes[changes.length - 1];
     expect(last?.[0]).toMatchObject({
+      connectionId: 'caller-supplied',
       toolkit: TOOL_SERVICE,
       scope: 'caller-supplied',
     });
     expect(last?.[0]?.label).toBeUndefined();
+  });
+
+  it('does not re-stamp when a caller-supplied pin already exists (idempotent on re-mount)', async () => {
+    const changes: PickerConnection[][] = [];
+    renderPicker({
+      initial: [
+        {
+          connectionId: 'caller-supplied',
+          toolkit: TOOL_SERVICE,
+          scope: 'caller-supplied',
+        },
+      ],
+      scope: 'caller-supplied',
+      onChange: next => changes.push(next),
+    });
+
+    // Give effects a tick — should remain empty (no new onChange call).
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(changes.length).toBe(0);
+    expect(authorizeMock).not.toHaveBeenCalled();
   });
 
   it('renders a Caller-supplied badge and no label input for caller-supplied pins', () => {
@@ -818,29 +839,23 @@ describe('ConnectionPicker', () => {
     expect(screen.queryByTestId(`connection-label-${TOOL_SERVICE}-0`)).toBeNull();
   });
 
-  it('renders the declare-only flow immediately when locked to caller-supplied (editor)', async () => {
-    const changes: PickerConnection[][] = [];
+  it('does not render the label-input / Connect flow when locked to caller-supplied (editor)', async () => {
     renderPicker({
       initial: [],
       scope: 'caller-supplied',
-      onChange: next => changes.push(next),
     });
 
-    // No label input, no Connect button — just the marker CTA.
+    // No label input, no Connect button, no manual "Mark caller-supplied" button —
+    // the pin is auto-stamped and renders as a normal pinned row.
     expect(screen.queryByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeNull();
     expect(screen.queryByTestId(`connection-connect-${TOOL_SERVICE}`)).toBeNull();
+    expect(screen.queryByTestId(`connection-mark-caller-supplied-${TOOL_SERVICE}`)).toBeNull();
 
-    const markBtn = screen.getByTestId(`connection-mark-caller-supplied-${TOOL_SERVICE}`);
-    await act(async () => {
-      fireEvent.click(markBtn);
+    // The Caller-supplied badge should render once the auto-stamped pin lands.
+    await waitFor(() => {
+      expect(screen.getByTestId(`connection-caller-supplied-badge-${TOOL_SERVICE}-0`)).toBeTruthy();
     });
-
     expect(authorizeMock).not.toHaveBeenCalled();
-    const last = changes[changes.length - 1];
-    expect(last?.[0]).toMatchObject({
-      toolkit: TOOL_SERVICE,
-      scope: 'caller-supplied',
-    });
   });
 
   it('hides the existing-connections section when locked to caller-supplied', async () => {

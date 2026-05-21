@@ -1,6 +1,6 @@
 import { AlertDialog, Badge, Button, DropdownMenu, Input, Txt, cn } from '@mastra/playground-ui';
 import { AlertCircle, Link2, MoreVertical, Plus, RefreshCw, Trash2, Unlink2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAuthorize } from '../hooks/use-authorize';
 import { useConnectionFields } from '../hooks/use-connection-fields';
@@ -309,6 +309,17 @@ export const ConnectionPicker = ({
     ]);
   };
 
+  // When the picker is locked to caller-supplied scope (Studio CMS editor),
+  // there is no user choice to make — stamp the sentinel pin on mount so
+  // the row renders immediately. `handleAddCallerSupplied` is idempotent.
+  useEffect(() => {
+    if (scope !== 'caller-supplied') return;
+    if (disabled) return;
+    if (connections.length !== 0) return;
+    handleAddCallerSupplied();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, connections.length, disabled]);
+
   const handleLabelChange = (index: number, label: string) => {
     const next = [...connections];
     const current = next[index];
@@ -498,57 +509,36 @@ export const ConnectionPicker = ({
           <div className="flex items-center gap-2">
             <AlertCircle className="size-4 shrink-0 text-warning" />
             <Txt as="span" variant="ui-sm" className="text-warning">
-              {scope === 'caller-supplied'
-                ? 'No marker yet — mark this toolkit as caller-supplied so the host app resolves end-user connections at runtime.'
-                : 'No connections yet — name your account and connect to enable these tools.'}
+              No connections yet — name your account and connect to enable these tools.
             </Txt>
           </div>
           {canAddMore && (
             <div className="flex flex-col gap-2">
-              {scope === 'caller-supplied' ? (
-                <div className="flex flex-col gap-2" data-testid={`connection-caller-supplied-${toolkit}`}>
-                  <Txt as="span" variant="ui-xs" className="text-text-muted">
-                    Tools resolve via <code>requestContext.set(MASTRA_RESOURCE_ID_KEY, &lt;userId&gt;)</code>. Each
-                    end-user gets their own OAuth flow on first use through your host app.
-                  </Txt>
-                  <Button
+              <div className="flex items-start gap-2">
+                <div className="flex-1">
+                  <Input
                     size="sm"
-                    variant="outline"
-                    onClick={handleAddCallerSupplied}
-                    disabled={disabled}
-                    data-testid={`connection-mark-caller-supplied-${toolkit}`}
-                  >
-                    <Plus className="size-3" />
-                    Mark caller-supplied
-                  </Button>
+                    value={newLabelDraft}
+                    placeholder="Account name (e.g. Work, Personal)"
+                    onChange={e => setNewLabelDraft(e.target.value)}
+                    disabled={disabled || authorize.isPending}
+                    error={Boolean(newDraftError) && newLabelDraft.length > 0}
+                    aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
+                    data-testid={`connection-new-label-${toolkit}`}
+                  />
+                  {newDraftError && <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>}
                 </div>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <div className="flex-1">
-                    <Input
-                      size="sm"
-                      value={newLabelDraft}
-                      placeholder="Account name (e.g. Work, Personal)"
-                      onChange={e => setNewLabelDraft(e.target.value)}
-                      disabled={disabled || authorize.isPending}
-                      error={Boolean(newDraftError) && newLabelDraft.length > 0}
-                      aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
-                      data-testid={`connection-new-label-${toolkit}`}
-                    />
-                    {newDraftError && <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleAdd}
-                    disabled={disabled || authorize.isPending || Boolean(newDraftError)}
-                    data-testid={`connection-connect-${toolkit}`}
-                  >
-                    <Plus className="size-3" />
-                    Connect
-                  </Button>
-                </div>
-              )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAdd}
+                  disabled={disabled || authorize.isPending || Boolean(newDraftError)}
+                  data-testid={`connection-connect-${toolkit}`}
+                >
+                  <Plus className="size-3" />
+                  Connect
+                </Button>
+              </div>
             </div>
           )}
         </div>
