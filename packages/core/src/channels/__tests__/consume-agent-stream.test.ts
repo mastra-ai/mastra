@@ -278,10 +278,21 @@ describe('consumeAgentStream', () => {
       );
 
       const posts = calls.filter(c => c.kind === 'post');
-      expect(posts).toHaveLength(1);
+      // Text-before-tools triggers a session flush so the leading text posts
+      // as its own platform message; the tool widget + trailing text post as
+      // a second message. Without the flush, Slack's AI Assistant widget
+      // would always render tasks above text within a single post.
+      expect(posts).toHaveLength(2);
       expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
 
-      const planArg = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      // First post: streaming text only (no task_update chunks).
+      const firstPost = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      const firstDrained = await drainStreamingPlan(firstPost);
+      const firstText = firstDrained.filter((p): p is string => typeof p === 'string').join('');
+      expect(firstText).toContain('thinking');
+
+      // Second post: tool widget + trailing text.
+      const planArg = (posts[1] as Extract<Call, { kind: 'post' }>).arg as any;
       // `'timeline'` mode tells StreamingPlan to render each task inline.
       expect(planArg.options?.groupTasks).toBe('timeline');
 
@@ -297,7 +308,6 @@ describe('consumeAgentStream', () => {
       // the existing task entry by id, so re-sending would render duplicates.
       expect(taskUpdates[1].details).toBeUndefined();
       const text = drained.filter((p): p is string => typeof p === 'string').join('');
-      expect(text).toContain('thinking');
       expect(text).toContain('done');
     });
 
@@ -363,13 +373,21 @@ describe('consumeAgentStream', () => {
       );
 
       // Streaming text still posts; tools render nothing.
+      // Hidden mode flushes pending text on tool-call so the leading text
+      // posts before the silent tool runs (otherwise the user sees the
+      // typing status with no leading message until the tool resolves).
       const posts = calls.filter(c => c.kind === 'post');
-      expect(posts).toHaveLength(1);
+      expect(posts).toHaveLength(2);
       expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
 
-      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
-      const taskUpdates = drained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
+      const allDrained = (
+        await Promise.all(posts.map(p => drainStreamingPlan((p as Extract<Call, { kind: 'post' }>).arg)))
+      ).flat();
+      const taskUpdates = allDrained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
       expect(taskUpdates).toHaveLength(0);
+      const text = allDrained.filter((p): p is string => typeof p === 'string').join('');
+      expect(text).toContain('thinking');
+      expect(text).toContain('done');
     });
 
     it("'timeline' without streaming: warns once and falls back to cards", async () => {

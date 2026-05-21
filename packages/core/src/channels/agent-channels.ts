@@ -1749,6 +1749,13 @@ export class AgentChannels {
         continue;
       }
 
+      // Flush as soon as the model finishes a text block so the message
+      // posts before any subsequent tool call status updates.
+      if (chunk.type === 'text-end') {
+        await flushText();
+        continue;
+      }
+
       if (chunk.type === 'reasoning-delta') {
         setTypingStatus('Thinking…');
         continue;
@@ -1837,7 +1844,11 @@ export class AgentChannels {
 
         // `'hidden'`: never render anything — just track the call so the result
         // handler can correlate, but skip cards and `task_update` chunks alike.
+        // Flush any pending text first so it posts before the silent tool runs;
+        // otherwise the user sees the "Calling…" typing status with no leading
+        // message until the tool resolves.
         if (toolDisplay === 'hidden') {
+          await flushText();
           toolCalls.set(chunk.payload.toolCallId, {
             displayName,
             argsSummary,
@@ -1853,7 +1864,22 @@ export class AgentChannels {
         // placeholder). The session is shared with text-deltas so chunks
         // interleave in platform message order under one StreamingPlan post.
         if (toolDisplay === 'timeline' || toolDisplay === 'grouped') {
+          // Close any active text-only session first so preceding text posts
+          // as its own platform message. Slack's AI Assistant widget always
+          // renders tasks above markdown body within a single post, so
+          // interleaving text and tools requires separate messages.
+          if (streamingSession && toolCalls.size === 0) {
+            await closeStreamingSession();
+          }
           if (!streamingSession) streamingSession = openStreamingSession();
+          // Track the active task as the plan title so Slack's AI Assistant
+          // Thinking Steps widget shows the current tool instead of the
+          // default "Thinking…"/"completed" labels. Mirrors the behavior of
+          // Chat SDK `Plan.addTask` which overwrites the plan title on each
+          // new task.
+          if (toolDisplay === 'grouped') {
+            streamingSession.push({ type: 'plan_update', title: displayName });
+          }
           streamingSession.push({
             type: 'task_update',
             id: chunk.payload.toolCallId,
