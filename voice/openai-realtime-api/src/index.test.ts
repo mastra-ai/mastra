@@ -92,9 +92,14 @@ describe('OpenAIRealtimeVoice', () => {
       await voice.connect();
 
       expect(WebSocket).toHaveBeenCalled();
-      const headers = vi.mocked(WebSocket).mock.calls[0]?.[2]?.headers as Record<string, string>;
-      expect(headers).toHaveProperty('Authorization');
-      expect(headers).not.toHaveProperty('OpenAI-Beta');
+      const firstCall = vi.mocked(WebSocket).mock.calls[0];
+      expect(firstCall).toBeDefined();
+      expect(firstCall[2]).toBeDefined();
+
+      const options = firstCall[2] as { headers: Record<string, string> };
+      expect(options.headers).toBeDefined();
+      expect(options.headers.Authorization).toBe('Bearer test-api-key');
+      expect(options.headers).not.toHaveProperty('OpenAI-Beta');
     });
   });
 
