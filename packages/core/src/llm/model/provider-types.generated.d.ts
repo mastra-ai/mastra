@@ -845,6 +845,29 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5-FP8',
     'zai-org/GLM-5.1-FP8',
   ];
+  readonly crof: readonly [
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4-pro-precision',
+    'gemma-4-31b-it',
+    'glm-4.7',
+    'glm-4.7-flash',
+    'glm-5',
+    'glm-5.1',
+    'glm-5.1-precision',
+    'greg',
+    'kimi-k2.5',
+    'kimi-k2.5-lightning',
+    'kimi-k2.6',
+    'kimi-k2.6-precision',
+    'mimo-v2.5-pro',
+    'mimo-v2.5-pro-precision',
+    'minimax-m2.5',
+    'qwen3.5-397b-a17b',
+    'qwen3.5-9b',
+    'qwen3.6-27b',
+  ];
   readonly ambient: readonly ['moonshotai/kimi-k2.6', 'zai-org/GLM-5.1-FP8'];
   readonly 'routing-run': readonly [
     'route/deepseek-v3.2',
@@ -1928,7 +1951,6 @@ export type ProviderModelsMap = {
     'arcee-ai/coder-large',
     'arcee-ai/maestro-reasoning',
     'arcee-ai/spotlight',
-    'arcee-ai/trinity-large-preview',
     'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-large-thinking:free',
     'arcee-ai/trinity-mini',
@@ -2206,6 +2228,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.6-flash',
     'qwen/qwen3.6-max-preview',
     'qwen/qwen3.6-plus',
+    'qwen/qwen3.7-max',
     'rekaai/reka-edge',
     'rekaai/reka-flash-3',
     'relace/relace-apply-3',
@@ -3384,6 +3407,7 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
+    'qwen3.6-plus-free',
   ];
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
@@ -3576,6 +3600,12 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-4.7-Flash',
     'hf:zai-org/GLM-5',
     'hf:zai-org/GLM-5.1',
+  ];
+  readonly inceptron: readonly [
+    'MiniMaxAI/MiniMax-M2.5',
+    'moonshotai/Kimi-K2.6',
+    'nvidia/llama-3.3-70b-instruct-fp8',
+    'zai-org/GLM-5.1-FP8',
   ];
   readonly 'minimax-coding-plan': readonly [
     'MiniMax-M2',
