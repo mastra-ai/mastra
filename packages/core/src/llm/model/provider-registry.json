@@ -2622,6 +2622,7 @@
         "x-ai/grok-4.20",
         "x-ai/grok-4.20-multi-agent",
         "x-ai/grok-4.3",
+        "x-ai/grok-build-0.1",
         "xiaomi/mimo-v2-flash",
         "xiaomi/mimo-v2-omni",
         "xiaomi/mimo-v2-pro",
@@ -3986,8 +3987,7 @@
         "minimax-m2.7",
         "nemotron-3-super-free",
         "qwen3.5-plus",
-        "qwen3.6-plus",
-        "qwen3.6-plus-free"
+        "qwen3.6-plus"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -5148,6 +5148,15 @@
       "docUrl": "https://docs.together.ai/docs/serverless-models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/togetherai"
+    },
+    "stepfun-ai": {
+      "url": "https://api.stepfun.ai/step_plan/v1",
+      "apiKeyEnvVar": "STEPFUN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "StepFun",
+      "models": ["step-3.5-flash", "step-3.5-flash-2603"],
+      "docUrl": "https://platform.stepfun.ai/docs/en/step-plan/integrations/open-code",
+      "gateway": "models.dev"
     },
     "inference": {
       "url": "https://inference.net/v1",
@@ -7463,6 +7472,7 @@
       "x-ai/grok-4.20",
       "x-ai/grok-4.20-multi-agent",
       "x-ai/grok-4.3",
+      "x-ai/grok-build-0.1",
       "xiaomi/mimo-v2-flash",
       "xiaomi/mimo-v2-omni",
       "xiaomi/mimo-v2-pro",
@@ -8616,8 +8626,7 @@
       "minimax-m2.7",
       "nemotron-3-super-free",
       "qwen3.5-plus",
-      "qwen3.6-plus",
-      "qwen3.6-plus-free"
+      "qwen3.6-plus"
     ],
     "mixlayer": [
       "qwen/qwen3.5-122b-a10b",
@@ -9484,6 +9493,7 @@
       "openai/gpt-oss-120b",
       "zai-org/GLM-5.1"
     ],
+    "stepfun-ai": ["step-3.5-flash", "step-3.5-flash-2603"],
     "inference": [
       "google/gemma-3",
       "meta/llama-3.1-8b-instruct",

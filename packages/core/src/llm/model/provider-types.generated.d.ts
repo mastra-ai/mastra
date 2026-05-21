@@ -2229,6 +2229,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20',
     'x-ai/grok-4.20-multi-agent',
     'x-ai/grok-4.3',
+    'x-ai/grok-build-0.1',
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
@@ -3383,7 +3384,6 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
-    'qwen3.6-plus-free',
   ];
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
@@ -4261,6 +4261,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'zai-org/GLM-5.1',
   ];
+  readonly 'stepfun-ai': readonly ['step-3.5-flash', 'step-3.5-flash-2603'];
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',
