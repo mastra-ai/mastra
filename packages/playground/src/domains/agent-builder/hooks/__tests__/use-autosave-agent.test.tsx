@@ -192,6 +192,37 @@ describe('useAutosaveAgent', () => {
     await waitFor(() => expect(calls).toBe(1));
   });
 
+  it('PATCHes when a Composio tool is added via setValue("toolProviders", ...)', async () => {
+    let calls = 0;
+    let lastBody: any = null;
+    server.use(
+      http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, async ({ request }) => {
+        calls += 1;
+        lastBody = await request.json();
+        return HttpResponse.json({ id: AGENT_ID });
+      }),
+    );
+
+    const { form } = renderAutosave({ debounceMs: 30, savedDisplayMs: 30 });
+
+    await act(async () => {
+      form().setValue(
+        'toolProviders',
+        {
+          composio: {
+            tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } },
+            connections: {},
+          },
+        },
+        { shouldDirty: true, shouldValidate: true },
+      );
+    });
+
+    await waitFor(() => expect(calls).toBe(1), { timeout: 500 });
+    expect(lastBody.toolProviders).toBeDefined();
+    expect(lastBody.toolProviders.composio.tools.GMAIL_FETCH_EMAILS).toMatchObject({ toolkit: 'gmail' });
+  });
+
   it('does not PATCH after unmount when no edit was pending', async () => {
     let calls = 0;
     server.use(

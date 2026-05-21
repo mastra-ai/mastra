@@ -74,4 +74,83 @@ describe('routeToolInputToFormKeys', () => {
     expect(result.agents).toEqual({});
     expect(result.workflows).toEqual({});
   });
+
+  it("routes type: 'integration' entries into toolProvidersFragment with toolkit and description", () => {
+    const available: AgentTool[] = [
+      {
+        id: 'composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        description: 'Fetch Gmail emails',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'gmail',
+      },
+    ];
+
+    const result = routeToolInputToFormKeys(available, [
+      { id: 'composio:GMAIL_FETCH_EMAILS', name: 'Gmail Fetch Emails' },
+    ]);
+
+    expect(result.toolProvidersFragment).toEqual({
+      composio: {
+        GMAIL_FETCH_EMAILS: { toolkit: 'gmail', description: 'Fetch Gmail emails' },
+      },
+    });
+    // Integration ids must never leak into the native tools allowlist.
+    expect(result.tools).toEqual({});
+    expect(result.agents).toEqual({});
+    expect(result.workflows).toEqual({});
+  });
+
+  it('preserves native routing when integration and native entries are mixed', () => {
+    const available: AgentTool[] = [
+      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
+      {
+        id: 'composio:GMAIL_SEND',
+        name: 'GMAIL_SEND',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'gmail',
+      },
+    ];
+
+    const result = routeToolInputToFormKeys(available, [
+      { id: 'tool-a', name: 'Tool A' },
+      { id: 'composio:GMAIL_SEND', name: 'Gmail Send' },
+    ]);
+
+    expect(result.tools).toEqual({ 'tool-a': true });
+    expect(result.toolProvidersFragment).toEqual({
+      composio: { GMAIL_SEND: { toolkit: 'gmail' } },
+    });
+  });
+
+  it('omits description from the fragment when the AgentTool has no description', () => {
+    const available: AgentTool[] = [
+      {
+        id: 'composio:SLACK_POST',
+        name: 'SLACK_POST',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'slack',
+      },
+    ];
+
+    const result = routeToolInputToFormKeys(available, [{ id: 'composio:SLACK_POST', name: 'Slack Post' }]);
+
+    expect(result.toolProvidersFragment).toEqual({
+      composio: { SLACK_POST: { toolkit: 'slack' } },
+    });
+  });
+
+  it('returns an empty toolProvidersFragment when no integration entries are routed', () => {
+    const available: AgentTool[] = [{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }];
+
+    const result = routeToolInputToFormKeys(available, [{ id: 'tool-a', name: 'Tool A' }]);
+
+    expect(result.toolProvidersFragment).toEqual({});
+  });
 });

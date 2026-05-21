@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
+import { useWatch } from 'react-hook-form';
 import { useBuilderPickerVisibility } from '../../builder';
+import { useAllProviderTools } from '../../tool-providers/hooks/use-all-provider-tools';
+import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAvailableToolRecords } from '../services/build-available-tool-records';
 import { buildAgentTools } from '../types/agent-tool';
 import type { AgentTool } from '../types/agent-tool';
@@ -37,6 +40,15 @@ export function useAvailableAgentTools({
 }: UseAvailableAgentToolsArgs): AgentTool[] {
   const resolvedWorkflowsData = workflowsData ?? EMPTY_RECORD;
   const picker = useBuilderPickerVisibility();
+  // Fan out per (provider, toolkit) to the registered tool-provider catalog.
+  // Server gates visibility via `allowedToolkits` / `allowedTools` on the
+  // ToolProvider, so we intentionally bypass the builder picker allowlist
+  // for integration rows (the picker has no `visibleIntegrations` field).
+  const { tools: integrationTools } = useAllProviderTools();
+  const toolProvidersFormValue = useWatch<AgentBuilderEditFormValues>({
+    name: 'toolProviders',
+  }) as AgentBuilderEditFormValues['toolProviders'];
+
   return useMemo(() => {
     const filteredTools = picker.visibleTools === null ? toolsData : filterByAllowlist(toolsData, picker.visibleTools);
     const filteredAgents =
@@ -47,12 +59,28 @@ export function useAvailableAgentTools({
         : filterByAllowlist(resolvedWorkflowsData, picker.visibleWorkflows);
 
     const records = buildAvailableToolRecords(filteredTools, filteredAgents, filteredWorkflows, excludeAgentId);
-    return buildAgentTools({
+    const native = buildAgentTools({
       tools: records.tools,
       agents: records.agents,
       workflows: records.workflows,
       selected: { tools: selectedTools, agents: selectedAgents, workflows: selectedWorkflows },
     });
+
+    // Append integration rows after native items so existing ordering for
+    // tools/agents/workflows is unchanged.
+    const integration: AgentTool[] = integrationTools.map(item => ({
+      // `id` namespaces by `providerId:toolSlug` so it can never collide with
+      // a native tool id (server-side native tool ids never contain `:`).
+      id: `${item.providerId}:${item.slug}`,
+      name: item.slug,
+      description: item.description,
+      isChecked: Boolean(toolProvidersFormValue?.[item.providerId]?.tools?.[item.slug]),
+      type: 'integration',
+      providerId: item.providerId,
+      toolkit: item.toolkit,
+    }));
+
+    return [...native, ...integration];
   }, [
     toolsData,
     agentsData,
@@ -62,5 +90,7 @@ export function useAvailableAgentTools({
     selectedWorkflows,
     excludeAgentId,
     picker,
+    integrationTools,
+    toolProvidersFormValue,
   ]);
 }

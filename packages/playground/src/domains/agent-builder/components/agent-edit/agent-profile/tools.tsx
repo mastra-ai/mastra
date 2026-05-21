@@ -1,8 +1,9 @@
 import { Checkbox, Txt, cn } from '@mastra/playground-ui';
 import type { CSSProperties, ReactNode } from 'react';
 import { useState } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
+import { needsConnectionSetup, useToolProvidersBridge } from '../../../hooks/use-tool-providers-bridge';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentSearchbar } from '../agent-searchbar';
@@ -11,10 +12,20 @@ import { AgentSelectableCard } from '../agent-selectable-card';
 interface ToolsProps {
   editable?: boolean;
   availableAgentTools?: AgentTool[];
+  /**
+   * Called when an integration row's "Set up connection" button is clicked.
+   * Parent is expected to switch the active tab to "Connections". Omit to
+   * hide the pill (e.g. when the Connections tab itself is disabled).
+   */
+  onOpenConnections?: () => void;
 }
 
-export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps) => {
+export const Tools = ({ editable = true, availableAgentTools = [], onOpenConnections }: ToolsProps) => {
   const { setValue, getValues } = useFormContext<AgentBuilderEditFormValues>();
+  const { addIntegrationTool, removeIntegrationTool } = useToolProvidersBridge();
+  const toolProvidersValue = useWatch<AgentBuilderEditFormValues>({ name: 'toolProviders' }) as
+    | AgentBuilderEditFormValues['toolProviders']
+    | undefined;
   const agentColor = useAgentColor();
   const [search, setSearch] = useState('');
   const [onlySelected, setOnlySelected] = useState(false);
@@ -29,6 +40,20 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
       : undefined;
 
   const toggle = (item: AgentTool, next: boolean) => {
+    if (item.type === 'integration') {
+      if (!item.providerId || !item.toolkit) return;
+      if (next) {
+        addIntegrationTool({
+          providerId: item.providerId,
+          toolkit: item.toolkit,
+          toolSlug: item.name,
+          description: item.description,
+        });
+      } else {
+        removeIntegrationTool({ providerId: item.providerId, toolSlug: item.name });
+      }
+      return;
+    }
     const fieldName = item.type === 'agent' ? 'agents' : item.type === 'workflow' ? 'workflows' : 'tools';
     const current = getValues(fieldName) ?? {};
     setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
@@ -90,19 +115,40 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
         <ToolListEmptyState details={emptyStateDetails} />
       ) : (
         <div className="grid min-h-0 grid-cols-1 content-start gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map(item => (
-            <AgentSelectableCard
-              key={`${item.type}__${item.id}`}
-              title={item.name}
-              subtitle={item.description || 'No description provided'}
-              isSelected={item.isChecked}
-              disabled={!editable}
-              onClick={() => toggle(item, !item.isChecked)}
-              ariaLabel={item.name}
-              testId={`tool-card-${item.type}-${item.id}`}
-              checkTestId={`tool-card-check-${item.type}-${item.id}`}
-            />
-          ))}
+          {visibleTools.map(item => {
+            const showSetup =
+              item.type === 'integration' && !!onOpenConnections && needsConnectionSetup(item, toolProvidersValue);
+
+            const card = (
+              <AgentSelectableCard
+                key={`${item.type}__${item.id}`}
+                title={item.name}
+                subtitle={item.description || 'No description provided'}
+                isSelected={item.isChecked}
+                disabled={!editable}
+                onClick={() => toggle(item, !item.isChecked)}
+                ariaLabel={item.name}
+                testId={`tool-card-${item.type}-${item.id}`}
+                checkTestId={`tool-card-check-${item.type}-${item.id}`}
+              />
+            );
+
+            if (!showSetup) return card;
+
+            return (
+              <div key={`${item.type}__${item.id}`} className="flex flex-col gap-2">
+                {card}
+                <button
+                  type="button"
+                  data-testid={`tool-card-setup-${item.providerId}-${item.name}`}
+                  onClick={() => onOpenConnections?.()}
+                  className="self-start rounded-md border border-border1 px-2 py-1 text-ui-xs text-neutral3 hover:bg-surface4"
+                >
+                  Set up connection
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

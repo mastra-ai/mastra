@@ -101,6 +101,10 @@ const builderFilterRef: { fn: (models: MockModel[]) => MockModel[] } = {
   fn: models => models.filter(model => model.provider === 'openai'),
 };
 
+vi.mock('@/domains/tool-providers/hooks/use-all-provider-tools', () => ({
+  useAllProviderTools: () => ({ data: [], isLoading: false }),
+}));
+
 vi.mock('@/domains/agent-builder/hooks/use-agent-builder-allowed-models', () => ({
   useAgentBuilderAllowedModels: () => {
     const allModels: MockModel[] = llmProvidersFixture.value.flatMap(provider =>

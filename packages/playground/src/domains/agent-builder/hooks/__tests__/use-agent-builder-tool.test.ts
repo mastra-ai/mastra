@@ -57,6 +57,7 @@ const renderWrapper = (args: {
   availableAgentTools?: AgentTool[];
   availableSkills?: StoredSkillResponse[];
   availableModels?: ModelInfo[];
+  integrationToolsLoading?: boolean;
 }) => {
   const Wrapper = ({ children }: { children: React.ReactNode }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
@@ -72,6 +73,7 @@ const renderWrapper = (args: {
         availableAgentTools: args.availableAgentTools ?? [],
         availableSkills: args.availableSkills,
         availableModels: args.availableModels,
+        integrationToolsLoading: args.integrationToolsLoading,
       }),
     { wrapper: Wrapper },
   );
@@ -153,5 +155,14 @@ describe('useAgentBuilderTool (composition + gating wrapper)', () => {
   it('omits the browserEnabled tool when features.browser is false', () => {
     const record = renderWrapper({ features: { ...allOnFeatures, browser: false } });
     expect(record[SET_AGENT_BROWSER_ENABLED_TOOL_NAME]).toBeUndefined();
+  });
+
+  it('omits the tools tool while integration tools are loading', () => {
+    const record = renderWrapper({
+      features: allOnFeatures,
+      availableAgentTools: [{ id: 'tool-a', name: 'Tool A', isChecked: false, type: 'tool' }],
+      integrationToolsLoading: true,
+    });
+    expect(record[SET_AGENT_TOOLS_TOOL_NAME]).toBeUndefined();
   });
 });

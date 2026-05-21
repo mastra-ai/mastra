@@ -16,22 +16,26 @@ import {
 } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
 import { PlusIcon, XIcon } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
-import { IntegrationToolsSection } from '@/domains/tool-providers/components';
+import { ToolProvidersSection } from '@/domains/tool-providers/components';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
+
+// CMS editor surface: caller-supplied only. End-user connections are resolved
+// at runtime from `requestContext[MASTRA_RESOURCE_ID_KEY]` by the host app.
+// per-author / shared belong to the agent builder (single-author surface).
+const EDITOR_SCOPE = 'caller-supplied' as const;
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
   const { data: tools } = useTools();
   const selectedTools = useWatch({ control, name: 'tools' });
-  const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
   const variables = useWatch({ control, name: 'variables' });
 
   const options = useMemo(() => {
@@ -96,27 +100,6 @@ export function ToolsPage() {
       { shouldDirty: true },
     );
   };
-
-  const handleIntegrationToolsSubmit = useCallback(
-    (providerId: string, tools: Map<string, string>) => {
-      const next = { ...selectedIntegrationTools };
-
-      // Remove all tools from this provider
-      for (const key of Object.keys(next)) {
-        if (key.startsWith(`${providerId}:`)) {
-          delete next[key];
-        }
-      }
-
-      // Add selected tools, preserving existing config (rules) if available
-      for (const [id, description] of tools) {
-        next[id] = selectedIntegrationTools?.[id] || { description };
-      }
-
-      form.setValue('integrationTools', next, { shouldDirty: true });
-    },
-    [form, selectedIntegrationTools],
-  );
 
   const selectedOptions = useMemo(() => {
     // Include all selected tools, even agent-level tools not in the global list.
@@ -229,10 +212,7 @@ export function ToolsPage() {
 
         <MCPClientList />
 
-        <IntegrationToolsSection
-          selectedToolIds={selectedIntegrationTools}
-          onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
-        />
+        <ToolProvidersSection form={form} readOnly={readOnly} scope={EDITOR_SCOPE} />
       </div>
     </ScrollArea>
   );

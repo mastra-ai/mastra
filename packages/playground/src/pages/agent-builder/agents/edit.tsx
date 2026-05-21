@@ -33,6 +33,7 @@ import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-bu
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { ModelPolicyProvider } from '@/domains/llm';
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
@@ -65,11 +66,13 @@ const EditPageForm = () => {
   const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
 
   return (
-    <FormProvider {...formMethods}>
-      <AgentColorProvider>
-        <EditPageBody />
-      </AgentColorProvider>
-    </FormProvider>
+    <ModelPolicyProvider surface="builder">
+      <FormProvider {...formMethods}>
+        <AgentColorProvider>
+          <EditPageBody />
+        </AgentColorProvider>
+      </FormProvider>
+    </ModelPolicyProvider>
   );
 };
 

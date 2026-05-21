@@ -21,6 +21,7 @@ import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { ModelPolicyProvider } from '@/domains/llm';
 
 export default function AgentBuilderAgentView() {
   const { id: agentId } = useParams<{ id: string }>();
@@ -64,22 +65,26 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
 
   if (hasBrowser) {
     return (
-      <FormProvider {...formMethods}>
-        <AgentColorProvider>
-          <BrowserToolCallsProvider>
-            <BrowserSessionProvider agentId={agentId} threadId={threadId}>
-              {body}
-            </BrowserSessionProvider>
-          </BrowserToolCallsProvider>
-        </AgentColorProvider>
-      </FormProvider>
+      <ModelPolicyProvider surface="builder">
+        <FormProvider {...formMethods}>
+          <AgentColorProvider>
+            <BrowserToolCallsProvider>
+              <BrowserSessionProvider agentId={agentId} threadId={threadId}>
+                {body}
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
+          </AgentColorProvider>
+        </FormProvider>
+      </ModelPolicyProvider>
     );
   }
 
   return (
-    <FormProvider {...formMethods}>
-      <AgentColorProvider>{body}</AgentColorProvider>
-    </FormProvider>
+    <ModelPolicyProvider surface="builder">
+      <FormProvider {...formMethods}>
+        <AgentColorProvider>{body}</AgentColorProvider>
+      </FormProvider>
+    </ModelPolicyProvider>
   );
 };
 

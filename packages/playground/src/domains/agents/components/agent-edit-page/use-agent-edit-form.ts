@@ -72,6 +72,7 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       model: initialValues?.model ?? { provider: '', name: '' },
       tools: initialValues?.tools ?? {},
       integrationTools: initialValues?.integrationTools ?? {},
+      toolProviders: initialValues?.toolProviders ?? {},
       workflows: initialValues?.workflows ?? {},
       agents: initialValues?.agents ?? {},
       scorers: initialValues?.scorers ?? {},

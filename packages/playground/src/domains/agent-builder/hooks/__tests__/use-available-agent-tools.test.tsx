@@ -1,14 +1,36 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
+import type { PropsWithChildren } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BuilderPickerVisibility } from '../../../builder';
+import type { AvailableIntegrationTool } from '../../../tool-providers/hooks/use-all-provider-tools';
+import type { ToolProvidersFormValue } from '../../../tool-providers/schemas';
 import { useAvailableAgentTools } from '../use-available-agent-tools';
 
 let pickerMock: BuilderPickerVisibility;
+let integrationToolsMock: AvailableIntegrationTool[];
 
 vi.mock('../../../builder', () => ({
   useBuilderPickerVisibility: () => pickerMock,
 }));
+
+vi.mock('../../../tool-providers/hooks/use-all-provider-tools', () => ({
+  useAllProviderTools: () => ({ tools: integrationToolsMock, isLoading: false }),
+}));
+
+function makeWrapper(toolProviders?: ToolProvidersFormValue) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return ({ children }: PropsWithChildren) => {
+    const form = useForm({ defaultValues: { toolProviders } });
+    return (
+      <QueryClientProvider client={client}>
+        <FormProvider {...form}>{children}</FormProvider>
+      </QueryClientProvider>
+    );
+  };
+}
 
 const UNRESTRICTED: BuilderPickerVisibility = {
   visibleTools: null,
@@ -18,17 +40,20 @@ const UNRESTRICTED: BuilderPickerVisibility = {
 
 beforeEach(() => {
   pickerMock = UNRESTRICTED;
+  integrationToolsMock = [];
 });
 
 describe('useAvailableAgentTools', () => {
   it('builds AgentTool[] from tools and agents data', () => {
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: { 'tool-a': { description: 'Tool A' } },
-        agentsData: { 'agent-x': { name: 'Agent X' } },
-        selectedTools: { 'tool-a': true },
-        selectedAgents: {},
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': { description: 'Tool A' } },
+          agentsData: { 'agent-x': { name: 'Agent X' } },
+          selectedTools: { 'tool-a': true },
+          selectedAgents: {},
+        }),
+      { wrapper: makeWrapper() },
     );
 
     expect(result.current).toHaveLength(2);
@@ -45,15 +70,17 @@ describe('useAvailableAgentTools', () => {
   });
 
   it('builds AgentTool[] including workflows with type "workflow"', () => {
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: {},
-        agentsData: {},
-        workflowsData: { 'wf-1': { name: 'Workflow One', description: 'wf desc' } },
-        selectedTools: {},
-        selectedAgents: {},
-        selectedWorkflows: { 'wf-1': true },
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: {},
+          agentsData: {},
+          workflowsData: { 'wf-1': { name: 'Workflow One', description: 'wf desc' } },
+          selectedTools: {},
+          selectedAgents: {},
+          selectedWorkflows: { 'wf-1': true },
+        }),
+      { wrapper: makeWrapper() },
     );
 
     expect(result.current).toHaveLength(1);
@@ -67,14 +94,16 @@ describe('useAvailableAgentTools', () => {
   });
 
   it('excludes the agent matching excludeAgentId', () => {
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: {},
-        agentsData: { 'agent-self': { name: 'Self' }, 'agent-other': { name: 'Other' } },
-        selectedTools: {},
-        selectedAgents: {},
-        excludeAgentId: 'agent-self',
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: {},
+          agentsData: { 'agent-self': { name: 'Self' }, 'agent-other': { name: 'Other' } },
+          selectedTools: {},
+          selectedAgents: {},
+          excludeAgentId: 'agent-self',
+        }),
+      { wrapper: makeWrapper() },
     );
 
     expect(result.current).toHaveLength(1);
@@ -105,7 +134,10 @@ describe('useAvailableAgentTools', () => {
           selectedTools: selT,
           selectedAgents: selA,
         }),
-      { initialProps: { tools: toolsData, agents: agentsData, selT: selectedTools, selA: selectedAgents } },
+      {
+        initialProps: { tools: toolsData, agents: agentsData, selT: selectedTools, selA: selectedAgents },
+        wrapper: makeWrapper(),
+      },
     );
 
     const first = result.current;
@@ -119,13 +151,15 @@ describe('useAvailableAgentTools', () => {
       ...UNRESTRICTED,
       visibleTools: new Set(['tool-a']),
     };
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: { 'tool-a': { description: 'A' }, 'tool-b': { description: 'B' } },
-        agentsData: {},
-        selectedTools: {},
-        selectedAgents: {},
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': { description: 'A' }, 'tool-b': { description: 'B' } },
+          agentsData: {},
+          selectedTools: {},
+          selectedAgents: {},
+        }),
+      { wrapper: makeWrapper() },
     );
     expect(result.current).toHaveLength(1);
     expect(result.current[0].id).toBe('tool-a');
@@ -137,15 +171,17 @@ describe('useAvailableAgentTools', () => {
       visibleAgents: new Set(['agent-x']),
       visibleWorkflows: new Set(['wf-1']),
     };
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: { 'tool-a': {} },
-        agentsData: { 'agent-x': { name: 'X' }, 'agent-y': { name: 'Y' } },
-        workflowsData: { 'wf-1': { name: 'WF1' }, 'wf-2': { name: 'WF2' } },
-        selectedTools: {},
-        selectedAgents: {},
-        selectedWorkflows: {},
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': {} },
+          agentsData: { 'agent-x': { name: 'X' }, 'agent-y': { name: 'Y' } },
+          workflowsData: { 'wf-1': { name: 'WF1' }, 'wf-2': { name: 'WF2' } },
+          selectedTools: {},
+          selectedAgents: {},
+          selectedWorkflows: {},
+        }),
+      { wrapper: makeWrapper() },
     );
     const ids = result.current.map(t => t.id).sort();
     expect(ids).toEqual(['agent-x', 'tool-a', 'wf-1']);
@@ -156,13 +192,15 @@ describe('useAvailableAgentTools', () => {
       ...UNRESTRICTED,
       visibleTools: new Set(),
     };
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: { 'tool-a': {}, 'tool-b': {} },
-        agentsData: {},
-        selectedTools: {},
-        selectedAgents: {},
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': {}, 'tool-b': {} },
+          agentsData: {},
+          selectedTools: {},
+          selectedAgents: {},
+        }),
+      { wrapper: makeWrapper() },
     );
     expect(result.current).toHaveLength(0);
   });
@@ -174,17 +212,19 @@ describe('useAvailableAgentTools', () => {
       ...UNRESTRICTED,
       visibleTools: new Set(['weatherKey', 'fallback-key']),
     };
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: {
-          weatherKey: { id: 'weather-id', description: 'W' },
-          'fallback-key': { description: 'F' },
-          otherKey: { id: 'other-id', description: 'O' },
-        },
-        agentsData: {},
-        selectedTools: {},
-        selectedAgents: {},
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: {
+            weatherKey: { id: 'weather-id', description: 'W' },
+            'fallback-key': { description: 'F' },
+            otherKey: { id: 'other-id', description: 'O' },
+          },
+          agentsData: {},
+          selectedTools: {},
+          selectedAgents: {},
+        }),
+      { wrapper: makeWrapper() },
     );
     const ids = result.current.map(t => t.id).sort();
     expect(ids).toEqual(['fallback-key', 'weatherKey']);
@@ -195,15 +235,89 @@ describe('useAvailableAgentTools', () => {
       ...UNRESTRICTED,
       visibleTools: new Set(['tool-a', 'ghost']),
     };
-    const { result } = renderHook(() =>
-      useAvailableAgentTools({
-        toolsData: { 'tool-a': {} },
-        agentsData: {},
-        selectedTools: {},
-        selectedAgents: {},
-      }),
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': {} },
+          agentsData: {},
+          selectedTools: {},
+          selectedAgents: {},
+        }),
+      { wrapper: makeWrapper() },
     );
     expect(result.current).toHaveLength(1);
     expect(result.current[0].id).toBe('tool-a');
+  });
+
+  it('appends integration rows after native rows, deriving isChecked from form state', () => {
+    integrationToolsMock = [
+      {
+        providerId: 'composio',
+        slug: 'GMAIL_FETCH_EMAILS',
+        toolkit: 'gmail',
+        description: 'Fetch Gmail emails',
+      },
+      { providerId: 'composio', slug: 'GMAIL_SEND_EMAIL', toolkit: 'gmail' },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': { description: 'A' } },
+          agentsData: {},
+          selectedTools: {},
+          selectedAgents: {},
+        }),
+      {
+        wrapper: makeWrapper({
+          composio: {
+            tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } },
+            connections: {},
+          },
+        }),
+      },
+    );
+
+    // Native first, then integration rows in catalog order.
+    expect(result.current.map(t => t.id)).toEqual([
+      'tool-a',
+      'composio:GMAIL_FETCH_EMAILS',
+      'composio:GMAIL_SEND_EMAIL',
+    ]);
+    expect(result.current[1]).toMatchObject({
+      type: 'integration',
+      providerId: 'composio',
+      toolkit: 'gmail',
+      isChecked: true,
+      description: 'Fetch Gmail emails',
+    });
+    expect(result.current[2]).toMatchObject({
+      type: 'integration',
+      isChecked: false,
+    });
+  });
+
+  it('bypasses the builder picker allowlist for integration rows', () => {
+    // Native tools are restricted but integration rows still surface — server
+    // gates them via `allowedToolkits` / `allowedTools` on the ToolProvider.
+    pickerMock = { ...UNRESTRICTED, visibleTools: new Set() };
+    integrationToolsMock = [{ providerId: 'composio', slug: 'GMAIL_FETCH_EMAILS', toolkit: 'gmail' }];
+
+    const { result } = renderHook(
+      () =>
+        useAvailableAgentTools({
+          toolsData: { 'tool-a': {} },
+          agentsData: {},
+          selectedTools: {},
+          selectedAgents: {},
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0]).toMatchObject({
+      type: 'integration',
+      id: 'composio:GMAIL_FETCH_EMAILS',
+    });
   });
 });
