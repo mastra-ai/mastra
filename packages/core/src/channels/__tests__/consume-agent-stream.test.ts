@@ -75,11 +75,16 @@ function makeChannels(
       result: unknown;
       isError?: boolean;
     }) => any;
+    typingStatus?: boolean | ((chunk: any, ctx: any) => any);
   } = {},
 ) {
   const recording = createRecording();
   // Build the adapter config as the right discriminated-union variant.
-  const baseAdapter = { adapter: recording.adapter, streaming: opts.streaming ?? false };
+  const baseAdapter: Record<string, unknown> = {
+    adapter: recording.adapter,
+    streaming: opts.streaming ?? false,
+  };
+  if (opts.typingStatus !== undefined) baseAdapter.typingStatus = opts.typingStatus;
   const adapterConfig =
     !opts.toolDisplay || opts.toolDisplay === 'cards'
       ? {
@@ -483,7 +488,7 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['Typing…', 'Calling weather…', 'Typing…']);
+      expect(typingStatuses).toEqual(['is typing…', 'is calling weather…', 'is typing…']);
     });
 
     it('dedups consecutive same-status calls', async () => {
@@ -500,7 +505,7 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['Typing…']);
+      expect(typingStatuses).toEqual(['is typing…']);
     });
 
     it('resets typing status between runs so the next run re-emits its first status', async () => {
@@ -519,20 +524,116 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['Typing…', 'Typing…']);
+      expect(typingStatuses).toEqual(['is typing…', 'is typing…']);
     });
 
-    it('skips empty text-deltas (no Typing… status emitted)', async () => {
+    it('emits at most one typing status across a run with only empty text-deltas', async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
+          { type: 'text-delta', payload: { text: '' } },
           { type: 'text-delta', payload: { text: '' } },
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
         sdkThread,
       );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is typing…']);
+    });
+
+    it('typingStatus: false disables all typing indicators', async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false, typingStatus: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hi ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Tokyo' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Tokyo' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+    });
+
+    it('typingStatus function receives chunks and can override status', async () => {
+      const { channels, calls, sdkThread } = makeChannels({
+        streaming: false,
+        typingStatus: (chunk: any) => {
+          if (chunk.type === 'text-delta') return 'cooking…';
+          if (chunk.type === 'tool-call') return `running ${chunk.payload.toolName}`;
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hi ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Tokyo' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Tokyo' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['cooking…', 'running weather']);
+    });
+
+    it('typingStatus function returning false/undefined leaves status unchanged', async () => {
+      const { channels, calls, sdkThread } = makeChannels({
+        streaming: false,
+        typingStatus: (chunk: any) => (chunk.type === 'text-delta' ? 'first' : undefined),
+      });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'a' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          { type: 'text-delta', payload: { text: 'b' } },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      // Only the text-delta returns a string; tool-call returns undefined so status holds.
+      // Second text-delta returns 'first' again but it's de-duped.
+      expect(typingStatuses).toEqual(['first']);
+    });
+
+    it('typingStatus function exceptions are swallowed and stream continues', async () => {
+      const { channels, calls, sdkThread } = makeChannels({
+        streaming: false,
+        typingStatus: () => {
+          throw new Error('boom');
+        },
+      });
+      await expect(
+        drive(
+          channels,
+          [
+            { type: 'text-delta', payload: { text: 'hi' } },
+            { type: 'finish', payload: {} },
+          ],
+          sdkThread,
+        ),
+      ).resolves.not.toThrow();
       expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
     });
   });

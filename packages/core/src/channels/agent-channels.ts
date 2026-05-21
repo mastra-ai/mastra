@@ -29,6 +29,8 @@ import {
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext, ThreadHistoryMessage } from './types';
+import { defaultTypingStatus } from './typing-status';
+import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 
 const DEFAULT_INLINE_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
@@ -76,16 +78,37 @@ export interface ChannelAdapterBaseConfig {
 
   /**
    * Show platform typing indicators (and adaptive status text where supported,
-   * e.g. Slack Assistant mode displays "Typing…" / "Calling weatherTool…").
+   * e.g. Slack Assistant mode displays `<App Name> <status>`).
    *
-   * Set to `false` to disable all typing indicators for this adapter — useful
-   * when `streaming: true` or `toolDisplay: 'timeline' | 'grouped'` already
-   * surface progress via the live widget and the extra typing status feels
-   * redundant or occasionally lingers after a run.
+   * - `true` (default) — use built-in defaults:
+   *   - `text-delta` → `'is typing…'`
+   *   - `tool-call` → `` `is calling ${toolName}…` ``
+   *   - `tool-call-approval` → `'is waiting for approval…'`
+   * - `false` — disable all typing indicators for this adapter. Useful when
+   *   `streaming: true` or `toolDisplay: 'timeline' | 'grouped'` already
+   *   surface progress via the live widget.
+   * - `(chunk, ctx) => string | false` — custom function called on every chunk
+   *   in the agent stream. Return a string to set the typing status; return
+   *   `false`/`null`/`undefined` to leave the current status unchanged. The
+   *   function fully replaces the defaults (no merging) — import
+   *   `defaultTypingStatus` from `@mastra/core/channels` to fall back to
+   *   defaults for chunks you don't handle.
+   *
+   * @example
+   * ```ts
+   * import { defaultTypingStatus } from '@mastra/core/channels';
+   *
+   * typingStatus: (chunk, ctx) => {
+   *   if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
+   *     return 'is searching docs…';
+   *   }
+   *   return defaultTypingStatus(chunk, ctx);
+   * }
+   * ```
    *
    * @default true
    */
-  typingStatus?: boolean;
+  typingStatus?: boolean | TypingStatusFn;
 }
 
 /**
@@ -1617,12 +1640,23 @@ export class AgentChannels {
     const groupTasks: 'plan' | 'timeline' | undefined =
       toolDisplay === 'timeline' ? 'timeline' : toolDisplay === 'grouped' ? 'plan' : undefined;
 
-    // Typing indicators (and adaptive status text on platforms that support it,
-    // e.g. Slack Assistant mode) default on. Disable when the live streaming
-    // widget already conveys progress and the extra indicator feels redundant.
-    const typingStatusEnabled = adapterConfig?.typingStatus !== false;
+    // Resolve `typingStatus` config once per run:
+    //   - `false` → no typing indicators at all
+    //   - `true` (default) → built-in `defaultTypingStatus` (per-chunk-type map)
+    //   - function → user-supplied resolver, called on every chunk; fully
+    //     replaces the defaults (compose with `defaultTypingStatus` to fall
+    //     back for chunks the user doesn't handle)
+    const typingStatusOption = adapterConfig?.typingStatus;
+    const typingStatusFn: TypingStatusFn | null =
+      typingStatusOption === false
+        ? null
+        : typeof typingStatusOption === 'function'
+          ? typingStatusOption
+          : defaultTypingStatus;
 
     interface TrackedTool {
+      toolName: string;
+      args: unknown;
       displayName: string;
       argsSummary: string;
       startedAt: number;
@@ -1640,11 +1674,25 @@ export class AgentChannels {
     // Slack Assistant mode displays the status; other adapters show a generic
     // typing indicator and ignore the text.
     let currentTypingStatus: string | undefined;
-    const setTypingStatus = (status: string) => {
-      if (!typingStatusEnabled) return;
-      if (status === currentTypingStatus) return;
-      currentTypingStatus = status;
-      sdkThread.startTyping(status).catch(e => {
+    const emitTypingStatus = (chunk: AgentChunkType<any>) => {
+      if (!typingStatusFn) return;
+      let result: ReturnType<TypingStatusFn>;
+      try {
+        const ctx: TypingStatusContext = {
+          platform,
+          threadId: sdkThread.id,
+          toolCalls,
+          currentStatus: currentTypingStatus,
+        };
+        result = typingStatusFn(chunk, ctx);
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
+        return;
+      }
+      if (typeof result !== 'string' || result.length === 0) return;
+      if (result === currentTypingStatus) return;
+      currentTypingStatus = result;
+      sdkThread.startTyping(result).catch(e => {
         this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
       });
     };
@@ -1753,6 +1801,8 @@ export class AgentChannels {
     const seedApprovalContext = () => {
       if (approvalContext) {
         toolCalls.set(approvalContext.toolCallId, {
+          toolName: '',
+          args: {},
           displayName: '',
           argsSummary: '',
           startedAt: Date.now(),
@@ -1787,6 +1837,11 @@ export class AgentChannels {
     };
 
     for await (const chunk of stream) {
+      // Adaptive typing status: one call per chunk, resolved via the configured
+      // `typingStatus` function (built-in defaults when `typingStatus: true`).
+      // De-duped against the currently displayed status inside `emitTypingStatus`.
+      emitTypingStatus(chunk);
+
       // --- Signal echo: subscription streams replay user-message / system-reminder /
       // custom data parts that callers wrote via sendSignal(). The platform already
       // rendered the user's message, so we drop the echo to avoid double-posting.
@@ -1805,7 +1860,6 @@ export class AgentChannels {
       if (chunk.type === 'text-delta') {
         const piece = chunk.payload.text;
         if (!piece) continue;
-        setTypingStatus('Typing…');
         if (streamingEnabled) {
           if (!streamingSession) streamingSession = openStreamingSession();
           streamingSession.push(piece);
@@ -1907,12 +1961,6 @@ export class AgentChannels {
       if (chunk.type === 'tool-call') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
         const displayName = stripToolPrefix(chunk.payload.toolName);
-        // `'timeline'` / `'grouped'` already render the in-progress task in the
-        // streaming widget — a `Calling X…` typing indicator on top of that is
-        // just visual noise.
-        if (toolDisplay !== 'timeline' && toolDisplay !== 'grouped') {
-          setTypingStatus(`Calling ${displayName}…`);
-        }
         const rawArgs = (
           typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
         ) as Record<string, unknown>;
@@ -1926,6 +1974,8 @@ export class AgentChannels {
         if (toolDisplay === 'hidden') {
           await flushText();
           toolCalls.set(chunk.payload.toolCallId, {
+            toolName: chunk.payload.toolName,
+            args: chunk.payload.args,
             displayName,
             argsSummary,
             startedAt: Date.now(),
@@ -1976,6 +2026,8 @@ export class AgentChannels {
             details: toolDisplay === 'grouped' ? undefined : argsSummary || undefined,
           });
           toolCalls.set(chunk.payload.toolCallId, {
+            toolName: chunk.payload.toolName,
+            args: chunk.payload.args,
             displayName,
             argsSummary,
             startedAt: Date.now(),
@@ -1996,6 +2048,8 @@ export class AgentChannels {
         }
 
         toolCalls.set(chunk.payload.toolCallId, {
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
           displayName,
           argsSummary,
           startedAt: Date.now(),
@@ -2015,7 +2069,11 @@ export class AgentChannels {
         if (!tracked) {
           const pending = this.pendingApprovalCards.get(chunk.payload.toolCallId);
           if (pending) {
-            tracked = pending;
+            tracked = {
+              ...pending,
+              toolName: pending.toolName ?? chunk.payload.toolName,
+              args: pending.args ?? chunk.payload.args ?? {},
+            };
             this.pendingApprovalCards.delete(chunk.payload.toolCallId);
           }
         }

@@ -12,6 +12,8 @@ export type {
 } from './agent-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
+export { defaultTypingStatus } from './typing-status';
+export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
 export type {
   ChannelContext,
   ChannelConnectDeepLink,

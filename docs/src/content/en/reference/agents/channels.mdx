@@ -200,11 +200,11 @@ const agent = new Agent({
   },
   {
     name: 'typingStatus',
-    type: 'boolean',
+    type: 'boolean | ((chunk: AgentChunkType, ctx: TypingStatusContext) => string | false | null | undefined | void)',
     isOptional: true,
     defaultValue: 'true (false for Slack)',
     description:
-      'Show the platform typing indicator while the agent is generating text or running tools. Set to `false` to suppress typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Slack defaults to `false`; other adapters default to `true`.',
+      'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle. Slack defaults to `false`; other adapters default to `true`.',
   },
 ]}
 />
@@ -242,6 +242,41 @@ const agent = new Agent({
         adapter: createSlackAdapter(),
         streaming: true, // already the Slack default
         toolDisplay: 'timeline',
+      },
+    },
+  },
+})
+```
+
+## Custom typing status
+
+Pass a function to `typingStatus` to customize the status copy. The function is
+called once per stream chunk; return a string to set the status, or `false` /
+`null` / `undefined` to leave the current status unchanged. Return values are
+de-duplicated so the platform only sees a call when the status changes.
+
+`defaultTypingStatus` is exported from `@mastra/core/channels` so you can
+fall back to the built-in defaults for chunks you don't handle.
+
+```typescript title="src/mastra/agents/custom-typing.ts"
+import { Agent } from '@mastra/core/agent'
+import { defaultTypingStatus } from '@mastra/core/channels'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+
+const agent = new Agent({
+  name: 'Custom Typing Agent',
+  instructions: '...',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      discord: {
+        adapter: createDiscordAdapter(),
+        typingStatus: (chunk, ctx) => {
+          if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
+            return 'is searching docs…'
+          }
+          return defaultTypingStatus(chunk, ctx)
+        },
       },
     },
   },
