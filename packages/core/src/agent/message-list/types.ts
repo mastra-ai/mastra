@@ -17,6 +17,7 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraPartVisibility,
   UIMessageV4Part,
   MessageSource,
   MemoryInfo,

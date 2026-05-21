@@ -1,7 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
-import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MastraPartVisibility } from '../../../agent/message-list';
 import type {
+  ChunkVisibility,
   FilePayload,
   ReasoningDeltaPayload,
   ReasoningStartPayload,
@@ -16,9 +17,36 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
 
 /**
  * A raw chunk collected during the stream.
- * We only store the type and payload — everything needed to reconstruct messages post-stream.
+ * We only store the type, payload, and visibility — everything needed to
+ * reconstruct messages post-stream while preserving processor-set visibility.
  */
-export type CollectedChunk = { type: string; payload: any; metadata?: Record<string, any> };
+export type CollectedChunk = {
+  type: string;
+  payload: any;
+  metadata?: Record<string, any>;
+  visibility?: ChunkVisibility;
+};
+
+/**
+ * Merge two visibility values, returning the more restrictive one.
+ * `'llm'` is more restrictive than `'all'` (or undefined).
+ */
+function mergeVisibility(
+  current: MastraPartVisibility | undefined,
+  next: ChunkVisibility | undefined,
+): MastraPartVisibility | undefined {
+  if (next === 'llm' || current === 'llm') return 'llm';
+  return current ?? next;
+}
+
+/**
+ * Apply a visibility flag to a part, omitting the field when not set so we
+ * don't pollute persisted messages with default values.
+ */
+function withVisibility<T extends MastraMessagePart>(part: T, visibility?: MastraPartVisibility): T {
+  if (!visibility || visibility === 'all') return part;
+  return { ...part, visibility } as T;
+}
 
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
@@ -55,7 +83,14 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: any;
+      args: any;
+      providerMetadata: any;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+      visibility?: ChunkVisibility;
+    }
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
@@ -66,6 +101,7 @@ export function buildMessagesFromChunks({
         providerMetadata: withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata),
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
+        visibility: chunk.visibility,
       });
     }
   }
@@ -74,12 +110,27 @@ export function buildMessagesFromChunks({
   const textMeta = new Map<string, Record<string, any> | undefined>();
   const reasoningMeta = new Map<string, Record<string, any> | undefined>();
 
+  // Visibility accumulated across the start/delta/end events of a span. The
+  // merged value is applied to the ref so the more restrictive flag wins
+  // regardless of which event carried it.
+  const textVisibility = new Map<string, MastraPartVisibility | undefined>();
+  const reasoningVisibility = new Map<string, MastraPartVisibility | undefined>();
+
   // Live references to parts already in the `parts` array, keyed by span ID.
   // Created and pushed on first delta — position reflects content arrival order (#15914).
-  const textRefs = new Map<string, { type: 'text'; text: string; providerMetadata?: Record<string, any> }>();
+  const textRefs = new Map<
+    string,
+    { type: 'text'; text: string; providerMetadata?: Record<string, any>; visibility?: MastraPartVisibility }
+  >();
   const reasoningRefs = new Map<
     string,
-    { type: 'reasoning'; reasoning: string; details: any[]; providerMetadata?: Record<string, any> }
+    {
+      type: 'reasoning';
+      reasoning: string;
+      details: any[];
+      providerMetadata?: Record<string, any>;
+      visibility?: MastraPartVisibility;
+    }
   >();
 
   for (const chunk of chunks) {
@@ -89,10 +140,13 @@ export function buildMessagesFromChunks({
         const p = chunk.payload as TextStartPayload;
         // Just stash metadata — part is created on first delta
         textMeta.set(p.id, p.providerMetadata);
+        textVisibility.set(p.id, mergeVisibility(textVisibility.get(p.id), chunk.visibility));
         break;
       }
       case 'text-delta': {
         const p = chunk.payload as TextDeltaPayload;
+        const merged = mergeVisibility(textVisibility.get(p.id), chunk.visibility);
+        textVisibility.set(p.id, merged);
         let ref = textRefs.get(p.id);
         if (!ref) {
           // First delta for this span — create the part and push it now
@@ -104,10 +158,15 @@ export function buildMessagesFromChunks({
         if (p.providerMetadata) {
           ref.providerMetadata = p.providerMetadata;
         }
+        if (merged === 'llm') {
+          ref.visibility = 'llm';
+        }
         break;
       }
       case 'text-end': {
         const pEnd = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
+        const merged = mergeVisibility(textVisibility.get(pEnd.id), chunk.visibility);
+        textVisibility.set(pEnd.id, merged);
         const ref = textRefs.get(pEnd.id);
         if (ref) {
           if (pEnd.providerMetadata) {
@@ -117,10 +176,14 @@ export function buildMessagesFromChunks({
           if (!ref.providerMetadata) {
             delete ref.providerMetadata;
           }
+          if (merged === 'llm') {
+            ref.visibility = 'llm';
+          }
         }
         // text-end with no deltas means empty span — nothing to emit
         textMeta.delete(pEnd.id);
         textRefs.delete(pEnd.id);
+        textVisibility.delete(pEnd.id);
         break;
       }
 
@@ -128,15 +191,26 @@ export function buildMessagesFromChunks({
       case 'reasoning-start': {
         const p = chunk.payload as ReasoningStartPayload;
         const isRedacted = Object.values(p.providerMetadata || {}).some((v: any) => v?.redactedData);
+        const merged = mergeVisibility(reasoningVisibility.get(p.id), chunk.visibility);
+        reasoningVisibility.set(p.id, merged);
 
         // Redacted reasoning never receives deltas, so create and push immediately
         if (isRedacted) {
-          const part = {
+          const part: {
+            type: 'reasoning';
+            reasoning: string;
+            details: any[];
+            providerMetadata?: Record<string, any>;
+            visibility?: MastraPartVisibility;
+          } = {
             type: 'reasoning' as const,
             reasoning: '',
             details: [{ type: 'redacted', data: '' }],
             providerMetadata: p.providerMetadata,
           };
+          if (merged === 'llm') {
+            part.visibility = 'llm';
+          }
           reasoningRefs.set(p.id, part);
           parts.push(part as unknown as MastraMessagePart);
         } else {
@@ -147,6 +221,8 @@ export function buildMessagesFromChunks({
       }
       case 'reasoning-delta': {
         const p = chunk.payload as ReasoningDeltaPayload;
+        const merged = mergeVisibility(reasoningVisibility.get(p.id), chunk.visibility);
+        reasoningVisibility.set(p.id, merged);
         let ref = reasoningRefs.get(p.id);
         if (!ref) {
           // First delta for this span — create the part and push it now
@@ -167,69 +243,96 @@ export function buildMessagesFromChunks({
         if (p.providerMetadata) {
           ref.providerMetadata = p.providerMetadata;
         }
+        if (merged === 'llm') {
+          ref.visibility = 'llm';
+        }
         break;
       }
       case 'reasoning-end': {
         const p = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
+        const merged = mergeVisibility(reasoningVisibility.get(p.id), chunk.visibility);
+        reasoningVisibility.set(p.id, merged);
         const ref = reasoningRefs.get(p.id);
         if (ref) {
           if (p.providerMetadata) {
             ref.providerMetadata = p.providerMetadata;
           }
+          if (merged === 'llm') {
+            ref.visibility = 'llm';
+          }
         } else {
           // No deltas arrived — emit empty reasoning part.
           // OpenAI requires item_reference for tool calls that follow reasoning.
           // See: https://github.com/mastra-ai/mastra/issues/9005
-          const part: MastraMessagePart = {
-            type: 'reasoning' as const,
-            reasoning: '',
-            details: [{ type: 'text', text: '' }],
-            providerMetadata: p.providerMetadata ?? reasoningMeta.get(p.id),
-          };
+          const part: MastraMessagePart = withVisibility(
+            {
+              type: 'reasoning' as const,
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: p.providerMetadata ?? reasoningMeta.get(p.id),
+            } as MastraMessagePart,
+            merged,
+          );
           parts.push(part);
         }
         reasoningMeta.delete(p.id);
         reasoningRefs.delete(p.id);
+        reasoningVisibility.delete(p.id);
         break;
       }
 
       // Redacted reasoning can appear as a standalone chunk (not wrapped in start/end)
       case 'redacted-reasoning': {
         const p = chunk.payload as { id: string; data: unknown; providerMetadata?: Record<string, any> };
-        parts.push({
-          type: 'reasoning' as const,
-          reasoning: '',
-          details: [{ type: 'redacted', data: '' }],
-          providerMetadata: p.providerMetadata,
-        } as MastraMessagePart);
+        parts.push(
+          withVisibility(
+            {
+              type: 'reasoning' as const,
+              reasoning: '',
+              details: [{ type: 'redacted', data: '' }],
+              providerMetadata: p.providerMetadata,
+            } as MastraMessagePart,
+            mergeVisibility(undefined, chunk.visibility),
+          ),
+        );
         break;
       }
 
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
         const p = chunk.payload as SourcePayload;
-        parts.push({
-          type: 'source',
-          source: {
-            sourceType: 'url',
-            id: p.id,
-            url: p.url || '',
-            title: p.title,
-            providerMetadata: p.providerMetadata,
-          },
-        } as MastraMessagePart);
+        parts.push(
+          withVisibility(
+            {
+              type: 'source',
+              source: {
+                sourceType: 'url',
+                id: p.id,
+                url: p.url || '',
+                title: p.title,
+                providerMetadata: p.providerMetadata,
+              },
+            } as MastraMessagePart,
+            mergeVisibility(undefined, chunk.visibility),
+          ),
+        );
         break;
       }
 
       // ── File ───────────────────────────────────────────────────
       case 'file': {
         const p = chunk.payload as FilePayload;
-        parts.push({
-          type: 'file' as const,
-          data: p.data,
-          mimeType: p.mimeType,
-          ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
-        } as MastraMessagePart);
+        parts.push(
+          withVisibility(
+            {
+              type: 'file' as const,
+              data: p.data,
+              mimeType: p.mimeType,
+              ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
+            } as MastraMessagePart,
+            mergeVisibility(undefined, chunk.visibility),
+          ),
+        );
         break;
       }
 
@@ -244,33 +347,44 @@ export function buildMessagesFromChunks({
         const result = toolResults.get(p.toolCallId);
 
         if (result) {
-          // Merge call + result into a single 'result' state part
+          // Merge call + result into a single 'result' state part.
+          // Visibility: the more restrictive of the call chunk and the result chunk wins.
           const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
-          parts.push({
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'result' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
-              result: result.result,
-            },
-            providerMetadata: result.providerMetadata ?? providerMetadata,
-            providerExecuted: resultProviderExecuted,
-          } as MastraMessagePart);
+          parts.push(
+            withVisibility(
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: p.toolCallId,
+                  toolName: p.toolName,
+                  args: p.args,
+                  result: result.result,
+                },
+                providerMetadata: result.providerMetadata ?? providerMetadata,
+                providerExecuted: resultProviderExecuted,
+              } as MastraMessagePart,
+              mergeVisibility(mergeVisibility(undefined, chunk.visibility), result.visibility),
+            ),
+          );
         } else {
           // No result yet — emit as 'call' state
-          parts.push({
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'call' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
-            },
-            providerMetadata,
-            providerExecuted,
-          } as MastraMessagePart);
+          parts.push(
+            withVisibility(
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: p.toolCallId,
+                  toolName: p.toolName,
+                  args: p.args,
+                },
+                providerMetadata,
+                providerExecuted,
+              } as MastraMessagePart,
+              mergeVisibility(undefined, chunk.visibility),
+            ),
+          );
         }
         break;
       }
@@ -286,21 +400,35 @@ export function buildMessagesFromChunks({
   // Unclosed reasoning spans with NO deltas need to be emitted for #9005.
   for (const [id] of reasoningMeta) {
     if (!reasoningRefs.has(id)) {
-      const part: MastraMessagePart = {
-        type: 'reasoning' as const,
-        reasoning: '',
-        details: [{ type: 'text', text: '' }],
-        providerMetadata: reasoningMeta.get(id),
-      };
+      const part: MastraMessagePart = withVisibility(
+        {
+          type: 'reasoning' as const,
+          reasoning: '',
+          details: [{ type: 'text', text: '' }],
+          providerMetadata: reasoningMeta.get(id),
+        } as MastraMessagePart,
+        reasoningVisibility.get(id),
+      );
       parts.push(part);
     }
   }
 
   // Unclosed text spans that had deltas are already in `parts`.
-  // Clean up undefined providerMetadata on any that are still open.
-  for (const [, ref] of textRefs) {
+  // Clean up undefined providerMetadata on any that are still open and apply
+  // any accumulated visibility flag.
+  for (const [id, ref] of textRefs) {
     if (!ref.providerMetadata) {
       delete ref.providerMetadata;
+    }
+    if (textVisibility.get(id) === 'llm') {
+      ref.visibility = 'llm';
+    }
+  }
+
+  // Apply any accumulated visibility flag on unclosed reasoning span refs too.
+  for (const [id, ref] of reasoningRefs) {
+    if (reasoningVisibility.get(id) === 'llm') {
+      ref.visibility = 'llm';
     }
   }
 

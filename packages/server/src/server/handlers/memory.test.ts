@@ -1320,6 +1320,9 @@ describe('Memory Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
+      // The UI-facing route asks `recall()` for the UI tier so hidden parts
+      // are stripped server-side. `includeSystemReminders` is forwarded as
+      // undefined when the caller doesn't set it.
       expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
@@ -1328,6 +1331,8 @@ describe('Memory Handlers', () => {
         orderBy: undefined,
         include: undefined,
         filter: undefined,
+        includeSystemReminders: undefined,
+        visibility: 'ui',
       });
     });
 
@@ -1623,6 +1628,235 @@ describe('Memory Handlers', () => {
 
       // Third message should have its own custom metadata
       expect(result.messages[2]?.content.metadata).toHaveProperty('referenceId', 'ref-123');
+    });
+
+    it('should strip parts marked visibility:"llm" from the UI-facing response', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const mockResult = {
+        messages: [
+          {
+            id: 'msg-visible-only',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'shown to user' }],
+              content: 'shown to user',
+            },
+          } as MastraDBMessage,
+          {
+            id: 'msg-mixed',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'shown to user', visibility: 'all' as const },
+                { type: 'text' as const, text: 'hidden from user', visibility: 'llm' as const },
+              ],
+              content: 'shown to user\nhidden from user',
+            },
+          } as MastraDBMessage,
+          {
+            id: 'msg-llm-only',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'fully hidden', visibility: 'llm' as const }],
+              content: 'fully hidden',
+            },
+          } as MastraDBMessage,
+        ],
+        total: 3,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
+
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+
+      // Whole-message-hidden case should be dropped, mixed message keeps
+      // only the visible part, fully-visible message passes through.
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0]?.id).toBe('msg-visible-only');
+      expect(result.messages[1]?.id).toBe('msg-mixed');
+      expect(result.messages[1]?.content.parts).toHaveLength(1);
+      expect(result.messages[1]?.content.parts?.[0]).toMatchObject({
+        type: 'text',
+        text: 'shown to user',
+      });
+      // The legacy aggregated `content.content` string must reflect the
+      // filtered parts so callers reading that field don't see hidden text.
+      expect(result.messages[1]?.content.content).toBe('shown to user');
+
+      // The UI-facing route asks `memory.recall` for the UI tier so the
+      // filtering happens server-side in core. The handler still applies a
+      // belt-and-suspenders inline filter on the response so older
+      // `@mastra/core` peer-floor versions stay safe.
+      expect(mockMemory.recall).toHaveBeenCalledWith({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+        includeSystemReminders: undefined,
+        visibility: 'ui',
+      });
+    });
+
+    it('should ask memory.recall for the UI tier so hidden parts are stripped server-side', async () => {
+      // The UI-facing handler delegates the visibility filter to
+      // `memory.recall({ visibility: 'ui' })` so a single core
+      // implementation owns the filtering rules. The agent loop calls
+      // `recall` without a `visibility` arg (see
+      // packages/core/src/agent/agent.ts `getMemoryMessages`), which
+      // defaults to `'all'` and returns the unfiltered messages the model
+      // needs.
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const recallSpy = vi.spyOn(mockMemory, 'recall').mockResolvedValue({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+
+      await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+
+      expect(recallSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          visibility: 'ui',
+        }),
+      );
+    });
+
+    it('should also strip hidden tool calls from legacy content.toolInvocations', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const visibleInvocation = {
+        state: 'result' as const,
+        toolCallId: 'call-visible',
+        toolName: 'searchTool',
+        args: { query: 'q' },
+        result: 'result',
+      };
+      const hiddenInvocation = {
+        state: 'result' as const,
+        toolCallId: 'call-hidden',
+        toolName: 'skillsTool',
+        args: {},
+        result: 'secret',
+      };
+
+      const mockResult = {
+        messages: [
+          {
+            id: 'msg-with-hidden-tool',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'tool-invocation' as const, toolInvocation: visibleInvocation },
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: hiddenInvocation,
+                  visibility: 'llm' as const,
+                },
+              ],
+              // Legacy mirror including the hidden invocation; if not
+              // filtered, the UI would still render the secret tool call.
+              toolInvocations: [visibleInvocation, hiddenInvocation],
+            },
+          } as unknown as MastraDBMessage,
+        ],
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
+
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.content.parts).toHaveLength(1);
+      expect((result.messages[0]?.content as { toolInvocations?: unknown[] }).toolInvocations).toEqual([
+        visibleInvocation,
+      ]);
     });
   });
 

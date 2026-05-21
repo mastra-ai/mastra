@@ -26,7 +26,38 @@ type LegacyToolInvocationPart = Extract<UIMessageV4['parts'][number], { type: 't
 type LegacySourcePart = Extract<UIMessageV4['parts'][number], { type: 'source' }>;
 type LegacyToolInvocation = NonNullable<UIMessageV4['toolInvocations']>[number];
 export type MastraProviderMetadata = AIV5Type.ProviderMetadata;
-type MastraPartExtensions = { providerMetadata?: MastraProviderMetadata; createdAt?: number };
+
+/**
+ * Controls who sees a stored message part on retrieval.
+ *
+ * - `'all'` (default when omitted): part is returned by every retrieval path,
+ *    including UI-facing memory endpoints.
+ * - `'llm'`: part is returned to the LLM (via the agent's input pipeline) but
+ *    is filtered out of UI-facing retrieval helpers. Useful for tool calls or
+ *    state changes that must remain in the conversation history but should
+ *    not be rendered in the UI.
+ *
+ * Mirrors `ChunkVisibility` from the stream layer; processors that mark a
+ * chunk with `visibility: 'llm'` produce parts with this same flag.
+ *
+ * **This is a UI presentation flag, not a redaction or privacy boundary.**
+ * Parts marked `visibility: 'llm'` are still persisted in storage and still
+ * returned to the agent loop / model on subsequent recalls — `'llm'` only
+ * suppresses them from UI-facing retrieval (`memory.recall({ visibility: 'ui' })`,
+ * the HTTP message-list endpoints, `filterMessagesByVisibility`). Do not use
+ * it for sensitive data handling.
+ */
+export type MastraPartVisibility = 'all' | 'llm';
+
+type MastraPartExtensions = {
+  providerMetadata?: MastraProviderMetadata;
+  createdAt?: number;
+  /**
+   * Optional visibility flag for this part. See {@link MastraPartVisibility}.
+   * Defaults to `'all'` when unset.
+   */
+  visibility?: MastraPartVisibility;
+};
 type PartWithProviderMetadata<T> = T & MastraPartExtensions;
 export type MastraStepStartPart = {
   type: 'step-start';
@@ -56,6 +87,8 @@ export type MastraToolInvocationPart = Omit<LegacyToolInvocationPart, 'toolInvoc
   title?: string;
   preliminary?: boolean;
   createdAt?: number;
+  /** See {@link MastraPartVisibility}. Defaults to `'all'` when unset. */
+  visibility?: MastraPartVisibility;
 };
 
 export type MastraSourceDocumentPart = {
@@ -66,11 +99,15 @@ export type MastraSourceDocumentPart = {
   filename?: string;
   providerMetadata?: MastraProviderMetadata;
   createdAt?: number;
+  /** See {@link MastraPartVisibility}. Defaults to `'all'` when unset. */
+  visibility?: MastraPartVisibility;
 };
 
 export type MastraSourceUrlPart = Omit<LegacySourcePart, 'providerMetadata'> & {
   providerMetadata?: MastraProviderMetadata;
   createdAt?: number;
+  /** See {@link MastraPartVisibility}. Defaults to `'all'` when unset. */
+  visibility?: MastraPartVisibility;
 };
 
 // Canonical stored part type. It starts from the v4 UI part model and extends

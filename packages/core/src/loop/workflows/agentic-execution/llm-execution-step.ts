@@ -351,11 +351,14 @@ async function processOutputStream<OUTPUT = undefined>({
       logger,
     });
 
-    // Collect every chunk for post-stream message building
+    // Collect every chunk for post-stream message building.
+    // `visibility` is preserved so chunk-level visibility flags flow through
+    // to `buildMessagesFromChunks` and survive onto the persisted parts.
     collectedChunks.push({
       type: chunk.type,
       payload: 'payload' in chunk ? chunk.payload : undefined,
       metadata: chunk.metadata,
+      visibility: chunk.visibility,
     });
 
     switch (chunk.type) {
@@ -476,6 +479,10 @@ async function processOutputStream<OUTPUT = undefined>({
             },
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+            // Forward chunk-level visibility so a deferred result chunk marked
+            // `'llm'` can upgrade the previously-added tool part to the more
+            // restrictive visibility (merge happens inside updateToolInvocation).
+            ...(chunk.visibility && chunk.visibility !== 'all' ? { visibility: chunk.visibility } : {}),
           });
         }
         safeEnqueue(controller, chunk);
