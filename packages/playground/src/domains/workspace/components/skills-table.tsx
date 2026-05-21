@@ -132,7 +132,7 @@ export function SkillsTable({
                 <DataList.RowButton flushRight flushLeft colEnd={-2} onClick={onClick}>
                   {rowContent}
                 </DataList.RowButton>
-                <DataList.Cell>
+                <DataList.Cell className="py-0">
                   <div className="flex items-center justify-end gap-1 pl-2 w-full pr-3">
                     {isDownloaded(skill) && (
                       <>
