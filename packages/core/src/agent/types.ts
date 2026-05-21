@@ -34,6 +34,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
 import type {
+  AdaptiveModelRouterOptions,
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -224,6 +225,8 @@ export interface AgentCreateOptions {
 
 export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
 
+export type AdaptiveModelRouterConfig = Omit<AdaptiveModelRouterOptions, 'models'>;
+
 export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
@@ -345,6 +348,12 @@ export interface AgentConfig<
    * ```
    */
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
+  /**
+   * Configures adaptive routing rules for fallback model arrays. When `model` resolves to
+   * multiple fallback entries, Mastra creates an internal AdaptiveModelRouter with these
+   * options and the resolved model list.
+   */
+  adaptiveModelRouter?: AdaptiveModelRouterConfig;
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0

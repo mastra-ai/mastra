@@ -785,3 +785,18 @@ export type {
   MessageContent,
   MessagePart,
 } from './step-schema';
+
+export {
+  AdaptiveModelRouter,
+  type AdaptiveModelRouterModel,
+  type AdaptiveModelRouterOptions,
+  type AdaptiveModelRouterRule,
+  type AdaptiveModelRouterTripwireMetadata,
+  type AdaptiveModelRouterViolationDetail,
+  type ErrorRateRule,
+  type FeedbackRule,
+  type MastraMetricName,
+  type RouterScope,
+  type RouterWindow,
+  type ScoreRule,
+} from './adaptive-model-router';

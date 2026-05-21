@@ -1061,11 +1061,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // immediately before execute() ensures the span's startTime excludes
             // input processor / prepareStep / processLLMRequest work, and that
             // availableTools / toolChoice reflect any per-step mutations.
+            const currentStepUsesModelConfig = currentStep.model === modelConfig.model;
+            const currentStepModelSettings = {
+              ...currentStep.modelSettings,
+              ...(currentStepUsesModelConfig ? modelConfig.modelSettings : {}),
+              maxRetries: currentStepUsesModelConfig
+                ? modelConfig.maxRetries
+                : ((currentStep.modelSettings as { maxRetries?: number } | undefined)?.maxRetries ??
+                  modelConfig.maxRetries),
+            };
+
             modelSpanTracker?.setInferenceContext?.({
-              parameters: {
-                ...currentStep.modelSettings,
-                ...modelConfig.modelSettings,
-              } as Record<string, unknown> | undefined,
+              parameters: currentStepModelSettings as Record<string, unknown> | undefined,
               providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(
                 currentStep.tools as Record<string, unknown> | undefined,
@@ -1090,11 +1097,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   options,
                   // Per-model modelSettings shallow-merge on top of call-time modelSettings.
                   // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
-                  modelSettings: {
-                    ...currentStep.modelSettings,
-                    ...modelConfig.modelSettings,
-                    maxRetries: modelConfig.maxRetries,
-                  },
+                  modelSettings: currentStepModelSettings,
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
                   // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
