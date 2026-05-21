@@ -144,5 +144,8 @@
     "@mastra/s3": "0.5.1",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260521-011414",
+    "green-birds-knock"
+  ]
 }
