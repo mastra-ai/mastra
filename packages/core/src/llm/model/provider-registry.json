@@ -3987,8 +3987,7 @@
         "minimax-m2.7",
         "nemotron-3-super-free",
         "qwen3.5-plus",
-        "qwen3.6-plus",
-        "qwen3.6-plus-free"
+        "qwen3.6-plus"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -8627,8 +8626,7 @@
       "minimax-m2.7",
       "nemotron-3-super-free",
       "qwen3.5-plus",
-      "qwen3.6-plus",
-      "qwen3.6-plus-free"
+      "qwen3.6-plus"
     ],
     "mixlayer": [
       "qwen/qwen3.5-122b-a10b",
