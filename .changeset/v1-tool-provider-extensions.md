@@ -88,3 +88,14 @@ getConnectionUsage, getHealth}`.
 the full v1 surface (OAuth, multi-account, dynamic auth fields,
 per-scope buckets, lifecycle, health). `ArcadeToolProvider` continues to
 expose only the static surface.
+
+**Surface-locked picker scopes**:
+
+`<ConnectionPicker />` and `<ToolProvidersSection />` accept
+`allowedScopes` to restrict the visibility radios. When the host passes a
+single scope, the picker hides the radios entirely and auto-seeds the
+new-connection draft to that scope. The infinite-connections hook also
+forwards `scope` to the server so cross-scope rows never come back. The
+Agent Builder mounts with `['per-author']` (single-author surface) and
+the CMS agent editor mounts with `['caller-supplied']` (declare-only,
+host app resolves end-users at runtime via `MASTRA_RESOURCE_ID_KEY`).
