@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui';
-import { ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeftIcon, RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import type { WorkspaceMode } from '../../layouts/types';
@@ -7,8 +7,8 @@ import { AgentBuilderTitle } from '../agent-edit/agent-builder-title';
 
 export interface ViewTopBarProps {
   /**
-   * The current workspace mode. When omitted, no mode badge or mode-toggle is
-   * rendered (e.g. for non-owners viewing a public agent).
+   * The current workspace mode. When omitted, no mode-toggle is rendered
+   * (e.g. for non-owners viewing a public agent).
    */
   mode?: WorkspaceMode;
   /** Called when the user clicks the mode-toggle button to switch to Edit. */
@@ -29,6 +29,7 @@ export const ViewTopBar = ({
   mobileMenu,
 }: ViewTopBarProps) => {
   const navigate = useNavigate();
+  const toggleLabel = mode === 'test' ? 'Switch to Edit' : 'Switch to View';
 
   return (
     <div
@@ -45,16 +46,23 @@ export const ViewTopBar = ({
           <ArrowLeftIcon />
         </Button>
       </div>
-      <AgentBuilderTitle
-        className="min-w-0 justify-self-start"
-        isLoading={false}
-        mode={mode}
-        onModeToggle={onModeToggle}
-        disabled={modeToggleDisabled}
-      />
+      <AgentBuilderTitle className="min-w-0 justify-self-start" isLoading={false} />
       <div className="justify-self-end flex items-center gap-2 shrink-0">
         {ownerActions && <div className="shrink-0 hidden lg:flex items-center gap-2">{ownerActions}</div>}
         {mobileMenu && <div className="shrink-0 lg:hidden">{mobileMenu}</div>}
+        {mode && onModeToggle && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onModeToggle}
+            disabled={modeToggleDisabled}
+            className="hidden lg:inline-flex shrink-0"
+            data-testid="agent-builder-mode-toggle"
+          >
+            <RefreshCwIcon />
+            {toggleLabel}
+          </Button>
+        )}
       </div>
     </div>
   );

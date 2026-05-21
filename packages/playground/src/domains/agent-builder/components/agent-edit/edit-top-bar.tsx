@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui';
-import { ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeftIcon, RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import type { WorkspaceMode } from '../../layouts/types';
@@ -8,11 +8,11 @@ import { AgentBuilderTitle } from './agent-builder-title';
 export interface EditTopBarProps {
   isLoading: boolean;
   /**
-   * The current workspace mode. When omitted, no mode badge or mode-toggle is
-   * rendered (e.g. for non-owners viewing a public agent).
+   * The current workspace mode. When omitted, no mode-toggle is rendered
+   * (e.g. for non-owners viewing a public agent).
    */
   mode?: WorkspaceMode;
-  /** Called when the user clicks the mode badge to switch between Edit and View. */
+  /** Called when the user clicks the mode-toggle button to switch between Edit and View. */
   onModeToggle?: () => void;
   /** Disables the mode-toggle button (e.g. while a stream is running). */
   modeToggleDisabled?: boolean;
@@ -39,6 +39,7 @@ export const EditTopBar = ({
   backTooltip = 'Agents list',
 }: EditTopBarProps) => {
   const navigate = useNavigate();
+  const toggleLabel = mode === 'test' ? 'Switch to Edit' : 'Switch to View';
 
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
@@ -52,17 +53,24 @@ export const EditTopBar = ({
           <ArrowLeftIcon />
         </Button>
       </div>
-      <AgentBuilderTitle
-        className="min-w-0 justify-self-start"
-        isLoading={isLoading}
-        mode={mode}
-        onModeToggle={onModeToggle}
-        disabled={modeToggleDisabled}
-      />
+      <AgentBuilderTitle className="min-w-0 justify-self-start" isLoading={isLoading} />
       <div className="justify-self-end flex items-center gap-2 shrink-0">
         {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
         {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
         {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
+        {mode && onModeToggle && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onModeToggle}
+            disabled={modeToggleDisabled}
+            className="hidden lg:inline-flex shrink-0"
+            data-testid="agent-builder-mode-toggle"
+          >
+            <RefreshCwIcon />
+            {toggleLabel}
+          </Button>
+        )}
       </div>
     </div>
   );

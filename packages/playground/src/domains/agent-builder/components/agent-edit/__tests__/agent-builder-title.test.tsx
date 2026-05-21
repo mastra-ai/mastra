@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AgentColorProvider } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderTitle } from '../agent-builder-title';
@@ -43,7 +43,7 @@ describe('AgentBuilderTitle', () => {
   it('renders the form name when not loading', () => {
     render(
       <FormWrapper>
-        <AgentBuilderTitle mode="build" />
+        <AgentBuilderTitle />
       </FormWrapper>,
     );
 
@@ -54,7 +54,7 @@ describe('AgentBuilderTitle', () => {
   it('renders a skeleton in place of the name when loading', () => {
     render(
       <FormWrapper>
-        <AgentBuilderTitle isLoading mode="build" />
+        <AgentBuilderTitle isLoading />
       </FormWrapper>,
     );
 
@@ -62,31 +62,7 @@ describe('AgentBuilderTitle', () => {
     expect(screen.queryByText('Support agent')).toBeNull();
   });
 
-  it('renders an "Edit mode" badge when mode is build', () => {
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle mode="build" />
-      </FormWrapper>,
-    );
-
-    const badge = screen.getByTestId('agent-builder-mode-badge-build');
-    expect(badge.textContent).toBe('Edit mode');
-    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
-  });
-
-  it('renders a "View mode" badge when mode is test', () => {
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle mode="test" />
-      </FormWrapper>,
-    );
-
-    const badge = screen.getByTestId('agent-builder-mode-badge-test');
-    expect(badge.textContent).toBe('View mode');
-    expect(screen.queryByTestId('agent-builder-mode-badge-build')).toBeNull();
-  });
-
-  it('renders no mode badge when mode is undefined', () => {
+  it('does not render a mode badge', () => {
     render(
       <FormWrapper>
         <AgentBuilderTitle />
@@ -97,91 +73,23 @@ describe('AgentBuilderTitle', () => {
     expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
   });
 
-  it('renders no mode-toggle button when onModeToggle is omitted', () => {
+  it('does not render the mode-toggle button (now rendered by the top bar)', () => {
     render(
       <FormWrapper>
-        <AgentBuilderTitle mode="build" />
+        <AgentBuilderTitle />
       </FormWrapper>,
     );
 
     expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
   });
 
-  it('renders no mode-toggle button when mode is undefined, even with onModeToggle', () => {
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle onModeToggle={vi.fn()} />
-      </FormWrapper>,
-    );
-
-    expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
-  });
-
-  it('renders a "Switch to View mode" toggle next to the badge in build mode and invokes the callback on click', () => {
-    const onModeToggle = vi.fn();
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle mode="build" onModeToggle={onModeToggle} />
-      </FormWrapper>,
-    );
-
-    const toggle = screen.getByTestId('agent-builder-mode-toggle') as HTMLButtonElement;
-    expect(toggle.tagName).toBe('BUTTON');
-    expect(toggle.getAttribute('aria-label')).toBe('Switch to View mode');
-    expect(toggle.className).toContain('rounded-full');
-
-    fireEvent.click(toggle);
-    expect(onModeToggle).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders a "Switch to Edit mode" toggle in test mode', () => {
-    const onModeToggle = vi.fn();
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle mode="test" onModeToggle={onModeToggle} />
-      </FormWrapper>,
-    );
-
-    const toggle = screen.getByTestId('agent-builder-mode-toggle');
-    expect(toggle.getAttribute('aria-label')).toBe('Switch to Edit mode');
-  });
-
-  it('disables the toggle and does not invoke onModeToggle when disabled is true', () => {
-    const onModeToggle = vi.fn();
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle mode="test" onModeToggle={onModeToggle} disabled />
-      </FormWrapper>,
-    );
-
-    const toggle = screen.getByTestId('agent-builder-mode-toggle') as HTMLButtonElement;
-    expect(toggle.disabled).toBe(true);
-    fireEvent.click(toggle);
-    expect(onModeToggle).not.toHaveBeenCalled();
-  });
-
-  it('tints the mode badge with an hsl background/color derived from the agent name', () => {
-    render(
-      <FormWrapper defaults={{ name: 'Support agent' }}>
-        <AgentBuilderTitle mode="build" />
-      </FormWrapper>,
-    );
-
-    const badge = screen.getByTestId('agent-builder-mode-badge-build');
-    // jsdom normalizes inline color/background-color from hsl() to rgb(), so we
-    // assert the property is present with a non-empty color value.
-    expect(badge.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-    expect(badge.style.color).toMatch(/^(rgb|hsl)\(/);
-  });
-
-  it('falls back to variant colors (no inline style) when the agent name is whitespace', () => {
+  it('falls back to "Untitled" when the name is whitespace', () => {
     render(
       <FormWrapper defaults={{ name: '   ' }}>
-        <AgentBuilderTitle mode="build" />
+        <AgentBuilderTitle />
       </FormWrapper>,
     );
 
-    const badge = screen.getByTestId('agent-builder-mode-badge-build');
-    expect(badge.getAttribute('style')).toBeNull();
+    expect(screen.getByTestId('agent-builder-title-name').textContent).toBe('Untitled');
   });
 });

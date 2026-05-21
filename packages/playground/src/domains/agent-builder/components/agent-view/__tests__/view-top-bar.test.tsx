@@ -53,7 +53,7 @@ describe('ViewTopBar', () => {
     expect(screen.getByTestId('location').textContent).toBe('/agent-builder/agents');
   });
 
-  it('renders the "View mode" badge and toggle when mode is "test"', () => {
+  it('renders the mode-toggle button when mode is "test" and invokes the callback', () => {
     const onModeToggle = vi.fn();
     render(
       <FormWrapper>
@@ -61,13 +61,14 @@ describe('ViewTopBar', () => {
       </FormWrapper>,
     );
 
-    expect(screen.getByTestId('agent-builder-mode-badge-test').textContent).toBe('View mode');
+    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
     const toggle = screen.getByTestId('agent-builder-mode-toggle');
+    expect(toggle.textContent).toContain('Switch to Edit');
     fireEvent.click(toggle);
     expect(onModeToggle).toHaveBeenCalledTimes(1);
   });
 
-  it('renders no mode badge or toggle when mode is undefined', () => {
+  it('renders no mode toggle when mode is undefined', () => {
     render(
       <FormWrapper>
         <ViewTopBar />

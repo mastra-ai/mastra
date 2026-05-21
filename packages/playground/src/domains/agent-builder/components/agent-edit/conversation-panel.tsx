@@ -165,6 +165,7 @@ const ConversationMessageList = () => {
   const { isLoading: isConversationLoading, agentId } = useContext(ConversationContext);
   return (
     <MessageList
+      mode="edit"
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}
