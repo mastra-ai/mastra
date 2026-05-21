@@ -25,6 +25,10 @@ import type { SubagentDefinition } from './types';
 
 export const SPAWN_SUBAGENT_TOOL_ID = 'spawn_subagent';
 
+function optionalModelId(value: string | null | undefined): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 /**
  * Build a `spawn_subagent` tool scoped to a single parent session + turn.
  * Returns `undefined` when the harness has no subagent types registered
@@ -124,6 +128,22 @@ export function createSpawnSubagentTool(parent: Session) {
           result: undefined,
         };
       }
+      if (modelOverride !== undefined && modelOverride.length === 0) {
+        const err = new HarnessValidationError('modelOverride', 'must be a non-empty string when provided');
+        return {
+          isError: true,
+          errorName: err.name,
+          field: err.field,
+          reason: err.reason,
+          subagentSessionId: '',
+          result: undefined,
+        };
+      }
+
+      const resolvedModelId =
+        optionalModelId(modelOverride) ??
+        optionalModelId(parent.models.getSubagent({ agentType })) ??
+        optionalModelId(def.defaultModelId);
 
       // Create a fresh thread + session for the subagent. The session is
       // `origin: 'subagent-tool'` and `parentSessionId` is wired so cascade
@@ -134,7 +154,7 @@ export function createSpawnSubagentTool(parent: Session) {
         parentSessionId: parent.id,
         origin: 'subagent-tool',
         modeId: def.modeId,
-        modelId: modelOverride ?? def.defaultModelId,
+        modelId: resolvedModelId,
         subagentDepth: childDepth,
       });
 
@@ -150,7 +170,7 @@ export function createSpawnSubagentTool(parent: Session) {
       // `queuedItemId` automatically. Track inner tool names by call id so
       // `subagent_tool_end` can carry the same `toolName` as its start.
       const innerToolNames = new Map<string, string>();
-      const resolvedModelId = modelOverride ?? def.defaultModelId ?? '';
+      const subagentModelId = resolvedModelId ?? child.models.current();
       const unsub = child.subscribe(event => {
         if (!event.type) return;
         switch (event.type) {
@@ -161,7 +181,7 @@ export function createSpawnSubagentTool(parent: Session) {
               subagentSessionId: child.id,
               agentType,
               task,
-              modelId: resolvedModelId,
+              modelId: subagentModelId,
               depth: childDepth,
             });
             break;

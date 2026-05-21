@@ -177,6 +177,22 @@ describe('spawn_subagent tool — execution', () => {
     expect(parent.subagentDepth).toBe(1);
   });
 
+  it('rejects an empty modelOverride without creating a child session', async () => {
+    const { harness } = setup();
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!(
+      { agentType: 'explore', task: 'find usages of X', modelOverride: '' },
+      execCtx(),
+    )) as any;
+
+    expect(result.isError).toBe(true);
+    expect(result.errorName).toBe('HarnessValidationError');
+    expect(result.field).toBe('modelOverride');
+    expect(result.reason).toContain('non-empty string');
+  });
+
   it('creates a fresh child session and returns subagentSessionId + result', async () => {
     const { harness, childAgent } = setup();
     childAgent.fullOutput = { ...childAgent.fullOutput, text: 'child says hi' };
@@ -189,6 +205,25 @@ describe('spawn_subagent tool — execution', () => {
     expect(typeof result.subagentSessionId).toBe('string');
     expect(result.subagentSessionId).not.toBe(parent.id);
     expect(result.subagentSessionId.length).toBeGreaterThan(0);
+  });
+
+  it('uses a session subagent model override before the subagent type default', async () => {
+    const { harness, storage } = setup();
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await parent.models.setSubagent({ agentType: 'explore', model: 'anthropic/claude-opus-4-6' });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const events: HarnessEvent[] = [];
+    parent.subscribe(e => {
+      events.push(e);
+    });
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'find usages of X' }, execCtx())) as any;
+
+    const childRecord = await storage.loadSession({ sessionId: result.subagentSessionId });
+    const start = events.find(e => e.type === 'subagent_start');
+    expect(childRecord?.modelId).toBe('anthropic/claude-opus-4-6');
+    expect((start as any).modelId).toBe('anthropic/claude-opus-4-6');
   });
 
   it('emits subagent_start + subagent_end on the parent session', async () => {
