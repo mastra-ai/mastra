@@ -83,7 +83,9 @@ class BorderedBox {
       const labelText = ` ${this.label} `;
       const labelLen = labelText.length;
       const remaining = Math.max(0, boxWidth - 2 - 2 - labelLen);
-      lines.push(borderColor('╭──') + chalk.hex(theme.getTheme().dim)(labelText) + borderColor(`${'─'.repeat(remaining)}╮`));
+      lines.push(
+        borderColor('╭──') + chalk.hex(theme.getTheme().dim)(labelText) + borderColor(`${'─'.repeat(remaining)}╮`),
+      );
     } else {
       lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));
     }
@@ -121,7 +123,9 @@ export class UserMessageComponent extends Container {
       italic: false,
     });
 
-    this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor, label: options.label }));
+    this.addChild(
+      new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor, label: options.label }),
+    );
   }
 
   getChatSpacingKind(): ChatSpacingKind {
