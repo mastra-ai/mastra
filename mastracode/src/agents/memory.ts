@@ -109,7 +109,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
     const subconscious = subconsciousEnabled
       ? new Subconscious({
-          model: 'default',
+          model: getObserverModel,
           workspace: new Workspace({
             id: 'mastracode-subconscious',
             name: 'MastraCode Subconscious',
