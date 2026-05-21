@@ -33,6 +33,7 @@ const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_PENDING_FLUSH_MS = 5 * 60_000;
+const DEFAULT_GH_COMMAND_TIMEOUT_MS = 30_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
 const DEFAULT_AUTHORIZED_PERMISSIONS = ['admin', 'maintain', 'write'] as const;
@@ -318,6 +319,7 @@ export function defaultGithubCommandRunner(args: string[]): Promise<GithubComman
   return execFileAsync('gh', args, {
     encoding: 'utf8',
     env,
+    timeout: DEFAULT_GH_COMMAND_TIMEOUT_MS,
   });
 }
 
@@ -948,12 +950,28 @@ export class GithubSignals {
     return 'default';
   }
 
+  getAgentIdForThread(resourceId: string, threadId: string) {
+    const agentIds = new Set<string>();
+    for (const subscription of this.#activeSubscriptions.values()) {
+      if (subscription.resourceId === resourceId && subscription.threadId === threadId) {
+        agentIds.add(subscription.agentId);
+      }
+    }
+    if (agentIds.size === 1) return agentIds.values().next().value as string;
+    return this.getAgentId();
+  }
+
   removeAgent(agentOrId: Agent<any, any, any, any> | string) {
     const agentId = typeof agentOrId === 'string' ? agentOrId : agentOrId.id;
     this.#agents.delete(agentId);
     for (const [key, subscription] of this.#activeSubscriptions) {
       if (subscription.agentId === agentId) {
         this.#activeSubscriptions.delete(key);
+      }
+    }
+    for (const [key, bucket] of this.#pendingNotifications) {
+      if (bucket.subscription.agentId === agentId) {
+        this.#pendingNotifications.delete(key);
       }
     }
     this.#ensureTimer();
@@ -2163,7 +2181,7 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
         ? contextResourceId
         : args.messages.find(message => message.resourceId)?.resourceId;
     if (!threadId || !resourceId) return undefined;
-    return { agentId: this.#owner.getAgentId(), resourceId, threadId };
+    return { agentId: this.#owner.getAgentIdForThread(resourceId, threadId), resourceId, threadId };
   }
 
   async #processSignals(args: ProcessInputStepArgs) {

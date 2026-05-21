@@ -1819,6 +1819,7 @@ export class Harness<TState = {}> {
         threadId: this.currentThreadId,
         ifIdle: { streamOptions },
       });
+      await result.started;
       return { accepted: result.accepted, runId: result.runId };
     });
 

@@ -115,6 +115,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         ctx.state.options.disableGithubSignals?.();
         ctx.state.options.githubSignals = undefined;
         ctx.state.activeGithubPrSubscriptions = [];
+        ctx.state.githubSyncingPrSubscriptions = [];
         ctx.updateStatusLine();
         ctx.showInfo('Experimental GitHub PR notifications disabled. /github commands are unavailable.');
       },

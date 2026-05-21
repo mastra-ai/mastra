@@ -418,6 +418,7 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      await this.#drainPendingIdleSignals(state, pubsub, key);
     }
   }
 
@@ -809,12 +810,13 @@ export class AgentThreadStreamRuntime {
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
       .then(() => undefined)
-      .catch(error => {
+      .catch(async error => {
         state.threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(state, runId);
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
         }
+        await this.#drainPendingIdleSignals(state, pubsub, key);
         throw error;
       });
     void started.catch(() => {});
