@@ -26,6 +26,7 @@ export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
 export * from './ds/components/Dialog';
+export * from './ds/components/Drawer';
 export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';

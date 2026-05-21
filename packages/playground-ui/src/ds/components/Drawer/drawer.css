@@ -1,0 +1,90 @@
+/* Drawer motion.
+ *
+ * Lives in a real stylesheet (not Tailwind utilities) for the same reason as
+ * `dialog.css`: Tailwind v4 emits a standalone `translate` property that does not
+ * compose with `transform`, and the drawer's open/close/swipe motion is all
+ * `transform`-based. Base UI drives the gesture through CSS custom properties
+ * (`--drawer-swipe-movement-*`, `--drawer-swipe-progress`, `--drawer-swipe-strength`,
+ * `--drawer-snap-point-offset`, `--nested-drawers`); this file consumes them. */
+
+.drawer-popup {
+  --drawer-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+  transition: transform 450ms var(--drawer-ease);
+}
+
+/* Resting + swiping transform: follow the finger. Snap-point offset is folded into
+ * the vertical axes so bottom-sheet snap points work with no extra wiring. */
+.drawer-popup[data-swipe-direction='down'],
+.drawer-popup[data-swipe-direction='up'] {
+  transform: translateY(calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px)));
+}
+
+.drawer-popup[data-swipe-direction='left'],
+.drawer-popup[data-swipe-direction='right'] {
+  transform: translateX(var(--drawer-swipe-movement-x, 0px));
+}
+
+/* Enter/exit: park the panel fully off its anchored edge. */
+.drawer-popup[data-swipe-direction='down'][data-starting-style],
+.drawer-popup[data-swipe-direction='down'][data-ending-style] {
+  transform: translateY(100%);
+}
+
+.drawer-popup[data-swipe-direction='up'][data-starting-style],
+.drawer-popup[data-swipe-direction='up'][data-ending-style] {
+  transform: translateY(-100%);
+}
+
+.drawer-popup[data-swipe-direction='right'][data-starting-style],
+.drawer-popup[data-swipe-direction='right'][data-ending-style] {
+  transform: translateX(100%);
+}
+
+.drawer-popup[data-swipe-direction='left'][data-starting-style],
+.drawer-popup[data-swipe-direction='left'][data-ending-style] {
+  transform: translateX(-100%);
+}
+
+/* While dragging, track the pointer with no easing delay. */
+.drawer-popup[data-swiping] {
+  transition-duration: 0ms;
+  user-select: none;
+}
+
+/* Release after a swipe: scale the settle duration by the gesture velocity. */
+.drawer-popup[data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+}
+
+/* Dim a parent drawer while a nested drawer sits on top of it. */
+.drawer-popup[data-nested-drawer-open] {
+  filter: brightness(0.82);
+}
+
+/* Backdrop: fades out proportionally as the drawer is swiped away. */
+.drawer-backdrop {
+  --drawer-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  opacity: calc(1 - var(--drawer-swipe-progress, 0));
+  transition: opacity 450ms var(--drawer-ease);
+}
+
+.drawer-backdrop[data-starting-style],
+.drawer-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.drawer-backdrop[data-swiping] {
+  transition-duration: 0ms;
+}
+
+.drawer-backdrop[data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-popup,
+  .drawer-backdrop {
+    transition-duration: 0ms;
+  }
+}
