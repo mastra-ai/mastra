@@ -420,10 +420,12 @@ export class MastraTUI {
 
   private queueFollowUpMessage(text: string): void {
     if (text.startsWith('/')) {
+      const messageId = `queued-slash-${Date.now()}-${this.state.pendingSlashCommands.length}`;
       this.state.pendingSlashCommands.push(text);
+      this.state.pendingSlashCommandMessageIds.push(messageId);
       this.state.pendingQueuedActions.push('slash');
+      addPendingUserMessage(this.state, messageId, text);
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
       return;
     }
 

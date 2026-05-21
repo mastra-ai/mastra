@@ -43,11 +43,15 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     pendingSlashCommands: [],
+    pendingSlashCommandMessageIds: [],
     pendingTools: new Map(),
     chatContainer: {
       children: [],
       addChild: vi.fn(function (this: any, child: unknown) {
         this.children.push(child);
+      }),
+      removeChild: vi.fn(function (this: any, child: unknown) {
+        this.children = this.children.filter((candidate: unknown) => candidate !== child);
       }),
       invalidate: vi.fn(),
     },
@@ -427,11 +431,20 @@ describe('MastraTUI queueing', () => {
     };
     tui.state = {
       pendingSlashCommands: [],
+      pendingSlashCommandMessageIds: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],
       pendingImages: [{ data: 'img-1', mimeType: 'image/png' }],
+      pendingSignalMessageComponentsById: new Map(),
       ui: { requestRender: vi.fn() },
-      chatContainer: {},
+      chatContainer: {
+        children: [],
+        addChild: vi.fn(function (this: any, child: unknown) {
+          this.children.push(child);
+        }),
+        removeChild: vi.fn(),
+        invalidate: vi.fn(),
+      },
       followUpComponents: [],
     };
 
@@ -445,7 +458,30 @@ describe('MastraTUI queueing', () => {
       { content: 'second message', images: undefined },
     ]);
     expect(tui.state.pendingSlashCommands).toEqual(['/help']);
+    expect(tui.state.pendingSlashCommandMessageIds).toHaveLength(1);
+    expect(tui.state.pendingSignalMessageComponentsById.size).toBe(1);
+    expect(tui.state.chatContainer.children).toHaveLength(1);
     expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
+  });
+
+  it('removes the grey pending slash command when the queued command drains', () => {
+    const state = createQueueState();
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      queueFollowUpMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.queueFollowUpMessage('/help');
+    expect(state.pendingSignalMessageComponentsById.size).toBe(1);
+    expect(state.chatContainer.children).toHaveLength(1);
+
+    const ctx = createQueueContext(state);
+    handleAgentEnd(ctx);
+
+    expect(ctx.handleSlashCommand).toHaveBeenCalledWith('/help');
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.chatContainer.children).toHaveLength(0);
   });
 
   it('drains queued messages and slash commands in FIFO order on agent end', async () => {

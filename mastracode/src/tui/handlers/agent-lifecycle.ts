@@ -9,7 +9,7 @@ import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { showInfo } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
-import { clearPendingUserMessages } from '../render-messages.js';
+import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
 import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -111,10 +111,17 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   }
 
   const nextCommand = state.pendingSlashCommands.shift();
+  const pendingMessageId = state.pendingSlashCommandMessageIds.shift();
   if (!nextCommand) {
+    if (pendingMessageId) {
+      removePendingUserMessage(state, pendingMessageId);
+    }
     return true;
   }
 
+  if (pendingMessageId) {
+    removePendingUserMessage(state, pendingMessageId);
+  }
   ctx.handleSlashCommand(nextCommand).catch(error => {
     ctx.showError(error instanceof Error ? error.message : 'Queued slash command failed');
   });
@@ -150,6 +157,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.pendingFollowUpMessages = [];
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
+  state.pendingSlashCommandMessageIds = [];
   clearPendingUserMessages(state);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
@@ -178,6 +186,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.pendingFollowUpMessages = [];
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
+  state.pendingSlashCommandMessageIds = [];
   clearPendingUserMessages(state);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
