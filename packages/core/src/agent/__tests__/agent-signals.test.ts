@@ -2185,30 +2185,32 @@ describe('Agent signals', () => {
       });
     });
 
-    it('thread-stream-runtime resolves deliveryAttributes on active signal delivery', async () => {
+    it('thread-stream-runtime resolves deliveryAttributes as interjection on active signal delivery', () => {
       const runtime = new AgentThreadStreamRuntime();
       const pubsub = new EventEmitterPubSub();
-      const model = createTextStreamModel('response');
-      const agent = new Agent({
-        id: 'delivery-test-agent',
-        name: 'Delivery Test Agent',
-        instructions: 'Test agent.',
-        model,
-      });
+      const agent = { id: 'delivery-active-agent' } as any;
 
-      // Start a run so the thread is active
-      const output = await agent.stream('start', {
-        runId: 'delivery-run',
-        memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
-        maxSteps: 1,
-      });
-      // Consume the stream
-      for await (const _ of output.fullStream) {
-        // drain
-      }
+      // Prepare and register a run that is still "running" so the thread is active.
+      const options = runtime.prepareRunOptions(
+        {
+          runId: 'active-run',
+          memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+        } as any,
+        pubsub,
+      );
+      runtime.registerRun(
+        agent,
+        {
+          runId: 'active-run',
+          status: 'running',
+          _waitUntilFinished: () => new Promise<any>(() => {}),
+        } as any,
+        options,
+        pubsub,
+      );
 
-      // Send a signal with deliveryAttributes to an active run
-      const idleResult = runtime.sendSignal(
+      // Send a signal while the run is still active.
+      const result = runtime.sendSignal(
         agent,
         {
           type: 'user-message',
@@ -2230,9 +2232,42 @@ describe('Agent signals', () => {
         pubsub,
       );
 
-      // Since no active run, it should go idle path and get 'message'
-      expect(idleResult.signal.attributes).toEqual({ delivery: 'message' });
-      expect(idleResult.signal.deliveryAttributes).toBeUndefined();
+      // Active run → ifActive branch → delivery: 'interjection'
+      expect(result.signal.attributes).toEqual({ delivery: 'interjection' });
+      expect(result.signal.deliveryAttributes).toBeUndefined();
+    });
+
+    it('thread-stream-runtime resolves deliveryAttributes as message on idle signal delivery', () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = { id: 'delivery-idle-agent', stream: () => new Promise(() => {}) } as any;
+
+      // No run registered → thread is idle.
+      const result = runtime.sendSignal(
+        agent,
+        {
+          type: 'user-message',
+          contents: 'idle test',
+          deliveryAttributes: {
+            ifActive: { delivery: 'interjection' },
+            ifIdle: { delivery: 'message' },
+          },
+        },
+        {
+          resourceId: 'idle-resource',
+          threadId: 'idle-thread',
+          ifIdle: {
+            streamOptions: {
+              memory: { thread: 'idle-thread', resource: 'idle-resource' },
+            },
+          },
+        },
+        pubsub,
+      );
+
+      // No active run → ifIdle branch → delivery: 'message'
+      expect(result.signal.attributes).toEqual({ delivery: 'message' });
+      expect(result.signal.deliveryAttributes).toBeUndefined();
     });
   });
 });
