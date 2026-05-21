@@ -7,32 +7,33 @@ import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 /**
- * Radix-style tri-state value. Base UI splits this into a strict `checked`
- * boolean plus a separate `indeterminate` boolean — we keep the Radix union
- * here so existing consumers (which pass `checked="indeterminate"`) keep
- * working without changes.
+ * Radix-style tri-state value for the controlled `checked` prop. Base UI splits
+ * this into a strict `checked` boolean plus a separate `indeterminate` boolean —
+ * we keep the Radix union here so existing consumers (which pass
+ * `checked="indeterminate"`) keep working without changes.
+ *
+ * `defaultChecked` is intentionally a plain boolean: an uncontrolled checkbox
+ * cannot start "indeterminate" and then be toggled out of it (the indeterminate
+ * state is inherently controlled), so `'indeterminate'` is not allowed there.
  */
 export type CheckedState = boolean | 'indeterminate';
 
-type CheckboxProps = Omit<CheckboxPrimitive.Root.Props, 'className' | 'checked' | 'defaultChecked'> & {
+type CheckboxProps = Omit<CheckboxPrimitive.Root.Props, 'className' | 'checked'> & {
   className?: string;
   checked?: CheckedState;
-  defaultChecked?: CheckedState;
 };
 
 const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
-  ({ className, checked, defaultChecked, indeterminate, ...props }, ref) => {
+  ({ className, checked, indeterminate, ...props }, ref) => {
     // Translate the Radix `'indeterminate'` sentinel into Base UI's dedicated
-    // `indeterminate` prop while leaving `checked`/`defaultChecked` as booleans.
+    // `indeterminate` prop while leaving `checked` as a boolean.
     const isCheckedIndeterminate = checked === 'indeterminate';
-    const isDefaultIndeterminate = defaultChecked === 'indeterminate';
 
     return (
       <CheckboxPrimitive.Root
         ref={ref}
         checked={isCheckedIndeterminate ? false : checked}
-        defaultChecked={isDefaultIndeterminate ? false : defaultChecked}
-        indeterminate={indeterminate ?? (isCheckedIndeterminate || isDefaultIndeterminate)}
+        indeterminate={indeterminate ?? isCheckedIndeterminate}
         className={cn(
           'peer h-4 w-4 shrink-0 rounded-sm border border-neutral3',
           'flex items-center justify-center',
