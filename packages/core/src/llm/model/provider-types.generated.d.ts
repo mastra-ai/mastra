@@ -3384,7 +3384,6 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
-    'qwen3.6-plus-free',
   ];
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
