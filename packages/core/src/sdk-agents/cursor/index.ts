@@ -67,27 +67,32 @@ export type CursorAgentOptions = {
    * its lifecycle elsewhere, or pass `CursorAgent.create` to let this wrapper
    * call it with the Cursor options on this object.
    *
+   * If you pass `CursorAgent.create({...})`, that promise has already been
+   * created by the Cursor SDK and wrapper-level create options cannot be
+   * merged into it. Put all Cursor create options in that call, or pass the
+   * factory itself as `agent: CursorAgent.create`.
+   *
    * The factory path keeps the vendor SDK import in your app while allowing
    * Mastra to hydrate defaults such as `apiKey`.
    */
   agent: CursorAgentInput;
   /**
-   * Cursor API key passed to an agent factory. Defaults to
+   * Cursor API key passed only when `agent` is a factory. Defaults to
    * `process.env.CURSOR_API_KEY` when not provided.
    */
   apiKey?: string;
   /**
-   * Cursor model selection passed to an agent factory.
+   * Cursor model selection passed only when `agent` is a factory.
    *
    * The Cursor SDK requires an explicit model for local agents.
    */
   model?: ModelSelection;
   /**
-   * Cursor local-agent options passed to an agent factory.
+   * Cursor local-agent options passed only when `agent` is a factory.
    */
   local?: LocalAgentOptions;
   /**
-   * Cursor cloud-agent options passed to an agent factory.
+   * Cursor cloud-agent options passed only when `agent` is a factory.
    */
   cloud?: CloudAgentOptions;
   /**
@@ -96,19 +101,19 @@ export type CursorAgentOptions = {
    */
   mcpServers?: Record<string, McpServerConfig>;
   /**
-   * Cursor subagent definitions passed to an agent factory.
+   * Cursor subagent definitions passed only when `agent` is a factory.
    */
   agents?: Record<string, AgentDefinition>;
   /**
-   * Existing Cursor agent id passed to an agent factory.
+   * Existing Cursor agent id passed only when `agent` is a factory.
    */
   agentId?: string;
   /**
-   * Cursor idempotency key passed to an agent factory.
+   * Cursor idempotency key passed only when `agent` is a factory.
    */
   idempotencyKey?: string;
   /**
-   * Cursor platform options passed to an agent factory.
+   * Cursor platform options passed only when `agent` is a factory.
    */
   platform?: CursorAgentPlatformOptions;
   /**
