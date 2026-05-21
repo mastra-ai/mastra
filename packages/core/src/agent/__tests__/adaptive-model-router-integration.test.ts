@@ -58,10 +58,34 @@ function createStreamModel(modelId: string, responseText: string, statusCode?: n
 }
 
 describe('AdaptiveModelRouter fallback integration', () => {
-  it('passes one model to the LLM loop per attempt when explicitly configured as a processor', async () => {
+  it('passes one model to the LLM loop for legacy model fallback arrays', async () => {
     loopModelCounts.length = 0;
     const primary = createStreamModel('primary-router-loop', '', 429);
     const secondary = createStreamModel('secondary-router-loop', 'secondary response');
+
+    const agent = new Agent({
+      id: 'adaptive-router-loop-model-count',
+      name: 'Adaptive Router Loop Model Count Test',
+      instructions: 'You are a test agent',
+      model: [
+        { id: 'primary', model: primary, maxRetries: 0 },
+        { id: 'secondary', model: secondary, maxRetries: 0 },
+      ],
+    });
+
+    await (
+      await agent.stream('Hello')
+    ).text;
+
+    expect(loopModelCounts).toEqual([1]);
+    expect(primary.doStreamCalls).toHaveLength(1);
+    expect(secondary.doStreamCalls).toHaveLength(1);
+  });
+
+  it('passes one model to the LLM loop when explicitly configured as a processor', async () => {
+    loopModelCounts.length = 0;
+    const primary = createStreamModel('explicit-primary-router-loop', '', 429);
+    const secondary = createStreamModel('explicit-secondary-router-loop', 'secondary response');
     const router = new AdaptiveModelRouter({
       models: [
         { id: 'primary', model: primary, maxRetries: 0 },
@@ -70,8 +94,8 @@ describe('AdaptiveModelRouter fallback integration', () => {
     });
 
     const agent = new Agent({
-      id: 'adaptive-router-loop-model-count',
-      name: 'Adaptive Router Loop Model Count Test',
+      id: 'explicit-adaptive-router-loop-model-count',
+      name: 'Explicit Adaptive Router Loop Model Count Test',
       instructions: 'You are a test agent',
       model: primary,
       inputProcessors: [router],
