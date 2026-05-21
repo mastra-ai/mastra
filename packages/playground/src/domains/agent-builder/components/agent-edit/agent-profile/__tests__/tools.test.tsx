@@ -236,4 +236,101 @@ describe('Tools', () => {
     expect(filterLabel.parentElement?.className).toContain('flex');
     expect(filterLabel.parentElement?.className).toContain('justify-between');
   });
+
+  describe('integration rows', () => {
+    const integrationTool: AgentTool = {
+      id: 'composio:GMAIL_FETCH',
+      name: 'GMAIL_FETCH',
+      isChecked: true,
+      type: 'integration',
+      providerId: 'composio',
+      toolkit: 'gmail',
+      description: 'Fetch emails',
+    };
+
+    it('renders a "Set up connection" button when the integration is checked and no connection is pinned', () => {
+      const onOpenConnections = vi.fn();
+      const { getByTestId } = render(
+        <FormHarness>
+          <Tools availableAgentTools={[integrationTool]} onOpenConnections={onOpenConnections} />
+        </FormHarness>,
+      );
+
+      const setupBtn = getByTestId('tool-card-setup-composio-GMAIL_FETCH');
+      expect(setupBtn.textContent).toBe('Set up connection');
+    });
+
+    it('calls onOpenConnections without toggling the card when "Set up connection" is clicked', () => {
+      const onOpenConnections = vi.fn();
+      let observedProviders: unknown;
+      const { getByTestId } = render(
+        <FormHarness>
+          <Tools availableAgentTools={[integrationTool]} onOpenConnections={onOpenConnections} />
+          <ToolProvidersProbe onChange={value => (observedProviders = value)} />
+        </FormHarness>,
+      );
+
+      fireEvent.click(getByTestId('tool-card-setup-composio-GMAIL_FETCH'));
+
+      expect(onOpenConnections).toHaveBeenCalledTimes(1);
+      // Card click is not triggered; toolProviders state is untouched.
+      expect(observedProviders).toBeUndefined();
+    });
+
+    it('hides the "Set up connection" button when a connection for the toolkit is already pinned', () => {
+      const onOpenConnections = vi.fn();
+      const { queryByTestId } = render(
+        <FormHarness
+          defaultValues={{
+            toolProviders: {
+              composio: {
+                tools: {},
+                connections: {
+                  gmail: [
+                    {
+                      kind: 'author',
+                      toolkit: 'gmail',
+                      connectionId: 'conn-1',
+                      scope: 'per-author',
+                    },
+                  ],
+                },
+              },
+            } as AgentBuilderEditFormValues['toolProviders'],
+          }}
+        >
+          <Tools availableAgentTools={[integrationTool]} onOpenConnections={onOpenConnections} />
+        </FormHarness>,
+      );
+
+      expect(queryByTestId('tool-card-setup-composio-GMAIL_FETCH')).toBeNull();
+    });
+
+    it('toggling an integration row writes the entry into toolProviders only (not tools)', () => {
+      let observedProviders: AgentBuilderEditFormValues['toolProviders'] | undefined;
+      let observedTools: AgentBuilderEditFormValues['tools'] | undefined;
+      const ToolsProbe = () => {
+        observedTools = useWatch<AgentBuilderEditFormValues>({ name: 'tools' }) as
+          | AgentBuilderEditFormValues['tools']
+          | undefined;
+        return null;
+      };
+
+      const uncheckedIntegration: AgentTool = { ...integrationTool, isChecked: false };
+      const { getByTestId } = render(
+        <FormHarness>
+          <Tools availableAgentTools={[uncheckedIntegration]} />
+          <ToolProvidersProbe onChange={value => (observedProviders = value as never)} />
+          <ToolsProbe />
+        </FormHarness>,
+      );
+
+      fireEvent.click(getByTestId('tool-card-integration-composio:GMAIL_FETCH'));
+
+      expect(observedProviders?.composio?.tools?.GMAIL_FETCH).toBeDefined();
+      expect(observedProviders?.composio?.tools?.GMAIL_FETCH?.toolkit).toBe('gmail');
+      // Native tools map is untouched.
+      expect(observedTools?.['composio:GMAIL_FETCH']).toBeUndefined();
+    });
+  });
 });

@@ -190,3 +190,16 @@ Unpin would be immediately undone by the `useEffect` that auto-stamps
 the sentinel pin on mount — so the entire trigger is removed for those
 rows. Per-author rows retain the full Reauthorize / Unpin / Disconnect
 menu.
+
+Reconcile this branch after merging `yj/magnificent-marquess`. Upstream
+introduced an atomic per-field split of `agentBuilderTool` and added the
+Browser / Integrations tabs to the builder profile; the merge wiped this
+branch's Connections tab, the Tools-tab "Set up connection" affordance for
+unauthenticated integrations, and the `ModelPolicyProvider surface="editor"`
+wrappers in the CMS layouts. The Connections tab + `ToolProvidersSection`
+are re-applied on top of the new shape, `set-agent-tools` now merges
+`toolProvidersFragment` into the form's `toolProviders` (preserving the
+existing `connections` map), and an `integrationToolsLoading` gate keeps the
+LLM from firing `set-agent-tools` against a stale tool-id enum while
+`useAllProviderTools` is still fanning in. `ModelPolicyProvider` is
+restored around both CMS `create-layout` and `edit-layout`.

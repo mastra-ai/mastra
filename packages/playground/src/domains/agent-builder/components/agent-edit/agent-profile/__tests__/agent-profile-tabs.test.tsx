@@ -184,6 +184,6 @@ describe('AgentProfileTabs', () => {
     );
 
     const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toEqual(['Instructions', 'Connections']);
+    expect(tabs).toEqual(['Connections', 'Instructions']);
   });
 });

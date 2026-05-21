@@ -22,6 +22,10 @@ interface ToolsProps {
 
 export const Tools = ({ editable = true, availableAgentTools = [], onOpenConnections }: ToolsProps) => {
   const { setValue, getValues } = useFormContext<AgentBuilderEditFormValues>();
+  const { addIntegrationTool, removeIntegrationTool } = useToolProvidersBridge();
+  const toolProvidersValue = useWatch<AgentBuilderEditFormValues>({ name: 'toolProviders' }) as
+    | AgentBuilderEditFormValues['toolProviders']
+    | undefined;
   const agentColor = useAgentColor();
   const [search, setSearch] = useState('');
   const [onlySelected, setOnlySelected] = useState(false);
@@ -111,19 +115,40 @@ export const Tools = ({ editable = true, availableAgentTools = [], onOpenConnect
         <ToolListEmptyState details={emptyStateDetails} />
       ) : (
         <div className="grid min-h-0 grid-cols-1 content-start gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map(item => (
-            <AgentSelectableCard
-              key={`${item.type}__${item.id}`}
-              title={item.name}
-              subtitle={item.description || 'No description provided'}
-              isSelected={item.isChecked}
-              disabled={!editable}
-              onClick={() => toggle(item, !item.isChecked)}
-              ariaLabel={item.name}
-              testId={`tool-card-${item.type}-${item.id}`}
-              checkTestId={`tool-card-check-${item.type}-${item.id}`}
-            />
-          ))}
+          {visibleTools.map(item => {
+            const showSetup =
+              item.type === 'integration' && !!onOpenConnections && needsConnectionSetup(item, toolProvidersValue);
+
+            const card = (
+              <AgentSelectableCard
+                key={`${item.type}__${item.id}`}
+                title={item.name}
+                subtitle={item.description || 'No description provided'}
+                isSelected={item.isChecked}
+                disabled={!editable}
+                onClick={() => toggle(item, !item.isChecked)}
+                ariaLabel={item.name}
+                testId={`tool-card-${item.type}-${item.id}`}
+                checkTestId={`tool-card-check-${item.type}-${item.id}`}
+              />
+            );
+
+            if (!showSetup) return card;
+
+            return (
+              <div key={`${item.type}__${item.id}`} className="flex flex-col gap-2">
+                {card}
+                <button
+                  type="button"
+                  data-testid={`tool-card-setup-${item.providerId}-${item.name}`}
+                  onClick={() => onOpenConnections?.()}
+                  className="self-start rounded-md border border-border1 px-2 py-1 text-ui-xs text-neutral3 hover:bg-surface4"
+                >
+                  Set up connection
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -43,24 +43,33 @@ export const AgentProfileTabs = ({
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
   const { data: channelPlatforms = [] } = useChannelPlatforms();
+  const form = useFormContext<AgentBuilderEditFormValues>();
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
   const skillsTabEnabled = features.skills && availableSkills.length > 0;
   const browserTabEnabled = features.browser;
   const integrationsTabEnabled = channelPlatforms.some(platform => platform.id === 'slack' && platform.isConfigured);
+  const connectionsTabEnabled = !!form;
 
   const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
   const isEditable = !disabled;
 
   const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
+  const [activeTab, setActiveTab] = useState<string>(defaultTab);
 
   return (
     <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
-      <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        defaultTab={defaultTab}
+        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+      >
         <TabList variant="line" sticky className="!bg-surface3 px-6">
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
+          {connectionsTabEnabled && <Tab value="connections">Connections</Tab>}
           <Tab value="instructions">Instructions</Tab>
           {skillsTabEnabled && <Tab value="skills">Skills</Tab>}
           {browserTabEnabled && <Tab value="browser">Browser</Tab>}
