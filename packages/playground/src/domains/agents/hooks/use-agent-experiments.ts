@@ -55,11 +55,14 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
         }),
       );
 
-      return results.flat().sort((a, b) => {
-        const dateA = a.startedAt ? new Date(a.startedAt).getTime() : 0;
-        const dateB = b.startedAt ? new Date(b.startedAt).getTime() : 0;
-        return dateB - dateA;
-      }) as AgentExperiment[];
+      const getStartedAtTime = (startedAt: AgentExperiment['startedAt'] | null) => {
+        if (!startedAt) return 0;
+        return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
+      };
+
+      return results
+        .flat()
+        .sort((a, b) => getStartedAtTime(b.startedAt) - getStartedAtTime(a.startedAt)) as AgentExperiment[];
     },
     enabled: Boolean(agentId) && datasets.length > 0,
     refetchInterval: query => {

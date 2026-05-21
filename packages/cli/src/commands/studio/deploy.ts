@@ -8,6 +8,7 @@ import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { config } from 'dotenv';
 import { runBuild } from '../../utils/run-build.js';
+import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -271,10 +272,19 @@ async function resolveProject(
     return { existing: true, projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
   }
 
-  // 1. CLI flag — match by slug first, then id
+  // 1. CLI flag — match by id, slug, or unambiguous name
   if (flagProject) {
     const projects = await fetchProjects(token, orgId);
-    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    const byId = projects.find(proj => proj.id === flagProject);
+    const bySlug = projects.find(proj => proj.slug === flagProject);
+    const byName = projects.filter(proj => proj.name === flagProject);
+    if (!byId && !bySlug && byName.length > 1) {
+      p.cancel(
+        `Multiple projects are named "${flagProject}". Pass --project with the project id or slug to disambiguate.`,
+      );
+      process.exit(1);
+    }
+    const match = byId ?? bySlug ?? (byName.length === 1 ? byName[0] : undefined);
     if (match) {
       return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
@@ -481,12 +491,32 @@ export async function deployAction(
 
   let t: number;
 
+  // Check build staleness to determine if we need to rebuild
+  const mastraDir = join(targetDir, 'src', 'mastra');
+  const outputDirectory = join(targetDir, '.mastra');
+  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory);
+
   if (opts.skipBuild) {
+    if (staleness.isStale && staleness.reason !== 'no-build') {
+      // User explicitly skipped build, but sources have changed — warn them
+      if (staleness.reason === 'hash-mismatch') {
+        p.log.warn('Source files have changed since last build. Deploy may not reflect latest changes.');
+      } else if (staleness.reason === 'no-manifest') {
+        p.log.warn('No build manifest found. Cannot verify if build is up-to-date.');
+      }
+    }
     p.log.step('Skipping build (--skip-build)');
-  } else {
+  } else if (staleness.isStale) {
+    // Build is stale or doesn't exist — rebuild
     t = performance.now();
+    if (staleness.reason === 'hash-mismatch') {
+      p.log.step('Source files changed, rebuilding...');
+    }
     await runBuild(targetDir, { debug: opts.debug });
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
+  } else {
+    // Build is up-to-date — skip rebuild
+    p.log.step('Build is up-to-date, skipping rebuild');
   }
 
   // Verify build output exists

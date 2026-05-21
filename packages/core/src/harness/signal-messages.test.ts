@@ -126,15 +126,18 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const harness = createHarness(storage, agent);
-    const thread = await harness.createThread();
-
-    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {})(),
       unsubscribe: vi.fn(),
       abort: vi.fn(),
       activeRunId: () => 'active-run-id',
     });
+    const thread = await harness.createThread();
+
+    // Simulate an active run from the harness consumer's perspective
+    (harness as any).currentRunId = 'active-run-id';
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -164,13 +167,13 @@ describe('Harness signal messages', () => {
     });
     const harness = createHarness(storage, agent);
     const abort = vi.fn();
-    await harness.createThread();
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {})(),
       unsubscribe: vi.fn(),
       abort,
       activeRunId: () => 'active-run-id',
     });
+    await harness.createThread();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -196,13 +199,20 @@ describe('Harness signal messages', () => {
     const abort = vi.fn(() => true);
     const unsubscribe = vi.fn();
 
+    vi.spyOn(agent, 'subscribeToThread')
+      .mockResolvedValueOnce({
+        stream: (async function* () {})(),
+        unsubscribe,
+        abort,
+        activeRunId: () => 'active-run-id',
+      })
+      .mockResolvedValue({
+        stream: (async function* () {})(),
+        unsubscribe: vi.fn(),
+        abort: vi.fn(),
+        activeRunId: () => null,
+      });
     await harness.createThread();
-    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
-      stream: (async function* () {})(),
-      unsubscribe,
-      abort,
-      activeRunId: () => 'active-run-id',
-    });
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -234,7 +244,6 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await harness.createThread();
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {
         yield { type: 'start', runId: 'run-1' };
@@ -244,18 +253,12 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'run-1',
-      signal: createSignal({ type: 'user-message', contents: 'active hello' }),
-    });
-
-    const signal = harness.sendSignal({ content: 'active hello' });
-    await signal.accepted;
+    await harness.createThread();
 
     await waitFor(() => events.some(event => event.type === 'agent_end' && event.reason === 'error'));
 
     expect(events.some(event => event.type === 'error' && event.error.message === 'subscription failed')).toBe(true);
+    await waitFor(() => harness.getCurrentRunId() === null);
     expect(harness.getCurrentRunId()).toBeNull();
   });
 
@@ -284,7 +287,6 @@ describe('Harness signal messages', () => {
       return true;
     });
 
-    await harness.createThread();
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {
         yield { type: 'start', runId: 'run-1' };
@@ -296,6 +298,7 @@ describe('Harness signal messages', () => {
       abort,
       activeRunId: () => activeRunId,
     });
+    await harness.createThread();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'run-1',
@@ -538,13 +541,10 @@ describe('Harness signal messages', () => {
         data: {
           id: 'signal-file-1',
           type: 'user-message',
-          contents: {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Review this' },
-              { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
-            ],
-          },
+          contents: [
+            { type: 'text', text: 'Review this' },
+            { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
+          ],
           createdAt: '2026-05-04T00:00:00.000Z',
         },
       },

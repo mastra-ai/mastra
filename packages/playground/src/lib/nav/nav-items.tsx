@@ -2,6 +2,7 @@ import {
   AgentIcon,
   DatasetsIcon,
   ExperimentsIcon,
+  HomeIcon,
   LogsIcon,
   McpServerIcon,
   MetricsIcon,
@@ -34,7 +35,7 @@ export interface NavItem {
 export interface NavSection {
   key: string;
   title: string;
-  href: string;
+  href?: string;
   items: NavItem[];
 }
 
@@ -42,7 +43,6 @@ export const mainNav: NavSection[] = [
   {
     key: 'primitives',
     title: 'Primitives',
-    href: '/primitives',
     items: [
       {
         name: 'Agents',
@@ -113,8 +113,13 @@ export const mainNav: NavSection[] = [
   {
     key: 'evaluation',
     title: 'Evaluation',
-    href: '/evaluation',
     items: [
+      {
+        name: 'Overview',
+        url: '/evaluation',
+        Icon: HomeIcon,
+        isOnMastraPlatform: true,
+      },
       {
         name: 'Scorers',
         url: '/scorers',
@@ -147,7 +152,6 @@ export const mainNav: NavSection[] = [
   {
     key: 'observability',
     title: 'Observability',
-    href: '/observability-overview',
     items: [
       {
         name: 'Metrics',
@@ -183,7 +187,7 @@ export const bottomNav: NavItem[] = [
   { name: 'Resources', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
 ];
 
-/** Section-level evaluation/observability/overview crumbs the sidebar headers link to. */
+/** Section-level entries used to resolve breadcrumb label + icon for the overview routes. */
 export const sectionNav: NavItem[] = [
   {
     name: 'Evaluation',
@@ -191,20 +195,11 @@ export const sectionNav: NavItem[] = [
     Icon: ExperimentsIcon,
     docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Evaluation documentation' },
   },
-  {
-    name: 'Observability',
-    url: '/observability-overview',
-    Icon: TraceIcon,
-    docs: { href: 'https://mastra.ai/en/docs/observability/overview', label: 'Observability documentation' },
-  },
-  {
-    name: 'Primitives',
-    url: '/primitives',
-    Icon: AgentIcon,
-  },
 ];
 
-const allItems: NavItem[] = [...mainNav.flatMap(s => s.items), ...bottomNav, ...sectionNav];
+// sectionNav comes first so /evaluation resolves to "Evaluation" (section crumb) rather than the
+// in-section "Overview" NavLink which shares the same url.
+const allItems: NavItem[] = [...sectionNav, ...mainNav.flatMap(s => s.items), ...bottomNav];
 
 export function findNavItem(url: string): NavItem | undefined {
   return allItems.find(i => i.url === url);

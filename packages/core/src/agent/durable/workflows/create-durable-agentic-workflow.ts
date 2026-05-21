@@ -3,7 +3,7 @@ import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
 import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
-import { createObservabilityContext } from '../../../observability';
+import { createObservabilityContext, InternalSpans } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -114,6 +114,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
       sharePubsub: true,
+      // Internal durable-agent execution plumbing — hide workflow spans;
+      // the agent/tool/model spans within still surface for users.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     // Step 0: Convert iteration state to LLM input format
@@ -202,6 +207,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       options: {
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
         validateInputs: false,
+        // Internal durable-agent execution plumbing — see singleIterationWorkflow.
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
       },
     })
       // Initialize iteration state from input

@@ -1,7 +1,6 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -9,12 +8,15 @@ import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 import { useMastraClient } from '@/mastra-client-context';
+
+type ToolsInput = any;
 
 export interface MastraChatProps {
   agentId: string;
@@ -56,10 +58,14 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
   | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
-export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
+export type GenerateArgs = SharedArgs & {
+  onFinish?: (messages: UIMessage[]) => Promise<void>;
+  clientTools?: ToolsInput;
+};
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
+  clientTools?: ToolsInput;
   signalId?: string;
 };
 
@@ -83,7 +89,7 @@ export const useChat = ({
   threadId,
   initialMessages,
   requestContext: propsRequestContext,
-  clientTools,
+  clientTools: hookClientTools,
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
@@ -126,14 +132,46 @@ export const useChat = ({
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
 
-  type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
+  type SignalContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'file'; data: string; mediaType: string; filename?: string };
+  type UserMessageSignalContents = string | SignalContentPart[];
+
+  const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
+    if (data instanceof URL) return data.toString();
+    return convertSignalDataToBase64String(data);
+  };
 
   const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
-    if (coreUserMessages.length === 1) {
-      return coreUserMessages[0] as UserMessageSignalContents;
-    }
+    const parts = coreUserMessages.reduce<SignalContentPart[]>((allParts, message) => {
+      if (typeof message.content === 'string') {
+        allParts.push({ type: 'text', text: message.content });
+        return allParts;
+      }
 
-    return coreUserMessages as UserMessageSignalContents;
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          allParts.push({ type: 'text', text: part.text });
+        } else if (part.type === 'file') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.data),
+            mediaType: part.mimeType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          });
+        } else if (part.type === 'image') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.image),
+            mediaType: part.mimeType ?? 'image/png',
+          });
+        }
+      }
+
+      return allParts;
+    }, []);
+
+    return parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
   };
 
   const markThreadSignalsUnsupported = useCallback(() => {
@@ -219,7 +257,7 @@ export const useChat = ({
           // run execute(), emit a synthetic tool-result chunk, and POST a
           // streamUntilIdle continuation. React contributes nothing beyond
           // forwarding these as hook props.
-          clientTools: clientTools as any,
+          clientTools: hookClientTools as any,
           requestContext: _requestContext.current,
         })
         .then(response => {
@@ -261,7 +299,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, clientTools, markThreadSignalsUnsupported, processStreamChunk],
+    [agentId, baseClient, hookClientTools, markThreadSignalsUnsupported, processStreamChunk],
   );
 
   useEffect(() => {
@@ -292,6 +330,7 @@ export const useChat = ({
     signal,
     onFinish,
     tracingOptions,
+    clientTools,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -307,6 +346,7 @@ export const useChat = ({
       requireToolApproval,
     } = modelSettings || {};
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedClientTools = clientTools ?? hookClientTools;
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
@@ -340,6 +380,7 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       tracingOptions,
       requireToolApproval,
+      clientTools: resolvedClientTools,
     });
 
     // Check if suspended for tool approval
@@ -394,6 +435,7 @@ export const useChat = ({
     modelSettings,
     signal,
     tracingOptions,
+    clientTools,
     signalId,
   }: StreamArgs) => {
     const {
@@ -411,6 +453,7 @@ export const useChat = ({
     } = modelSettings || {};
 
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedClientTools = clientTools ?? hookClientTools;
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
@@ -450,10 +493,7 @@ export const useChat = ({
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
-        // Forward hook-prop client tools so the legacy in-stream tool loop
-        // (processStreamResponse) can execute them when no thread
-        // subscription is available.
-        clientTools: clientTools as any,
+        clientTools: resolvedClientTools,
       });
 
       _onChunk.current = onChunk;
@@ -512,7 +552,7 @@ export const useChat = ({
             providerOptions: providerOptions as any,
             requireToolApproval,
             tracingOptions,
-            clientTools: clientTools as any,
+            clientTools: resolvedClientTools as any,
           },
         },
       });

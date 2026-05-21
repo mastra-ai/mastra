@@ -10,6 +10,11 @@ import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import {
+  buildMaxStepsStreamErrorMessage,
+  buildStreamErrorMessage,
+  isMaxStepsFinishChunk,
+} from './stream-error-message';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -134,34 +139,6 @@ const buildGlobalOmPartsByCycleId = (messages: MastraUIMessage[]) => {
     indexOmPartsByCycleId(msg.parts, map);
   }
   return map;
-};
-
-/**
- * Build a `MastraUIMessage` representing a stream `error` chunk so it can be
- * rendered by `error-aware-text`. Prefer the human-readable `message` field on
- * the error payload when present, falling back to a JSON dump so we never
- * silently swallow an error.
- */
-const buildStreamErrorMessage = (chunk: { runId?: string; payload?: { error?: unknown } }): MastraUIMessage => {
-  const errorValue = chunk.payload?.error;
-  let text: string;
-  if (typeof errorValue === 'string') {
-    text = errorValue;
-  } else if (
-    errorValue &&
-    typeof errorValue === 'object' &&
-    typeof (errorValue as { message?: unknown }).message === 'string'
-  ) {
-    text = (errorValue as { message: string }).message;
-  } else {
-    text = JSON.stringify(errorValue ?? 'Unknown error');
-  }
-  return {
-    id: `error-${chunk.runId ?? 'unknown'}-${Date.now()}`,
-    role: 'assistant',
-    parts: [{ type: 'text', text }],
-    metadata: { status: 'error' },
-  } as MastraUIMessage;
 };
 
 /**
@@ -493,9 +470,10 @@ export function MastraRuntimeProvider({
   // Check if OM is enabled from the agent's memory config.
   // The config value can be `true`, `false`, `undefined`, or an object with/without `.enabled`.
   const { data: memoryConfigData } = useMemoryConfig(agentId);
-  const omConfig = memoryConfigData?.config?.observationalMemory;
+  const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
   const isOMEnabled =
-    omConfig === true || (typeof omConfig === 'object' && omConfig !== null && omConfig.enabled !== false);
+    omConfig === true ||
+    (typeof omConfig === 'object' && omConfig !== null && (!('enabled' in omConfig) || omConfig.enabled !== false));
   const {
     setIsObservingFromStream,
     setIsReflectingFromStream,
@@ -859,6 +837,10 @@ export function MastraRuntimeProvider({
               tracingOptions: tracingSettings?.tracingOptions,
               onChunk: async chunk => {
                 if (chunk.type === 'finish') {
+                  if (isMaxStepsFinishChunk(chunk)) {
+                    setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, maxSteps)]);
+                  }
+
                   await refreshThreadList?.();
                 }
 

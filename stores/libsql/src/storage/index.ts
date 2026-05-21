@@ -9,6 +9,7 @@ import { BlobsLibSQL } from './domains/blobs';
 import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
+import { FavoritesLibSQL } from './domains/favorites';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
@@ -38,6 +39,7 @@ export {
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
   SkillsLibSQL,
+  FavoritesLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -194,6 +196,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const mcpServers = new MCPServersLibSQL(domainConfig);
     const workspaces = new WorkspacesLibSQL(domainConfig);
     const skills = new SkillsLibSQL(domainConfig);
+    const favorites = new FavoritesLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
@@ -213,6 +216,7 @@ export class LibSQLStore extends MastraCompositeStore {
       mcpServers,
       workspaces,
       skills,
+      favorites,
       blobs,
       backgroundTasks,
       schedules,

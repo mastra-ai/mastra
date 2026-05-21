@@ -8,6 +8,7 @@ import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
+import type { MastraCodeAnalytics } from '../analytics.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -18,8 +19,10 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
+import type { IdleCounterComponent } from './components/idle-counter.js';
+import type { JudgeDisplayComponent } from './components/judge-display.js';
 import type { GradientAnimator } from './components/obi-loader.js';
-import type { OMMarkerComponent } from './components/om-marker.js';
+import type { OMMarkerComponent, OMMarkerData } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { ShellStreamComponent } from './components/shell-output.js';
@@ -48,6 +51,9 @@ export interface MastraTUIOptions {
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
+
+  /** Analytics client for product telemetry */
+  analytics?: MastraCodeAnalytics;
 
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
@@ -87,6 +93,7 @@ export interface TUIState {
   harness: Harness<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
+  analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   mcpManager?: McpManager;
   workspace?: Workspace;
@@ -95,6 +102,9 @@ export interface TUIState {
   ui: TUI;
   chatContainer: Container;
   editorContainer: Container;
+  idleCounter?: IdleCounterComponent;
+  idleStartedAt?: number;
+  lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
   terminal: ProcessTerminal;
@@ -130,8 +140,9 @@ export interface TUIState {
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
   quietMode: boolean;
+  quietModeMaxToolPreviewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
-  activeGoalJudge?: { modelId: string };
+  activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -155,7 +166,8 @@ export interface TUIState {
   pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
-  lastSubmitPlanComponent?: IToolExecutionComponent;
+  lastSubmitPlanComponent?: Component;
+  pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -180,6 +192,7 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationData?: OMMarkerData;
   activeActivationTTLMarker?: OMMarkerComponent;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 
@@ -188,10 +201,13 @@ export interface TUIState {
 
   // ── Goal loop ─────────────────────────────────────────────────────────
   goalManager: GoalManager;
+  /** Track a goal started from plan approval — return to plan mode when it completes */
+  planStartedGoalId?: string;
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  skillCommands: SkillMetadata[];
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
@@ -233,6 +249,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     harness: options.harness,
     options,
     hookManager: options.hookManager,
+    analytics: options.analytics,
     authStorage: options.authStorage,
     mcpManager: options.mcpManager,
     workspace: options.workspace,
@@ -262,6 +279,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     toolOutputExpanded: false,
     hideThinkingBlock: true,
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,
@@ -272,6 +290,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Inline interaction
     lastClearedText: '',
     pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
@@ -286,9 +305,11 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Goal loop
     goalManager: new GoalManager(),
+    planStartedGoalId: undefined,
 
     // Input
     customSlashCommands: [],
+    skillCommands: [],
     goalSkillCommands: [],
     pendingImages: [],
 

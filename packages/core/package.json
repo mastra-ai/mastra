@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.34.0-alpha.1",
+  "version": "1.37.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -89,6 +89,16 @@
       "require": {
         "types": "./dist/auth/ee/index.d.ts",
         "default": "./dist/auth/ee/index.cjs"
+      }
+    },
+    "./agent-builder/ee": {
+      "import": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.cjs"
       }
     },
     "./background-tasks": {
@@ -702,6 +712,16 @@
         "default": "./dist/storage/domains/skills/index.cjs"
       }
     },
+    "./storage/domains/favorites": {
+      "import": {
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.cjs"
+      }
+    },
     "./storage/domains/workspaces": {
       "import": {
         "types": "./dist/storage/domains/workspaces/index.d.ts",
@@ -741,7 +761,7 @@
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.18.0",
-    "chat": "^4.24.0",
+    "chat": "^4.29.0",
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
@@ -756,6 +776,7 @@
     "p-map": "^7.0.4",
     "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
+    "posthog-node": "^5.30.6",
     "ws": "^8.20.0",
     "xxhash-wasm": "^1.1.0"
   },

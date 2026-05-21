@@ -74,7 +74,7 @@ describe('Express auth middleware helper', () => {
     await middleware(authenticatedReq, authenticatedRes, next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(authenticatedRes.locals.requestContext.get('user')).toEqual({
+    expect(authenticatedRes.locals.requestContext.get('mastra__user')).toEqual({
       id: 'user-1',
       email: 'user@example.com',
     });

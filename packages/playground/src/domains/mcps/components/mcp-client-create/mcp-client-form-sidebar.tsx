@@ -1,6 +1,5 @@
 import {
   Button,
-  ButtonWithTooltip,
   Input,
   Label,
   ScrollArea,
@@ -273,12 +272,12 @@ export function MCPClientFormSidebar({
                     : undefined;
 
               return tooltipContent ? (
-                <ButtonWithTooltip
+                <Button
                   variant="outline"
                   onClick={onTryConnect}
                   disabled={isDisabled}
                   className="w-full"
-                  tooltipContent={tooltipContent}
+                  tooltip={tooltipContent}
                 >
                   {isTryingConnect ? (
                     <>
@@ -288,7 +287,7 @@ export function MCPClientFormSidebar({
                   ) : (
                     'Try to connect'
                   )}
-                </ButtonWithTooltip>
+                </Button>
               ) : (
                 <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
                   {isTryingConnect ? (
