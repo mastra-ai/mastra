@@ -295,7 +295,7 @@ export function renderOmTaskUpdate(om: OmChunk): StreamChunk {
       id: `om-activation:${cycleId}`,
       title: `Activated reflection${deltaStr}`,
       status: 'complete',
-      details: `${formatTokens(om.data.tokensActivated)} → ${formatTokens(om.data.observationTokens)} obs tokens`,
+      details: `${formatTokens(om.data.tokensActivated)} → ${formatTokens(om.data.observationTokens)} memory tokens`,
     };
   }
 
@@ -304,6 +304,6 @@ export function renderOmTaskUpdate(om: OmChunk): StreamChunk {
     id: `om-activation:${cycleId}`,
     title: 'Recalled memory',
     status: 'complete',
-    details: `-${formatTokens(om.data.tokensActivated)} msg tokens, +${formatTokens(om.data.observationTokens)} obs tokens`,
+    details: `-${formatTokens(om.data.tokensActivated)} message tokens, +${formatTokens(om.data.observationTokens)} memory tokens`,
   };
 }

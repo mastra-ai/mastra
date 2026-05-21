@@ -504,6 +504,7 @@ export async function runStreamingDriver({
       // 'timeline' | 'grouped' — push task_update into Plan widget.
       const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
+      pushToSession({ type: 'plan_update', title: taskTitle });
       pushToSession({
         type: 'task_update',
         id: enr.toolCallId,
@@ -592,16 +593,14 @@ export async function runStreamingDriver({
         args: chunk.payload.args,
       });
       const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
-      const activeSession = sessionRef.current;
-      if (activeSession) {
-        activeSession.push({
-          type: 'task_update',
-          id: enr.toolCallId,
-          title: taskTitle,
-          status: 'pending',
-          details: 'Requesting user approval…',
-        });
-      }
+      pushToSession({ type: 'plan_update', title: `Requesting approval: ${enr.displayName}` });
+      pushToSession({
+        type: 'task_update',
+        id: enr.toolCallId,
+        title: taskTitle,
+        status: 'complete',
+        details: 'Requesting user approval…',
+      });
       await closeSession();
       // Approval cards are always rendered as Block Kit (`useCards: true`)
       // so the Approve/Deny buttons render — non-cards modes never opt out
