@@ -46,7 +46,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 

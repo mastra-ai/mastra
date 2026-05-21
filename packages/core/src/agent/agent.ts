@@ -5756,7 +5756,8 @@ export class Agent<
             agentBackgroundConfig: this.#backgroundTasks,
           }),
       skipBgTaskWait: options._skipBgTaskWait,
-      drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
+      drainPendingSignals: (runId, scope) =>
+        agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub, scope),
     });
 
     // The prepare-stream workflow runs on the evented engine and needs a

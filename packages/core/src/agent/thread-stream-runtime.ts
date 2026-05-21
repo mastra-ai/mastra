@@ -59,6 +59,10 @@ type AgentThreadRuntimeState = {
   threadKeysByRunId: Map<string, string>;
   activeThreadRunIds: Map<string, string>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  // Signals queued for a run that is starting but has not made its first model
+  // request yet. The first LLM step drains these and folds them into that
+  // request; `pendingSignalsByThread` follow-ups instead become their own turn.
+  preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
   watchedThreadRunIds: Set<string>;
   preparedRunsById: Map<string, PreparedThreadRun>;
@@ -72,7 +76,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'stream-part'; runId: string; part: unknown; sourceId: string }
   | { type: 'run-completed'; runId: string }
   | { type: 'run-aborted'; runId: string }
-  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string };
+  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean };
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -80,6 +84,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadKeysByRunId: new Map(),
     activeThreadRunIds: new Map(),
     pendingSignalsByThread: new Map(),
+    preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     watchedThreadRunIds: new Set(),
     preparedRunsById: new Map(),
@@ -268,6 +273,7 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.clear();
     state.activeThreadRunIds.clear();
     state.pendingSignalsByThread.clear();
+    state.preRunSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.watchedThreadRunIds.clear();
     state.preparedRunsById.clear();
@@ -354,6 +360,15 @@ export class AgentThreadStreamRuntime {
       return;
     }
 
+    // A run can finish before its first model request drained its pre-run
+    // signals (e.g. it errored early). Don't strand them — fold them into the
+    // follow-up queue so the next run still picks them up.
+    const preRunLeftover = state.preRunSignalsByThread.get(key);
+    if (preRunLeftover?.length) {
+      state.preRunSignalsByThread.delete(key);
+      state.pendingSignalsByThread.set(key, [...preRunLeftover, ...(state.pendingSignalsByThread.get(key) ?? [])]);
+    }
+
     const queue = state.pendingSignalsByThread.get(key);
     const signal = queue?.shift();
     if (signal && queue) {
@@ -421,18 +436,27 @@ export class AgentThreadStreamRuntime {
     }
   }
 
-  drainPendingSignals(runId: string, pubsub?: PubSub) {
+  /**
+   * Drains queued signals for a run.
+   *
+   * - `scope: 'pending'` (default) returns active-run follow-up signals — each
+   *   becomes its own model turn via `signalDrainStep`.
+   * - `scope: 'pre-run'` returns signals queued before the run's first model
+   *   request — the first LLM step folds these into that request.
+   */
+  drainPendingSignals(runId: string, pubsub?: PubSub, scope: 'pending' | 'pre-run' = 'pending'): CreatedAgentSignal[] {
     const state = this.#getState(pubsub);
     const record = state.threadRunsById.get(runId);
     const key = record ? this.#threadKey(record.resourceId, record.threadId) : state.threadKeysByRunId.get(runId);
     if (!key) return [];
 
-    const queue = state.pendingSignalsByThread.get(key);
+    const signalsByThread = scope === 'pre-run' ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+    const queue = signalsByThread.get(key);
     if (!queue || queue.length === 0) {
       return [];
     }
 
-    state.pendingSignalsByThread.delete(key);
+    signalsByThread.delete(key);
     return queue;
   }
 
@@ -594,9 +618,10 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'signal-enqueued') {
         if (data.sourceId === this.#id) return;
-        const queue = state.pendingSignalsByThread.get(key) ?? [];
+        const signalsByThread = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+        const queue = signalsByThread.get(key) ?? [];
         queue.push(createSignal(data.signal));
-        state.pendingSignalsByThread.set(key, queue);
+        signalsByThread.set(key, queue);
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted') {
@@ -748,18 +773,23 @@ export class AgentThreadStreamRuntime {
       }
 
       if (key && state.activeThreadRunIds.get(key) === runId) {
-        // Reserved local runs need a local queue until registerRun() attaches the stream record.
-        // Remote active runs only need the PubSub event; the owning process queues it locally.
-        if (state.threadKeysByRunId.get(runId) === key) {
-          const queue = state.pendingSignalsByThread.get(key) ?? [];
+        // A local reserved run has not registered its stream record yet, so it
+        // has not made its first model request — queue the signal as a pre-run
+        // signal so the first LLM step folds it into that request. A run owned
+        // by another runtime instance is reached only via PubSub; treat it as a
+        // follow-up, since the sender cannot see the owner's request state.
+        const isLocalReservedRun = state.threadKeysByRunId.get(runId) === key;
+        if (isLocalReservedRun) {
+          const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
-          state.pendingSignalsByThread.set(key, queue);
+          state.preRunSignalsByThread.set(key, queue);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',
           runId,
           signal: this.#serializeSignal(signal),
           sourceId: this.#getSourceId(),
+          preRun: isLocalReservedRun,
         });
         return { accepted: true, runId, signal };
       }

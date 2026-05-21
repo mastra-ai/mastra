@@ -55,7 +55,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
