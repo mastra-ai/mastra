@@ -756,9 +756,8 @@ export class SlackProvider implements ChannelProvider {
    */
   #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
-    const { adapterConfig, cors, gateway, cards, formatToolCall, formatError, streaming, typingStatus, toolDisplay } =
-      this.#channelConfig;
-    const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, typingStatus, toolDisplay };
+    const { adapterConfig, cors, gateway, formatError, streaming, typingStatus, toolDisplay } = this.#channelConfig;
+    const topLevel = { cors, gateway, formatError, streaming, typingStatus, toolDisplay };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
     const filteredAdapterConfig = Object.fromEntries(
       Object.entries(adapterConfig ?? {}).filter(([, value]) => value !== undefined),

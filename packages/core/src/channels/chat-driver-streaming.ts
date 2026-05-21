@@ -2,18 +2,38 @@ import type { Adapter, StreamChunk, Thread } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
+import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './agent-channels';
 import { chatModule } from './chat-lazy';
 import { formatToolApproval } from './formatting';
 import { asOmChunk, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
-import { ToolTracker, postFileAttachment, postStreamError, postTripwire } from './stream-helpers';
+import {
+  ToolTracker,
+  postFileAttachment,
+  postStreamError,
+  postTripwire,
+  renderBuiltInToolEvent,
+} from './stream-helpers';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
   sdkThread: Thread;
   adapter: Adapter;
-  /** After `resolveToolDisplay`, streaming-mode tool display is one of these three. */
-  toolDisplay: 'timeline' | 'grouped' | 'hidden';
+  /**
+   * Resolved tool display mode. `'timeline'`/`'grouped'`/`'hidden'` render
+   * inside the streaming `Plan` widget; `'cards'`/`'text'` render as
+   * discrete `sdkThread.post`/`edit` calls — the driver closes the active
+   * session, posts the per-tool message, and reopens on the next chunk.
+   */
+  toolDisplay: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden';
+  /**
+   * Optional function-form `toolDisplay` callback. When set, the built-in
+   * renderers are bypassed and this is called once per tool lifecycle event.
+   * A `{ kind: 'post' }` return triggers the close/post/reopen lifecycle
+   * (same as `'cards'`/`'text'`); a `{ kind: 'stream' }` return pushes the
+   * chunk into the active streaming session.
+   */
+  toolDisplayFn?: ToolDisplayFn;
   streamingOptions?: { updateIntervalMs?: number };
   channelToolNames: Set<string>;
   logger?: IMastraLogger;
@@ -65,6 +85,7 @@ export async function runStreamingDriver({
   sdkThread,
   adapter,
   toolDisplay,
+  toolDisplayFn,
   streamingOptions,
   channelToolNames,
   logger,
@@ -76,8 +97,17 @@ export async function runStreamingDriver({
 }: StreamingDriverArgs): Promise<void> {
   const platform = adapter.name;
 
+  // Only `'timeline'`/`'grouped'` configure the chat-SDK Plan widget. The
+  // rest (`'cards'`/`'text'`/`'hidden'`) stream just the text body and post
+  // per-tool messages out-of-band via close/post/reopen.
   const groupTasks: 'plan' | 'timeline' | undefined =
     toolDisplay === 'timeline' ? 'timeline' : toolDisplay === 'grouped' ? 'plan' : undefined;
+
+  // `'timeline'`/`'grouped'`/`'hidden'` push tool events as task_updates
+  // into the active streaming Plan. `'cards'`/`'text'` (and `fn` returning
+  // `{ kind: 'post' }`) close the session, post the message, and reopen on
+  // the next chunk.
+  const rendersToolsInPlan = toolDisplay === 'timeline' || toolDisplay === 'grouped';
 
   const tracker = new ToolTracker();
   // Box the session in a ref object so TypeScript's CFA can't narrow it to
@@ -198,6 +228,80 @@ export async function runStreamingDriver({
     return stash ? `${stash.displayName} ${stash.argsSummary}` : fallback;
   };
 
+  /**
+   * Close any active streaming session, post `message` as a standalone
+   * platform message (Block Kit card or plain text), and let the next
+   * chunk reopen a fresh session. Used for `'cards'`/`'text'` tool events
+   * and `ToolDisplayFn` `{ kind: 'post' }` returns.
+   */
+  const postOutOfBand = async (message: PostableMessage): Promise<string | undefined> => {
+    await closeSession();
+    try {
+      const sent = await sdkThread.post(message);
+      return sent?.id;
+    } catch (e) {
+      logger?.debug?.('[CHANNEL] streaming out-of-band post failed', { error: e });
+      return undefined;
+    }
+  };
+
+  /**
+   * Dispatch a tool lifecycle event:
+   *   - If `toolDisplayFn` is set, call it. `{ kind: 'post' }` → close /
+   *     post / reopen. `{ kind: 'stream' }` → push to active session.
+   *     `undefined` → skip.
+   *   - Else if `toolDisplay` renders inside the Plan widget
+   *     (`'timeline'`/`'grouped'`/`'hidden'`), return null so the caller
+   *     can push the built-in `task_update` into the session.
+   *   - Else (`'cards'`/`'text'`), render via `renderBuiltInToolEvent` and
+   *     post out-of-band.
+   * Returns the posted message id (when posted out-of-band) so the caller
+   * can stash it on `tool-call` and edit it on `tool-result`/`-error`.
+   */
+  const dispatchToolEvent = async (event: ToolDisplayEvent): Promise<{ posted: boolean; messageId?: string }> => {
+    if (toolDisplayFn) {
+      const result = toolDisplayFn(event, { mode: 'streaming', platform });
+      if (result == null) return { posted: true };
+      if (result.kind === 'stream') {
+        pushToSession(result.chunk);
+        return { posted: false };
+      }
+      // kind === 'post'
+      const id = result.message != null ? await postOutOfBand(result.message) : undefined;
+      return { posted: true, messageId: id };
+    }
+    if (rendersToolsInPlan || toolDisplay === 'hidden') {
+      return { posted: false };
+    }
+    // 'cards' | 'text' — post out-of-band
+    const message = renderBuiltInToolEvent(event, toolDisplay);
+    const id = await postOutOfBand(message);
+    return { posted: true, messageId: id };
+  };
+
+  // Stash messageId of out-of-band "Running…" posts per toolCallId so the
+  // tool-result/-error handler can edit the same message instead of posting
+  // a second one. Only used when tools are posted out-of-band (cards/text
+  // or fn returning `{ kind: 'post' }`).
+  const toolMessageIds = new Map<string, string | undefined>();
+
+  const editOrPost = async (messageId: string | undefined, message: PostableMessage): Promise<void> => {
+    await closeSession();
+    if (messageId) {
+      try {
+        await adapter.editMessage(sdkThread.id, messageId, message);
+        return;
+      } catch (e) {
+        logger?.debug?.('[CHANNEL] streaming edit failed, falling back to post', { error: e });
+      }
+    }
+    try {
+      await sdkThread.post(message);
+    } catch (e) {
+      logger?.debug?.('[CHANNEL] streaming edit-fallback post failed', { error: e });
+    }
+  };
+
   for await (const chunk of stream) {
     // --- data-* parts: signal echo + OM lifecycle ---
     const chunkType = chunk.type as string;
@@ -288,14 +392,43 @@ export async function runStreamingDriver({
         continue;
       }
 
-      // Close any active text-only session before the first tool of a step
-      // in timeline mode so the preceding text posts as its own platform
-      // message (Slack's AI Assistant always renders tasks above markdown
-      // body within a single post). In grouped mode keep the session open
-      // so every task accumulates under one plan widget.
+      // For Plan-widget modes, close any active text-only session before
+      // the first tool of a step in timeline mode so the preceding text
+      // posts as its own platform message. In grouped mode keep the
+      // session open so every task accumulates under one plan widget.
       if (toolDisplay === 'timeline' && sessionRef.current && tracker.inFlightCount === 1) {
         await closeSession();
       }
+
+      if (toolDisplayFn || !rendersToolsInPlan) {
+        // 'cards' | 'text' | fn → post out-of-band, stash messageId for
+        // the result handler to edit. Skip the eager "running" post when
+        // a custom fn is set — most fns prefer to render once on result.
+        if (toolDisplayFn) {
+          toolMessageIds.set(enr.toolCallId, undefined);
+          // Still call the fn so it can render a "running" view if it wants.
+          const { messageId } = await dispatchToolEvent({
+            kind: 'running',
+            toolName: enr.toolName,
+            displayName: enr.displayName,
+            argsSummary: enr.argsSummary,
+            args: enr.args,
+          });
+          if (messageId) toolMessageIds.set(enr.toolCallId, messageId);
+        } else {
+          const { messageId } = await dispatchToolEvent({
+            kind: 'running',
+            toolName: enr.toolName,
+            displayName: enr.displayName,
+            argsSummary: enr.argsSummary,
+            args: enr.args,
+          });
+          toolMessageIds.set(enr.toolCallId, messageId);
+        }
+        continue;
+      }
+
+      // 'timeline' | 'grouped' — push task_update into Plan widget.
       const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
       if (toolDisplay === 'grouped') {
         // Mirror the task title (with inline args) into the plan title so
@@ -321,8 +454,54 @@ export async function runStreamingDriver({
         result: chunk.payload.result,
         isError: chunk.payload.isError,
       });
-      takePendingApproval(enr.toolCallId);
+      const approvalStash = takePendingApproval(enr.toolCallId);
       if (toolDisplay === 'hidden') continue;
+
+      if (toolDisplayFn || !rendersToolsInPlan) {
+        const messageId = toolMessageIds.get(enr.toolCallId) ?? approvalStash?.messageId;
+        toolMessageIds.delete(enr.toolCallId);
+        if (toolDisplayFn) {
+          const result = toolDisplayFn(
+            {
+              kind: 'result',
+              toolName: enr.toolName,
+              displayName: enr.displayName,
+              argsSummary: enr.argsSummary,
+              args: enr.args,
+              result: chunk.payload.result,
+              resultText: enr.resultText ?? '',
+              durationMs: enr.durationMs ?? 0,
+              isError: !!chunk.payload.isError,
+            },
+            { mode: 'streaming', platform },
+          );
+          if (result == null) continue;
+          if (result.kind === 'stream') {
+            pushToSession(result.chunk);
+            continue;
+          }
+          if (result.message != null) await editOrPost(messageId, result.message);
+          continue;
+        }
+        const message = renderBuiltInToolEvent(
+          {
+            kind: 'result',
+            toolName: enr.toolName,
+            displayName: enr.displayName,
+            argsSummary: enr.argsSummary,
+            args: enr.args,
+            result: chunk.payload.result,
+            resultText: enr.resultText ?? '',
+            durationMs: enr.durationMs ?? 0,
+            isError: !!chunk.payload.isError,
+          },
+          toolDisplay as 'cards' | 'text',
+        );
+        await editOrPost(messageId, message);
+        continue;
+      }
+
+      // 'timeline' | 'grouped' — push task_update into Plan widget.
       const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
       pushToSession({
@@ -345,8 +524,52 @@ export async function runStreamingDriver({
         args: chunk.payload.args,
         error: chunk.payload.error,
       });
-      takePendingApproval(enr.toolCallId);
+      const approvalStash = takePendingApproval(enr.toolCallId);
       if (toolDisplay === 'hidden') continue;
+
+      if (toolDisplayFn || !rendersToolsInPlan) {
+        const messageId = toolMessageIds.get(enr.toolCallId) ?? approvalStash?.messageId;
+        toolMessageIds.delete(enr.toolCallId);
+        if (toolDisplayFn) {
+          const result = toolDisplayFn(
+            {
+              kind: 'error',
+              toolName: enr.toolName,
+              displayName: enr.displayName,
+              argsSummary: enr.argsSummary,
+              args: enr.args,
+              error: chunk.payload.error,
+              errorText: enr.errorText ?? '',
+              durationMs: enr.durationMs ?? 0,
+            },
+            { mode: 'streaming', platform },
+          );
+          if (result == null) continue;
+          if (result.kind === 'stream') {
+            pushToSession(result.chunk);
+            continue;
+          }
+          if (result.message != null) await editOrPost(messageId, result.message);
+          continue;
+        }
+        const message = renderBuiltInToolEvent(
+          {
+            kind: 'error',
+            toolName: enr.toolName,
+            displayName: enr.displayName,
+            argsSummary: enr.argsSummary,
+            args: enr.args,
+            error: chunk.payload.error,
+            errorText: enr.errorText ?? '',
+            durationMs: enr.durationMs ?? 0,
+          },
+          toolDisplay as 'cards' | 'text',
+        );
+        await editOrPost(messageId, message);
+        continue;
+      }
+
+      // 'timeline' | 'grouped' — push task_update into Plan widget.
       const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
       // Mark as `complete` rather than `error` so a single failing tool

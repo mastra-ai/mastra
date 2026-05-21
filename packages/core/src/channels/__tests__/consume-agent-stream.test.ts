@@ -67,33 +67,17 @@ async function* chunkStream(chunks: any[]): AsyncIterable<any> {
 function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
-    toolDisplay?: 'cards' | 'timeline' | 'grouped' | 'hidden';
-    cards?: boolean;
-    formatToolCall?: (info: {
-      toolName: string;
-      args: Record<string, unknown>;
-      result: unknown;
-      isError?: boolean;
-    }) => any;
+    toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
   } = {},
 ) {
   const recording = createRecording();
-  // Build the adapter config as the right discriminated-union variant.
-  const baseAdapter: Record<string, unknown> = {
+  const adapterConfig: Record<string, unknown> = {
     adapter: recording.adapter,
     streaming: opts.streaming ?? false,
   };
-  if (opts.typingStatus !== undefined) baseAdapter.typingStatus = opts.typingStatus;
-  const adapterConfig =
-    !opts.toolDisplay || opts.toolDisplay === 'cards'
-      ? {
-          ...baseAdapter,
-          ...(opts.toolDisplay ? { toolDisplay: opts.toolDisplay } : {}),
-          ...(opts.cards !== undefined ? { cards: opts.cards } : {}),
-          ...(opts.formatToolCall ? { formatToolCall: opts.formatToolCall } : {}),
-        }
-      : { ...baseAdapter, toolDisplay: opts.toolDisplay };
+  if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
+  if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   const channels = new AgentChannels({
     adapters: { test: adapterConfig as any },
   });
@@ -233,10 +217,12 @@ describe('consumeAgentStream', () => {
       expect(await drainStreamingPlan((plans[1] as Extract<Call, { kind: 'post' }>).arg)).toEqual(['second']);
     });
 
-    it("with streaming and undefined toolDisplay, defaults to 'timeline'", async () => {
-      // The streaming driver renders tools as inline `task_update` chunks; it
-      // cannot post discrete cards, so when streaming is enabled the resolved
-      // default for `toolDisplay` is `'timeline'` rather than `'cards'`.
+    it("with streaming and undefined toolDisplay, defaults to 'cards'", async () => {
+      // The default is always `'cards'` regardless of streaming —
+      // `'timeline'`/`'grouped'` require StreamingPlan and aren't available
+      // on every platform, so users opt in explicitly. With streaming on,
+      // `'cards'` closes the streaming session, posts the card, and reopens
+      // on the next chunk.
       const { channels, calls, sdkThread } = makeChannels({ streaming: true });
       await drive(
         channels,
@@ -254,15 +240,9 @@ describe('consumeAgentStream', () => {
         ],
         sdkThread,
       );
-      // Tool renders as a task_update inside the streaming plan — no editMessage.
-      expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
-      const posts = calls.filter(c => c.kind === 'post');
-      const drained = (
-        await Promise.all(posts.map(p => drainStreamingPlan((p as Extract<Call, { kind: 'post' }>).arg)))
-      ).flat();
-      const taskUpdates = drained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
-      // in_progress + complete for the single tool.
-      expect(taskUpdates.length).toBeGreaterThanOrEqual(2);
+      // Tool renders as discrete cards (post + edit), not as task_updates.
+      const edits = calls.filter(c => c.kind === 'editMessage');
+      expect(edits.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -772,13 +752,16 @@ describe('consumeAgentStream', () => {
       expect(calls.filter(c => c.kind === 'editMessage')).toEqual([]);
     });
 
-    it('honors formatToolCall override (custom result rendering)', async () => {
+    it("honors toolDisplay function form returning { kind: 'post' } (custom result rendering)", async () => {
       const recording = createRecording();
       const channels = new AgentChannels({
         adapters: {
           test: {
             adapter: recording.adapter,
-            formatToolCall: ({ toolName, result }) => `🛠 ${toolName}=${String(result)}`,
+            toolDisplay: event => {
+              if (event.kind !== 'result') return undefined;
+              return { kind: 'post', message: `🛠 ${event.toolName}=${String(event.result)}` };
+            },
           },
         },
       });
@@ -797,10 +780,133 @@ describe('consumeAgentStream', () => {
         ],
         recording.sdkThread,
       );
-      // With formatToolCall set: no running card is posted, only the result is rendered.
+      // The fn skipped the `running` event (returned undefined), then
+      // rendered `result` once — exactly one post.
       const posts = recording.calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
       expect(posts[0]).toEqual({ kind: 'post', arg: '🛠 weather=sunny' });
+    });
+
+    it("toolDisplay: 'text' renders plain-text per-tool messages (no Block Kit)", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false, toolDisplay: 'text' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      // Running post + result edit, both plain strings (no Block Kit object).
+      const posts = calls.filter(c => c.kind === 'post');
+      const edits = calls.filter(c => c.kind === 'editMessage');
+      expect(posts).toHaveLength(1);
+      expect(edits).toHaveLength(1);
+      expect(typeof (posts[0] as Extract<Call, { kind: 'post' }>).arg).toBe('string');
+      expect(typeof (edits[0] as Extract<Call, { kind: 'editMessage' }>).content).toBe('string');
+    });
+
+    it('toolDisplay fn returning undefined skips the event silently', async () => {
+      const recording = createRecording();
+      const channels = new AgentChannels({
+        adapters: {
+          test: {
+            adapter: recording.adapter,
+            // Always skip.
+            toolDisplay: () => undefined,
+          },
+        },
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        recording.sdkThread,
+      );
+      const posts = recording.calls.filter(c => c.kind === 'post');
+      const edits = recording.calls.filter(c => c.kind === 'editMessage');
+      expect(posts).toHaveLength(0);
+      expect(edits).toHaveLength(0);
+    });
+
+    it("streaming + toolDisplay: 'cards' uses close/post/reopen lifecycle", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'before ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'text-delta', payload: { text: 'after' } },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      // Cards rendering still produces a running card post + a result edit
+      // even with streaming enabled — the streaming session is closed around
+      // the cards and reopened for surrounding text.
+      const edits = calls.filter(c => c.kind === 'editMessage');
+      expect(edits.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("streaming + toolDisplay fn returning { kind: 'post' } closes session, posts, reopens", async () => {
+      const recording = createRecording();
+      const channels = new AgentChannels({
+        adapters: {
+          test: {
+            adapter: recording.adapter,
+            streaming: true,
+            toolDisplay: event => {
+              if (event.kind !== 'result') return undefined;
+              return { kind: 'post', message: `🛠 ${event.toolName}=${String(event.result)}` };
+            },
+          },
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'before ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'text-delta', payload: { text: 'after' } },
+          { type: 'finish', payload: {} },
+        ],
+        recording.sdkThread,
+      );
+      const stringPosts = recording.calls.filter(
+        c => c.kind === 'post' && typeof (c as Extract<Call, { kind: 'post' }>).arg === 'string',
+      );
+      expect(stringPosts).toHaveLength(1);
+      expect((stringPosts[0] as Extract<Call, { kind: 'post' }>).arg).toBe('🛠 weather=sunny');
     });
   });
 

@@ -2,36 +2,31 @@ import type { Adapter, Thread } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
-import type { PostableMessage } from './agent-channels';
-import { formatToolApproval, formatToolResult, formatToolRunning } from './formatting';
+import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './agent-channels';
 import type { PendingApprovalRecord } from './stream-helpers';
-import { ToolTracker, postFileAttachment, postStreamError, postTripwire } from './stream-helpers';
+import {
+  ToolTracker,
+  chunkToFallbackMessage,
+  postFileAttachment,
+  postStreamError,
+  postTripwire,
+  renderBuiltInToolEvent,
+} from './stream-helpers';
 
 export interface StaticDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
   sdkThread: Thread;
   adapter: Adapter;
-  /** After `resolveToolDisplay`, non-streaming tool display is one of these two. */
-  toolDisplay: 'cards' | 'hidden';
+  /** After `resolveToolDisplay`, non-streaming tool display is one of these. */
+  toolDisplay: 'cards' | 'text' | 'hidden';
   /**
-   * Whether to render tool cards as rich Block Kit (`true`) or plain text.
-   * @deprecated Use `toolDisplay: 'cards'` instead
-   * */
-  useCards: boolean;
+   * Optional function-form `toolDisplay` callback. When set, the built-in
+   * renderers are bypassed and this is called once per tool lifecycle event
+   * (running, result, error, approval).
+   */
+  toolDisplayFn?: ToolDisplayFn;
   channelToolNames: Set<string>;
   logger?: IMastraLogger;
-  /**
-   * Optional override for tool-call rendering. When set, the eager
-   * "Running…" card is skipped and this is called once per tool with the
-   * full result (or error). Return `null` to suppress the message entirely.
-   * Only available in `'cards'` mode.
-   */
-  formatToolCall?: (info: {
-    toolName: string;
-    args: Record<string, unknown>;
-    result: unknown;
-    isError?: boolean;
-  }) => PostableMessage | null;
   onApprovalPosted: (toolCallId: string, record: PendingApprovalRecord) => void;
   getPendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
   takePendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
@@ -54,16 +49,34 @@ export async function runStaticDriver({
   sdkThread,
   adapter,
   toolDisplay,
-  useCards,
+  toolDisplayFn,
   channelToolNames,
   logger,
-  formatToolCall,
   onApprovalPosted,
   getPendingApproval,
   takePendingApproval,
   formatError,
 }: StaticDriverArgs): Promise<void> {
   const platform = adapter.name;
+
+  /**
+   * Dispatch a tool lifecycle event to either the user-supplied
+   * `toolDisplayFn` or the built-in `'cards'`/`'text'` renderer. Returns
+   * `null` when the fn returned `undefined` (skip) or `{ kind: 'post', message: null }`.
+   * `{ kind: 'stream' }` is flattened to a plain-text fallback since the
+   * static driver has no streaming session to push into.
+   */
+  const renderToolEvent = (event: ToolDisplayEvent): PostableMessage | null => {
+    if (toolDisplayFn) {
+      const result = toolDisplayFn(event, { mode: 'static', platform });
+      if (result == null) return null;
+      if (result.kind === 'post') return result.message ?? null;
+      if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);
+      return null;
+    }
+    if (toolDisplay === 'hidden') return null;
+    return renderBuiltInToolEvent(event, toolDisplay);
+  };
 
   const tracker = new ToolTracker();
   let textBuffer = '';
@@ -176,16 +189,28 @@ export async function runStaticDriver({
         args: chunk.payload.args,
       });
 
+      // Always flush in-flight text so the per-tool message lands after it.
+      await flushText();
+
+      // Skip the eager "Running…" post when a custom `toolDisplayFn` is set
+      // — most fns prefer to render once on `result` with the full output
+      // and we don't want a leading placeholder card to edit/replace.
+      if (toolDisplayFn) {
+        toolMessageIds.set(enr.toolCallId, undefined);
+        continue;
+      }
+
       if (toolDisplay === 'hidden') continue; // silent, just track
 
-      // Cards mode: flush any in-flight text first so the card lands after
-      // it, then post an eager "Running…" card the result handler will edit
-      // in place. Skip the eager post when a custom `formatToolCall` is
-      // configured — that runs once on tool-result with the full result and
-      // we don't want a leading placeholder card.
-      await flushText();
-      if (!formatToolCall) {
-        const sent = await sdkThread.post(formatToolRunning(enr.displayName, enr.argsSummary, useCards));
+      const running = renderToolEvent({
+        kind: 'running',
+        toolName: enr.toolName,
+        displayName: enr.displayName,
+        argsSummary: enr.argsSummary,
+        args: enr.args,
+      });
+      if (running != null) {
+        const sent = await sdkThread.post(running);
         toolMessageIds.set(enr.toolCallId, sent?.id);
       } else {
         toolMessageIds.set(enr.toolCallId, undefined);
@@ -204,7 +229,6 @@ export async function runStaticDriver({
       });
       // Pop any approval-card stash so it doesn't leak across runs.
       const approvalStash = takePendingApproval(enr.toolCallId);
-      if (toolDisplay === 'hidden') continue;
 
       // `messageId` falls back to the approval card when the resumed run
       // arrives via the subscription stream without ever firing `tool-call`
@@ -212,26 +236,19 @@ export async function runStaticDriver({
       const messageId = toolMessageIds.get(enr.toolCallId) ?? approvalStash?.messageId;
       toolMessageIds.delete(enr.toolCallId);
 
-      if (formatToolCall) {
-        const custom = formatToolCall({
-          toolName: enr.displayName,
-          args: (enr.args ?? {}) as Record<string, unknown>,
-          result: chunk.payload.result,
-          isError: chunk.payload.isError,
-        });
-        if (custom != null) {
-          await editOrPost(messageId, custom);
-        }
-      } else {
-        const resultMessage = formatToolResult(
-          enr.displayName,
-          enr.argsSummary,
-          enr.resultText ?? '',
-          !!chunk.payload.isError,
-          enr.durationMs,
-          useCards,
-        );
-        await editOrPost(messageId, resultMessage);
+      const result = renderToolEvent({
+        kind: 'result',
+        toolName: enr.toolName,
+        displayName: enr.displayName,
+        argsSummary: enr.argsSummary,
+        args: enr.args,
+        result: chunk.payload.result,
+        resultText: enr.resultText ?? '',
+        durationMs: enr.durationMs ?? 0,
+        isError: !!chunk.payload.isError,
+      });
+      if (result != null) {
+        await editOrPost(messageId, result);
       }
       continue;
     }
@@ -245,31 +262,22 @@ export async function runStaticDriver({
         error: chunk.payload.error,
       });
       const approvalStash = takePendingApproval(enr.toolCallId);
-      if (toolDisplay === 'hidden') continue;
 
       const messageId = toolMessageIds.get(enr.toolCallId) ?? approvalStash?.messageId;
       toolMessageIds.delete(enr.toolCallId);
 
-      if (formatToolCall) {
-        const custom = formatToolCall({
-          toolName: enr.displayName,
-          args: (enr.args ?? {}) as Record<string, unknown>,
-          result: chunk.payload.error,
-          isError: true,
-        });
-        if (custom != null) {
-          await editOrPost(messageId, custom);
-        }
-      } else {
-        const resultMessage = formatToolResult(
-          enr.displayName,
-          enr.argsSummary,
-          enr.errorText ?? '',
-          true,
-          enr.durationMs,
-          useCards,
-        );
-        await editOrPost(messageId, resultMessage);
+      const errored = renderToolEvent({
+        kind: 'error',
+        toolName: enr.toolName,
+        displayName: enr.displayName,
+        argsSummary: enr.argsSummary,
+        args: enr.args,
+        error: chunk.payload.error,
+        errorText: enr.errorText ?? '',
+        durationMs: enr.durationMs ?? 0,
+      });
+      if (errored != null) {
+        await editOrPost(messageId, errored);
       }
       continue;
     }
@@ -280,11 +288,17 @@ export async function runStaticDriver({
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
       });
-      // Approval cards always render as rich Block Kit so the Approve/Deny
-      // buttons render. Non-cards modes never opt out via `useCards: false`.
-      const approvalMessage = formatToolApproval(enr.displayName, enr.argsSummary, enr.toolCallId, true);
+      const approvalMessage = renderToolEvent({
+        kind: 'approval',
+        toolName: enr.toolName,
+        displayName: enr.displayName,
+        argsSummary: enr.argsSummary,
+        args: enr.args,
+        toolCallId: enr.toolCallId,
+      });
       const existingMessageId = toolMessageIds.get(enr.toolCallId) ?? getPendingApproval(enr.toolCallId)?.messageId;
-      const finalMessageId = await editOrPost(existingMessageId, approvalMessage);
+      const finalMessageId =
+        approvalMessage != null ? await editOrPost(existingMessageId, approvalMessage) : existingMessageId;
       // Stash by toolCallId so the click handler can resume the correct
       // run directly. The persisted-metadata path keys by toolName and
       // collides on parallel same-tool approvals.

@@ -1,4 +1,4 @@
-import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -106,81 +106,98 @@ export interface ChannelAdapterBaseConfig {
 }
 
 /**
- * `'cards'` mode (default): per-tool "Running…" → "Result" cards. This is the
- * only mode where `cards` and `formatToolCall` apply.
+ * How tool calls are rendered in the channel.
+ *
+ * String modes:
+ * - `'cards'` — per-tool "Running…" → "Result" Block Kit cards. Default when
+ *   `streaming: false`. Requires `streaming: false`.
+ * - `'text'` — per-tool plain-text messages (no Block Kit). Good for platforms
+ *   without rich card rendering (e.g. Discord). Requires `streaming: false`.
+ * - `'timeline'` — emit `task_update` chunks into the active streaming session
+ *   so each tool renders as an inline task card alongside text. Default when
+ *   `streaming: true`. Requires `streaming: true`. Slack renders this
+ *   natively; other adapters may render a placeholder.
+ * - `'grouped'` — same as `'timeline'` but tasks combine into a single plan
+ *   widget (`StreamingPlan({ groupTasks: 'plan' })`). Requires `streaming: true`.
+ * - `'hidden'` — execute tools silently. Only the typing status indicates work.
+ *
+ * Function form: custom renderer. See {@link ToolDisplayFn}.
+ *
+ * Mismatched string modes (e.g. `'cards'` with `streaming: true`) warn once
+ * per platform and fall back to the streaming-appropriate default.
  */
-export interface ChannelAdapterCardsConfig extends ChannelAdapterBaseConfig {
-  /**
-   * How tool calls are rendered in the channel.
-   *
-   * - `'cards'` (default) — per-tool "Running…" → "Result" cards. Only this
-   *   mode accepts `cards` and `formatToolCall`.
-   * - `'timeline'` — emit `task_update` chunks into the active streaming
-   *   session so each tool renders as an inline task card alongside text.
-   *   Requires `streaming: true`. Slack renders this natively; other adapters
-   *   may render a placeholder or omit the result.
-   * - `'grouped'` — same as `'timeline'` but tasks combine into a single plan
-   *   block (`StreamingPlan({ groupTasks: 'plan' })`). Requires `streaming: true`.
-   * - `'hidden'` — execute tools silently. Only the typing status indicates work.
-   *
-   * @default 'cards'
-   */
-  toolDisplay?: 'cards';
+export type ToolDisplay = 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn;
 
-  /**
-   * Use rich card formatting for tool calls, approvals, and results.
-   * Set to `false` to use plain text formatting instead.
-   *
-   * Some platforms (e.g. Discord) may have rendering issues with cards.
-   *
-   * @default true
-   */
-  cards?: boolean;
+/**
+ * Custom tool-call renderer. Called once per tool lifecycle event (running,
+ * result, error, approval). Returns either a postable message (closes the
+ * streaming session if open, posts/edits the message, then reopens on the
+ * next chunk), a streaming chunk (pushed into the streaming session — opens
+ * one lazily if needed), or `undefined` to skip the event.
+ *
+ * In static drivers (`streaming: false`), returning `{ kind: 'stream' }`
+ * flattens the chunk to a plain-text fallback message.
+ */
+export type ToolDisplayFn = (event: ToolDisplayEvent, ctx: ToolDisplayContext) => ToolDisplayResult;
 
-  /**
-   * Override how tool calls are rendered in the chat.
-   * Called once per tool invocation after the result is available.
-   * Return `null` to suppress the message entirely.
-   *
-   * Only available in `'cards'` mode (the default). To use a different
-   * rendering strategy, set `toolDisplay` to `'timeline'`, `'grouped'`, or
-   * `'hidden'` instead.
-   *
-   * @default - A Card showing the function-call signature and result.
-   */
-  formatToolCall?: (info: {
-    toolName: string;
-    args: Record<string, unknown>;
-    result: unknown;
-    isError?: boolean;
-  }) => PostableMessage | null;
+/** Per-event payload passed to {@link ToolDisplayFn}. */
+export type ToolDisplayEvent =
+  | {
+      kind: 'running';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+    }
+  | {
+      kind: 'result';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      result: unknown;
+      resultText: string;
+      durationMs: number;
+      isError: boolean;
+    }
+  | {
+      kind: 'error';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      error: unknown;
+      errorText: string;
+      durationMs: number;
+    }
+  | {
+      kind: 'approval';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      toolCallId: string;
+    };
+
+/** Context about which driver is consuming the function-form result. */
+export interface ToolDisplayContext {
+  /** Which driver is consuming the result. */
+  mode: 'streaming' | 'static';
+  /** Adapter platform key (e.g. `'slack'`, `'discord'`). */
+  platform: string;
 }
 
-/**
- * Non-`'cards'` modes: tool calls route through the streaming session (or run
- * silently). `cards` and `formatToolCall` are not available here — they only
- * apply to the `'cards'` renderer.
- */
-export interface ChannelAdapterStreamingToolsConfig extends ChannelAdapterBaseConfig {
-  /** See {@link ChannelAdapterCardsConfig.toolDisplay} for mode descriptions. */
-  toolDisplay: 'timeline' | 'grouped' | 'hidden';
-}
+/** Return value from a {@link ToolDisplayFn}. */
+export type ToolDisplayResult =
+  | { kind: 'post'; message: PostableMessage; replace?: boolean }
+  | { kind: 'stream'; chunk: StreamChunk }
+  | undefined
+  | void;
 
-/**
- * Per-adapter configuration. `toolDisplay` is a discriminator: in `'cards'`
- * mode (the default) `cards` and `formatToolCall` are available; in
- * `'timeline'` / `'grouped'` / `'hidden'` they are not, because those modes
- * render through the streaming session instead of per-tool cards.
- */
-export type ChannelAdapterConfig = ChannelAdapterCardsConfig | ChannelAdapterStreamingToolsConfig;
-
-/**
- * Narrow an adapter config to the `'cards'` variant (where `cards` and
- * `formatToolCall` live), or `undefined` if the adapter is in a non-cards mode.
- */
-function asCardsConfig(config: ChannelAdapterConfig | undefined): ChannelAdapterCardsConfig | undefined {
-  if (!config) return undefined;
-  return !config.toolDisplay || config.toolDisplay === 'cards' ? config : undefined;
+/** Per-adapter configuration. */
+export interface ChannelAdapterConfig extends ChannelAdapterBaseConfig {
+  /** See {@link ToolDisplay} for mode descriptions. */
+  toolDisplay?: ToolDisplay;
 }
 
 /**
@@ -805,7 +822,11 @@ export class AgentChannels {
           // Build the card header with tool name and args
           const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
           const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
-          const useCards = asCardsConfig(adapterConfig)?.cards !== false;
+          // Resolve the tool display mode so the approve/deny edit matches
+          // the original card's rendering (cards → Block Kit, text → plain).
+          // Streaming is irrelevant here — we're outside the agent loop.
+          const { resolved: clickToolDisplay } = this.resolveToolDisplay(platform, adapterConfig?.toolDisplay, false);
+          const useCards = clickToolDisplay === 'cards';
 
           if (!approved) {
             const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
@@ -1385,7 +1406,21 @@ export class AgentChannels {
     // message into an already-running agent loop or wakes the thread with an idle stream
     // using the same options we used to pass to agent.stream().
     const adapterConfig = this.adapterConfigs[platform];
-    const useCards = asCardsConfig(adapterConfig)?.cards !== false;
+    // Auto-approve suspended tools when there's no way to render an
+    // approval card with buttons. Block Kit cards have buttons; plain
+    // `'text'` mode has only a "reply approve/deny" hint with no
+    // first-class affordance, so we auto-approve to avoid getting stuck.
+    const { resolved: webhookToolDisplay, fn: webhookToolDisplayFn } = this.resolveToolDisplay(
+      platform,
+      adapterConfig?.toolDisplay,
+      this.resolveStreaming(adapterConfig?.streaming).enabled,
+    );
+    const canRenderApprovalButtons =
+      webhookToolDisplayFn !== undefined ||
+      webhookToolDisplay === 'cards' ||
+      webhookToolDisplay === 'timeline' ||
+      webhookToolDisplay === 'grouped' ||
+      webhookToolDisplay === 'hidden';
 
     const { channelContext, attributes, providerOptions } = this.buildEventContext({
       sdkThread,
@@ -1441,8 +1476,9 @@ export class AgentChannels {
               thread: threadForRun,
               resource: threadResourceId,
             },
-            // Without cards, we can't show approval buttons — auto-approve tools instead
-            autoResumeSuspendedTools: useCards ? undefined : true,
+            // Without approval-button rendering, auto-approve tools to
+            // avoid getting stuck waiting for input we can't ask for.
+            autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
           },
         },
       },
@@ -1561,8 +1597,11 @@ export class AgentChannels {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const streaming = this.resolveStreaming(adapterConfig?.streaming);
-    const cardsConfig = asCardsConfig(adapterConfig);
-    const toolDisplay = this.resolveToolDisplay(platform, adapterConfig?.toolDisplay, streaming.enabled);
+    const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
+      platform,
+      adapterConfig?.toolDisplay,
+      streaming.enabled,
+    );
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
     // `messageId` for the incoming `tool-result` even though it never saw the
@@ -1597,7 +1636,8 @@ export class AgentChannels {
         stream: wrapped,
         sdkThread,
         adapter,
-        toolDisplay: toolDisplay as 'timeline' | 'grouped' | 'hidden',
+        toolDisplay: toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
+        toolDisplayFn,
         streamingOptions: streaming.options,
         channelToolNames: this.channelToolNames,
         logger: this.logger,
@@ -1612,11 +1652,10 @@ export class AgentChannels {
         stream: wrapped,
         sdkThread,
         adapter,
-        toolDisplay: toolDisplay as 'cards' | 'hidden',
-        useCards: cardsConfig?.cards !== false,
+        toolDisplay: toolDisplay as 'cards' | 'text' | 'hidden',
+        toolDisplayFn,
         channelToolNames: this.channelToolNames,
         logger: this.logger,
-        formatToolCall: cardsConfig?.formatToolCall,
         onApprovalPosted,
         getPendingApproval,
         takePendingApproval,
@@ -1848,11 +1887,30 @@ export class AgentChannels {
    */
   private resolveToolDisplay(
     platform: string,
-    requested: 'cards' | 'timeline' | 'grouped' | 'hidden' | undefined,
+    requested: ToolDisplay | undefined,
     streamingEnabled: boolean,
-  ): 'cards' | 'timeline' | 'grouped' | 'hidden' {
-    const toolDisplay = requested ?? (streamingEnabled ? 'timeline' : 'cards');
-    if ((toolDisplay === 'timeline' || toolDisplay === 'grouped') && !streamingEnabled) {
+  ): { resolved: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden'; fn?: ToolDisplayFn } {
+    // Function form: drivers call the fn directly. The resolved mode is
+    // the default `'cards'` — drivers use it only for any event the fn
+    // doesn't render (returns `undefined`).
+    const fn = typeof requested === 'function' ? requested : undefined;
+    const requestedMode = typeof requested === 'function' ? undefined : requested;
+    // Default is always `'cards'`: `'timeline'`/`'grouped'` need
+    // `StreamingPlan` (not supported on every platform) so users opt in
+    // explicitly. `'cards'` works under both streaming and static modes
+    // — the streaming driver closes the session, posts the card, and
+    // reopens on the next chunk.
+    const toolDisplay = requestedMode ?? 'cards';
+
+    // `'timeline'` and `'grouped'` push `task_update`/`plan_update` chunks
+    // that only render inside a chat-SDK `StreamingPlan`. Without streaming
+    // there's no Plan to push into, so warn and fall back to `'cards'`.
+    // `'cards'` and `'text'` work under both streaming and static modes:
+    // the streaming driver closes the session, posts the per-tool message,
+    // and reopens on the next chunk — same lifecycle as a `ToolDisplayFn`
+    // returning `{ kind: 'post' }`.
+    const isStreamingOnlyMode = toolDisplay === 'timeline' || toolDisplay === 'grouped';
+    if (isStreamingOnlyMode && !streamingEnabled) {
       if (!this.warnedToolDisplayFallback.has(platform)) {
         this.warnedToolDisplayFallback.add(platform);
         this.log(
@@ -1860,16 +1918,9 @@ export class AgentChannels {
           `[${platform}] toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`,
         );
       }
-      return 'cards';
+      return { resolved: 'cards', fn };
     }
-    if (toolDisplay === 'cards' && streamingEnabled) {
-      if (!this.warnedToolDisplayFallback.has(platform)) {
-        this.warnedToolDisplayFallback.add(platform);
-        this.log('warn', `[${platform}] toolDisplay: 'cards' requires streaming: false; falling back to 'timeline'.`);
-      }
-      return 'timeline';
-    }
-    return toolDisplay;
+    return { resolved: toolDisplay, fn };
   }
 
   private log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {

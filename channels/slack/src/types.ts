@@ -1,9 +1,4 @@
-import type {
-  ChannelAdapterCardsConfig,
-  ChannelAdapterConfig,
-  ChannelConfig,
-  ChannelHandlers,
-} from '@mastra/core/channels';
+import type { ChannelAdapterConfig, ChannelConfig, ChannelHandlers } from '@mastra/core/channels';
 import type { ChannelsStorage } from '@mastra/core/storage';
 import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
@@ -20,23 +15,6 @@ export interface SlackAdapterChannelConfig {
 
   /** Slack gateway listener toggle. Currently a no-op for Slack (HTTP-only). */
   gateway?: ChannelAdapterConfig['gateway'];
-
-  /**
-   * Use rich card formatting for tool calls, approvals, and results.
-   * Set to `false` to fall back to plain text.
-   *
-   * Only applies when `toolDisplay` is `'cards'` (the default).
-   *
-   * @default true
-   */
-  cards?: ChannelAdapterCardsConfig['cards'];
-
-  /**
-   * Override how tool calls are rendered in Slack messages.
-   *
-   * Only applies when `toolDisplay` is `'cards'` (the default).
-   */
-  formatToolCall?: ChannelAdapterCardsConfig['formatToolCall'];
 
   /** Override how errors are rendered in Slack messages. */
   formatError?: ChannelAdapterConfig['formatError'];
@@ -76,12 +54,21 @@ export interface SlackAdapterChannelConfig {
   /**
    * How tool calls are rendered in Slack.
    *
-   * - `'cards'` — per-tool "Running…" → "Result" cards.
+   * String modes:
+   * - `'cards'` — per-tool "Running…" → "Result" Block Kit cards. Requires
+   *   `streaming: false`.
+   * - `'text'` — per-tool plain-text messages (no Block Kit). Requires
+   *   `streaming: false`.
    * - `'timeline'` — render tools as inline task entries beside the streaming
-   *   text (requires `streaming: true`, which is the Slack default).
+   *   text. Requires `streaming: true` (the Slack default).
    * - `'grouped'` (default in Slack) — render tools together inside a single
-   *   "Thinking Steps" plan block. Renders well in Slack's AI Assistant UI.
+   *   "Thinking Steps" plan widget. Renders well in Slack's AI Assistant UI.
    * - `'hidden'` — execute tools silently; only the typing status indicates work.
+   *
+   * Function form: a `ToolDisplayFn` for full control. Return
+   * `{ kind: 'post', message }` to post/edit a discrete message, or
+   * `{ kind: 'stream', chunk }` to push a chat-SDK `StreamChunk` into the
+   * active streaming session.
    *
    * Approve/deny prompts (`requireApproval`) always render as a separate card,
    * regardless of mode, because inline task entries can't carry interactive
@@ -100,7 +87,7 @@ export interface SlackAdapterChannelConfig {
  * Configuration for SlackProvider at the Mastra level.
  *
  * Combines Slack-specific fields (tokens, baseUrl, OAuth callbacks),
- * Slack-adapter overrides (`cards`, `formatToolCall`, `streaming`, …), and a
+ * Slack-adapter overrides (`toolDisplay`, `streaming`, `typingStatus`, …), and a
  * curated subset of `AgentChannels` options forwarded to every connected agent
  * (`handlers`, `inlineMedia`, `inlineLinks`, …).
  */
@@ -115,23 +102,6 @@ export interface SlackProviderConfig {
 
   /** Slack gateway listener toggle. Currently a no-op for Slack (HTTP-only). */
   gateway?: ChannelAdapterConfig['gateway'];
-
-  /**
-   * Use rich card formatting for tool calls, approvals, and results.
-   * Set to `false` to fall back to plain text.
-   *
-   * Only applies when `toolDisplay` is `'cards'` (the default).
-   *
-   * @default true
-   */
-  cards?: ChannelAdapterCardsConfig['cards'];
-
-  /**
-   * Override how tool calls are rendered in Slack messages.
-   *
-   * Only applies when `toolDisplay` is `'cards'` (the default).
-   */
-  formatToolCall?: ChannelAdapterCardsConfig['formatToolCall'];
 
   /** Override how errors are rendered in Slack messages. */
   formatError?: ChannelAdapterConfig['formatError'];
@@ -171,12 +141,21 @@ export interface SlackProviderConfig {
   /**
    * How tool calls are rendered in Slack.
    *
-   * - `'cards'` — per-tool "Running…" → "Result" cards.
+   * String modes:
+   * - `'cards'` — per-tool "Running…" → "Result" Block Kit cards. Requires
+   *   `streaming: false`.
+   * - `'text'` — per-tool plain-text messages (no Block Kit). Requires
+   *   `streaming: false`.
    * - `'timeline'` — render tools as inline task entries beside the streaming
-   *   text (requires `streaming: true`, which is the Slack default).
+   *   text. Requires `streaming: true` (the Slack default).
    * - `'grouped'` (default in Slack) — render tools together inside a single
-   *   "Thinking Steps" plan block. Renders well in Slack's AI Assistant UI.
+   *   "Thinking Steps" plan widget. Renders well in Slack's AI Assistant UI.
    * - `'hidden'` — execute tools silently; only the typing status indicates work.
+   *
+   * Function form: a `ToolDisplayFn` for full control. Return
+   * `{ kind: 'post', message }` to post/edit a discrete message, or
+   * `{ kind: 'stream', chunk }` to push a chat-SDK `StreamChunk` into the
+   * active streaming session.
    *
    * Approve/deny prompts (`requireApproval`) always render as a separate card,
    * regardless of mode, because inline task entries can't carry interactive
@@ -292,7 +271,7 @@ export interface SlackProviderConfig {
 
   /**
    * Per-adapter overrides applied to the Slack adapter entry inside
-   * `AgentChannels.adapters` — for example `cards`, `formatToolCall`,
+   * `AgentChannels.adapters` — for example `toolDisplay`, `streaming`,
    * `formatError`.
    *
    * @deprecated Pass these fields at the top level of `SlackProviderConfig`

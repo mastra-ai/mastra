@@ -1,7 +1,15 @@
-import type { Thread } from 'chat';
+import type { StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
-import { formatArgsSummary, formatResult, stripToolPrefix } from './formatting';
+import type { PostableMessage, ToolDisplayEvent } from './agent-channels';
+import {
+  formatArgsSummary,
+  formatResult,
+  formatToolApproval,
+  formatToolResult,
+  formatToolRunning,
+  stripToolPrefix,
+} from './formatting';
 
 /**
  * Approval card metadata stashed when a driver posts an approval card. The
@@ -279,4 +287,58 @@ export async function postFileAttachment(args: {
   } catch (e) {
     logger?.debug?.('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
   }
+}
+
+/**
+ * Render a built-in `'cards'` or `'text'` tool event as a `PostableMessage`.
+ * Both drivers go through this so the lifecycle (post → edit on result) is
+ * identical — only the platform-specific post/edit calls differ.
+ *
+ * `'cards'` → rich Block Kit; `'text'` → plain text. Approval messages are
+ * always rendered as cards regardless of mode so the Approve/Deny buttons
+ * render — plain-text approval falls back to a "reply approve/deny" hint.
+ */
+export function renderBuiltInToolEvent(event: ToolDisplayEvent, mode: 'cards' | 'text'): PostableMessage {
+  const useCards = mode === 'cards';
+  if (event.kind === 'running') {
+    return formatToolRunning(event.displayName, event.argsSummary, useCards);
+  }
+  if (event.kind === 'result') {
+    return formatToolResult(
+      event.displayName,
+      event.argsSummary,
+      event.resultText,
+      event.isError,
+      event.durationMs,
+      useCards,
+    );
+  }
+  if (event.kind === 'error') {
+    return formatToolResult(event.displayName, event.argsSummary, event.errorText, true, event.durationMs, useCards);
+  }
+  // Approval: always cards (need Approve/Deny buttons). `useCards: false`
+  // falls back to a plain "reply approve/deny" hint.
+  return formatToolApproval(event.displayName, event.argsSummary, event.toolCallId, true);
+}
+
+/**
+ * Render a chat-SDK `StreamChunk` as a plain-text fallback message. Used by
+ * the static driver when a `ToolDisplayFn` returns `{ kind: 'stream' }` —
+ * the static driver has no `StreamingPlan` to push the chunk into, so we
+ * flatten it to text so the user still sees the rendered output.
+ */
+export function chunkToFallbackMessage(chunk: StreamChunk): string {
+  if (chunk.type === 'markdown_text') {
+    return typeof chunk.text === 'string' ? chunk.text : '';
+  }
+  if (chunk.type === 'task_update') {
+    const status = chunk.status ? ` · ${chunk.status}` : '';
+    const head = `${chunk.title ?? ''}${status}`.trim();
+    const body = chunk.details ?? chunk.output ?? '';
+    return body ? `${head}\n${body}` : head;
+  }
+  if (chunk.type === 'plan_update') {
+    return chunk.title ?? '';
+  }
+  return '';
 }

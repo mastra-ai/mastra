@@ -1,14 +1,17 @@
 export { AgentChannels } from './agent-channels';
 export type {
   ChannelAdapterBaseConfig,
-  ChannelAdapterCardsConfig,
   ChannelAdapterConfig,
-  ChannelAdapterStreamingToolsConfig,
   ChannelConfig,
   ChannelHandler,
   ChannelHandlerConfig,
   ChannelHandlers,
   PostableMessage,
+  ToolDisplay,
+  ToolDisplayContext,
+  ToolDisplayEvent,
+  ToolDisplayFn,
+  ToolDisplayResult,
 } from './agent-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
