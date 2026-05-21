@@ -6,6 +6,7 @@ import type { ModelUsage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { Agent } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import type { Mastra } from '../../mastra';
+import type { CostContext } from '../../observability';
 import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '../../stream';
 import { ChunkFrom } from '../../stream';
 import {
@@ -183,6 +184,8 @@ async function runClaudeGenerate(
     }
   }
 
+  const totals = usage.totals();
+
   return {
     content: [{ type: 'text', text }],
     finishReason: { unified: 'stop', raw: 'stop' },
@@ -192,7 +195,8 @@ async function runClaudeGenerate(
       modelId: getModelId(options),
       timestamp: new Date(),
     },
-    providerMetadata: getClaudeProviderMetadata(options, usage.totals()),
+    providerMetadata: getClaudeProviderMetadata(options, totals),
+    costContext: getClaudeCostContext(options, totals),
   };
 }
 
@@ -242,7 +246,8 @@ function runClaudeAsMastraStream(
           }
         }
 
-        const providerMetadata = getClaudeProviderMetadata(options, usage.totals());
+        const totals = usage.totals();
+        const providerMetadata = getClaudeProviderMetadata(options, totals);
         enqueueFinishChunks(controller, {
           runId,
           prompt,
@@ -252,6 +257,7 @@ function runClaudeAsMastraStream(
           modelId,
           usage: usage.toLanguageModelUsage(),
           providerMetadata,
+          costContext: getClaudeCostContext(options, totals),
         });
         controller.close();
       } catch (error) {
@@ -415,6 +421,26 @@ function getClaudeProviderMetadata(options: ClaudeAgentOptions, usage?: ClaudeUs
     disallowedTools: options.disallowedTools,
     usage,
   });
+}
+
+function getClaudeCostContext(options: ClaudeAgentOptions, usage?: ClaudeUsageTotals): CostContext | undefined {
+  if (typeof usage?.totalCostUsd !== 'number') {
+    return undefined;
+  }
+
+  return {
+    provider: 'anthropic',
+    model: getModelId(options),
+    estimatedCost: usage.totalCostUsd,
+    costUnit: 'USD',
+    costMetadata: {
+      source: 'sdk_estimate',
+      sdkProvider: PROVIDER,
+      sdkCostField: 'total_cost_usd',
+      scope: 'query_total',
+      modelUsage: usage.modelUsage,
+    },
+  };
 }
 
 function getTextDelta(message: SDKMessage): string {

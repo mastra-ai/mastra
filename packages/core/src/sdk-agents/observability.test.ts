@@ -345,6 +345,18 @@ describe('SDK agent observability', () => {
         attributes: expect.objectContaining({
           finishReason: 'stop',
           responseModel: 'claude-sonnet-4-6',
+          costContext: expect.objectContaining({
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            estimatedCost: 0.0123,
+            costUnit: 'USD',
+            costMetadata: expect.objectContaining({
+              source: 'sdk_estimate',
+              sdkProvider: '@anthropic-ai/claude-agent-sdk',
+              sdkCostField: 'total_cost_usd',
+              scope: 'query_total',
+            }),
+          }),
           usage: expect.objectContaining({
             inputTokens: 15,
             outputTokens: 4,
@@ -389,6 +401,18 @@ describe('SDK agent observability', () => {
         attributes: expect.objectContaining({
           finishReason: 'stop',
           responseModel: 'claude-sonnet-4-6',
+          costContext: expect.objectContaining({
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            estimatedCost: 0.0123,
+            costUnit: 'USD',
+            costMetadata: expect.objectContaining({
+              source: 'sdk_estimate',
+              sdkProvider: '@anthropic-ai/claude-agent-sdk',
+              sdkCostField: 'total_cost_usd',
+              scope: 'query_total',
+            }),
+          }),
           usage: expect.objectContaining({
             inputTokens: 15,
             outputTokens: 4,

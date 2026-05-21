@@ -8,7 +8,7 @@ import type { MessageListInput } from '../agent/message-list';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import { EntityType, SpanType } from '../observability';
-import type { AIModelGenerationSpan, IModelSpanTracker, Span, UsageStats } from '../observability';
+import type { AIModelGenerationSpan, CostContext, IModelSpanTracker, Span, UsageStats } from '../observability';
 import { executeWithContext, getOrCreateSpan } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '../stream';
@@ -43,6 +43,7 @@ export type SDKModelGenerateResult = {
     timestamp: Date;
   };
   providerMetadata?: ProviderMetadata;
+  costContext?: CostContext;
 };
 
 export function createNoopModel({ modelId, provider }: { modelId: string; provider: string }): MastraLanguageModel {
@@ -72,6 +73,7 @@ export function createCompletedMastraStream({
   modelId,
   usage,
   providerMetadata,
+  costContext,
 }: {
   runId: string;
   prompt: string;
@@ -80,6 +82,7 @@ export function createCompletedMastraStream({
   modelId: string;
   usage: LanguageModelUsage;
   providerMetadata?: ProviderMetadata;
+  costContext?: CostContext;
 }): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start(controller) {
@@ -104,6 +107,7 @@ export function createCompletedMastraStream({
         modelId,
         usage,
         providerMetadata,
+        costContext,
       });
       controller.close();
     },
@@ -167,6 +171,7 @@ export function toFullOutput<OUTPUT>({
     modelId: result.response.modelId,
     usage: toLanguageModelUsage(result.usage),
     providerMetadata: result.providerMetadata,
+    costContext: result.costContext,
   });
 
   return createMastraOutput<OUTPUT>({
@@ -270,6 +275,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
     finishReason = 'stop',
     responseId,
     responseModel,
+    costContext,
   }: {
     text: string;
     usage?: LanguageModelUsage;
@@ -277,6 +283,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
     finishReason?: string;
     responseId?: string;
     responseModel?: string;
+    costContext?: CostContext;
   }) => {
     if (modelSpanTracker) {
       modelSpanTracker.endGeneration({
@@ -287,6 +294,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
           finishReason,
           responseId,
           responseModel,
+          costContext,
         },
         usage,
         providerMetadata,
@@ -303,6 +311,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
         responseId,
         responseModel,
         usage: usage ? toUsageStats(usage) : undefined,
+        costContext,
       },
     });
   };
@@ -314,6 +323,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
     finishReason?: string;
     responseId?: string;
     responseModel?: string;
+    costContext?: CostContext;
   }) => {
     if (ended) {
       return;
@@ -353,6 +363,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
         finishReason: result.finishReason.unified,
         responseId: result.response.id,
         responseModel: result.response.modelId,
+        costContext: result.costContext,
       });
     },
     fail,
@@ -394,6 +405,7 @@ function wrapStreamForAgentSpan(
       finishReason?: string;
       responseId?: string;
       responseModel?: string;
+      costContext?: CostContext;
     }) => void;
     fail: (error: unknown) => void;
   },
@@ -415,6 +427,7 @@ function wrapStreamForAgentSpan(
             finishReason: chunk.payload.stepResult.reason,
             responseId: chunk.payload.response?.id,
             responseModel: chunk.payload.response?.modelId,
+            costContext: getCostContext(chunk.payload.metadata?.costContext),
           });
         }
 
@@ -444,6 +457,14 @@ function toUsageStats(usage: LanguageModelUsage): UsageStats {
       reasoning: usage.reasoningTokens,
     },
   };
+}
+
+function getCostContext(value: unknown): CostContext | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  return value as CostContext;
 }
 
 export function enqueueStartChunks(
@@ -527,6 +548,7 @@ export function enqueueFinishChunks(
     modelId,
     usage,
     providerMetadata,
+    costContext,
   }: {
     runId: string;
     prompt: string;
@@ -536,6 +558,7 @@ export function enqueueFinishChunks(
     modelId: string;
     usage: LanguageModelUsage;
     providerMetadata?: ProviderMetadata;
+    costContext?: CostContext;
   },
 ): void {
   const timestamp = new Date();
@@ -546,6 +569,7 @@ export function enqueueFinishChunks(
   };
   const metadata = {
     providerMetadata,
+    costContext,
     request: { body: prompt },
     modelId,
     timestamp,
