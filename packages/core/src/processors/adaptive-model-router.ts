@@ -268,17 +268,19 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     const state = this.#getState(args.state);
     const selectedModelId = state.selectedModelId ?? state.originalModelId ?? this.#models.find(isEnabled)?.id;
     if (!selectedModelId) return;
-
-    state.attemptedModelIds = Array.from(new Set([...(state.attemptedModelIds ?? []), selectedModelId]));
-    await this.#openCircuit(selectedModelId, state.currentRule);
-
+    const tentativeAttempted = Array.from(new Set([...(state.attemptedModelIds ?? []), selectedModelId]));
     const nextModel = await this.#selectEligibleModel({
       fallbackOrder: state.activeFallbackOrder ?? this.#models.map(model => model.id),
-      attemptedModelIds: state.attemptedModelIds,
+      attemptedModelIds: tentativeAttempted,
       skippedModelIds: state.skippedModelIds ?? [],
     });
 
+    // Only commit attempted/circuit state when we actually have a different model to try.
+    // This lets downstream error processors retry with the same model if they want to.
     if (!nextModel) return;
+
+    state.attemptedModelIds = tentativeAttempted;
+    await this.#openCircuit(selectedModelId, state.currentRule);
 
     args.rotateResponseMessageId?.();
     return { retry: true };
