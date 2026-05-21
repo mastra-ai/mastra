@@ -71,9 +71,9 @@ function emitUsageMetrics(
   metrics: MetricsContext,
 ): void {
   let metricCosts = new Map<TokenMetrics, CostContext>();
-  const sdkCostContext = getSdkCostContext(attrs, usage);
-  if (sdkCostContext) {
-    metricCosts = sdkCostContext;
+  const providedCostContext = getProvidedCostContext(attrs, usage);
+  if (providedCostContext) {
+    metricCosts = providedCostContext;
   } else {
     try {
       const provider = attrs.provider;
@@ -106,7 +106,7 @@ function emitUsageMetrics(
   }
 }
 
-function getSdkCostContext(
+function getProvidedCostContext(
   attrs: ModelGenerationAttributes,
   usage: NonNullable<ModelGenerationAttributes['usage']>,
 ): Map<TokenMetrics, CostContext> | undefined {
