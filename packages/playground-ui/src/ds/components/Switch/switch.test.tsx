@@ -78,4 +78,12 @@ describe('Switch', () => {
 
     expect(screen.getByRole('switch').classList.contains('custom-switch')).toBe(true);
   });
+
+  it('applies the id to the visible switch control, not a hidden input', () => {
+    render(<Switch aria-label="Toggle" id="my-switch" />);
+
+    const switchEl = screen.getByRole('switch');
+    expect(switchEl.getAttribute('id')).toBe('my-switch');
+    expect(switchEl.tagName).toBe('BUTTON');
+  });
 });

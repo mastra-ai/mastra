@@ -11,7 +11,14 @@ type SwitchProps = Omit<SwitchPrimitive.Root.Props, 'className'> & {
 };
 
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(({ className, asChild, children, ...props }, ref) => {
-  const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
+  // Base UI's Switch.Root defaults to a `<span>` and forwards `id` to its
+  // hidden checkbox input. Render a native `<button>` (with `nativeButton`) so
+  // the consumer's `id` — and the click target — lands on the visible control,
+  // matching the previous Radix behavior.
+  const renderProps =
+    asChild && React.isValidElement(children)
+      ? { render: children as React.ReactElement }
+      : { render: <button type="button" />, nativeButton: true };
 
   return (
     <SwitchPrimitive.Root
