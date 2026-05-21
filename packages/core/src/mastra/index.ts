@@ -32,6 +32,7 @@ import type {
   ObservabilityInstance,
   LoggerContext,
   MetricsContext,
+  TracingContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
@@ -591,6 +592,10 @@ export class Mastra<
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #internalMastraWorkflows: Record<string, Workflow> = {};
+  // Per-run tracing context for evented workflow runs. `currentSpan` is a
+  // non-serializable AISpan, so it cannot ride the engine's pubsub events —
+  // the event processor reads it from here, keyed by runId, instead.
+  #runTracingContexts: Map<string, TracingContext> = new Map();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
@@ -2310,6 +2315,26 @@ export class Mastra<
     }
 
     return workflow;
+  }
+
+  /**
+   * @internal Records the tracing context for an evented workflow run so the
+   * event processor can nest step spans under the run's parent span. The
+   * `currentSpan` is non-serializable, so it is held here rather than passed
+   * through the engine's pubsub events.
+   */
+  __registerRunTracingContext(runId: string, tracingContext: TracingContext) {
+    this.#runTracingContexts.set(runId, tracingContext);
+  }
+
+  /** @internal Returns the tracing context recorded for an evented workflow run. */
+  __getRunTracingContext(runId: string): TracingContext | undefined {
+    return this.#runTracingContexts.get(runId);
+  }
+
+  /** @internal Clears the tracing context once an evented workflow run finishes. */
+  __unregisterRunTracingContext(runId: string) {
+    this.#runTracingContexts.delete(runId);
   }
 
   /**

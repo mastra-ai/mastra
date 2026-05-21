@@ -15,7 +15,7 @@ import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext } from '../../observability';
+import type { ObservabilityContext, TracingContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
 import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
@@ -1704,6 +1704,7 @@ export class EventedRun<
     requestContext,
     perStep,
     outputOptions,
+    tracingContext,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
@@ -1713,6 +1714,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -1756,6 +1758,14 @@ export class EventedRun<
 
     this.setupAbortHandler();
 
+    // The evented engine's events are serialized over pubsub, so the
+    // non-serializable `currentSpan` on `tracingContext` can't ride them.
+    // Hold it on Mastra, keyed by runId, so the event processor can nest each
+    // step's spans under the run's parent span.
+    if (tracingContext?.currentSpan) {
+      this.mastra?.__registerRunTracingContext(this.runId, tracingContext);
+    }
+
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -1775,6 +1785,7 @@ export class EventedRun<
     // console.dir({ startResult: result }, { depth: null });
 
     if (result.status !== 'suspended') {
+      this.mastra?.__unregisterRunTracingContext(this.runId);
       this.cleanup?.();
     }
 

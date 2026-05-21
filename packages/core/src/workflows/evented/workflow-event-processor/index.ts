@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '..
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
+import type { TracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import type {
@@ -135,6 +136,25 @@ export class WorkflowEventProcessor extends EventProcessor {
         this.parentChildRelationships.delete(childRunId);
       }
     }
+  }
+
+  /**
+   * Resolves the tracing context for a run, walking up the parent chain so a
+   * nested workflow run (e.g. `agentic-execution` inside `agentic-loop`)
+   * inherits its parent's parent span. `EventedRun.start` records the context
+   * on Mastra keyed by runId; nested runs are only registered against their
+   * parent.
+   */
+  private resolveRunTracingContext(runId: string): TracingContext | undefined {
+    const seen = new Set<string>();
+    let current: string | undefined = runId;
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      const ctx = this.mastra.__getRunTracingContext(current);
+      if (ctx) return ctx;
+      current = this.parentChildRelationships.get(current);
+    }
+    return undefined;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -1328,6 +1348,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         abortController,
         format: streamFormat,
         perStep,
+        // Non-serializable parent span for span nesting; held on Mastra by
+        // `EventedRun.start` since it can't ride pubsub events. Walk the parent
+        // chain so nested workflow runs inherit it.
+        tracingContext: this.resolveRunTracingContext(runId),
       });
     }
     requestContext = Object.fromEntries(rc.entries());
