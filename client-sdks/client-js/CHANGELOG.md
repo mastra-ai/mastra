@@ -1,5 +1,25 @@
 # @mastra/client-js
 
+## 1.21.0-alpha.1
+
+### Minor Changes
+
+- Client-side tool tracing is now built in. When server-side observability is configured, the SDK automatically measures execution duration and ships it back to the server. To add child spans and structured logs from inside your tool's `execute(input, context)` function, use the `observe` helper on the execution context: ([#16425](https://github.com/mastra-ai/mastra/pull/16425))
+
+  ```ts
+  execute: async ({ userId }, { observe }) => {
+    observe.log('info', 'fetching user', { userId });
+    return observe.span('fetch user', () => fetch(`/api/users/${userId}`));
+  };
+  ```
+
+  The `createTool()` helper now calls `execute(input, context)` so client tools receive the same execution context shape as core tools.
+
+### Patch Changes
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+
 ## 1.20.1-alpha.0
 
 ### Patch Changes

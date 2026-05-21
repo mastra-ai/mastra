@@ -1,5 +1,16 @@
 # @mastra/observability
 
+## 1.14.0-alpha.0
+
+### Minor Changes
+
+- Support ingesting client-side tool telemetry. Spans, logs, and duration metrics captured by the client SDK during tool execution are forwarded through the observability bus to your existing exporters. Client tool durations are reported via the existing `mastra_tool_duration_ms` metric with a `toolType: 'client'` label to distinguish them from server-side tool durations. ([#16425](https://github.com/mastra-ai/mastra/pull/16425))
+
+### Patch Changes
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+
 ## 1.13.0
 
 ### Minor Changes
