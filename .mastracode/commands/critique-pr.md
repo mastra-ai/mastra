@@ -1,3 +1,9 @@
+---
+name: critique-pr
+description: Analyze, critique, summarize, and draft an optional review comment for the current pull request
+goal: true
+---
+
 # Review Pull Request
 
 Use the GH CLI to analyze and summarize a pull request for the current repository.
