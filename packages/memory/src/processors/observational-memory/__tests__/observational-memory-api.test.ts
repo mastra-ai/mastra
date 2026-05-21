@@ -2476,7 +2476,7 @@ describe('getUnobservedMessages filtering', () => {
     expect(unobserved.length).toBe(2);
   });
 
-  it('should keep messages created exactly at the lastObservedAt fallback cursor', async () => {
+  it('should filter messages created exactly at the lastObservedAt fallback cursor', async () => {
     const om = createOM(storage);
     const base = Date.now() - 10_000;
     const messages = createBulkMessages(3, threadId, base);
@@ -2485,7 +2485,7 @@ describe('getUnobservedMessages filtering', () => {
     (record as any).lastObservedAt = messages[1]!.createdAt;
 
     const unobserved = om.getUnobservedMessages(messages, record);
-    expect(unobserved.map(m => m.id)).toEqual([messages[1]!.id, messages[2]!.id]);
+    expect(unobserved.map(m => m.id)).toEqual([messages[2]!.id]);
   });
 });
 

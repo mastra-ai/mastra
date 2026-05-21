@@ -159,7 +159,7 @@ export function filterObservedMessages(opts: {
 
       if (lastObservedAt && msg.createdAt) {
         const msgDate = new Date(msg.createdAt);
-        if (msgDate < lastObservedAt) {
+        if (msgDate <= lastObservedAt) {
           messagesToRemove.push(msg.id);
         }
       }
