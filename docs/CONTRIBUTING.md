@@ -7,7 +7,7 @@ We welcome contributions of any size and contributors of any skill level.
 
 ## Project setup
 
-To begin developing locally, check out this project from your machine.
+To begin developing locally, clone this project to your machine.
 
 ```shell
 git clone git@github.com:mastra-ai/mastra.git
