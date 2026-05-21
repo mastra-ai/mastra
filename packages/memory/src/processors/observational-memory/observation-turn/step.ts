@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
@@ -18,6 +19,14 @@ import type { StepContext } from './types';
 export class ObservationStep {
   private _prepared = false;
   private _context?: StepContext;
+  /**
+   * Set when prepare() created a fresh assistant message in messageList to
+   * carry OM lifecycle markers on step 0 (when no assistant message exists
+   * yet). Used to suppress the `onSyncObservationComplete` rotation hook:
+   * the seeded message is the new response container; rotating to a new id
+   * would orphan the markers in a separate assistant turn.
+   */
+  private _seededMarkerMessage = false;
 
   constructor(
     private readonly turn: ObservationTurn,
@@ -190,6 +199,7 @@ export class ObservationStep {
     // when we're about to observe — needed so the input survives the cleanup
     // that runs after observation, matching the step > 0 invariant) ──
     const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+
     if (this.stepNumber > 0 || willObserveNow) {
       const newInput = messageList.clear.input.db();
       const newOutput = messageList.clear.response.db();
@@ -200,6 +210,37 @@ export class ObservationStep {
           messageList.add(msg, 'memory');
         }
       }
+    }
+
+    // ── Seed assistant response message on step 0 when no assistant message
+    // exists yet (e.g. fresh thread, single mega user message > threshold) ──
+    // Sync observation will write `data-om-*` lifecycle marker parts. Markers
+    // must land on an assistant-role message, so we create an empty assistant
+    // message keyed by the active response messageId from `processInputStep`.
+    // Seeded *after* the save block so it isn't flushed empty (and dropped by
+    // filterMessagesForPersistence). It lives in the 'response' bucket until
+    // observation appends marker parts via `persistMarkerToMessage` (which
+    // also persists the message-with-markers to storage). Streamed response
+    // parts emitted by the LLM later in this step carry the same messageId,
+    // so MessageMerger.shouldMerge merges them onto the seed (data-only
+    // assistant messages only accept incoming parts when ids match), keeping
+    // markers + real assistant output on a single assistant turn.
+    if (
+      this.stepNumber === 0 &&
+      willObserveNow &&
+      this.turn.responseMessageId &&
+      !messageList.get.all.db().some(m => m?.role === 'assistant')
+    ) {
+      const seed: MastraDBMessage = {
+        id: this.turn.responseMessageId,
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: { format: 2, parts: [] },
+      };
+      messageList.add(seed, 'response');
+      this._seededMarkerMessage = true;
     }
 
     // ── Threshold observation (all steps, skip if tool calls pending) ──
@@ -369,6 +410,12 @@ export class ObservationStep {
       threadId,
       resourceId,
       messages: messageList.get.all.db(),
+      // Pass the live MessageList so observation strategies can attach
+      // lifecycle markers to the in-memory assistant message (incl. the
+      // step-0 seed) via persistMarkerToMessage instead of looking up the
+      // DB. Required for the step-0 seed flow because the seed has empty
+      // parts until markers land on it.
+      messageList,
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
       observabilityContext: this.turn.observabilityContext,
@@ -391,12 +438,18 @@ export class ObservationStep {
       const messagesToSeal = messageToSeal ? [messageToSeal] : [];
       om.sealMessagesForBuffering(messagesToSeal);
 
-      try {
-        await this.turn.hooks?.onSyncObservationComplete?.();
-      } catch (error) {
-        omDebug(
-          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      // Suppress the rotation hook when we just seeded an empty assistant
+      // message for OM markers on step 0. The seed already uses the active
+      // response messageId; rotating to a fresh id would split markers and
+      // later streamed response parts into two separate assistant turns.
+      if (!this._seededMarkerMessage) {
+        try {
+          await this.turn.hooks?.onSyncObservationComplete?.();
+        } catch (error) {
+          omDebug(
+            `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
 
       if (messagesToSeal.length > 0) {

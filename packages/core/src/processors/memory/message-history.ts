@@ -118,16 +118,8 @@ export class MessageHistory implements Processor {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
-      // 2. Filter out system messages (they should never be stored in DB) and
-      // synthetic marker messages (runtime-owned shells used by Observational
-      // Memory to carry data-om-* lifecycle parts when no real assistant
-      // message exists yet — they have no content the LLM needs to see and
-      // would otherwise show up as an empty assistant turn in the prompt).
-      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
-        if (msg.role === 'system') return false;
-        if (msg.content?.metadata?.mastraSynthetic === true) return false;
-        return true;
-      });
+      // 2. Filter out system messages (they should never be stored in DB)
+      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => msg.role !== 'system');
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
       // This includes messages added by previous processors like SemanticRecall

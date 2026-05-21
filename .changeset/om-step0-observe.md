@@ -8,4 +8,4 @@ The previous `stepNumber > 0` gate was inherited from the pre-async-buffering er
 
 - Observation runs on every step (including step 0) when `pendingTokens >= threshold` and no tool calls are pending.
 - On step 0, pending input is persisted to storage before observation cleanup runs, preserving the message-persistence invariant.
-- Lifecycle markers (`data-om-observation-start` / `-failed` / `-end`) fall back to the most recent message of any role when no assistant message exists yet — previously they were silently dropped on step 0 because there was nothing to attach them to.
+- Lifecycle markers (`data-om-observation-start` / `-failed` / `-end`) land on the active pending assistant response message — previously they were silently dropped on step 0 because there was no assistant-role message yet. When no assistant message exists, the step seeds an empty assistant message using the active response `messageId` from `processInputStep`; the LLM's streamed response parts merge onto it via `MessageMerger.shouldMerge` (which keys on id equality for data-only assistant messages), keeping markers and the actual response on the same assistant turn.
