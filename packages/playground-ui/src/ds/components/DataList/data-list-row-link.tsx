@@ -29,6 +29,7 @@ export function DataListRowLink({
   return (
     <Link
       href={to}
+      role="listitem"
       className={cn(
         ...dataListRowStyles,
         flushLeft && 'ml-0!',

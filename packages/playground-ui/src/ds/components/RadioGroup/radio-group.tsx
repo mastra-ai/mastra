@@ -20,22 +20,25 @@ type RadioGroupItemProps = Omit<RadioPrimitive.Root.Props, 'className'> & {
   className?: string;
 };
 
-const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({ className, ...props }, ref) => {
+const RadioGroupItem = React.forwardRef<HTMLButtonElement, RadioGroupItemProps>(({ className, ...props }, ref) => {
+  // Base UI's Radio.Root defaults to a `<span>` and forwards `id` to its
+  // hidden radio input. Render a native `<button>` (with `nativeButton`) so
+  // the consumer's `id` — and the click target — lands on the visible control,
+  // matching the previous Radix behavior and preventing duplicate accessible
+  // elements when paired with `<label htmlFor="...">`.
   return (
     <RadioPrimitive.Root
       ref={ref}
+      render={<button type="button" />}
+      nativeButton
       className={cn(
-        // Base UI's Radio.Root renders a `<span>` (inline) — unlike Radix's
-        // `<button>`. `flex` + `shrink-0` make the sizing/centering classes
-        // take effect and keep the control square inside flex rows.
         'flex shrink-0 items-center justify-center',
         'aspect-square h-4 w-4 rounded-full border border-neutral3 text-neutral6',
         'shadow-sm',
         transitions.all,
         'hover:border-neutral5 hover:shadow-md',
         formElementFocus,
-        // Base UI's Radio.Root is a `<span>`, so `:disabled` never matches — target `data-disabled`.
-        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:border-neutral3 data-[disabled]:hover:shadow-sm',
+        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-neutral3 disabled:hover:shadow-sm',
         // Base UI exposes `data-checked`/`data-unchecked` instead of Radix's `data-state`.
         'data-[checked]:border-accent1 data-[checked]:shadow-glow-accent1',
         className,

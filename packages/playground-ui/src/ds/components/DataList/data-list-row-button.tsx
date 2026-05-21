@@ -21,6 +21,7 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
       <button
         ref={ref}
         type={type}
+        role="listitem"
         className={cn(
           ...dataListRowStyles,
           'text-left',

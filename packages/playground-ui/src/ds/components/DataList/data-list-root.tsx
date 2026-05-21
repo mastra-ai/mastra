@@ -17,6 +17,7 @@ export function DataListRoot({ children, columns, className, scrollRef }: DataLi
   return (
     <div
       ref={scrollRef}
+      role="list"
       className={cn(
         'grid bg-surface2 border max-h-full border-border1 rounded-xl overflow-y-auto content-start',
         className,

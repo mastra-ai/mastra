@@ -16,7 +16,12 @@ export type DataListRowProps = ComponentPropsWithoutRef<'div'>;
  */
 export const DataListRow = forwardRef<HTMLDivElement, DataListRowProps>(({ children, className, ...rest }, ref) => {
   return (
-    <div ref={ref} className={cn('grid grid-cols-subgrid gap-0 mx-1', ...dataListRowOuterStyles, className)} {...rest}>
+    <div
+      ref={ref}
+      role="listitem"
+      className={cn('grid grid-cols-subgrid gap-0 mx-1', ...dataListRowOuterStyles, className)}
+      {...rest}
+    >
       {children}
     </div>
   );
