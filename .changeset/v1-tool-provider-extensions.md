@@ -122,3 +122,12 @@ config handed to `handleAutoVersioning`. The new version row was written
 without the field, so on reload `getByIdResolved` returned the agent with
 no `toolProviders` and the picker appeared empty. `toolProviders` is now
 included in the snapshot config alongside the other agent-config fields.
+
+**Labels are required when creating a new connection.** The empty-state
+`<ConnectionPicker />` now disables Connect until the user types a label,
+so every persisted `tool_integration_connections` row ships with a real
+account name. The "Label is required" copy no longer appears on unpinned
+existing rows — pinning inherits the persisted label as before, and rows
+without a persisted label fall back to a truncated-id display name. The
+`validateLabels` `>= 2` uniqueness rule still protects legacy rows that
+lack a persisted label.

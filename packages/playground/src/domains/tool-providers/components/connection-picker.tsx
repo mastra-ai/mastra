@@ -193,10 +193,6 @@ export const ConnectionPicker = ({
     return map;
   }, [connections]);
 
-  // Labels become *required* once we'd cross into multi-connection territory
-  // for this `toolkit` (i.e. pinning would result in ≥2 connections).
-  const labelWouldBeRequired = connections.length >= 1;
-
   const handlePinExisting = (connectionId: string) => {
     // Per-agent label override has been removed. Always inherit the persisted
     // account label from `tool_integration_connections`. The picker only allows pinning
@@ -208,7 +204,6 @@ export const ConnectionPicker = ({
     // keeps resolving from the shared bucket once pinned. Absent on legacy
     // rows; falls through and runtime treats as per-author.
     const scope = (item?.scope as 'per-author' | 'shared' | 'caller-supplied' | undefined) ?? undefined;
-    if (!label && labelWouldBeRequired) return;
     if (label) {
       const key = label.trim().toLowerCase();
       if (connections.some(c => (c.label ?? '').trim().toLowerCase() === key)) return;
@@ -226,9 +221,9 @@ export const ConnectionPicker = ({
 
   const newDraftError = useMemo(() => {
     const trimmed = newLabelDraft.trim();
-    if (trimmed.length === 0) {
-      return labelWouldBeRequired ? 'Label is required when you have multiple connections' : undefined;
-    }
+    // Labels are required on every newly-created connection so every persisted
+    // row in `tool_integration_connections` ships with a real account name.
+    if (trimmed.length === 0) return 'Label is required';
     if (trimmed.length > MAX_LABEL) return `Label must be ≤${MAX_LABEL} characters`;
     if (!LABEL_RE.test(trimmed)) return 'Use letters, numbers, spaces, _ or -';
     const key = trimmed.toLowerCase();
@@ -236,7 +231,7 @@ export const ConnectionPicker = ({
       return 'Duplicate label';
     }
     return undefined;
-  }, [newLabelDraft, labelWouldBeRequired, connections]);
+  }, [newLabelDraft, connections]);
 
   const handleAdd = async () => {
     // If the provider declares additional fields (e.g. Confluence subdomain),
@@ -383,11 +378,7 @@ export const ConnectionPicker = ({
           const duplicate =
             persistedLabel !== undefined &&
             connections.some(c => (c.label ?? '').trim().toLowerCase() === persistedLabel.trim().toLowerCase());
-          const error = duplicate
-            ? 'Already pinned under this label'
-            : !persistedLabel && labelWouldBeRequired
-              ? 'Label is required when you have multiple connections'
-              : undefined;
+          const error = duplicate ? 'Already pinned under this label' : undefined;
           const inactive = item.status !== 'active';
           const displayName = persistedLabel ?? `${item.connectionId.slice(0, 12)}…`;
           // Show an owner badge only on rows whose authorId differs from
@@ -537,9 +528,7 @@ export const ConnectionPicker = ({
                       aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
                       data-testid={`connection-new-label-${toolkit}`}
                     />
-                    {newDraftError && newLabelDraft.length > 0 && (
-                      <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>
-                    )}
+                    {newDraftError && <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>}
                   </div>
                   <Button
                     size="sm"
@@ -709,9 +698,7 @@ export const ConnectionPicker = ({
                 aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
                 data-testid={`connection-new-label-${toolkit}`}
               />
-              {newDraftError && newLabelDraft.length > 0 && (
-                <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>
-              )}
+              {newDraftError && <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>}
             </div>
             <Button
               size="sm"

@@ -114,13 +114,14 @@ describe('ConnectionPicker', () => {
     expect(screen.getByText(/no connections yet/i)).toBeTruthy();
   });
 
-  it('does not require a label when there is only one connection', () => {
+  it('does not require a label on a single already-pinned row', () => {
     renderPicker({
       initial: [{ connectionId: 'c1', toolkit: TOOL_SERVICE, label: 'Work' }],
     });
     const input = screen.getByTestId(`connection-label-${TOOL_SERVICE}-0`) as HTMLInputElement;
     fireEvent.change(input, { target: { value: '' } });
-    expect(screen.queryByText(/label is required/i)).toBeNull();
+    // The pinned row itself stays valid when blanked. The "Add another"
+    // footer is a separate input governed by the create-time label rule.
     expect(input.getAttribute('aria-invalid')).not.toBe('true');
   });
 
@@ -316,6 +317,10 @@ describe('ConnectionPicker', () => {
       expect(screen.getByTestId(`connection-picker-${TOOL_SERVICE}-empty`)).toBeTruthy();
     });
 
+    // Labels are now required at create time — set one before connecting.
+    const labelInput = screen.getByTestId(`connection-new-label-${TOOL_SERVICE}`) as HTMLInputElement;
+    fireEvent.change(labelInput, { target: { value: 'Acme' } });
+
     // First click opens the inline field form rather than calling authorize.
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /connect/i }));
@@ -337,6 +342,7 @@ describe('ConnectionPicker', () => {
         providerId: INTEGRATION_ID,
         toolkit: TOOL_SERVICE,
         config: { subdomain: 'acme' },
+        label: 'Acme',
         scope: 'per-author',
       });
     });
@@ -396,21 +402,19 @@ describe('ConnectionPicker', () => {
     });
   });
 
-  it('allows connecting with no label when none is typed in the empty state', async () => {
+  it('requires a label before allowing connect in the empty state', async () => {
     authorizeMock.mockResolvedValue({ status: 'completed', connectionId: 'ca_new' });
     renderPicker({ initial: [] });
 
+    const connectButton = screen.getByRole('button', { name: /connect/i }) as HTMLButtonElement;
+    expect(connectButton.disabled).toBe(true);
+    expect(screen.getByText(/^Label is required$/)).toBeTruthy();
+
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+      fireEvent.click(connectButton);
     });
 
-    await waitFor(() => {
-      expect(authorizeMock).toHaveBeenCalledWith({
-        providerId: INTEGRATION_ID,
-        toolkit: TOOL_SERVICE,
-        scope: 'per-author',
-      });
-    });
+    expect(authorizeMock).not.toHaveBeenCalled();
   });
 
   it('surfaces persisted labels from listConnections as static read-only text on the existing-connections row', async () => {
@@ -641,6 +645,9 @@ describe('ConnectionPicker', () => {
       scope: 'per-author',
       onChange: next => changes.push(next),
     });
+
+    const labelInput = screen.getByTestId(`connection-new-label-${TOOL_SERVICE}`) as HTMLInputElement;
+    fireEvent.change(labelInput, { target: { value: 'New' } });
 
     await act(async () => {
       fireEvent.click(screen.getByTestId(`connection-connect-${TOOL_SERVICE}`));
