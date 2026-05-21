@@ -8,7 +8,6 @@ import { useConnectionUsage } from '../hooks/use-connection-usage';
 import { useDisconnectConnection } from '../hooks/use-disconnect-connection';
 import { useInfiniteConnections } from '../hooks/use-infinite-connections';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 type ConnectionField = {
   name: string;
@@ -142,27 +141,10 @@ export const ConnectionPicker = ({
   }, [allowedScopes]);
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
-
-  // Admin callers can flip between "Mine" (the default, server resolves
-  // their own authorId from the auth context) and "All authors" (broader
-  // listing seeded from `tool_integration_connections`). Non-admin callers never see
-  // the dropdown — the server silently ignores any authorId they pass.
-  const { hasPermission, rbacEnabled, isLoading: permissionsLoading } = usePermissions();
-  // Only surface the admin filter when RBAC is actually enabled and the
-  // caller carries the bypass permission. In OSS (no RBAC) the picker
-  // looks the same as it did before #6.
-  const isAdmin = rbacEnabled && !permissionsLoading && hasPermission('tool-providers:admin');
   const { data: currentUser } = useCurrentUser();
   const callerId = currentUser?.id;
-  const [authorFilter, setAuthorFilter] = useState<'mine' | 'all'>('mine');
-  // Distinguish "no value, server resolve me" from "explicitly undefined to mean all".
+
   const existing = useInfiniteConnections(providerId, toolkit, {
-    // Only forward authorId when admin is filtering to themselves. Non-admin
-    // callers leave this unset so the server resolves the owner.
-    ...(isAdmin && authorFilter === 'mine' && callerId ? { authorId: callerId } : {}),
-    // `authorId: undefined` is meaningful for admin "All authors"; the hook
-    // already omits the param when not provided, which is exactly what we
-    // want for non-admin (defer to server).
     // When the surface is locked to a single scope, push that filter to the
     // server so cross-scope rows never come back in the first place.
     ...(lockedScope ? { scope: lockedScope } : {}),
@@ -475,9 +457,7 @@ export const ConnectionPicker = ({
     // makes no sense because end-user accounts are created at runtime
     // by the host app, not pre-listed in the editor.
     if (newScopeDraft === 'caller-supplied') return null;
-    // Render the section whenever the admin filter is visible (so the
-    // dropdown stays available) OR there are unpinned rows to show.
-    if (unpinnedExisting.length === 0 && !isAdmin) return null;
+    if (unpinnedExisting.length === 0) return null;
 
     return (
       <div
@@ -491,29 +471,6 @@ export const ConnectionPicker = ({
               Pin an existing connection to this agent.
             </Txt>
           </div>
-          {isAdmin && (
-            <DropdownMenu>
-              <DropdownMenu.Trigger asChild>
-                <Button size="sm" variant="ghost" data-testid={`connection-author-filter-${toolkit}`}>
-                  {authorFilter === 'mine' ? 'Mine' : 'All authors'}
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="end">
-                <DropdownMenu.Item
-                  onSelect={() => setAuthorFilter('mine')}
-                  data-testid={`connection-author-filter-${toolkit}-mine`}
-                >
-                  Mine
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onSelect={() => setAuthorFilter('all')}
-                  data-testid={`connection-author-filter-${toolkit}-all`}
-                >
-                  All authors
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu>
-          )}
         </div>
         {unpinnedExisting.map(item => {
           const persistedLabel = item.label ?? undefined;
@@ -531,8 +488,9 @@ export const ConnectionPicker = ({
           const inactive = item.status !== 'active';
           const displayName = persistedLabel ?? `${item.connectionId.slice(0, 12)}…`;
           // Show an owner badge only on rows whose authorId differs from
-          // the caller (typically only possible when the admin filter is
-          // set to "All authors").
+          // the caller. The inline picker never surfaces cross-author rows
+          // today (the admin filter has been removed), but the server-side
+          // admin author filter can still hand them to a future global page.
           const isCrossAuthor = Boolean(item.authorId && callerId && item.authorId !== callerId);
           return (
             <div

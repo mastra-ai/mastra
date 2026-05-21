@@ -100,6 +100,13 @@ Agent Builder mounts with `['per-author']` (single-author surface) and
 the CMS agent editor mounts with `['caller-supplied']` (declare-only,
 host app resolves end-users at runtime via `MASTRA_RESOURCE_ID_KEY`).
 
+The Mine/All admin cross-author dropdown is also removed from the inline
+picker. Inside a surface-locked picker it could never produce a pinnable
+result (other authors' per-author connections live in their own buckets
+and cannot be cross-pinned at runtime). The server-side admin author
+filter on `GET /api/tool-providers/:providerId/connections?authorId=…`
+is preserved for a future global admin connections page.
+
 **Fix: `toolProviders` survives reload on `PATCH /stored/agents/:id`**:
 
 The update handler destructured `toolProviders` from the request body and
