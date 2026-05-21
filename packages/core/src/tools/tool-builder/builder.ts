@@ -13,7 +13,7 @@ import {
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
-import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import { backgroundOverrideJsonSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -26,7 +26,6 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
-import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
@@ -96,48 +95,35 @@ export class CoreToolBuilder extends MastraBase {
           schema = z.object({});
         }
 
-        if (isZodObject(schema)) {
-          let nextSchema = schema;
+        // Unified JSON-schema path: normalize the user's input schema (Zod v3,
+        // Zod v4, or a JsonSchemaWrapper) into a Standard Schema, extract its
+        // JSON Schema, add the framework's override fields, and re-wrap. This
+        // matches the codebase's general schema-interop pattern and avoids
+        // splicing a Zod v4 ZodOptional into a Zod v3 ZodObject's shape, which
+        // would crash later in `ZodObject._parse` with
+        // `keyValidator._parse is not a function`.
+        const standardSchema = isStandardSchemaWithJSON(schema as any)
+          ? (schema as any)
+          : toStandardSchema(schema as any);
+        const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
+
+        if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
+          const properties = { ...(jsonSchema.properties ?? {}) };
+
           if (isBackgroundEligible) {
-            nextSchema = nextSchema.extend({
-              _background: backgroundOverrideZodSchema,
-            });
+            properties._background = backgroundOverrideJsonSchema;
           }
           if (isResumableTool) {
-            nextSchema = nextSchema.extend({
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
+            properties.suspendedToolRunId = {
+              type: ['string', 'null'],
+              description: 'The runId of the suspended tool',
+            };
+            properties.resumeData = {
+              description: 'The resumeData object created from the resumeSchema of suspended tool',
+            };
           }
-          this.originalTool.inputSchema = nextSchema;
-        } else {
-          // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
-          // Extract JSON Schema, add suspend/resume fields, re-wrap.
-          const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
-          if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-            if (isBackgroundEligible) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                _background: backgroundOverrideJsonSchema,
-              };
-            }
-            if (isResumableTool) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                suspendedToolRunId: {
-                  type: ['string', 'null'],
-                  description: 'The runId of the suspended tool',
-                },
-                resumeData: {
-                  description: 'The resumeData object created from the resumeSchema of suspended tool',
-                },
-              };
-            }
-            this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
-          }
+
+          this.originalTool.inputSchema = toStandardSchema({ ...jsonSchema, properties }) as any;
         }
       }
     }
