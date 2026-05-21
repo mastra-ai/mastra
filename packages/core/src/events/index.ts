@@ -3,4 +3,3 @@ export * from './pubsub';
 export * from './event-emitter';
 export { CachingPubSub, withCaching, type CachingPubSubOptions } from './caching-pubsub';
 export * from './unix-socket-pubsub';
-export * from './per-thread-pubsub';

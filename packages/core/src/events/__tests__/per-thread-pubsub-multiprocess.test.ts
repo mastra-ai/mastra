@@ -1,11 +1,13 @@
 /**
- * Multi-process integration tests for PerThreadPubSub.
+ * Multi-process integration tests for per-thread socket isolation.
  *
- * Spawns real child processes on separate threads to verify:
+ * Spawns real child processes to verify the mastracode signal routing boundary:
+ * - Socket paths mirror /tmp/mc/<resourceId>/<threadId>.sock
+ * - Topics use the real format: agent.thread-stream.<encoded(resourceId\0threadId)>
  * - Solo process has zero serialization overhead (broker with 0 clients)
- * - Two processes on the same thread exchange stream parts
- * - Processes on different threads don't receive each other's events
- * - Process disconnect stops requiring broadcast
+ * - Two processes on the same thread (same socket) exchange stream parts
+ * - Processes on different threads (different sockets) don't receive each other's events
+ * - Process disconnect is detected and client count drops
  *
  * Uses IPC (process.send / process.on('message')) for cross-process assertions.
  */
@@ -22,9 +24,18 @@ interface WorkerMessage {
   data?: any;
 }
 
+/** Encodes a topic in the same format as thread-stream-runtime.ts */
+function threadTopic(resourceId: string, threadId: string): string {
+  return `agent.thread-stream.${encodeURIComponent(`${resourceId}\0${threadId}`)}`;
+}
+
+/** Derives socket path matching mastracode's SignalsPubSub routing */
+function threadSocketPath(baseDir: string, resourceId: string, threadId: string): string {
+  return join(baseDir, resourceId, `${threadId}.sock`);
+}
+
 function waitForMessage(child: ChildProcess, type: string, timeoutMs = 5000): Promise<WorkerMessage> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timeout waiting for "${type}" from child`)), timeoutMs);
     const handler = (msg: WorkerMessage) => {
       if (msg.type === type) {
         clearTimeout(timer);
@@ -32,28 +43,35 @@ function waitForMessage(child: ChildProcess, type: string, timeoutMs = 5000): Pr
         resolve(msg);
       }
     };
+    const timer = setTimeout(() => {
+      child.off('message', handler);
+      reject(new Error(`Timeout waiting for "${type}" from child`));
+    }, timeoutMs);
     child.on('message', handler);
   });
 }
 
-describe('PerThreadPubSub - multi-process', () => {
+describe('UnixSocketPubSub - multi-process per-thread isolation', () => {
   let tempDir: string;
   let workerScript: string;
   const children: ChildProcess[] = [];
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-mp-test-'));
-    // Write a worker script that uses the compiled dist output
+    // Write a worker script that uses UnixSocketPubSub directly with a given socket path.
+    // This mirrors how mastracode routes each thread to its own socket.
     workerScript = join(tempDir, 'worker.mjs');
-    // Resolve relative to this test file's directory → src/events/__tests__/ → up to packages/core/dist
     const distEventsPath = join(__dirname, '../../../dist/events/index.js').replace(/\\/g, '/');
     await writeFile(
       workerScript,
       `
-import { PerThreadPubSub } from '${distEventsPath}';
+import { UnixSocketPubSub } from '${distEventsPath}';
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
-const prefix = process.argv[2];
-const pubsub = new PerThreadPubSub(prefix);
+const socketPath = process.argv[2];
+await mkdir(dirname(socketPath), { recursive: true });
+const pubsub = new UnixSocketPubSub(socketPath);
 let eventCount = 0;
 
 process.on('message', async (msg) => {
@@ -68,12 +86,11 @@ process.on('message', async (msg) => {
       await pubsub.publish(msg.topic, { type: msg.event.type, data: msg.event.data || {}, runId: 'run-1' });
       process.send({ type: 'ready', data: { published: true } });
     } else if (msg.type === 'get-status') {
-      const socket = pubsub.getSocket(msg.topic);
       process.send({
         type: 'status',
         data: {
-          isBroker: socket?.isBroker ?? null,
-          remoteClientCount: socket?.remoteClientCount ?? null,
+          isBroker: pubsub.isBroker,
+          remoteClientCount: pubsub.remoteClientCount,
         }
       });
     } else if (msg.type === 'close') {
@@ -98,31 +115,37 @@ process.send({ type: 'ready', data: { started: true } });
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  function spawnWorker(prefix: string): ChildProcess {
-    const child = fork(workerScript, [prefix], {
+  function spawnWorker(socketPath: string): ChildProcess {
+    const child = fork(workerScript, [socketPath], {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     });
     children.push(child);
     return child;
   }
 
-  it('solo process: broker with 0 clients delivers locally', async () => {
-    const worker = spawnWorker('solo-resource');
+  const resourceId = 'res-abc123';
+  const threadA = 'thread-aaaa-1111';
+  const threadB = 'thread-bbbb-2222';
+
+  it('solo process: broker with 0 clients, zero serialization overhead', async () => {
+    const sockPath = threadSocketPath(tempDir, resourceId, threadA);
+    const topic = threadTopic(resourceId, threadA);
+
+    const worker = spawnWorker(sockPath);
     await waitForMessage(worker, 'ready'); // started
 
-    worker.send({ type: 'subscribe', topic: 'thread-solo' });
+    worker.send({ type: 'subscribe', topic });
     await waitForMessage(worker, 'ready'); // subscribed
 
-    // Listen for event-received before publishing (local delivery is synchronous)
     const eventPromise = waitForMessage(worker, 'event-received');
-    worker.send({ type: 'publish', topic: 'thread-solo', event: { type: 'solo-event' } });
+    worker.send({ type: 'publish', topic, event: { type: 'stream-part' } });
 
     const received = await eventPromise;
-    expect(received.data.eventType).toBe('solo-event');
+    expect(received.data.eventType).toBe('stream-part');
     expect(received.data.eventCount).toBe(1);
 
-    // Verify broker status: should have 0 remote clients
-    worker.send({ type: 'get-status', topic: 'thread-solo' });
+    // Verify: broker with 0 remote clients = no serialization to wire
+    worker.send({ type: 'get-status' });
     const status = await waitForMessage(worker, 'status');
     expect(status.data.isBroker).toBe(true);
     expect(status.data.remoteClientCount).toBe(0);
@@ -130,94 +153,101 @@ process.send({ type: 'ready', data: { started: true } });
     worker.send({ type: 'close' });
   });
 
-  it('two processes on same thread exchange events', async () => {
-    const worker1 = spawnWorker('shared-resource');
-    const worker2 = spawnWorker('shared-resource');
-    await waitForMessage(worker1, 'ready'); // started
-    await waitForMessage(worker2, 'ready'); // started
+  it('two processes on same thread (same socket) exchange stream parts', async () => {
+    const sockPath = threadSocketPath(tempDir, resourceId, threadA);
+    const topic = threadTopic(resourceId, threadA);
 
-    // Both subscribe to the same topic (thread)
-    worker1.send({ type: 'subscribe', topic: 'thread-shared' });
+    const worker1 = spawnWorker(sockPath);
+    const worker2 = spawnWorker(sockPath);
     await waitForMessage(worker1, 'ready');
-    worker2.send({ type: 'subscribe', topic: 'thread-shared' });
+    await waitForMessage(worker2, 'ready');
+
+    worker1.send({ type: 'subscribe', topic });
+    await waitForMessage(worker1, 'ready');
+    worker2.send({ type: 'subscribe', topic });
     await waitForMessage(worker2, 'ready');
 
     // Worker1 publishes — both should receive
     const w1EventPromise = waitForMessage(worker1, 'event-received');
     const w2EventPromise = waitForMessage(worker2, 'event-received');
 
-    worker1.send({ type: 'publish', topic: 'thread-shared', event: { type: 'hello-from-1' } });
+    worker1.send({ type: 'publish', topic, event: { type: 'stream-part' } });
     await waitForMessage(worker1, 'ready'); // published
 
     const [w1Event, w2Event] = await Promise.all([w1EventPromise, w2EventPromise]);
-    expect(w1Event.data.eventType).toBe('hello-from-1');
-    expect(w2Event.data.eventType).toBe('hello-from-1');
+    expect(w1Event.data.eventType).toBe('stream-part');
+    expect(w2Event.data.eventType).toBe('stream-part');
 
     worker1.send({ type: 'close' });
     worker2.send({ type: 'close' });
   });
 
-  it('processes on different threads do NOT receive each other events', async () => {
-    const worker1 = spawnWorker('isolation-resource');
-    const worker2 = spawnWorker('isolation-resource');
-    await waitForMessage(worker1, 'ready');
-    await waitForMessage(worker2, 'ready');
+  it('processes on different threads (different sockets) are fully isolated', async () => {
+    const sockPathA = threadSocketPath(tempDir, resourceId, threadA);
+    const sockPathB = threadSocketPath(tempDir, resourceId, threadB);
+    const topicA = threadTopic(resourceId, threadA);
+    const topicB = threadTopic(resourceId, threadB);
 
-    // Subscribe to DIFFERENT topics (different threads)
-    worker1.send({ type: 'subscribe', topic: 'thread-A' });
-    await waitForMessage(worker1, 'ready');
-    worker2.send({ type: 'subscribe', topic: 'thread-B' });
-    await waitForMessage(worker2, 'ready');
+    const workerA = spawnWorker(sockPathA);
+    const workerB = spawnWorker(sockPathB);
+    await waitForMessage(workerA, 'ready');
+    await waitForMessage(workerB, 'ready');
 
-    // Worker1 publishes on thread-A
-    const w1EventPromise = waitForMessage(worker1, 'event-received');
-    worker1.send({ type: 'publish', topic: 'thread-A', event: { type: 'only-for-A' } });
-    await waitForMessage(worker1, 'ready');
+    workerA.send({ type: 'subscribe', topic: topicA });
+    await waitForMessage(workerA, 'ready');
+    workerB.send({ type: 'subscribe', topic: topicB });
+    await waitForMessage(workerB, 'ready');
 
-    // Worker1 should receive its own event
-    const w1Event = await w1EventPromise;
-    expect(w1Event.data.eventType).toBe('only-for-A');
+    // WorkerA publishes on thread-A
+    const wAEventPromise = waitForMessage(workerA, 'event-received');
+    workerA.send({ type: 'publish', topic: topicA, event: { type: 'only-for-A' } });
+    await waitForMessage(workerA, 'ready');
 
-    // Worker2 should NOT receive it — give it time to verify no event arrives
+    const wAEvent = await wAEventPromise;
+    expect(wAEvent.data.eventType).toBe('only-for-A');
+
+    // Give workerB time — it should NOT receive anything
     await new Promise(resolve => setTimeout(resolve, 200));
 
-    // Verify worker2's socket is on a different path (different broker)
-    worker2.send({ type: 'get-status', topic: 'thread-B' });
-    const status = await waitForMessage(worker2, 'status');
-    // Worker2's socket has 0 remote clients (it's alone on thread-B)
-    expect(status.data.isBroker).toBe(true);
-    expect(status.data.remoteClientCount).toBe(0);
+    // Verify workerB is on its own isolated socket with 0 clients
+    workerB.send({ type: 'get-status' });
+    const statusB = await waitForMessage(workerB, 'status');
+    expect(statusB.data.isBroker).toBe(true);
+    expect(statusB.data.remoteClientCount).toBe(0);
 
-    worker1.send({ type: 'close' });
-    worker2.send({ type: 'close' });
+    workerA.send({ type: 'close' });
+    workerB.send({ type: 'close' });
   });
 
-  it('broker detects peer disconnect and reports correct client count', async () => {
-    const worker1 = spawnWorker('disconnect-resource');
-    const worker2 = spawnWorker('disconnect-resource');
+  it('broker detects peer disconnect and client count drops to 0', async () => {
+    const sockPath = threadSocketPath(tempDir, resourceId, threadA);
+    const topic = threadTopic(resourceId, threadA);
+
+    const worker1 = spawnWorker(sockPath);
+    const worker2 = spawnWorker(sockPath);
     await waitForMessage(worker1, 'ready');
     await waitForMessage(worker2, 'ready');
 
-    worker1.send({ type: 'subscribe', topic: 'thread-disconnect' });
+    worker1.send({ type: 'subscribe', topic });
     await waitForMessage(worker1, 'ready');
-    worker2.send({ type: 'subscribe', topic: 'thread-disconnect' });
+    worker2.send({ type: 'subscribe', topic });
     await waitForMessage(worker2, 'ready');
 
     // Verify broker has 1 remote client
-    worker1.send({ type: 'get-status', topic: 'thread-disconnect' });
+    worker1.send({ type: 'get-status' });
     let status = await waitForMessage(worker1, 'status');
     expect(status.data.isBroker).toBe(true);
     expect(status.data.remoteClientCount).toBe(1);
 
     // Disconnect worker2
     worker2.send({ type: 'close' });
-    await waitForMessage(worker2, 'ready'); // closed
+    await waitForMessage(worker2, 'ready');
 
-    // Give the broker time to detect the disconnect
+    // Give broker time to detect disconnect
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Verify broker now has 0 remote clients
-    worker1.send({ type: 'get-status', topic: 'thread-disconnect' });
+    // Verify broker now has 0 clients — subsequent publishes skip serialization
+    worker1.send({ type: 'get-status' });
     status = await waitForMessage(worker1, 'status');
     expect(status.data.remoteClientCount).toBe(0);
 
