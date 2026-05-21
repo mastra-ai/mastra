@@ -38,6 +38,7 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
+import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -406,6 +407,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
+            observe: execOptions.observe ?? noopObserve,
             writer: new ToolStream(
               {
                 prefix: 'tool',
