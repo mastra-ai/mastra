@@ -1,4 +1,3 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { MASTRA_RESOURCE_ID_KEY } from '../request-context';
 import type { ToolAction } from '../tools/types';
@@ -115,9 +114,6 @@ export async function resolveStoredToolProviders(
       for (const connection of connections) {
         const suffix = skipSuffix ? '' : `__${buildConnectionSuffix(connection.label, usedSuffixes)}`;
 
-        // Resolved outside the try so structured errors (e.g. caller-supplied
-        // resourceId missing) propagate instead of being swallowed alongside
-        // adapter failures.
         const resolvedAuthorId = resolveConnectionAuthorId(connection, authorId, requestContext);
 
         let resolved: Record<string, ToolAction<any, any, any>>;
@@ -161,7 +157,10 @@ export async function resolveStoredToolProviders(
  *
  * - `kind !== 'author'` → undefined (invoker/platform are reserved for later phases).
  * - `scope === 'shared'` → {@link SHARED_BUCKET_ID}.
- * - `scope === 'caller-supplied'` → `requestContext[MASTRA_RESOURCE_ID_KEY]` (throws if missing).
+ * - `scope === 'caller-supplied'` → `requestContext[MASTRA_RESOURCE_ID_KEY]` when
+ *   present, otherwise falls back to the shared `'default'` bucket (matching legacy
+ *   `ComposioToolProvider` semantics on main). Multi-tenant deployments should wire
+ *   `authConfig.mapUserToResourceId` to avoid cross-user bucket sharing.
  * - otherwise → the caller's resolved authorId.
  */
 function resolveConnectionAuthorId(
@@ -173,15 +172,13 @@ function resolveConnectionAuthorId(
   if (connection.scope === 'shared') return SHARED_BUCKET_ID;
   if (connection.scope === 'caller-supplied') {
     const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
-    if (typeof resourceId !== 'string' || resourceId.length === 0) {
-      throw new MastraError({
-        id: 'CALLER_SUPPLIED_USER_ID_MISSING',
-        domain: ErrorDomain.TOOL,
-        category: ErrorCategory.USER,
-        text: `Connection ${connection.connectionId} requires a caller-supplied user id via requestContext['${MASTRA_RESOURCE_ID_KEY}']`,
-      });
-    }
-    return resourceId;
+    if (typeof resourceId === 'string' && resourceId.length > 0) return resourceId;
+    // Match legacy ComposioToolProvider behavior: when the host app has not
+    // wired requestContext[MASTRA_RESOURCE_ID_KEY] (e.g. via
+    // authConfig.mapUserToResourceId), fall back to a shared 'default' bucket
+    // so tools still resolve. Multi-tenant deployments must wire the resource
+    // id explicitly to avoid cross-user bucket sharing.
+    return 'default';
   }
   return callerAuthorId;
 }

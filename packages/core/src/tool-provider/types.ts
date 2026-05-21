@@ -114,8 +114,10 @@ export interface ToolProviderCapabilities {
  * - `'shared'` — bucketed under {@link SHARED_BUCKET_ID}, visible to every caller.
  * - `'caller-supplied'` — bucketed under the host app's `resourceId` forwarded
  *   via request context. Used for multi-tenant SaaS deployments where the
- *   host app authenticates the end-user upstream. Throws at runtime if the
- *   resource id is missing.
+ *   host app authenticates the end-user upstream. Falls back to a shared
+ *   `'default'` bucket when the resource id is missing; multi-tenant
+ *   deployments should wire the resource id explicitly (e.g. via
+ *   `authConfig.mapUserToResourceId`) to avoid cross-tenant bucket sharing.
  */
 export type ToolProviderConnectionScope = 'shared' | 'per-author' | 'caller-supplied';
 

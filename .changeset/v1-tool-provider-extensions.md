@@ -203,3 +203,10 @@ existing `connections` map), and an `integrationToolsLoading` gate keeps the
 LLM from firing `set-agent-tools` against a stale tool-id enum while
 `useAllProviderTools` is still fanning in. `ModelPolicyProvider` is
 restored around both CMS `create-layout` and `edit-layout`.
+
+Restore legacy permissive behavior for `caller-supplied` connections: when
+`requestContext[MASTRA_RESOURCE_ID_KEY]` is missing, the runtime resolver
+falls back to a shared `'default'` user bucket instead of throwing
+`CALLER_SUPPLIED_USER_ID_MISSING`. Matches `ComposioToolProvider` semantics
+on `main`. Multi-tenant deployments should still wire
+`authConfig.mapUserToResourceId` to avoid cross-tenant bucket sharing.
