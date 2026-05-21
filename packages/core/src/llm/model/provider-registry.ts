@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import type { AttachmentCapabilities, ProviderConfig, MastraModelGateway } from './gateways/base.js';
+import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -72,7 +72,7 @@ const CACHE_DIR = () => path.join(os.homedir(), '.cache', 'mastra');
 const CACHE_FILE = () => path.join(CACHE_DIR(), 'gateway-refresh-time');
 const GLOBAL_PROVIDER_REGISTRY_JSON = () => path.join(CACHE_DIR(), 'provider-registry.json');
 const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.generated.d.ts');
-const GLOBAL_PROVIDER_CAPABILITIES_JSON = () => path.join(CACHE_DIR(), 'provider-capabilities.json');
+const GLOBAL_CAPABILITIES_DIR = () => path.join(CACHE_DIR(), 'capabilities');
 
 let modelRouterCacheFailed = false;
 
@@ -159,26 +159,28 @@ function syncGlobalCacheToLocal(): void {
       }
     }
 
-    // Sync capabilities JSON if global exists and differs from local
-    const globalCapabilitiesExists = fs.existsSync(GLOBAL_PROVIDER_CAPABILITIES_JSON());
-    if (globalCapabilitiesExists) {
-      const globalCapContent = fs.readFileSync(GLOBAL_PROVIDER_CAPABILITIES_JSON(), 'utf-8');
-      try {
-        JSON.parse(globalCapContent);
-      } catch {
+    // Sync capabilities/ directory if global exists
+    const globalCapDir = GLOBAL_CAPABILITIES_DIR();
+    if (fs.existsSync(globalCapDir) && fs.statSync(globalCapDir).isDirectory()) {
+      const localCapDir = path.join(packageRoot, 'dist', 'capabilities');
+      fs.mkdirSync(localCapDir, { recursive: true });
+      const files = fs.readdirSync(globalCapDir).filter(f => f.endsWith('.json'));
+      for (const file of files) {
+        const globalFile = path.join(globalCapDir, file);
+        const localFile = path.join(localCapDir, file);
         try {
-          fs.unlinkSync(GLOBAL_PROVIDER_CAPABILITIES_JSON());
+          const globalContent = fs.readFileSync(globalFile, 'utf-8');
+          JSON.parse(globalContent); // validate
+          let shouldCopy = true;
+          if (fs.existsSync(localFile)) {
+            shouldCopy = fs.readFileSync(localFile, 'utf-8') !== globalContent;
+          }
+          if (shouldCopy) {
+            atomicWriteFileSync(localFile, globalContent, 'utf-8');
+          }
         } catch {
-          // Ignore deletion errors
+          // Skip corrupted files
         }
-      }
-      const localCapPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
-      let shouldCopyCap = true;
-      if (fs.existsSync(localCapPath)) {
-        shouldCopyCap = fs.readFileSync(localCapPath, 'utf-8') !== globalCapContent;
-      }
-      if (shouldCopyCap) {
-        atomicWriteFileSync(localCapPath, globalCapContent, 'utf-8');
       }
     }
 
@@ -452,65 +454,73 @@ export function getRegisteredProviders(): string[] {
 // Provider capabilities (per-model attachment / modality metadata)
 // ---------------------------------------------------------------------------
 
-interface CapabilitiesFile {
-  attachment: AttachmentCapabilities;
+interface ProviderCapabilityFile {
+  attachment: string[];
 }
 
-let capabilitiesData: CapabilitiesFile | null = null;
+const providerCapCache = new Map<string, string[] | null>();
 
-function loadCapabilities(useDynamicLoading: boolean): CapabilitiesFile {
-  if (capabilitiesData) return capabilitiesData;
+function findCapabilitiesDir(useDynamicLoading: boolean): string | null {
+  const packageRoot = getPackageRoot();
+  const candidates = useDynamicLoading
+    ? [
+        path.join(packageRoot, 'dist', 'capabilities'),
+        path.join(packageRoot, 'src', 'llm', 'model', 'capabilities'),
+        path.join(process.cwd(), 'packages/core/src/llm/model/capabilities'),
+      ]
+    : [path.join(packageRoot, 'dist', 'capabilities')];
 
-  if (useDynamicLoading) {
-    const packageRoot = getPackageRoot();
-    const paths = [
-      path.join(packageRoot, 'dist', 'provider-capabilities.json'),
-      path.join(packageRoot, 'src', 'llm', 'model', 'provider-capabilities.json'),
-      path.join(process.cwd(), 'packages/core/src/llm/model/provider-capabilities.json'),
-    ];
-    for (const p of paths) {
-      try {
-        const content = fs.readFileSync(p, 'utf-8');
-        capabilitiesData = JSON.parse(content) as CapabilitiesFile;
-        return capabilitiesData;
-      } catch {
-        continue;
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+        return dir;
       }
+    } catch {
+      continue;
     }
   }
+  return null;
+}
 
-  // Try static import from dist (bundled at build time)
+let capabilitiesDirCache: string | null | undefined;
+
+function loadProviderAttachmentModels(provider: string, useDynamicLoading: boolean): string[] | null {
+  if (providerCapCache.has(provider)) return providerCapCache.get(provider)!;
+
+  if (capabilitiesDirCache === undefined) {
+    capabilitiesDirCache = findCapabilitiesDir(useDynamicLoading);
+  }
+
+  if (!capabilitiesDirCache) {
+    providerCapCache.set(provider, null);
+    return null;
+  }
+
+  const filePath = path.join(capabilitiesDirCache, `${provider}.json`);
   try {
-    const packageRoot = getPackageRoot();
-    const staticPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
-    if (fs.existsSync(staticPath)) {
-      const content = fs.readFileSync(staticPath, 'utf-8');
-      capabilitiesData = JSON.parse(content) as CapabilitiesFile;
-      return capabilitiesData;
-    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(content) as ProviderCapabilityFile;
+    providerCapCache.set(provider, data.attachment);
+    return data.attachment;
   } catch {
-    // Fall through
+    providerCapCache.set(provider, null);
+    return null;
   }
-
-  capabilitiesData = { attachment: {} };
-  return capabilitiesData;
 }
 
 /**
  * Check whether a model supports image/file attachments.
- * Returns `true` if the model is listed in the attachment capabilities,
- * `false` if the provider is known but the model isn't listed, or
- * `undefined` when no data exists for the provider (caller should fall
- * back to their own default).
+ * Reads only the per-provider capability file for the given model's provider.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
  */
 export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
   const { provider, modelId } = parseModelString(modelRouterId);
   if (!provider) return undefined;
   const registry = GatewayRegistry.getInstance();
-  const caps = loadCapabilities(registry['useDynamicLoading']);
-  const providerModels = caps.attachment[provider];
-  if (!providerModels) return undefined;
-  return providerModels.includes(modelId);
+  const models = loadProviderAttachmentModels(provider, registry['useDynamicLoading']);
+  if (!models) return undefined;
+  return models.includes(modelId);
 }
 
 /**
@@ -660,10 +670,14 @@ export class GatewayRegistry {
         await fs.promises.copyFile(distJsonPath, srcJsonPath);
         await fs.promises.copyFile(distTypesPath, srcTypesPath);
 
-        const distCapPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
-        const srcCapPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-capabilities.json');
-        if (fs.existsSync(distCapPath)) {
-          await fs.promises.copyFile(distCapPath, srcCapPath);
+        const distCapDir = path.join(packageRoot, 'dist', 'capabilities');
+        const srcCapDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+        if (fs.existsSync(distCapDir)) {
+          await fs.promises.mkdir(srcCapDir, { recursive: true });
+          const capFiles = fs.readdirSync(distCapDir).filter(f => f.endsWith('.json'));
+          for (const file of capFiles) {
+            await fs.promises.copyFile(path.join(distCapDir, file), path.join(srcCapDir, file));
+          }
         }
         // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
       }
@@ -671,7 +685,8 @@ export class GatewayRegistry {
       // Clear the in-memory cache to force reload (dynamic loading only)
       if (this.useDynamicLoading) {
         registryData = null;
-        capabilitiesData = null;
+        providerCapCache.clear();
+        capabilitiesDirCache = undefined;
       }
 
       this.lastRefreshTime = new Date();

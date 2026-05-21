@@ -234,9 +234,26 @@ export async function writeRegistryFiles(
   const typeContent = generateTypesContent(models);
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
 
-  // 3. Write provider-capabilities.json alongside the registry if data was collected
+  // 3. Write per-provider capability files into a capabilities/ directory
   if (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) {
-    const capabilitiesPath = path.join(jsonDir, 'provider-capabilities.json');
-    await atomicWriteFile(capabilitiesPath, JSON.stringify({ attachment: attachmentCapabilities }, null, 2), 'utf-8');
+    const capDir = path.join(jsonDir, 'capabilities');
+    await fs.mkdir(capDir, { recursive: true });
+
+    // Clean out stale provider files from previous runs
+    try {
+      const existing = await fs.readdir(capDir);
+      for (const file of existing) {
+        if (file.endsWith('.json')) {
+          await fs.unlink(path.join(capDir, file));
+        }
+      }
+    } catch {
+      // Directory may not exist yet — ignore
+    }
+
+    for (const [provider, models] of Object.entries(attachmentCapabilities)) {
+      const providerFile = path.join(capDir, `${provider}.json`);
+      await atomicWriteFile(providerFile, JSON.stringify({ attachment: models }, null, 2), 'utf-8');
+    }
   }
 }
