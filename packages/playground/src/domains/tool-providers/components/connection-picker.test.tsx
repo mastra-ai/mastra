@@ -825,7 +825,7 @@ describe('ConnectionPicker', () => {
     expect(authorizeMock).not.toHaveBeenCalled();
   });
 
-  it('renders a Caller-supplied badge and no label input for caller-supplied pins', () => {
+  it('renders the caller-supplied runtime copy and no label input for caller-supplied pins', () => {
     renderPicker({
       initial: [
         {
@@ -835,7 +835,9 @@ describe('ConnectionPicker', () => {
         },
       ],
     });
-    expect(screen.getByTestId(`connection-caller-supplied-badge-${TOOL_SERVICE}-0`)).toBeTruthy();
+    const copy = screen.getByTestId(`connection-caller-supplied-${TOOL_SERVICE}-0`);
+    expect(copy).toBeTruthy();
+    expect(copy.textContent).toMatch(/user id must be supplied at runtime/i);
     expect(screen.queryByTestId(`connection-label-${TOOL_SERVICE}-0`)).toBeNull();
   });
 
@@ -851,9 +853,11 @@ describe('ConnectionPicker', () => {
     expect(screen.queryByTestId(`connection-connect-${TOOL_SERVICE}`)).toBeNull();
     expect(screen.queryByTestId(`connection-mark-caller-supplied-${TOOL_SERVICE}`)).toBeNull();
 
-    // The Caller-supplied badge should render once the auto-stamped pin lands.
+    // The caller-supplied runtime copy should render once the auto-stamped pin lands.
     await waitFor(() => {
-      expect(screen.getByTestId(`connection-caller-supplied-badge-${TOOL_SERVICE}-0`)).toBeTruthy();
+      const copy = screen.getByTestId(`connection-caller-supplied-${TOOL_SERVICE}-0`);
+      expect(copy).toBeTruthy();
+      expect(copy.textContent).toMatch(/user id must be supplied at runtime/i);
     });
     expect(authorizeMock).not.toHaveBeenCalled();
   });

@@ -560,14 +560,14 @@ export const ConnectionPicker = ({
             >
               <div className="flex-1">
                 {isCallerSupplied ? (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="info" data-testid={`connection-caller-supplied-badge-${toolkit}-${index}`}>
-                      Caller-supplied
-                    </Badge>
-                    <Txt as="span" variant="ui-xs" className="text-text-muted">
-                      Resolved at runtime from request context.
-                    </Txt>
-                  </div>
+                  <Txt
+                    as="span"
+                    variant="ui-sm"
+                    className="text-text-muted"
+                    data-testid={`connection-caller-supplied-${toolkit}-${index}`}
+                  >
+                    User ID must be supplied at runtime from request context.
+                  </Txt>
                 ) : showLabelInput ? (
                   <>
                     <Input

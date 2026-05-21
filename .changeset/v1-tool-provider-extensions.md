@@ -177,3 +177,9 @@ on mount via `useEffect` and renders it as a normal pinned row with the
 existing "Shared (caller-supplied)" badge. The `handleAddCallerSupplied`
 guard keeps the effect idempotent on re-mount with persisted state. The
 Agent Builder (`per-author`) empty state is unchanged.
+
+Drop the **Caller-supplied** badge from `ConnectionPicker`; replace the
+row's secondary copy with **"User ID must be supplied at runtime from
+request context."** With the editor surface hard-locked to
+`caller-supplied` scope, the badge labeled a non-choice; the simplified
+copy keeps the runtime-resolution reminder users actually need.
