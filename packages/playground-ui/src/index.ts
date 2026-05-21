@@ -61,7 +61,6 @@ export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
 export * from './ds/components/DateTimePicker';
-export * from './ds/components/EntryList';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
