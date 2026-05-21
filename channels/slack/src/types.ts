@@ -55,10 +55,19 @@ export interface SlackAdapterChannelConfig {
   streaming?: boolean | { updateIntervalMs?: number };
 
   /**
-   * Show Slack typing indicators and Assistant-mode status text (e.g.
-   * "Typing…", "Calling weatherTool…"). Set to `true` to enable typing
-   * indicators — useful if you override the default `toolDisplay` to a
-   * mode that doesn't convey progress on its own.
+   * Control Slack typing indicators and Assistant-mode status text.
+   *
+   * - `true` — use built-in defaults: `"is typing…"` while generating text,
+   *   `"is calling {toolName}…"` while a tool runs, `"is waiting for
+   *   approval…"` while a tool is suspended. Slack auto-prepends the app
+   *   name so the user sees `"<App Name> is typing…"`.
+   * - `false` — never call `startTyping`. Useful when a live streaming
+   *   widget (e.g. `toolDisplay: 'grouped'`) already conveys progress.
+   * - `(chunk, ctx) => string | false | null | undefined | void` — set
+   *   custom copy per chunk. Return a string to override the status,
+   *   or `false`/`null`/`undefined` to leave it unchanged. Compose with
+   *   `defaultTypingStatus` (exported from `@mastra/core/channels`) to
+   *   fall back to defaults for chunks you don't handle.
    *
    * SlackProvider defaults this to `false` because the default
    * `toolDisplay: 'grouped'` already shows live progress inside the
@@ -145,10 +154,19 @@ export interface SlackProviderConfig {
   streaming?: boolean | { updateIntervalMs?: number };
 
   /**
-   * Show Slack typing indicators and Assistant-mode status text (e.g.
-   * "Typing…", "Calling weatherTool…"). Set to `true` to enable typing
-   * indicators — useful if you override the default `toolDisplay` to a
-   * mode that doesn't convey progress on its own.
+   * Control Slack typing indicators and Assistant-mode status text.
+   *
+   * - `true` — use built-in defaults: `"is typing…"` while generating text,
+   *   `"is calling {toolName}…"` while a tool runs, `"is waiting for
+   *   approval…"` while a tool is suspended. Slack auto-prepends the app
+   *   name so the user sees `"<App Name> is typing…"`.
+   * - `false` — never call `startTyping`. Useful when a live streaming
+   *   widget (e.g. `toolDisplay: 'grouped'`) already conveys progress.
+   * - `(chunk, ctx) => string | false | null | undefined | void` — set
+   *   custom copy per chunk. Return a string to override the status,
+   *   or `false`/`null`/`undefined` to leave it unchanged. Compose with
+   *   `defaultTypingStatus` (exported from `@mastra/core/channels`) to
+   *   fall back to defaults for chunks you don't handle.
    *
    * SlackProvider defaults this to `false` because the default
    * `toolDisplay: 'grouped'` already shows live progress inside the
