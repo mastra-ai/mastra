@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -26,9 +27,14 @@ const DEFAULT_FEATURES: Features = {
 };
 
 let featuresMock: Features = { ...DEFAULT_FEATURES };
+let skillsMock: StoredSkillResponse[] = [];
 
 vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
   useBuilderAgentFeatures: () => featuresMock,
+}));
+
+vi.mock('@/domains/agent-builder/contexts/agent-primitives-context', () => ({
+  useAgentPrimitives: () => ({ availableSkills: skillsMock }),
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -78,6 +84,7 @@ const flushPlatforms = () => act(async () => new Promise(resolve => setTimeout(r
 describe('WizardProvider', () => {
   beforeEach(() => {
     featuresMock = { ...DEFAULT_FEATURES };
+    skillsMock = [];
     usePlatformsHandler([]);
   });
 
@@ -122,6 +129,7 @@ describe('WizardProvider', () => {
       skills: true,
       browser: true,
     };
+    skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
     usePlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]);
 
     const { getByTestId } = renderWizard({ initialStep: 'initial' });
@@ -171,6 +179,26 @@ describe('WizardProvider', () => {
     await flushPlatforms();
 
     expect(getByTestId('steps').textContent).toBe('initial>tools>instructions>end');
+  });
+
+  it('excludes skills when features.skills is on but no skills are available', async () => {
+    featuresMock = { ...DEFAULT_FEATURES, skills: true };
+    skillsMock = [];
+
+    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('initial>instructions>end');
+  });
+
+  it('includes skills when features.skills is on and skills are available', async () => {
+    featuresMock = { ...DEFAULT_FEATURES, skills: true };
+    skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
+
+    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('initial>instructions>skills>end');
   });
 
   it('excludes integrations when no platform is configured', async () => {
