@@ -10,6 +10,7 @@ import { weatherInfo } from './tools';
 import { weatherAgent } from './agents';
 import { greetWorkflow } from './workflows';
 import { SlackProvider } from '@mastra/slack';
+import { workspace } from './workspace';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -82,7 +83,7 @@ export const mastra = new Mastra({
           tools: true,
           agents: true,
           workflows: true,
-          stars: true,
+          favorites: true,
           model: true,
           browser: true,
           avatarUpload: true,
@@ -109,8 +110,10 @@ export const mastra = new Mastra({
               provider: 'stagehand',
             },
           },
+          workspace: { type: 'id', workspaceId: workspace.id },
         },
       },
     },
   }),
+  workspace,
 });

@@ -20,6 +20,7 @@ overrides:
   '@mastra/editor': link:../../packages/editor
   '@mastra/stagehand': link:../../browser/stagehand
   '@mastra/slack': link:../../channels/slack
+  '@mastra/daytona': link:../../workspaces/daytona
 
 importers:
 
@@ -46,6 +47,9 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/daytona':
+        specifier: link:../../workspaces/daytona
+        version: link:../../workspaces/daytona
       '@mastra/editor':
         specifier: link:../../packages/editor
         version: link:../../packages/editor
