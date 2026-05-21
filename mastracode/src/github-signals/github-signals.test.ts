@@ -2177,6 +2177,34 @@ describe('GithubSignals', () => {
     vi.useRealTimers();
   });
 
+  it('does not poll on every idle transition within the poll interval', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-02T00:00:00.000Z'));
+    const commandRunner = createSnapshotCommandRunner([createSnapshot(), createSnapshot()]);
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.markIdle(context);
+    expect(commandRunner).toHaveBeenCalledTimes(4);
+
+    await github.markIdle(context);
+    expect(commandRunner).toHaveBeenCalledTimes(4);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await github.markIdle(context);
+    expect(commandRunner).toHaveBeenCalledTimes(8);
+    github.destroy();
+  });
+
   it('does not treat blocked merge state as a merge conflict', async () => {
     const commandRunner = createSnapshotCommandRunner([
       createSnapshot({

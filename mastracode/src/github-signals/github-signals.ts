@@ -677,6 +677,7 @@ export class GithubSignals {
   #activeThreads = new Set<string>();
   #timer?: ReturnType<typeof setInterval>;
   #polling = false;
+  #lastAutomaticPollAt?: number;
   #options: NormalizedGithubSignalsOptions;
   #notificationPoller?: GithubNotificationPoller;
   #pendingNotifications = new Map<string, PendingGithubNotificationBucket>();
@@ -1064,7 +1065,7 @@ export class GithubSignals {
   async markIdle(context: ActiveThreadContext) {
     this.#activeThreads.delete(activeThreadKey(context));
     await this.deliverPendingNotifications(context);
-    await this.poll(context);
+    await this.#pollIfDue(context);
   }
 
   markIdleAfterOutput(context: ActiveThreadContext) {
@@ -1124,9 +1125,16 @@ export class GithubSignals {
 
     if (this.#timer) return;
     this.#timer = setInterval(() => {
-      void this.poll();
+      void this.#pollIfDue();
     }, this.#options.pollIntervalMs);
     this.#timer.unref?.();
+  }
+
+  async #pollIfDue(context?: ActiveThreadContext) {
+    const now = this.#options.now().getTime();
+    if (this.#lastAutomaticPollAt && now - this.#lastAutomaticPollAt < this.#options.pollIntervalMs) return;
+    this.#lastAutomaticPollAt = now;
+    await this.poll(context);
   }
 
   async #pollSubscription(subscription: ActiveSubscription) {
