@@ -387,7 +387,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
-        'OpenAI-Beta': 'realtime=v1',
       },
     });
 
@@ -395,13 +394,24 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     await Promise.all([this.waitForOpen(), this.waitForSessionCreated()]);
 
     const openaiTools = transformTools(this.tools);
+    // GA Realtime nests voice/transcription under `audio.{input,output}` and
+    // rejects the legacy flat `voice` / `input_audio_transcription` fields.
+    // The legacy `OpenAI-Beta: realtime=v1` header is also removed; the
+    // server now identifies the session via `session.type`.
     this.updateConfig({
+      type: 'realtime',
       instructions: this.instructions,
       tools: openaiTools.map(t => t.openaiTool),
-      input_audio_transcription: {
-        model: this.transcriber,
+      audio: {
+        input: {
+          transcription: {
+            model: this.transcriber,
+          },
+        },
+        output: {
+          voice: this.speaker,
+        },
       },
-      voice: this.speaker,
     });
     this.state = 'open';
   }
