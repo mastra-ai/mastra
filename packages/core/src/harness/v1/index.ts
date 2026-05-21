@@ -81,6 +81,22 @@ export {
 
 export { nonDurableProvider } from './workspace-provider';
 export type { WorkspaceOwnershipKind, WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
+export { evaluateWorkspacePolicy, resolveWorkspacePath } from './workspace-policy';
+export type {
+  WorkspaceCommandPolicyAction,
+  WorkspaceFileOperation,
+  WorkspaceFilePolicyAction,
+  WorkspaceMcpPolicyAction,
+  WorkspaceNetworkPolicyAction,
+  WorkspacePolicy,
+  WorkspacePolicyAction,
+  WorkspacePolicyActionKind,
+  WorkspacePolicyEvaluation,
+  WorkspacePolicyMatchedRule,
+  WorkspacePolicyRule,
+  WorkspaceResolvedPath,
+  WorkspaceRootDescriptor,
+} from './workspace-policy';
 
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version
