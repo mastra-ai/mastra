@@ -99,3 +99,12 @@ forwards `scope` to the server so cross-scope rows never come back. The
 Agent Builder mounts with `['per-author']` (single-author surface) and
 the CMS agent editor mounts with `['caller-supplied']` (declare-only,
 host app resolves end-users at runtime via `MASTRA_RESOURCE_ID_KEY`).
+
+**Fix: `toolProviders` survives reload on `PATCH /stored/agents/:id`**:
+
+The update handler destructured `toolProviders` from the request body and
+passed it into `agentsStore.update`, but omitted it from the snapshot
+config handed to `handleAutoVersioning`. The new version row was written
+without the field, so on reload `getByIdResolved` returned the agent with
+no `toolProviders` and the picker appeared empty. `toolProviders` is now
+included in the snapshot config alongside the other agent-config fields.

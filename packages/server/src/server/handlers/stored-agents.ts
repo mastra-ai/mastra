@@ -562,6 +562,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,

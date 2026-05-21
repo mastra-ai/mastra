@@ -890,6 +890,41 @@ describe('Stored Agents Handlers', () => {
       const stored = mockAgentsData.get('autopub-test');
       expect(stored?.activeVersionId).toBe(newVersionId);
     });
+
+    it('threads toolProviders into the auto-versioning snapshot config', async () => {
+      mockAgentsData.set('tp-snapshot-test', {
+        id: 'tp-snapshot-test',
+        name: 'TP Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-tp-1',
+      });
+
+      const { handleAutoVersioning } = await import('./version-helpers');
+      vi.mocked(handleAutoVersioning).mockClear();
+
+      const toolProviders = {
+        composio: {
+          tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } },
+          connections: {},
+        },
+      };
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'tp-snapshot-test',
+        toolProviders,
+      });
+
+      // 7th positional arg (index 6) is `providedConfigFields` — the snapshot
+      // config passed to the version writer. Without `toolProviders` here, the
+      // new version row drops the field on disk and reload shows nothing.
+      const call = vi.mocked(handleAutoVersioning).mock.calls.at(-1);
+      expect(call).toBeDefined();
+      const providedConfigFields = call?.[6] as Record<string, unknown> | undefined;
+      expect(providedConfigFields).toBeDefined();
+      expect(providedConfigFields?.toolProviders).toEqual(toolProviders);
+    });
   });
 
   describe('DELETE_STORED_AGENT_ROUTE', () => {
