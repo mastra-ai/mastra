@@ -370,6 +370,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     options?: Array<{ label: string; description?: string }>;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
+    allowCustomResponse?: boolean;
     multiline?: boolean;
     tui?: TUI;
     onSubmit: (answer: string) => void;
@@ -381,6 +382,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.onCancel = options.onCancel;
     this.isNegativeAnswer = options.isNegativeAnswer;
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
+    this.allowCustomResponse = options.allowCustomResponse ?? true;
     this.multiline = Boolean(options.multiline);
 
     // Update question text and items to final values
