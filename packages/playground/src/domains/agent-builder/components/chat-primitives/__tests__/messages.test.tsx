@@ -125,7 +125,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('renders MessageSetAgentName for streaming dynamic-tool', () => {
-    renderRow(
+    const { container } = renderRow(
       [
         {
           type: 'dynamic-tool',
@@ -138,12 +138,12 @@ describe('MessageRow dynamic-tool rendering', () => {
       ],
       { name: 'Acme Bot' },
     );
-    const input = screen.getByTestId('agent-builder-chat-set-agent-name-input') as HTMLInputElement;
-    expect(input.value).toBe('Acme Bot');
+    expect(container.textContent).toContain('Setting the agent name:');
+    expect(container.textContent).toContain('Acme Bot');
   });
 
   it('renders MessageSetAgentName for persisted tool part', () => {
-    renderRow(
+    const { container } = renderRow(
       [
         {
           type: `tool-${SET_AGENT_NAME_TOOL_NAME}`,
@@ -155,12 +155,12 @@ describe('MessageRow dynamic-tool rendering', () => {
       ],
       { name: 'Acme Bot' },
     );
-    const input = screen.getByTestId('agent-builder-chat-set-agent-name-input') as HTMLInputElement;
-    expect(input.value).toBe('Acme Bot');
+    expect(container.textContent).toContain('Setting the agent name:');
+    expect(container.textContent).toContain('Acme Bot');
   });
 
   it('renders MessageSetAgentDescription for streaming dynamic-tool', () => {
-    renderRow(
+    const { container } = renderRow(
       [
         {
           type: 'dynamic-tool',
@@ -173,12 +173,12 @@ describe('MessageRow dynamic-tool rendering', () => {
       ],
       { description: 'A helpful research assistant.' },
     );
-    const input = screen.getByTestId('agent-builder-chat-set-agent-description-input') as HTMLInputElement;
-    expect(input.value).toBe('A helpful research assistant.');
+    expect(container.textContent).toContain('Setting the agent description:');
+    expect(container.textContent).toContain('A helpful research assistant.');
   });
 
   it('renders MessageSetAgentDescription for persisted tool part', () => {
-    renderRow(
+    const { container } = renderRow(
       [
         {
           type: `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`,
@@ -190,37 +190,43 @@ describe('MessageRow dynamic-tool rendering', () => {
       ],
       { description: 'A helpful research assistant.' },
     );
-    const input = screen.getByTestId('agent-builder-chat-set-agent-description-input') as HTMLInputElement;
-    expect(input.value).toBe('A helpful research assistant.');
+    expect(container.textContent).toContain('Setting the agent description:');
+    expect(container.textContent).toContain('A helpful research assistant.');
   });
 
-  it('renders MessageSetAgentInstructions collapsible for streaming dynamic-tool', () => {
-    renderRow([
-      {
-        type: 'dynamic-tool',
-        toolCallId: 'call-instr',
-        toolName: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
-        state: 'output-available',
-        input: { instructions: 'Always answer in French.' },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(screen.getByTestId('agent-builder-chat-set-agent-instructions-trigger')).toBeTruthy();
-    expect(screen.getByText('Agent instructions')).toBeTruthy();
+  it('renders MessageSetAgentInstructions for streaming dynamic-tool', () => {
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-instr',
+          toolName: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
+          state: 'output-available',
+          input: { instructions: 'Always answer in French.' },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { instructions: 'Always answer in French.' },
+    );
+    expect(container.textContent).toContain('Setting the agent instructions:');
+    expect(container.textContent).toContain('Always answer in French.');
   });
 
-  it('renders MessageSetAgentInstructions collapsible for persisted tool part', () => {
-    renderRow([
-      {
-        type: `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`,
-        toolCallId: 'call-instr-r',
-        state: 'output-available',
-        input: { instructions: 'Always answer in French.' },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(screen.getByTestId('agent-builder-chat-set-agent-instructions-trigger')).toBeTruthy();
-    expect(screen.getByText('Agent instructions')).toBeTruthy();
+  it('renders MessageSetAgentInstructions for persisted tool part', () => {
+    const { container } = renderRow(
+      [
+        {
+          type: `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`,
+          toolCallId: 'call-instr-r',
+          state: 'output-available',
+          input: { instructions: 'Always answer in French.' },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { instructions: 'Always answer in French.' },
+    );
+    expect(container.textContent).toContain('Setting the agent instructions:');
+    expect(container.textContent).toContain('Always answer in French.');
   });
 
   it('renders MessageSetAgentTools for streaming dynamic-tool', () => {
@@ -301,85 +307,74 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('Translate');
   });
 
-  it('renders MessageSetAgentModel as a ToolCard with provider/model dropdowns for streaming dynamic-tool', () => {
-    server.use(
-      http.get('*/api/agents/providers', () => HttpResponse.json({ providers: [] })),
-      http.get('*/api/editor/builder/settings', () => HttpResponse.json({ enabled: false })),
+  it('renders MessageSetAgentModel for streaming dynamic-tool', () => {
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-model',
+          toolName: SET_AGENT_MODEL_TOOL_NAME,
+          state: 'output-available',
+          input: { model: { provider: 'openai', name: 'gpt-4o' } },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { model: { provider: 'openai', name: 'gpt-4o' } },
     );
-    render(
-      <ChannelsWrapper>
-        <FormWrapper defaultValues={{ model: { provider: 'openai', name: 'gpt-4o' } }}>
-          <MessageRow
-            message={buildMessage([
-              {
-                type: 'dynamic-tool',
-                toolCallId: 'call-model',
-                toolName: SET_AGENT_MODEL_TOOL_NAME,
-                state: 'output-available',
-                input: { model: { provider: 'openai', name: 'gpt-4o' } },
-                output: { success: true },
-              } as ToolPart,
-            ])}
-          />
-        </FormWrapper>
-      </ChannelsWrapper>,
-    );
-    expect(screen.getByTestId('agent-builder-chat-set-agent-model')).toBeTruthy();
-    // The header still surfaces the selected provider/model as help text.
-    expect(screen.getByText('openai/gpt-4o')).toBeTruthy();
+    expect(container.textContent).toContain('Setting agent model to');
+    expect(container.textContent).toContain('openai/gpt-4o');
   });
 
-  it('renders MessageSetAgentModel as a ToolCard with provider/model dropdowns for persisted tool part', () => {
-    server.use(
-      http.get('*/api/agents/providers', () => HttpResponse.json({ providers: [] })),
-      http.get('*/api/editor/builder/settings', () => HttpResponse.json({ enabled: false })),
+  it('renders MessageSetAgentModel for persisted tool part', () => {
+    const { container } = renderRow(
+      [
+        {
+          type: `tool-${SET_AGENT_MODEL_TOOL_NAME}`,
+          toolCallId: 'call-model-r',
+          state: 'output-available',
+          input: { model: { provider: 'openai', name: 'gpt-4o' } },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { model: { provider: 'openai', name: 'gpt-4o' } },
     );
-    render(
-      <ChannelsWrapper>
-        <FormWrapper defaultValues={{ model: { provider: 'openai', name: 'gpt-4o' } }}>
-          <MessageRow
-            message={buildMessage([
-              {
-                type: `tool-${SET_AGENT_MODEL_TOOL_NAME}`,
-                toolCallId: 'call-model-r',
-                state: 'output-available',
-                input: { model: { provider: 'openai', name: 'gpt-4o' } },
-                output: { success: true },
-              } as ToolPart,
-            ])}
-          />
-        </FormWrapper>
-      </ChannelsWrapper>,
-    );
-    expect(screen.getByTestId('agent-builder-chat-set-agent-model')).toBeTruthy();
-    expect(screen.getByText('openai/gpt-4o')).toBeTruthy();
+    expect(container.textContent).toContain('Setting agent model to');
+    expect(container.textContent).toContain('openai/gpt-4o');
   });
 
   it('renders MessageSetAgentBrowserEnabled (enabled) for streaming dynamic-tool', () => {
-    const { container } = renderRow([
-      {
-        type: 'dynamic-tool',
-        toolCallId: 'call-browser',
-        toolName: SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
-        state: 'output-available',
-        input: { browserEnabled: true },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(container.textContent).toContain('Your agent will now be able to interact with web pages');
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-browser',
+          toolName: SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
+          state: 'output-available',
+          input: { browserEnabled: true },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { browserEnabled: true },
+    );
+    expect(container.textContent).toContain('Browser access');
+    expect(container.textContent).toContain('enabled');
   });
 
   it('renders MessageSetAgentBrowserEnabled (disabled) for persisted tool part', () => {
-    const { container } = renderRow([
-      {
-        type: `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`,
-        toolCallId: 'call-browser-r',
-        state: 'output-available',
-        input: { browserEnabled: false },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(container.textContent).toContain('Your agent will no longer interact with web pages');
+    const { container } = renderRow(
+      [
+        {
+          type: `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`,
+          toolCallId: 'call-browser-r',
+          state: 'output-available',
+          input: { browserEnabled: false },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { browserEnabled: false },
+    );
+    expect(container.textContent).toContain('Browser access');
+    expect(container.textContent).toContain('disabled');
   });
 
   it('renders MessageSetAgentWorkspaceId for streaming dynamic-tool', () => {
