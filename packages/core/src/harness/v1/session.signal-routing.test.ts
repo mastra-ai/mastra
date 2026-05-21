@@ -17,7 +17,15 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import type { MockAgent } from './__test-utils__/mock-agent';
 import { setupHarness } from './__test-utils__/setup';
+import type { HarnessEvent } from './events';
+
+async function waitForStreamCalls(agent: MockAgent, expected: number): Promise<void> {
+  for (let i = 0; i < 100 && agent.streamCalls.length < expected; i++) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+}
 
 describe('Session.message() signal routing', () => {
   it('routes default-path messages through agent.sendSignal and stamps the runtime runId on the result', async () => {
@@ -61,6 +69,56 @@ describe('Session.message() signal routing', () => {
     expect(a.runId).not.toBe(b.runId);
     expect((agent.streamCalls[0]!.options as { runId: string }).runId).toBe(a.runId);
     expect((agent.streamCalls[1]!.options as { runId: string }).runId).toBe(b.runId);
+  });
+
+  it('does not take turn ownership when a message drains into an active run', async () => {
+    const { harness, agent } = setupHarness();
+    let releaseFirst!: () => void;
+    const hold = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold, text: 'first' });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = session.message({ content: 'first' });
+    await waitForStreamCalls(agent, 1);
+    for (let i = 0; i < 5; i++) await new Promise<void>(resolve => setImmediate(resolve));
+    expect(session.isRunning()).toBe(true);
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const second = session.message({ content: 'second' });
+    await Promise.resolve();
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(0);
+
+    releaseFirst();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(secondResult.runId).toBe(firstResult.runId);
+    expect(session.getTokenUsage()).toEqual({ promptTokens: 1, completionTokens: 1, totalTokens: 2 });
+  });
+
+  it('rejects requestContext on messages that drain into an active run', async () => {
+    const { harness, agent } = setupHarness();
+    let releaseFirst!: () => void;
+    const hold = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold, text: 'first' });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = session.message({ content: 'first' });
+    await waitForStreamCalls(agent, 1);
+
+    await expect(session.message({ content: 'second', requestContext: new Map() as any })).rejects.toThrow(
+      /requestContext/,
+    );
+
+    releaseFirst();
+    await first;
   });
 
   it('does not route the structured + sync path through signals', async () => {

@@ -97,6 +97,13 @@ export type {
   WorkspaceResolvedPath,
   WorkspaceRootDescriptor,
 } from './workspace-policy';
+export {
+  askUser as askUserTool,
+  submitPlan as submitPlanTool,
+  taskCheck as taskCheckTool,
+  taskWrite as taskWriteTool,
+} from './builtin-tools';
+export { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagent-tool';
 
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version

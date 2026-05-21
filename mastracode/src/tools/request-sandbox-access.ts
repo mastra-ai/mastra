@@ -47,19 +47,31 @@ export const requestSandboxAccessTool = createTool({
         };
       }
 
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
+      const canSuspend = typeof context?.agent?.suspend === 'function';
+      const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
+      const resumeData = context?.agent?.resumeData as { answer?: HarnessQuestionAnswer } | undefined;
+      let answer: HarnessQuestionAnswer | undefined = resumeData?.answer;
+
+      if (answer === undefined && !canSuspend && (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion)) {
         return {
           content: `Cannot request sandbox access: TUI context not available. The user should manually run /sandbox add ${absolutePath}`,
           isError: true,
         };
       }
 
-      const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
+      if (answer === undefined && canSuspend) {
+        await context.agent!.suspend!({ path: absolutePath, reason });
+        return {
+          content:
+            'Sandbox access request is waiting for user approval. Do not access this path until the request is resumed and approved.',
+          isError: false,
+        };
+      }
 
       // Create a promise that resolves when the user answers in the TUI
-      const answer = await new Promise<HarnessQuestionAnswer>(resolve => {
+      answer ??= await new Promise<HarnessQuestionAnswer>(resolve => {
         // Register the resolver so respondToQuestion() can resolve it
-        harnessCtx.registerQuestion!({
+        harnessCtx!.registerQuestion!({
           questionId,
           resolve: answer => {
             resolve(Array.isArray(answer) ? answer.join(',') : answer);
@@ -67,7 +79,7 @@ export const requestSandboxAccessTool = createTool({
         });
 
         // Emit event — TUI will show the dialog
-        harnessCtx.emitEvent!({
+        harnessCtx!.emitEvent!({
           type: 'sandbox_access_request',
           questionId,
           path: absolutePath,
@@ -79,9 +91,9 @@ export const requestSandboxAccessTool = createTool({
       const approved = answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
       if (approved) {
         // Add to allowed paths in harness state (persists across turns)
-        const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const currentAllowed = (harnessCtx?.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
         if (!currentAllowed.includes(absolutePath)) {
-          harnessCtx.setState?.({
+          harnessCtx?.setState?.({
             sandboxAllowedPaths: [...currentAllowed, absolutePath],
           });
         }

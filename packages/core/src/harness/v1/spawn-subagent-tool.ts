@@ -128,13 +128,14 @@ export function createSpawnSubagentTool(parent: Session) {
       // Create a fresh thread + session for the subagent. The session is
       // `origin: 'subagent-tool'` and `parentSessionId` is wired so cascade
       // rules + the depth field on the record are populated correctly.
+      const resolvedModelId = modelOverride ?? parent.models.getSubagent({ agentType }) ?? def.defaultModelId ?? '';
       const child = await harness.session({
         resourceId: parent.resourceId,
         threadId: { fresh: true },
         parentSessionId: parent.id,
         origin: 'subagent-tool',
         modeId: def.modeId,
-        modelId: modelOverride ?? def.defaultModelId,
+        modelId: resolvedModelId,
         subagentDepth: childDepth,
       });
 
@@ -150,7 +151,6 @@ export function createSpawnSubagentTool(parent: Session) {
       // `queuedItemId` automatically. Track inner tool names by call id so
       // `subagent_tool_end` can carry the same `toolName` as its start.
       const innerToolNames = new Map<string, string>();
-      const resolvedModelId = modelOverride ?? def.defaultModelId ?? '';
       const unsub = child.subscribe(event => {
         if (!event.type) return;
         switch (event.type) {

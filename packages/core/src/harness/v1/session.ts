@@ -227,6 +227,27 @@ function cloneMcpSchemaLike(value: unknown): unknown | undefined {
   return cloneMcpCatalogValue(value);
 }
 
+function cloneSessionSnapshot<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function createModePrepareStep(mode: HarnessMode): AgentExecutionOptionsBase<unknown>['prepareStep'] | undefined {
+  const metadata = mode.metadata;
+  const allowedRaw = metadata?.['allowedWorkspaceTools'];
+  const workspaceRaw = metadata?.['workspaceToolNames'];
+  if (!Array.isArray(allowedRaw) || !Array.isArray(workspaceRaw)) return undefined;
+
+  const allowedWorkspaceTools = new Set(allowedRaw.filter((tool): tool is string => typeof tool === 'string'));
+  const workspaceToolNames = new Set(workspaceRaw.filter((tool): tool is string => typeof tool === 'string'));
+  if (workspaceToolNames.size === 0) return undefined;
+
+  return ({ tools }) => ({
+    activeTools: Object.keys(tools ?? {}).filter(
+      toolName => !workspaceToolNames.has(toolName) || allowedWorkspaceTools.has(toolName),
+    ),
+  });
+}
+
 export type SessionLifecycleState = 'live' | 'closing' | 'closed' | 'deleted' | 'evicted';
 
 /**
@@ -512,6 +533,9 @@ export class Session {
    * powers `session.isRunning()` — non-undefined means a turn is in-flight.
    */
   private _currentTurnAbortController?: AbortController;
+  private readonly _turnAbortCleanups = new WeakMap<AbortController, () => void>();
+  private _pendingMessageAdmissions = 0;
+  private _pendingAbortReason: unknown;
   /**
    * Transient per-turn tracking surfaced via `getDisplayState()`. Reset at
    * the start of every turn (in `_beginTurn` via `_resetTurnTracking`) and
@@ -844,10 +868,14 @@ export class Session {
       if (callerSignal.aborted) {
         controller.abort((callerSignal as { reason?: unknown }).reason);
       } else {
-        callerSignal.addEventListener('abort', () => controller.abort((callerSignal as { reason?: unknown }).reason), {
-          once: true,
-        });
+        const onAbort = () => controller.abort((callerSignal as { reason?: unknown }).reason);
+        callerSignal.addEventListener('abort', onAbort, { once: true });
+        this._turnAbortCleanups.set(controller, () => callerSignal.removeEventListener('abort', onAbort));
       }
+    }
+    if (!controller.signal.aborted && this._pendingAbortReason !== undefined) {
+      controller.abort(this._pendingAbortReason);
+      this._pendingAbortReason = undefined;
     }
     this._currentTurnAbortController = controller;
     this._resetTurnTracking();
@@ -876,6 +904,11 @@ export class Session {
    * idle state. Cumulative aggregates (`_tokenUsage`) are preserved.
    */
   private _endTurn(controller: AbortController): void {
+    const cleanup = this._turnAbortCleanups.get(controller);
+    if (cleanup) {
+      cleanup();
+      this._turnAbortCleanups.delete(controller);
+    }
     if (this._currentTurnAbortController === controller) {
       this._currentTurnAbortController = undefined;
       this._currentRunId = undefined;
@@ -885,6 +918,20 @@ export class Session {
       this._toolInputBuffers.clear();
     }
     this._notifyMaybeIdle();
+  }
+
+  private _beginPendingMessageAdmission(): () => void {
+    this._pendingMessageAdmissions += 1;
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      this._pendingMessageAdmissions = Math.max(0, this._pendingMessageAdmissions - 1);
+      if (this._pendingMessageAdmissions === 0 && this._currentTurnAbortController === undefined) {
+        this._pendingAbortReason = undefined;
+      }
+      this._notifyMaybeIdle();
+    };
   }
 
   private _createActiveTurnWaiter(): ActiveTurnWaiter {
@@ -953,9 +1000,11 @@ export class Session {
       };
       const prompt = u.promptTokens ?? u.inputTokens;
       const completion = u.completionTokens ?? u.outputTokens;
-      if (typeof prompt === 'number') this._tokenUsage.promptTokens += prompt;
-      if (typeof completion === 'number') this._tokenUsage.completionTokens += completion;
-      if (typeof u.totalTokens === 'number') this._tokenUsage.totalTokens += u.totalTokens;
+      const promptDelta = typeof prompt === 'number' ? prompt : 0;
+      const completionDelta = typeof completion === 'number' ? completion : 0;
+      this._tokenUsage.promptTokens += promptDelta;
+      this._tokenUsage.completionTokens += completionDelta;
+      this._tokenUsage.totalTokens += typeof u.totalTokens === 'number' ? u.totalTokens : promptDelta + completionDelta;
     }
   }
 
@@ -966,7 +1015,7 @@ export class Session {
    * from this signal in combination with `lifecycleState`.
    */
   isRunning(): boolean {
-    return this._currentTurnAbortController !== undefined;
+    return this._currentTurnAbortController !== undefined || this._pendingMessageAdmissions > 0;
   }
 
   /**
@@ -982,6 +1031,7 @@ export class Session {
    * `isRunning()`.
    */
   isBusy(): boolean {
+    if (this._pendingMessageAdmissions > 0) return true;
     if (this._currentTurnAbortController !== undefined) return true;
     if (this._draining) return true;
     if (this._currentQueuedItemId !== undefined) return true;
@@ -1126,9 +1176,15 @@ export class Session {
    * forwarded as the `AbortSignal.reason` so tools can branch on it.
    */
   abort(opts?: { reason?: string }): void {
+    const reason = opts?.reason ?? 'session_aborted';
     const controller = this._currentTurnAbortController;
-    if (!controller) return;
-    controller.abort(opts?.reason ?? 'session_aborted');
+    if (controller) {
+      controller.abort(reason);
+      return;
+    }
+    if (this._pendingMessageAdmissions > 0) {
+      this._pendingAbortReason = reason;
+    }
   }
 
   /** @internal — emitter epoch (for tests). */
@@ -1162,7 +1218,7 @@ export class Session {
 
   /** Read-only snapshot of the underlying record. */
   getRecord(): Readonly<SessionRecord> {
-    return this._record;
+    return cloneSessionSnapshot(this._record);
   }
 
   // -------------------------------------------------------------------------
@@ -2355,6 +2411,121 @@ export class Session {
     // Per-turn additionalTools merge with the mode's surface, never replace.
     const toolsets = this._buildToolsets(mode, opts.additionalTools);
 
+    let clearPendingAdmission: (() => void) | undefined;
+    if (opts.output === undefined) {
+      clearPendingAdmission = this._beginPendingMessageAdmission();
+      const subscriptionWaiter = this._createActiveTurnWaiter();
+      void subscriptionWaiter.promise.catch(() => {});
+      try {
+        const subscription = this._ensureThreadSubscription(agent);
+        void subscription.catch(() => {});
+        const sub = await Promise.race([subscription, subscriptionWaiter.promise]).finally(() => {
+          subscriptionWaiter.cleanup();
+        });
+        this._assertLive('message()');
+
+        let activeRunId = sub.activeRunId();
+        if (activeRunId === null && this._currentTurnAbortController !== undefined) {
+          for (let i = 0; i < 10 && activeRunId === null; i += 1) {
+            await new Promise<void>(resolve => setImmediate(resolve));
+            activeRunId = sub.activeRunId();
+          }
+        }
+        if (activeRunId !== null) {
+          if (effectiveModeId !== this._record.modeId) {
+            throw new HarnessOverrideConflictError(
+              this.id,
+              'mode',
+              `cannot override mode on a message that drains into an active run (run ${activeRunId})`,
+            );
+          }
+          if (opts.model !== undefined) {
+            throw new HarnessOverrideConflictError(
+              this.id,
+              'model',
+              `cannot override model on a message that drains into an active run (run ${activeRunId})`,
+            );
+          }
+          if (opts.additionalTools !== undefined) {
+            throw new HarnessOverrideConflictError(
+              this.id,
+              'additionalTools',
+              `cannot supply additionalTools on a message that drains into an active run (run ${activeRunId})`,
+            );
+          }
+          if (opts.requestContext !== undefined) {
+            throw new HarnessOverrideConflictError(
+              this.id,
+              'requestContext',
+              `cannot supply requestContext on a message that drains into an active run (run ${activeRunId})`,
+            );
+          }
+          if (opts.admissionId !== undefined) {
+            throw new HarnessValidationError(
+              'message().admissionId',
+              `admissionId cannot be used on a message that drains into an active run (run ${activeRunId})`,
+            );
+          }
+
+          const activeTurnWaiter = this._createActiveTurnWaiter();
+          void activeTurnWaiter.promise.catch(() => {});
+          clearPendingAdmission?.();
+          try {
+            const dispatched = agent.sendSignal(
+              {
+                type: 'user-message',
+                contents: opts.content as never,
+              },
+              {
+                resourceId: this.resourceId,
+                threadId: this.threadId,
+                ifIdle: { behavior: 'discard' },
+              },
+            );
+            if (dispatched.delivery !== 'active') {
+              throw new HarnessValidationError(
+                'message()',
+                'active run ended before the message could be delivered; retry the message',
+              );
+            }
+            const completion = this._awaitRunCompletion(dispatched.runId);
+            void completion.catch(() => {});
+
+            if (opts.stream === true) {
+              let out = agent.getRunOutput(dispatched.runId) as MastraModelOutput<unknown> | undefined;
+              if (!out) {
+                out = (await Promise.race([
+                  agent.waitForRunOutput(dispatched.runId) as Promise<MastraModelOutput<unknown>>,
+                  activeTurnWaiter.promise,
+                  completion.then(
+                    () => undefined,
+                    () => undefined,
+                  ),
+                  delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS).then(() => undefined),
+                ])) as MastraModelOutput<unknown> | undefined;
+              }
+              if (!out) {
+                throw new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
+              }
+              return out;
+            }
+
+            return await Promise.race([completion, activeTurnWaiter.promise]);
+          } finally {
+            activeTurnWaiter.cleanup();
+          }
+        }
+        if (this._currentTurnAbortController !== undefined) {
+          throw new HarnessValidationError('message()', 'another turn is already running on this session');
+        }
+      } catch (err) {
+        clearPendingAdmission?.();
+        throw err;
+      } finally {
+        subscriptionWaiter.cleanup();
+      }
+    }
+
     const admissionStart =
       opts.admissionId !== undefined
         ? createDeferred<AgentSignalResultEvidence | OperationAdmissionTombstone>()
@@ -2386,6 +2557,8 @@ export class Session {
     // their own AbortSignal, we forward it into the session controller so
     // both paths converge on a single signal handed to the agent.
     const turnAbortController = this._beginTurn(opts.abortSignal);
+    clearPendingAdmission?.();
+    clearPendingAdmission = undefined;
     const turnAbortSignal = turnAbortController.signal;
     const activeTurnWaiter = this._createActiveTurnWaiter();
     void activeTurnWaiter.promise.catch(() => {});
@@ -2412,6 +2585,7 @@ export class Session {
           modeId: effectiveModeId,
           modelId: effectiveModelId,
           abortSignal: turnAbortSignal,
+          requestContext: opts.requestContext,
         }),
         activeTurnWaiter.promise,
       ]);
@@ -2421,12 +2595,14 @@ export class Session {
     }
     assertOwnedMessageTurnNotDeleted();
 
+    const prepareStep = createModePrepareStep(mode);
     const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
       memory: { thread: this.threadId, resource: this.resourceId },
       abortSignal: turnAbortSignal,
       requestContext,
       ...(toolsets ? { toolsets } : {}),
       ...(mode.instructions ? { instructions: mode.instructions } : {}),
+      ...(prepareStep ? { prepareStep } : {}),
     };
 
     // agent_start signals the turn has begun. Subscribers can latch their
@@ -3343,9 +3519,6 @@ export class Session {
   // -------------------------------------------------------------------------
   async signal(opts: SessionSignalOptions): Promise<SessionSignalResult> {
     this._assertLive('signal()');
-    if (typeof opts.content !== 'string') {
-      throw new HarnessValidationError('signal()', '`content` must be a string');
-    }
 
     // Resolve effective mode + backing agent.
     const effectiveModeId = opts.mode ?? this._record.modeId;
@@ -3382,6 +3555,13 @@ export class Session {
           `cannot supply additionalTools on a signal that drains into an active run (run ${activeRunId})`,
         );
       }
+      if (opts.requestContext !== undefined) {
+        throw new HarnessOverrideConflictError(
+          this.id,
+          'requestContext',
+          `cannot supply requestContext on a signal that drains into an active run (run ${activeRunId})`,
+        );
+      }
     }
 
     if (!willInterleave) {
@@ -3407,21 +3587,29 @@ export class Session {
             modeId: effectiveModeId,
             modelId: this._record.modelId,
             abortSignal: turnAbortSignal,
+            requestContext: opts.requestContext,
           }),
           activeTurnWaiter.promise,
         ]);
+        const prepareStep = createModePrepareStep(mode);
         const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
           memory: { thread: this.threadId, resource: this.resourceId },
           abortSignal: turnAbortSignal,
           requestContext,
           ...(toolsets ? { toolsets } : {}),
           ...(mode.instructions ? { instructions: mode.instructions } : {}),
+          ...(prepareStep ? { prepareStep } : {}),
         };
         assertOwnedSignalTurnNotDeleted();
         this._emitTurnEvent({ type: 'agent_start' });
 
         dispatched = agent.sendSignal(
-          { type: 'user-message', contents: opts.content as never },
+          {
+            type: opts.type ?? 'user-message',
+            contents: opts.content as never,
+            ...(opts.attributes ? { attributes: opts.attributes } : {}),
+            ...(opts.metadata ? { metadata: opts.metadata } : {}),
+          },
           {
             resourceId: this.resourceId,
             threadId: this.threadId,
@@ -3479,13 +3667,24 @@ export class Session {
     // bookkeeping owned here; the in-flight run owns its own completion.
     // Pass empty streamOptions — the runtime ignores them when active.
     const dispatched = agent.sendSignal(
-      { type: 'user-message', contents: opts.content as never },
+      {
+        type: opts.type ?? 'user-message',
+        contents: opts.content as never,
+        ...(opts.attributes ? { attributes: opts.attributes } : {}),
+        ...(opts.metadata ? { metadata: opts.metadata } : {}),
+      },
       {
         resourceId: this.resourceId,
         threadId: this.threadId,
-        ifIdle: { behavior: 'wake', streamOptions: {} as never },
+        ifIdle: { behavior: 'discard' },
       },
     );
+    if (dispatched.delivery !== 'active') {
+      throw new HarnessValidationError(
+        'signal()',
+        'active run ended before the signal could be delivered; retry the signal',
+      );
+    }
 
     // Shared completion promise with whichever caller owns the run.
     const completion = this._awaitRunCompletion(dispatched.runId);
@@ -3563,12 +3762,14 @@ export class Session {
           }),
           activeTurnWaiter.promise,
         ]);
+        const prepareStep = createModePrepareStep(mode);
         const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
           memory: { thread: this.threadId, resource: this.resourceId },
           abortSignal: turnAbortSignal,
           requestContext,
           ...(toolsets ? { toolsets } : {}),
           ...(mode.instructions ? { instructions: mode.instructions } : {}),
+          ...(prepareStep ? { prepareStep } : {}),
         };
         assertOwnedReminderTurnNotDeleted();
         this._emitTurnEvent({ type: 'agent_start' });
@@ -3717,6 +3918,7 @@ export class Session {
 
   private _classifyResumeKind(payload: { toolName: string; suspendPayload?: unknown }): PendingResume['kind'] {
     if (payload.toolName === ASK_USER_TOOL_NAME) return 'question';
+    if (payload.toolName === 'request_access') return 'question';
     if (payload.toolName === SUBMIT_PLAN_TOOL_NAME) return 'plan-approval';
     if ('suspendPayload' in payload && payload.suspendPayload !== undefined) return 'tool-suspension';
     return 'tool-approval';
@@ -3734,11 +3936,14 @@ export class Session {
       case 'question': {
         const args = (payload.args ?? {}) as {
           question?: string;
+          path?: string;
+          reason?: string;
           options?: { label: string; description?: string }[];
           selectionMode?: 'single_select' | 'multi_select';
         };
         return {
           question: args.question,
+          ...(args.path ? { input: { path: args.path, reason: args.reason } } : {}),
           options: args.options,
           selectionMode: args.selectionMode,
         };
@@ -3885,7 +4090,7 @@ export class Session {
   /** Returns the current state. Always resolves with the latest persisted value. */
   async getState<TState = unknown>(): Promise<TState> {
     this._assertLive('getState()');
-    return (this._record.state ?? {}) as TState;
+    return cloneSessionSnapshot(this._record.state ?? {}) as TState;
   }
 
   /**
@@ -3954,7 +4159,7 @@ export class Session {
       pending: pendingResumeForDisplay(rec.pendingResume),
 
       // Queue
-      queueDepth: rec.pendingQueue.length,
+      queueDepth: rec.pendingQueue?.length ?? 0,
     };
     if (this.parentSessionId !== undefined) snapshot.parentSessionId = this.parentSessionId;
     if (this._currentRunId !== undefined) snapshot.currentRunId = this._currentRunId;
@@ -5060,10 +5265,19 @@ export class Session {
     let full: FullOutput<unknown>;
     try {
       assertResumedTurnNotDeleted();
+      const requestContext = await Promise.race([
+        this._buildRequestContext({
+          modeId: resumeModeId,
+          modelId: resumeRuntimeDependencies.modelId ?? this._record.modelId,
+          abortSignal: turnAbortController.signal,
+        }),
+        activeTurnWaiter.promise,
+      ]);
       const resumeStream = agent.resumeStream(resumeData, {
         runId: pending.runId,
         toolCallId: pending.toolCallId,
         abortSignal: turnAbortController.signal,
+        requestContext,
       });
       void resumeStream.catch(() => {});
       const out = await Promise.race([resumeStream, activeTurnWaiter.promise]);
@@ -6264,12 +6478,14 @@ export class Session {
         activeTurnWaiter.promise,
       ]);
       assertQueuedTurnNotDeleted();
+      const prepareStep = createModePrepareStep(mode);
       const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
         memory: { thread: this.threadId, resource: this.resourceId },
         abortSignal: turnAbortController.signal,
         requestContext,
         ...(toolsets ? { toolsets } : {}),
         ...(mode.instructions ? { instructions: mode.instructions } : {}),
+        ...(prepareStep ? { prepareStep } : {}),
       };
 
       this._emitTurnEvent({ type: 'agent_start' });
@@ -7083,6 +7299,7 @@ export class Session {
     modelId: string;
     abortSignal: AbortSignal;
     persistedRequestContext?: PersistedRequestContextInput;
+    requestContext?: RequestContext;
   }): Promise<RequestContext> {
     const session = this;
     const stateSnapshot = (this._record.state ?? {}) as unknown;
@@ -7114,6 +7331,24 @@ export class Session {
         session._setTurnState(
           updatesOrUpdater as Partial<unknown> | ((prev: unknown) => unknown),
         )) as HarnessRequestContext<unknown>['setState'],
+      updateState: (async updater => {
+        let result: unknown;
+        let events: unknown[] | undefined;
+        await session._flushUpdate(prev => {
+          const current = (prev.state ?? {}) as unknown;
+          const mutation = updater(current as Readonly<unknown>);
+          if (mutation instanceof Promise) {
+            throw new HarnessValidationError('ctx.updateState', 'async updateState updaters are not supported');
+          }
+          result = mutation.result;
+          events = mutation.events;
+          return { ...prev, state: { ...(current as object), ...((mutation.updates ?? {}) as object) } };
+        });
+        for (const event of events ?? []) {
+          session._emitTurnEvent(event as EmitInput);
+        }
+        return result;
+      }) as HarnessRequestContext<unknown>['updateState'],
       abortSignal: turn.abortSignal,
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>
@@ -7128,18 +7363,30 @@ export class Session {
         if (!agentType) return null;
         return this._record.subagentModelOverrides?.[agentType] ?? null;
       },
+      getSubagentModelId: params => {
+        const agentType = params?.agentType;
+        if (agentType) return this._record.subagentModelOverrides?.[agentType] ?? null;
+        return this._record.subagentModelOverrides?.default ?? null;
+      },
+      emitEvent: event => this._emitTurnEvent(event as EmitInput),
       // Tool-facing skill execution. Delegates back to the owning session
       // so resolution, args validation, prompt construction, and dispatch
       // stay in one place (§4.6).
       useSkill: (ref, opts) => session._skillsUse(ref, opts),
       ...(workspace ? { workspace } : {}),
     };
-    const entries: [string, unknown][] = [['harness', harnessSlot]];
+    const entries: [string, unknown][] = turn.requestContext ? Array.from(turn.requestContext.entries()) : [];
+    const setEntry = (key: string, value: unknown) => {
+      const idx = entries.findIndex(([entryKey]) => entryKey === key);
+      if (idx >= 0) entries[idx] = [key, value];
+      else entries.push([key, value]);
+    };
+    setEntry('harness', harnessSlot);
     if (persistedRequestContext?.metadata) {
-      entries.push(['app', persistedRequestContext.metadata]);
+      setEntry('app', persistedRequestContext.metadata);
     }
     if (persistedRequestContext?.channel) {
-      entries.push(['channel', persistedRequestContext.channel]);
+      setEntry('channel', persistedRequestContext.channel);
     }
     return new RequestContext(entries);
   }

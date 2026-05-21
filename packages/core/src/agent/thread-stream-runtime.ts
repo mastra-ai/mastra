@@ -1383,9 +1383,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return acceptSignal({ accepted: true, runId: runId!, signal, persisted });
+        return acceptSignal({ accepted: true, runId: runId!, signal, delivery: 'persisted', persisted });
       }
-      return acceptSignal({ accepted: true, runId: runId!, signal });
+      return acceptSignal({ accepted: true, runId: runId!, signal, delivery: 'discarded' });
     }
 
     if (runId) {
@@ -1405,7 +1405,7 @@ export class AgentThreadStreamRuntime {
             sourceId: this.#id,
           });
           void this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
-          return acceptSignal({ accepted: true, runId, signal });
+          return acceptSignal({ accepted: true, runId, signal, delivery: 'active' });
         }
       }
 
@@ -1423,7 +1423,7 @@ export class AgentThreadStreamRuntime {
           signal: this.#serializeSignal(signal),
           sourceId: this.#id,
         });
-        return acceptSignal({ accepted: true, runId, signal });
+        return acceptSignal({ accepted: true, runId, signal, delivery: 'active' });
       }
     }
 
@@ -1442,9 +1442,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return acceptSignal({ accepted: true, runId, signal, persisted }, false);
+        return acceptSignal({ accepted: true, runId, signal, delivery: 'persisted', persisted }, false);
       }
-      return acceptSignal({ accepted: true, runId, signal }, false);
+      return acceptSignal({ accepted: true, runId, signal, delivery: 'discarded' }, false);
     }
 
     key ??= this.#threadKey(resourceId, threadId);
@@ -1483,7 +1483,7 @@ export class AgentThreadStreamRuntime {
       if (activeRecord) {
         void this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
-      return acceptSignal({ accepted: true, runId, signal });
+      return acceptSignal({ accepted: true, runId, signal, delivery: 'idle' });
     }
 
     // No active same-agent run accepted the signal. Reserve early when the runtime owns
@@ -1525,7 +1525,7 @@ export class AgentThreadStreamRuntime {
       }) as Promise<MastraModelOutput<unknown>>;
     void output.catch(() => {});
 
-    return acceptSignal({ accepted: true, runId, signal, output });
+    return acceptSignal({ accepted: true, runId, signal, delivery: 'idle', output });
   }
 }
 

@@ -130,6 +130,8 @@ export interface SendAgentSignalResult {
   accepted: true;
   runId: string;
   signal: CreatedAgentSignal;
+  /** Internal routing result for callers that must distinguish interleave vs idle behavior. */
+  delivery?: 'active' | 'idle' | 'persisted' | 'discarded';
   /** Resolves with the stream output when this signal starts an idle thread run. */
   output?: Promise<MastraModelOutput<unknown>>;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */

@@ -154,16 +154,19 @@ describe('Session — lifecycleState transitions', () => {
 });
 
 describe('Session — getRecord snapshot', () => {
-  it('returns the current record reference', () => {
+  it('returns a defensive snapshot of the current record', () => {
     const { session, record } = makeStandaloneSession();
-    expect(session.getRecord()).toBe(record);
+    const snapshot = session.getRecord();
+    expect(snapshot).not.toBe(record);
+    expect(snapshot).toStrictEqual(record);
   });
 
   it('reflects the new record after _markClosed', () => {
     const { session } = makeStandaloneSession({ version: 1 });
     const updated = makeRecord({ version: 2, closedAt: 9999 });
     session._markClosed(updated);
-    expect(session.getRecord()).toBe(updated);
+    expect(session.getRecord()).not.toBe(updated);
+    expect(session.getRecord()).toStrictEqual(updated);
     expect(session.getRecord().version).toBe(2);
     expect(session.getRecord().closedAt).toBe(9999);
   });
@@ -172,8 +175,19 @@ describe('Session — getRecord snapshot', () => {
     const { session } = makeStandaloneSession({ version: 1 });
     const updated = makeRecord({ version: 2 });
     session._markEvicted(updated);
-    expect(session.getRecord()).toBe(updated);
+    expect(session.getRecord()).not.toBe(updated);
+    expect(session.getRecord()).toStrictEqual(updated);
     expect(session.getRecord().version).toBe(2);
+  });
+
+  it('does not expose mutable internal record state', () => {
+    const { session } = makeStandaloneSession({ modeId: 'default' });
+    const snapshot = session.getRecord() as any;
+    snapshot.modeId = 'mutated';
+    snapshot.pendingQueue.push({ id: 'external-mutation' });
+
+    expect(session.getRecord().modeId).toBe('default');
+    expect(session.getRecord().pendingQueue).toEqual([]);
   });
 });
 

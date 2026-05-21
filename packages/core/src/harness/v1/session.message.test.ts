@@ -269,14 +269,25 @@ describe('Session.message() — default path', () => {
   });
 
   it('aborting the caller signal aborts the per-turn signal handed to the agent', async () => {
-    const { harness, agent } = setup();
+    const agent = new LiveStreamFakeAgent('default');
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const ac = new AbortController();
-    await session.message({ content: 'hi', abortSignal: ac.signal });
+    const turn = session.message({ content: 'hi', abortSignal: ac.signal });
+    while (agent.calls.length === 0) await nextTick();
+
     const turnSignal = agent.calls[0]!.options.abortSignal as AbortSignal;
     ac.abort('caller-cancelled');
     expect(turnSignal.aborted).toBe(true);
     expect((turnSignal as { reason?: unknown }).reason).toBe('caller-cancelled');
+    agent.releaseStream?.();
+    await turn;
   });
 
   it('deduplicates an exact admissionId retry without accepting a second signal', async () => {

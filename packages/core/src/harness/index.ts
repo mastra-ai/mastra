@@ -16,7 +16,7 @@ export {
   taskWriteTool,
 } from './tools';
 export type { TaskCheckResult, TaskCheckSummary, TaskItem, TaskItemInput, TaskItemSnapshot } from './tools';
-export { defaultDisplayState, defaultOMProgressState } from './types';
+export { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 export type {
   ActiveSubagentState,
   ActiveToolState,

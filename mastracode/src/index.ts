@@ -2,7 +2,6 @@ import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
 import type { PubSub } from '@mastra/core/events';
-import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
   HeartbeatHandler,
@@ -76,6 +75,7 @@ import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { MastraCodeHarnessV1 as Harness } from './harness-v1-adapter.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',

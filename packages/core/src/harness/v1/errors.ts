@@ -324,7 +324,7 @@ export class HarnessOverrideConflictError extends Error {
   readonly name = 'HarnessOverrideConflictError';
   constructor(
     public readonly sessionId: string,
-    public readonly field: 'mode' | 'additionalTools' | 'model',
+    public readonly field: 'mode' | 'additionalTools' | 'model' | 'requestContext',
     public readonly reason: string,
   ) {
     super(`HarnessOverrideConflictError on session "${sessionId}" for "${field}": ${reason}`);

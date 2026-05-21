@@ -111,6 +111,32 @@ vi.mock('@mastra/core/harness', () => ({
   taskCheckTool: {},
 }));
 
+vi.mock('../harness-v1-adapter.js', () => ({
+  MastraCodeHarnessV1: class {
+    constructor(config: unknown) {
+      harnessConstructorMock(config);
+    }
+    subscribe(eventHandler: unknown) {
+      harnessSubscribeMock(eventHandler);
+    }
+    getCurrentThreadId() {
+      return harnessGetCurrentThreadIdMock();
+    }
+    getState() {
+      return harnessStateMock;
+    }
+    listThreads(options: unknown) {
+      return harnessListThreadsMock(options);
+    }
+    setState(state: unknown) {
+      return harnessSetStateMock(state);
+    }
+    setThreadSetting(setting: unknown) {
+      return harnessSetThreadSettingMock(setting);
+    }
+  },
+}));
+
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';

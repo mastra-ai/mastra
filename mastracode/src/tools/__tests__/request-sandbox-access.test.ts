@@ -177,4 +177,57 @@ describe('request_access', () => {
     expect(result.isError).toBe(false);
     expect(result.content).toContain('Access granted');
   });
+
+  it('uses v1 agent suspension without legacy TUI registration', async () => {
+    const mockHarnessCtx = {
+      emitEvent: vi.fn(),
+      registerQuestion: vi.fn(),
+      getState: () => ({ sandboxAllowedPaths: [] }),
+      setState: vi.fn(),
+    };
+    const suspend = vi.fn(async () => undefined);
+
+    const context = {
+      requestContext: {
+        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
+      },
+      workspace: {},
+      agent: { suspend },
+    };
+
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: '/outside/project/dir', reason: 'need to read config' },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('waiting for user approval');
+    expect(suspend.mock.calls[0]?.[0]).toEqual({ path: '/outside/project/dir', reason: 'need to read config' });
+    expect(mockHarnessCtx.registerQuestion).not.toHaveBeenCalled();
+    expect(mockHarnessCtx.emitEvent).not.toHaveBeenCalled();
+  });
+
+  it('applies v1 resume approval after a suspended access request', async () => {
+    const mockHarnessCtx = {
+      getState: () => ({ sandboxAllowedPaths: [] }),
+      setState: vi.fn(),
+    };
+
+    const context = {
+      requestContext: {
+        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
+      },
+      workspace: {},
+      agent: { resumeData: { answer: 'yes' } },
+    };
+
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: '/outside/project/dir', reason: 'need to read config' },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('Access granted');
+    expect(mockHarnessCtx.setState).toHaveBeenCalledWith({ sandboxAllowedPaths: ['/outside/project/dir'] });
+  });
 });

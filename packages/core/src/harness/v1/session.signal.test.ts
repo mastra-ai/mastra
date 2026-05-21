@@ -71,6 +71,26 @@ describe('Session.signal()', () => {
     expect(messages.contents).toBe('hi');
   });
 
+  it('idle dispatch preserves typed signal attributes and metadata', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const handle = await session.signal({
+      type: 'user-message',
+      content: 'hi',
+      attributes: { source: 'goal' },
+      metadata: { goalId: 'goal-1' },
+    });
+    await handle.result;
+
+    const messages = agent.streamCalls[0]?.messages as {
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    };
+    expect(messages.attributes).toEqual({ source: 'goal' });
+    expect(messages.metadata).toEqual({ goalId: 'goal-1' });
+  });
+
   it('active-delivery dispatch returns willInterleave: true and reuses the in-flight runId', async () => {
     const { harness, agent } = setupHarness();
     let releaseFirst!: () => void;
@@ -139,6 +159,28 @@ describe('Session.signal()', () => {
     await expect(
       session.signal({ content: 'x', additionalTools: { extra: { id: 'extra', execute: async () => 'ok' } as any } }),
     ).rejects.toBeInstanceOf(HarnessOverrideConflictError);
+
+    release();
+    await firstPromise;
+  });
+
+  it('rejects active-delivery dispatch with requestContext', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    const hold = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold });
+
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const firstPromise = session.message({ content: 'first' });
+    await waitForStreamCalls(agent, 1);
+
+    await expect(session.signal({ content: 'x', requestContext: new Map() as any })).rejects.toBeInstanceOf(
+      HarnessOverrideConflictError,
+    );
 
     release();
     await firstPromise;

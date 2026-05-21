@@ -11,7 +11,7 @@ import type { z } from 'zod';
 
 import type { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
-import type { CreatedAgentSignal } from '../../agent/signals';
+import type { AgentSignalContents, AgentSignalInput, CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import type { ChannelProvider } from '../../channels';
 import type { Mastra } from '../../mastra';
@@ -1345,6 +1345,11 @@ interface MessageOptionsBase extends MessageOverrides {
    * harness's own abort plumbing.
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Request-scoped context forwarded to tools for this turn.
+   */
+  requestContext?: RequestContext;
 }
 
 /** Default shape: returns a fully-resolved `AgentResult`. */
@@ -1491,7 +1496,16 @@ export interface ListMessagesOptions {
 /** Options accepted by `Session.signal(...)`. */
 export interface SessionSignalOptions {
   /** Free-form user content. Matches `message().content`. */
-  content: string;
+  content: AgentSignalContents;
+
+  /** Signal type forwarded to the agent runtime. Defaults to `user-message`. */
+  type?: AgentSignalInput['type'];
+
+  /** Optional structured attributes attached to the forwarded signal. */
+  attributes?: AgentSignalInput['attributes'];
+
+  /** Optional structured metadata attached to the forwarded signal. */
+  metadata?: AgentSignalInput['metadata'];
 
   /** Per-turn mode override (same semantics as `message().mode`). */
   mode?: string;
@@ -1508,6 +1522,11 @@ export interface SessionSignalOptions {
    * its own abort controller).
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Request-scoped context forwarded to tools when this signal wakes a new run.
+   */
+  requestContext?: RequestContext;
 }
 
 /** Result returned by `Session.signal(...)` (resolved on the first await tick). */
@@ -1650,6 +1669,14 @@ export interface HarnessRequestContext<TState = unknown> {
   getState: () => TState;
   /** Persisted shallow merge (object form) or atomic read-modify-write (functional form). */
   setState: SetStateFn<TState>;
+  /** Legacy-compatible serialized state transaction helper. */
+  updateState?: <TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: unknown[]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: unknown[]; result: TResult }>,
+  ) => Promise<TResult>;
 
   /** Turn abort signal. Fires for the four reasons enumerated in §4.5. */
   abortSignal: AbortSignal;
@@ -1673,6 +1700,10 @@ export interface HarnessRequestContext<TState = unknown> {
    * agent type, or `null` to fall back to the session's default model.
    */
   getSubagentModel: (params?: { agentType?: string }) => string | null;
+  /** Legacy Harness alias used by compatibility tools. */
+  getSubagentModelId?: (params?: { agentType?: string }) => string | null;
+  /** Legacy Harness event bridge used by compatibility tools. */
+  emitEvent?: (event: unknown) => void;
 
   /**
    * Workspace handle (§6.1). Only present when the harness is configured

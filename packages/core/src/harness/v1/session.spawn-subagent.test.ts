@@ -239,4 +239,16 @@ describe('spawn_subagent tool — execution', () => {
     const childRecord = await storage.loadSession({ sessionId: childId });
     expect(childRecord?.closedAt).toBeDefined();
   });
+
+  it('uses the parent session subagent model override when no call override is provided', async () => {
+    const { harness, storage } = setup();
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await parent.models.setSubagent({ agentType: 'explore', model: 'openai/gpt-5-mini' });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'go' }, execCtx('tc-model-1'))) as any;
+
+    const childRecord = await storage.loadSession({ sessionId: result.subagentSessionId as string });
+    expect(childRecord?.modelId).toBe('openai/gpt-5-mini');
+  });
 });
