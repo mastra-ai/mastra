@@ -1096,7 +1096,6 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_READ },
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
@@ -1619,17 +1618,11 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
-      const idleBodyRequestContext = runId
-        ? undefined
-        : (ifIdle?.streamOptions?.requestContext as Record<string, unknown> | undefined);
-      mergeBodyRequestContext(serverRequestContext, idleBodyRequestContext);
+      const idleRequestContext = ifIdle?.streamOptions?.requestContext as Record<string, unknown> | undefined;
+      const versionOptions = extractVersionOptions(serverRequestContext, idleRequestContext);
+      mergeBodyRequestContext(serverRequestContext, idleRequestContext);
 
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext, idleBodyRequestContext),
-        requestContext: serverRequestContext,
-      });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext: serverRequestContext });
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {

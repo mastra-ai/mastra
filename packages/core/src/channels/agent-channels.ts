@@ -346,9 +346,16 @@ async function headContentType(url: string, logger?: IMastraLogger): Promise<str
  */
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
+  /**
+   * The original channel configuration. Channel providers use this to rebuild
+   * an AgentChannels instance without dropping author-configured adapters.
+   */
+  public readonly channelConfig: ChannelConfig;
   private chat: Chat | null = null;
   /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
   private initPromise: Promise<void> | null = null;
+  /** Incremented when the lifecycle is closed so stale async initialization cannot resurrect chat. */
+  private lifecycleGeneration = 0;
   private agent!: Agent<any, any, any, any>;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
@@ -399,6 +406,7 @@ export class AgentChannels {
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
+    this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
 
@@ -477,6 +485,7 @@ export class AgentChannels {
       return this.initPromise;
     }
 
+    const generation = this.lifecycleGeneration;
     this.initPromise = (async () => {
       // Resolve state adapter: custom > Mastra storage > in-memory fallback
       if (this.customState) {
@@ -690,6 +699,9 @@ export class AgentChannels {
         }
       });
       await chat.initialize();
+      if (generation !== this.lifecycleGeneration) {
+        return;
+      }
       this.chat = chat;
 
       // Start gateway listeners for adapters that support it (e.g. Discord)
@@ -703,7 +715,7 @@ export class AgentChannels {
             durationMs?: number,
           ) => Promise<Response>;
 
-          this.startGatewayLoop(name, startGateway);
+          this.startGatewayLoop(name, startGateway, generation);
         }
       }
     })();
@@ -711,7 +723,9 @@ export class AgentChannels {
     try {
       await this.initPromise;
     } catch (error) {
-      this.initPromise = null;
+      if (generation === this.lifecycleGeneration) {
+        this.initPromise = null;
+      }
       throw error;
     }
   }
@@ -844,6 +858,17 @@ export class AgentChannels {
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};
     return this.makeChannelTools();
+  }
+
+  /**
+   * Close resources owned by AgentChannels. The fork's channel runtime does not
+   * currently hold long-lived subscriptions here, but providers still call this
+   * before replacing an instance.
+   */
+  close(): void {
+    this.lifecycleGeneration += 1;
+    this.initPromise = null;
+    this.chat = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -1525,12 +1550,13 @@ export class AgentChannels {
   private startGatewayLoop(
     name: string,
     startGateway: (options: { waitUntil: (p: Promise<unknown>) => void }, durationMs?: number) => Promise<Response>,
+    generation: number,
   ): void {
     const DURATION = 24 * 60 * 60 * 1000;
     const RETRY_DELAY = 5000;
 
     const reconnect = async () => {
-      while (true) {
+      while (generation === this.lifecycleGeneration) {
         try {
           let resolve: () => void;
           let reject: (err: unknown) => void;
@@ -1550,8 +1576,14 @@ export class AgentChannels {
             DURATION,
           );
           await done;
+          if (generation !== this.lifecycleGeneration) {
+            break;
+          }
           this.log('info', `[${name}] Gateway session ended, reconnecting...`);
         } catch (err) {
+          if (generation !== this.lifecycleGeneration) {
+            break;
+          }
           this.log('error', `[${name}] Gateway error, retrying in ${RETRY_DELAY / 1000}s`, err);
           await new Promise(r => setTimeout(r, RETRY_DELAY));
         }

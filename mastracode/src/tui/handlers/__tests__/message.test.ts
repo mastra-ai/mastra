@@ -2,6 +2,7 @@ import { Container, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -179,35 +180,6 @@ describe('handleMessageUpdate system reminders', () => {
     expect(children[1]).toBeInstanceOf(UserMessageComponent);
     expect(children[2]).toBeInstanceOf(AssistantMessageComponent);
     expect(state.streamingComponent).toBe(children[2]);
-  });
-
-  it('starts a new assistant component below an echoed signal user message', () => {
-    const streamingMessage = new Text('streaming', 0, 0);
-    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
-    state.streamingMessage = createAssistantMessage([{ type: 'text', text: 'first assistant text' }]);
-    state.chatContainer.addChild(streamingMessage);
-
-    addPendingUserMessage(state, 'signal-1', 'follow up');
-    const pending = state.chatContainer.children[1];
-
-    addUserMessage(state, {
-      id: 'signal-1',
-      role: 'user',
-      content: [{ type: 'text', text: 'follow up' }],
-    } as HarnessMessage);
-
-    expect(state.chatContainer.children[0]).toBe(streamingMessage);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.chatContainer.children[1]).not.toBe(pending);
-    expect(state.streamingComponent).toBeUndefined();
-
-    handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'second assistant text' }]));
-
-    expect(state.chatContainer.children).toHaveLength(3);
-    expect(state.chatContainer.children[0]).toBe(streamingMessage);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.chatContainer.children[2]).toBeInstanceOf(AssistantMessageComponent);
-    expect(state.streamingComponent).toBe(state.chatContainer.children[2]);
   });
 
   it('inserts temporal-gap reminders before the preceded user message', () => {

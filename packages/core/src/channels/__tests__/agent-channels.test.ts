@@ -64,6 +64,46 @@ describe('AgentChannels', () => {
       expect(Object.keys(agentChannels.adapters)).toEqual(['discord', 'slack']);
     });
 
+    it('exposes the original channel config for provider rebuilds', () => {
+      expect(agentChannels.channelConfig.adapters).toBeDefined();
+      expect(Object.keys(agentChannels.channelConfig.adapters)).toEqual(['discord', 'slack']);
+    });
+
+    it('allows providers to close before replacing the instance', () => {
+      (agentChannels as any).chat = { webhooks: {} };
+      (agentChannels as any).initPromise = Promise.resolve();
+      const generation = (agentChannels as any).lifecycleGeneration;
+
+      expect(() => agentChannels.close()).not.toThrow();
+      expect(agentChannels.sdk).toBeNull();
+      expect((agentChannels as any).initPromise).toBeNull();
+      expect((agentChannels as any).lifecycleGeneration).toBe(generation + 1);
+    });
+
+    it('stops gateway reconnect loops after close', async () => {
+      let finishGateway!: () => void;
+      const gatewayDone = new Promise<void>(resolve => {
+        finishGateway = resolve;
+      });
+      const startGateway = vi.fn(async ({ waitUntil }: { waitUntil: (p: Promise<unknown>) => void }) => {
+        waitUntil(gatewayDone);
+        return new Response('ok');
+      });
+      const generation = (agentChannels as any).lifecycleGeneration;
+
+      (agentChannels as any).startGatewayLoop('mock', startGateway, generation);
+      await Promise.resolve();
+
+      expect(startGateway).toHaveBeenCalledTimes(1);
+
+      agentChannels.close();
+      finishGateway();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(startGateway).toHaveBeenCalledTimes(1);
+    });
+
     it('returns a specific adapter by key', () => {
       const adapter = agentChannels.adapters['discord'];
       expect(adapter).toBeDefined();

@@ -52,9 +52,8 @@ function inferResponseShape(responseSchema: JSONSchema7 | undefined): ApiSchemaR
   const listProperty = Object.entries(properties).find(
     ([, property]) => schemaType(asJsonSchema(property)) === 'array',
   )?.[0];
-  const hasCursorPagination = 'nextCursor' in properties || 'truncated' in properties;
 
-  if (listProperty && (paginationProperty || hasCursorPagination || propertyNames.length <= 2)) {
+  if (listProperty && (paginationProperty || propertyNames.length <= 2)) {
     return { kind: 'object-property', listProperty, paginationProperty };
   }
   if (responseSchema.additionalProperties && propertyNames.length === 0) return { kind: 'record' };

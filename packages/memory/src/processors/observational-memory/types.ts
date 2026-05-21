@@ -50,7 +50,7 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | false;
+export type ActivationTTL = number | string | 'auto' | false;
 export type ResolvedActivationTTL = number | 'auto';
 
 /**

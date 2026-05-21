@@ -127,7 +127,8 @@ The `_background` override is a _modifier_ on tools the developer has already op
 When a tool call is dispatched, the resolved background config is computed in this priority order:
 
 1. Agent-level `backgroundTasks.tools` entry for the tool.
-1. Tool-level `background` config.
+1. Tool-level `backgroundTasks` config.
+1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.

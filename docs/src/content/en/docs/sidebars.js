@@ -145,6 +145,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/adding-voice',
+          label: 'Voice',
+        },
+        {
+          type: 'doc',
           id: 'agents/signals',
           label: 'Signals',
           customProps: {
@@ -153,15 +158,10 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
-        },
-        {
-          type: 'doc',
           id: 'agents/response-caching',
           label: 'Response Caching',
           customProps: {
-            tags: ['experimental'],
+            tags: ['alpha'],
           },
         },
         {
@@ -213,6 +213,11 @@ const sidebars = {
           type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
+        },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
         },
       ],
     },

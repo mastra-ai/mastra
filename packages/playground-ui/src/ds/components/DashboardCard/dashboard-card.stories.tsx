@@ -23,6 +23,13 @@ const meta: Meta<typeof DashboardCard> = {
   parameters: {
     layout: 'padded',
   },
+  decorators: [
+    Story => (
+      <div className="rounded-2xl border border-border1 bg-surface2 p-6">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export default meta;

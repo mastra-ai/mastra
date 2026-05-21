@@ -779,6 +779,15 @@ export class InternalMastraMCPClient extends MastraBase {
         // Stamp serverId into _meta.ui so consumers can resolve app resources
         // back to the originating MCP server without scanning all servers.
         const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
+        const mcpToolProps =
+          toolMeta || annotations
+            ? {
+                mcp: {
+                  ...(toolMeta ? { _meta: toolMeta } : {}),
+                  ...(annotations ? { annotations } : {}),
+                },
+              }
+            : {};
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -786,7 +795,9 @@ export class InternalMastraMCPClient extends MastraBase {
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri
           // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
-          ...(toolMeta ? { mcp: { _meta: toolMeta } } : {}),
+          // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
+          // can read them via `tool.mcp.annotations`.
+          ...mcpToolProps,
           // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult

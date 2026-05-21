@@ -5,6 +5,7 @@ import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { RouteObject } from 'react-router';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import type { RouteObject, LoaderFunctionArgs } from 'react-router';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -48,8 +49,6 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import ObservabilityOverview from './pages/observability-overview';
-import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
@@ -259,7 +258,6 @@ export const routes: RouteObject[] = [
           ]),
 
       { path: '/logs', element: <Logs />, handle: navHandle('/logs') },
-      { path: '/primitives', element: <Primitives />, handle: navHandle('/primitives') },
       { path: '/evaluation', element: <Evaluation />, handle: navHandle('/evaluation') },
       { path: '/scorers', element: <Scorers />, handle: navHandle('/scorers') },
       {
@@ -268,11 +266,6 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      {
-        path: '/observability-overview',
-        element: <ObservabilityOverview />,
-        handle: navHandle('/observability-overview'),
-      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',
@@ -335,7 +328,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/agents/${params.agentId}/chat`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
@@ -431,7 +424,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/workflows/${params.workflowId}/graph`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/workflows/${params.workflowId}/graph`),
           },
           { path: 'graph', element: <Workflow /> },
           {

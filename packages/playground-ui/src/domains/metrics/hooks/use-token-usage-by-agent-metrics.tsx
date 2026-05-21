@@ -24,11 +24,10 @@ export function useTokenUsageByAgentMetrics() {
         orderDirection: 'DESC' as const,
         filters,
       };
-      const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all([
+      // total_input/total_output estimatedCost already rolls up cache + other detail costs.
+      const [inputRes, outputRes] = await Promise.all([
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_input_tokens'] }),
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_output_tokens'] }),
-        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_read_tokens'] }),
-        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_write_tokens'] }),
       ]);
 
       type AgentEntry = { input: number; output: number; cost: number | null; costUnit: string | null };

@@ -8,8 +8,8 @@ import { createAgentsTests } from './domains/agents';
 import { createDatasetsTests } from './domains/datasets';
 import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
+import { createFavoritesTests } from './domains/favorites';
 import { createSchedulesTests } from './domains/schedules';
-import { createHarnessTest } from './domains/harness';
 export * from './domains/memory/data';
 export * from './domains/harness/data';
 export * from './domains/workflows/data';
@@ -83,14 +83,14 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
         clearList.push(backgroundTasksStorage.dangerouslyClearAll());
       }
 
+      const favoritesStorage = await storage.getStore('favorites');
+      if (favoritesStorage) {
+        clearList.push(favoritesStorage.dangerouslyClearAll());
+      }
+
       const schedulesStorage = await storage.getStore('schedules');
       if (schedulesStorage) {
         clearList.push(schedulesStorage.dangerouslyClearAll());
-      }
-
-      const harnessStorage = await storage.getStore('harness');
-      if (harnessStorage) {
-        clearList.push(harnessStorage.dangerouslyClearAll());
       }
 
       // Clear all domain data after tests
@@ -106,8 +106,8 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createAgentsTests({ storage });
     createDatasetsTests({ storage });
     createExperimentsTests({ storage });
-    createBackgroundTasksTests({ storage, capabilities });
+    createBackgroundTasksTests({ storage });
+    createFavoritesTests({ storage });
     createSchedulesTests({ storage });
-    createHarnessTest({ storage });
   });
 }

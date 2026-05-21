@@ -36,6 +36,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       omObservationThreshold: null,
       omReflectionThreshold: null,
       omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
       goalJudgeModel: null,
       goalMaxTurns: null,

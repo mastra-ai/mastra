@@ -21,10 +21,15 @@ function stripAnsi(s: string): string {
 class BorderedBox {
   private child: { render(width: number): string[]; invalidate?(): void };
   private pending: boolean;
+  private borderColor?: string;
 
-  constructor(child: { render(width: number): string[]; invalidate?(): void }, options: { pending?: boolean } = {}) {
+  constructor(
+    child: { render(width: number): string[]; invalidate?(): void },
+    options: { pending?: boolean; borderColor?: string } = {},
+  ) {
     this.child = child;
     this.pending = options.pending ?? false;
+    this.borderColor = options.borderColor;
   }
 
   invalidate() {
@@ -33,7 +38,11 @@ class BorderedBox {
 
   render(width: number): string[] {
     const borderColor = (s: string) =>
-      this.pending ? chalk.hex(theme.getTheme().dim)(s) : chalk.hex(tintHex(mastra.green, 1))(s);
+      this.borderColor
+        ? chalk.hex(this.borderColor)(s)
+        : this.pending
+          ? chalk.hex(theme.getTheme().dim)(s)
+          : chalk.hex(tintHex(mastra.green, 1))(s);
 
     // Border uses 4 chars: "│ " (2) on left + " │" (2) on right
     // Plus 2 for the "› " prompt prefix on the first line
@@ -91,7 +100,11 @@ class BorderedBox {
 }
 
 export class UserMessageComponent extends Container {
-  constructor(text: string, markdownTheme: MarkdownTheme = getMarkdownTheme(), options: { pending?: boolean } = {}) {
+  constructor(
+    text: string,
+    markdownTheme: MarkdownTheme = getMarkdownTheme(),
+    options: { pending?: boolean; borderColor?: string } = {},
+  ) {
     super();
 
     const md = new Markdown(text, 0, 0, markdownTheme, {
@@ -99,8 +112,11 @@ export class UserMessageComponent extends Container {
       italic: false,
     });
 
-    this.addChild(new BorderedBox(md, { pending: options.pending }));
-    this.addChild(new Spacer(1));
+    this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor }));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'user-message';
   }
 }
 
@@ -112,5 +128,9 @@ export class PendingUserMessageComponent extends Container {
     const displayText = `${prefix}${text.replace(/\[image\]\s*/g, '').trim()}`.trim();
     this.addChild(new Text(theme.fg('dim', `↳ ${displayText || 'Message'} pending…`), BOX_INDENT_STR.length, 0));
     this.addChild(new Spacer(1));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'user-message';
   }
 }

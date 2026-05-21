@@ -342,7 +342,9 @@ export class AgentsPG extends AgentsStorage {
       status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: parseJsonResilient(row.metadata, 'metadata'),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -1056,6 +1058,7 @@ export class AgentsPG extends AgentsStorage {
       workspace: parseJsonResilient(row.workspace, 'workspace'),
       skills: parseJsonResilient(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      browser: parseJsonResilient(row.browser, 'browser'),
       changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,

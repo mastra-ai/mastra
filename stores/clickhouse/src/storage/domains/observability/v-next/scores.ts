@@ -241,6 +241,89 @@ export async function listScores(
   };
 }
 
+type ScoreDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  traceId: string | null;
+  timestamp: string;
+  scoreId: string;
+};
+
+async function queryScoresAfterCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  cursorId: string,
+): Promise<ScoreDeltaRow[]> {
+  return await queryJson<ScoreDeltaRow>(
+    client,
+    `
+      SELECT
+        s.* EXCEPT(traceId, timestamp, scoreId),
+        s.traceId AS traceId,
+        s.timestamp AS timestamp,
+        s.scoreId AS scoreId,
+        toString(d.cursorId) AS cursorId
+      FROM ${TABLE_SCORE_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_SCORE_EVENTS} s
+        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
+       AND s.timestamp = d.timestamp
+       AND s.scoreId = d.scoreId
+      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ORDER BY d.cursorId ASC
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
+  );
+}
+
+async function getDeltaCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_SCORE_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_SCORE_EVENTS} s
+        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
+       AND s.timestamp = d.timestamp
+       AND s.scoreId = d.scoreId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
+  }
+
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_SCORE_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_SCORE_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+function buildScoresCursor(row: ScoreDeltaRow): string {
+  return row.cursorId ?? '0';
+}
+
 export async function getScoreById(client: ClickHouseClient, scoreId: string): Promise<ScoreRecord | null> {
   const rows = await queryJson<Record<string, any>>(
     client,

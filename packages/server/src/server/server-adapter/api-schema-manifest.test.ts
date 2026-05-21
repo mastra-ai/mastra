@@ -70,11 +70,6 @@ describe('apiSchemaManifest', () => {
     );
     expect(listRuns?.responseShape).toMatchObject({ kind: 'object-property', listProperty: 'runs' });
 
-    const listHarnessSessions = apiSchemaManifest.routes.find(
-      route => route.method === 'GET' && route.path === '/harness/:name/sessions',
-    );
-    expect(listHarnessSessions?.responseShape).toMatchObject({ kind: 'object-property', listProperty: 'items' });
-
     const getAgent = apiSchemaManifest.routes.find(
       route => route.method === 'GET' && route.path === '/agents/:agentId',
     );

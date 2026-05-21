@@ -14,6 +14,10 @@ import {
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
+// Re-export request-context key constants so custom middleware can read namespaced
+// auth state without importing internal paths.
+export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
+
 export const HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM = 'subscriptionToken';
 
 const HARNESS_ROUTE_PREFIX = '/harness/';
@@ -451,6 +455,9 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     return pass;
   }
 
+  // When a route explicitly requires auth (requiresAuth: true), skip the
+  // public-path bypass so the user is still authenticated and permissions
+  // are injected into the request context.
   if (!forceRouteAuth && canAccessPublicly(path, method, authConfig)) {
     return pass;
   }

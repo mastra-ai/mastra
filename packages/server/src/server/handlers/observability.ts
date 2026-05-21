@@ -37,6 +37,7 @@ import {
   listBranchesResponseSchema,
   getBranchArgsSchema,
   getBranchResponseSchema,
+  listTracesLightResponseSchema,
 } from './observability-storage-schemas';
 
 export * from './observability-new-endpoints';
@@ -157,11 +158,48 @@ export const LIST_TRACES_ROUTE = createRoute({
         });
       }
 
-      const pagination = pickParams(paginationArgsSchema, transformedParams) as StoragePagination;
+      const pagination = pickParams(paginationArgsSchema, transformedParams);
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing traces');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/light - paginated lightweight trace listing with filtering and sorting. */
+export const LIST_TRACES_LIGHT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/light',
+  responseType: 'json',
+  queryParamSchema: listTracesQueryParamSchema,
+  responseSchema: listTracesLightResponseSchema,
+  summary: 'List lightweight traces',
+  description: 'Returns a paginated list of lightweight traces with optional filtering and sorting',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    try {
+      const transformedParams = transformLegacyParams(params);
+
+      const filters = pickParams(tracesFilterSchema, transformedParams);
+      const pagination = pickParams(paginationArgsSchema, transformedParams);
+      const orderBy = pickParams(tracesOrderBySchema, transformedParams);
+
+      const observabilityStore = await getObservabilityStore(mastra);
+      // `listTracesLight` was added in `@mastra/core` alongside this route.
+      // When this `@mastra/server` is paired with an older `@mastra/core`,
+      // the base `ObservabilityStorage` class doesn't declare
+      // `listTracesLight` at all, so calling it on a store instance throws
+      // `TypeError: ... is not a function`. Detect that case and fall back
+      // to the full `listTraces` call so consumers still get a response.
+      const store = observabilityStore as { listTracesLight?: unknown };
+      if (typeof store.listTracesLight !== 'function') {
+        return await observabilityStore.listTraces({ filters, pagination, orderBy });
+      }
+      return await observabilityStore.listTracesLight({ filters, pagination, orderBy });
+    } catch (error) {
+      return handleError(error, 'Error listing lightweight traces');
     }
   },
 });
@@ -171,22 +209,29 @@ export const LIST_BRANCHES_ROUTE = createRoute({
   method: 'GET',
   path: '/observability/branches',
   responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(
-    branchesFilterSchema.extend(paginationArgsSchema.shape).extend(branchesOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: createObservabilityListQuerySchema(branchesFilterSchema, branchesOrderBySchema),
   responseSchema: listBranchesResponseSchema,
   summary: 'List trace branches',
   description:
-    'Returns a paginated list of branch-anchor spans (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL) across all traces. Unlike listTraces (one row per root-rooted trace), each row here is a single anchor span -- including ones nested under a different root entity.',
+    'Returns a paginated list of branch-anchor spans (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL) across all traces. Unlike listTraces (one row per root-rooted trace), each row here is a single anchor span -- including ones nested under a different root entity. In delta mode, returns only newly listed branch rows matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
+  handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       const filters = pickParams(branchesFilterSchema, params);
-      const pagination = pickParams(paginationArgsSchema, params) as StoragePagination;
-      const orderBy = pickParams(branchesOrderBySchema, params);
-
       const observabilityStore = await getObservabilityStore(mastra);
+      if (mode === 'delta') {
+        assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.branches);
+        return await observabilityStore.listBranches({
+          mode,
+          filters,
+          after: typeof after === 'string' ? after : undefined,
+          limit,
+        });
+      }
+
+      const pagination = pickParams(paginationArgsSchema, params);
+      const orderBy = pickParams(branchesOrderBySchema, params);
       return await observabilityStore.listBranches({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing branches');
@@ -222,7 +267,6 @@ export const GET_BRANCH_ROUTE = createRoute({
     }
   },
 });
-
 /** Route: GET /observability/traces/:traceId - retrieve a single trace with all spans. */
 export const GET_TRACE_ROUTE = createRoute({
   method: 'GET',

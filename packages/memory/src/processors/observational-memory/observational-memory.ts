@@ -138,7 +138,7 @@ export { didProviderChange } from './model-context';
 function parseActivationTTL(
   value: number | string | false | undefined,
   fieldPath: string,
-): ResolvedActivationTTL | undefined {
+): number | 'auto' | undefined {
   if (value === undefined || value === false) {
     return undefined;
   }

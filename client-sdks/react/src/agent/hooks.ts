@@ -9,6 +9,7 @@ import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
@@ -59,6 +60,7 @@ export type GenerateArgs = SharedArgs & {
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
+  clientTools?: ToolsInput;
   signalId?: string;
 };
 
@@ -124,14 +126,56 @@ export const useChat = ({
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
 
-  type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
+  type SignalContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'file'; data: string; mimeType: string; filename?: string }
+    | { type: 'image'; image: string; mimeType?: string };
+  type SerializableCoreUserMessage = {
+    role: 'user';
+    content: string | SignalContentPart[];
+  };
+  type UserMessageSignalContents = string | SerializableCoreUserMessage | SerializableCoreUserMessage[];
+
+  const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
+    if (data instanceof URL) return data.toString();
+    return convertSignalDataToBase64String(data);
+  };
 
   const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
-    if (coreUserMessages.length === 1) {
-      return coreUserMessages[0] as UserMessageSignalContents;
+    if (coreUserMessages.length === 1 && typeof coreUserMessages[0]?.content === 'string') {
+      return coreUserMessages[0].content;
     }
 
-    return coreUserMessages as UserMessageSignalContents;
+    const messages = coreUserMessages.map<SerializableCoreUserMessage>(message => {
+      if (typeof message.content === 'string') {
+        return { role: 'user', content: message.content };
+      }
+
+      const parts = message.content.reduce<SignalContentPart[]>((allParts, part) => {
+        if (part.type === 'text') {
+          allParts.push({ type: 'text', text: part.text });
+        } else if (part.type === 'file') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.data),
+            mimeType: part.mimeType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          });
+        } else if (part.type === 'image') {
+          allParts.push({
+            type: 'image',
+            image: normalizeSignalFileData(part.image),
+            ...(part.mimeType ? { mimeType: part.mimeType } : {}),
+          });
+        }
+
+        return allParts;
+      }, []);
+
+      return { role: 'user', content: parts };
+    });
+
+    return messages.length === 1 ? messages[0]! : messages;
   };
 
   const markThreadSignalsUnsupported = useCallback(() => {
@@ -383,6 +427,7 @@ export const useChat = ({
     modelSettings,
     signal,
     tracingOptions,
+    clientTools,
     signalId,
   }: StreamArgs) => {
     const {
@@ -439,6 +484,7 @@ export const useChat = ({
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
+        clientTools,
       });
 
       _onChunk.current = onChunk;

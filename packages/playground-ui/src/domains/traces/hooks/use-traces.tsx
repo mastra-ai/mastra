@@ -1,7 +1,8 @@
 import type { ListBranchesArgs, ListBranchesResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import type { InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
@@ -86,18 +87,11 @@ const fetchTracesFn = async ({
   limit,
   filters,
   listMode = 'traces',
-}: TracesFilters & {
-  client: ReturnType<typeof useMastraClient>;
-  page: number;
-  perPage: number;
-}) => {
-  const params = {
-    pagination: {
-      page,
-      perPage,
-    },
-    filters,
-  };
+}: FetchTracesFnArgs) => {
+  const params =
+    mode === 'delta'
+      ? { mode: 'delta' as const, after, limit, filters }
+      : { pagination: { page: page!, perPage: perPage! }, filters };
 
   if (listMode === 'branches') {
     return client.listBranches(params as ListBranchesArgs);
@@ -125,7 +119,7 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-type TracesPageResponse = (ListTracesResponse | ListBranchesResponse) & { threadTitles?: Record<string, string> };
+type TracesPageResponse = ListTracesResponse | ListBranchesResponse;
 
 function getPageSpans(page: TracesPageResponse) {
   if ('branches' in page) return page.branches ?? [];
@@ -133,7 +127,7 @@ function getPageSpans(page: TracesPageResponse) {
 }
 
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
- *  Also merges threadTitles from all pages for thread grouping display. */
+ *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   const seen = new Set<string>();
   const spans = data.pages
@@ -148,7 +142,118 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   return { spans, deltaCursor: data.pages[0]?.deltaCursor };
 }
 
-export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
+/** Replaces existing page-0 rows in place (keyed by traceId:spanId) with
+ *  refreshed copies from the server. Rows the server doesn't return are kept
+ *  as-is so delta-accumulated rows that have aged off the server's page 0
+ *  aren't dropped from the UI. New rows aren't added here — delta polling
+ *  delivers those. */
+export function refreshPage0Rows(
+  old: InfiniteData<TracesPageResponse> | undefined,
+  refreshed: ListTracesResponse | ListBranchesResponse,
+  listMode: TraceListMode,
+): InfiniteData<TracesPageResponse> | undefined {
+  if (!old || old.pages.length === 0) return old;
+  const [firstPage, ...rest] = old.pages;
+
+  const refreshedRows =
+    listMode === 'branches' && 'branches' in refreshed
+      ? (refreshed.branches ?? [])
+      : 'spans' in refreshed
+        ? (refreshed.spans ?? [])
+        : [];
+
+  if (refreshedRows.length === 0) return old;
+
+  const refreshedByKey = new Map<string, (typeof refreshedRows)[number]>();
+  for (const row of refreshedRows) {
+    refreshedByKey.set(`${row.traceId}:${row.spanId}`, row);
+  }
+
+  let updatedFirst: TracesPageResponse;
+  if (listMode === 'branches' && 'branches' in firstPage) {
+    const updated = (firstPage.branches ?? []).map(existing => {
+      const fresh = refreshedByKey.get(`${existing.traceId}:${existing.spanId}`);
+      return fresh ?? existing;
+    });
+    updatedFirst = { ...firstPage, branches: updated };
+  } else if ('spans' in firstPage) {
+    const updated = (firstPage.spans ?? []).map(existing => {
+      const fresh = refreshedByKey.get(`${existing.traceId}:${existing.spanId}`);
+      return fresh ?? existing;
+    });
+    updatedFirst = { ...firstPage, spans: updated };
+  } else {
+    return old;
+  }
+
+  return { ...old, pages: [updatedFirst, ...rest] };
+}
+
+/** Stable `startedAt DESC` sort matching the server's default page-mode
+ *  ordering for both list endpoints. Rows missing `startedAt` sink to the
+ *  bottom (compared as time 0). */
+function sortRowsByStartedAtDesc<T extends { startedAt?: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const aTime = a.startedAt ? new Date(a.startedAt as string | number | Date).getTime() : 0;
+    const bTime = b.startedAt ? new Date(b.startedAt as string | number | Date).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+/** Prepends delta-mode rows into page 0 and advances its deltaCursor.
+ *  Delta responses come back in server cursor order (insertion order into
+ *  the per-store delta index), not the `startedAt DESC` order page-mode
+ *  uses — so we re-sort the merged page 0 to match what the user sees on
+ *  a fresh page-mode load. Cross-page duplication is handled later by
+ *  selectUniqueTraces. */
+export function mergeDeltaIntoPage0(
+  old: InfiniteData<TracesPageResponse> | undefined,
+  delta: ListTracesResponse | ListBranchesResponse,
+  listMode: TraceListMode,
+): InfiniteData<TracesPageResponse> | undefined {
+  if (!old || old.pages.length === 0) return old;
+  const [firstPage, ...rest] = old.pages;
+  const nextCursor = delta.deltaCursor ?? firstPage.deltaCursor;
+
+  let updatedFirst: TracesPageResponse;
+  if (listMode === 'branches' && 'branches' in firstPage) {
+    const newRows = (delta as ListBranchesResponse).branches ?? [];
+    updatedFirst = {
+      ...firstPage,
+      branches: sortRowsByStartedAtDesc([...newRows, ...(firstPage.branches ?? [])]),
+      deltaCursor: nextCursor,
+    };
+  } else if ('spans' in firstPage) {
+    const newRows = (delta as ListTracesResponse).spans ?? [];
+    updatedFirst = {
+      ...firstPage,
+      spans: sortRowsByStartedAtDesc([...newRows, ...(firstPage.spans ?? [])]),
+      deltaCursor: nextCursor,
+    };
+  } else {
+    return old;
+  }
+
+  return { ...old, pages: [updatedFirst, ...rest] };
+}
+
+export interface UseTracesArgs extends TracesFilters {
+  /** Optional overrides for the live-tail polling tunables. Any omitted fields fall back to the
+   *  built-in defaults; pass only what you want to change. */
+  polling?: TracesPollingConfig;
+}
+
+export const useTraces = ({ filters, listMode = 'traces', polling = {} }: UseTracesArgs) => {
+  const {
+    deltaPollIntervalMs = DEFAULT_POLLING_CONFIG.deltaPollIntervalMs,
+    deltaChaseIntervalMs = DEFAULT_POLLING_CONFIG.deltaChaseIntervalMs,
+    deltaLimit = DEFAULT_POLLING_CONFIG.deltaLimit,
+    pageModeRefetchIntervalMs = DEFAULT_POLLING_CONFIG.pageModeRefetchIntervalMs,
+    page0StatusRefreshIntervalMs = DEFAULT_POLLING_CONFIG.page0StatusRefreshIntervalMs,
+    idleGuardThresholdMs = DEFAULT_POLLING_CONFIG.idleGuardThresholdMs,
+    minRefetchSpinMs = DEFAULT_POLLING_CONFIG.minRefetchSpinMs,
+    deltaHighlightMs = DEFAULT_POLLING_CONFIG.deltaHighlightMs,
+  } = polling;
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
@@ -173,7 +278,7 @@ export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
   const tracesQueryKey = ['traces', listMode, filters] as const;
 
   const query = useInfiniteQuery({
-    queryKey: ['traces', listMode, filters],
+    queryKey: tracesQueryKey,
     queryFn: ({ pageParam }) =>
       fetchTracesFn({
         client,
@@ -186,8 +291,13 @@ export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
     getNextPageParam: getTracesNextPageParam,
     select: selectUniqueTraces,
     retry: false,
-    // Disable polling on 403 to prevent flickering
-    refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 10000),
+    // Disable polling on 403 to prevent flickering.
+    // Fall back to page-mode polling only when delta isn't running.
+    refetchInterval: q => {
+      if (is403ForbiddenError(q.state.error)) return false;
+      if (!autoRefetch) return false;
+      return deltaUnsupported ? pageModeRefetchIntervalMs : false;
+    },
   });
 
   const cursor = query.data?.deltaCursor;

@@ -7,6 +7,12 @@ packages:
 
 # Response Caching
 
+:::experimental
+
+This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Response caching skips the LLM call and replays a previously cached response when an agent receives an identical request. Use it to reduce latency and avoid paying for repeated calls.
 
 Caching is implemented as the [`ResponseCache`](/reference/processors/response-cache) input processor. Mastra doesn't provide an agent-level option. To enable caching, register the processor explicitly. This keeps the API surface small while Mastra collects feedback; per-call overrides flow through `RequestContext`.

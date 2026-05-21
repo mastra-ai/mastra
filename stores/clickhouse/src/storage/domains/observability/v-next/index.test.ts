@@ -11,13 +11,91 @@
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
  */
 import { createClient } from '@clickhouse/client';
+import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_MIGRATIONS, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
+import {
+  ALL_MIGRATIONS,
+  buildAllMvDDL,
+  buildAllTableDDL,
+  buildRetentionDDL,
+  buildRetentionEntries,
+  MV_DISCOVERY_PAIRS,
+  MV_DISCOVERY_VALUES,
+  parseTtlExpression,
+  TABLE_DISCOVERY_PAIRS,
+  TABLE_DISCOVERY_VALUES,
+} from './ddl';
+import { isReplacingMergeTreeEngine } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+// Reuse a single ClickHouse storage instance across the shared suite. init()
+// is expensive (DDL + MVs + migrations) and running it per-test triggers
+// container crashes under ARM emulation. dangerouslyClearAll() truncates the
+// signal tables between tests, giving the same isolation as a fresh instance.
+let sharedSuiteStorage: ObservabilityStorageClickhouseVNext | undefined;
+
+createObservabilityVNextTests({
+  capabilities: {
+    label: 'ClickHouse vNext',
+    preferredStrategy: 'insert-only',
+  },
+  getStorage: async () => {
+    if (!sharedSuiteStorage) {
+      sharedSuiteStorage = new ObservabilityStorageClickhouseVNext({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      await sharedSuiteStorage.init();
+    }
+    return sharedSuiteStorage as unknown as ObservabilityStorage;
+  },
+  cleanup: async storage => {
+    await storage.dangerouslyClearAll();
+  },
+  // ClickHouse vNext serves discovery from refreshable materialized views.
+  // In production they refresh on a schedule; in tests we need to trigger the
+  // refresh by hand so discovery reads see writes from the same test.
+  refreshDiscovery: async () => {
+    const { MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS } = await import('./ddl');
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}` });
+      await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
+      await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
+      await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+    } finally {
+      await client.close();
+    }
+  },
+  // ClickHouse vNext dedups signal-table inserts via ReplacingMergeTree
+  // background merges. In retry-idempotency tests we force the merge with
+  // OPTIMIZE ... FINAL so the read assertion sees the collapsed row.
+  flushPendingMerges: async () => {
+    const { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } = await import('./ddl');
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      for (const table of [TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+        await client.command({ query: `OPTIMIZE TABLE ${table} FINAL` });
+      }
+    } finally {
+      await client.close();
+    }
+  },
+});
 
 describe('ObservabilityStorageClickhouseVNext', () => {
   let storage: ObservabilityStorageClickhouseVNext;
@@ -1799,22 +1877,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
     });
 
-    it('getMetricAggregate returns avg', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(266.67, 0);
-    });
-
-    it('getMetricAggregate returns count', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
     it('getMetricBreakdown groups by entityName', async () => {
       const result = await storage.getMetricBreakdown({
         name: ['mastra_agent_duration_ms'],
@@ -2039,335 +2101,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.series).toHaveLength(2);
       const p50 = result.series.find(s => s.percentile === 0.5);
       expect(p50).toBeDefined();
-    });
-  });
-
-  // ==========================================================================
-  // Default ORDER BY
-  // ==========================================================================
-
-  describe('default ORDER BY', () => {
-    it('listLogs defaults to timestamp DESC', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            logId: 'log-test-1',
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            level: 'info',
-            message: 'first',
-            data: null,
-            metadata: null,
-          },
-          {
-            logId: 'log-test-2',
-            timestamp: new Date('2026-01-01T00:00:03Z'),
-            level: 'info',
-            message: 'third',
-            data: null,
-            metadata: null,
-          },
-          {
-            logId: 'log-test-3',
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            level: 'info',
-            message: 'second',
-            data: null,
-            metadata: null,
-          },
-        ],
-      });
-
-      const result = await storage.listLogs({});
-      expect(result.logs).toHaveLength(3);
-      // Default: timestamp DESC → third, second, first
-      expect(result.logs[0]!.message).toBe('third');
-      expect(result.logs[1]!.message).toBe('second');
-      expect(result.logs[2]!.message).toBe('first');
-    });
-
-    it('listMetrics defaults to timestamp DESC', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            metricId: 'metric-test-1',
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            name: 'order_test',
-            value: 1,
-            labels: {},
-          },
-          {
-            metricId: 'metric-test-2',
-            timestamp: new Date('2026-01-01T00:00:03Z'),
-            name: 'order_test',
-            value: 3,
-            labels: {},
-          },
-          {
-            metricId: 'metric-test-3',
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            name: 'order_test',
-            value: 2,
-            labels: {},
-          },
-        ],
-      });
-
-      const result = await storage.listMetrics({ filters: { name: ['order_test'] } });
-      expect(result.metrics).toHaveLength(3);
-      expect(result.metrics[0]!.value).toBe(3);
-      expect(result.metrics[1]!.value).toBe(2);
-      expect(result.metrics[2]!.value).toBe(1);
-    });
-
-    it('listScores defaults to timestamp DESC', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'ord-1',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.1,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-2',
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'ord-3',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.3,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-3',
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'ord-2',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.2,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(3);
-      expect(result.scores[0]!.traceId).toBe('ord-3');
-      expect(result.scores[1]!.traceId).toBe('ord-2');
-      expect(result.scores[2]!.traceId).toBe('ord-1');
-    });
-
-    it('gets a score by id', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-lookup-1',
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'lookup-trace-1',
-          spanId: null,
-          scorerId: 'quality',
-          score: 0.8,
-          reason: 'Good answer',
-          experimentId: null,
-          metadata: { entityType: 'agent' },
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-lookup-2',
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'lookup-trace-2',
-          spanId: 'lookup-span-2',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const score = await storage.getScoreById('score-lookup-1');
-      expect(score).toEqual(
-        expect.objectContaining({
-          scoreId: 'score-lookup-1',
-          traceId: 'lookup-trace-1',
-          scorerId: 'quality',
-          score: 0.8,
-        }),
-      );
-      expect(await storage.getScoreById('missing-score')).toBeNull();
-    });
-
-    it('listFeedback defaults to timestamp DESC', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'fb-ord-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-2',
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'fb-ord-3',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 3,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-3',
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'fb-ord-2',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 2,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(3);
-      expect(result.feedback[0]!.traceId).toBe('fb-ord-3');
-      expect(result.feedback[1]!.traceId).toBe('fb-ord-2');
-      expect(result.feedback[2]!.traceId).toBe('fb-ord-1');
-    });
-
-    it('listTraces defaults to startedAt DESC', async () => {
-      await storage.batchCreateSpans({
-        records: [
-          {
-            traceId: 'tr-ord-1',
-            spanId: 'root-1',
-            parentSpanId: null,
-            name: 'first',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: null,
-            entityId: null,
-            entityName: null,
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:01Z'),
-            endedAt: new Date('2026-01-01T00:00:02Z'),
-          },
-          {
-            traceId: 'tr-ord-3',
-            spanId: 'root-3',
-            parentSpanId: null,
-            name: 'third',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: null,
-            entityId: null,
-            entityName: null,
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:03Z'),
-            endedAt: new Date('2026-01-01T00:00:04Z'),
-          },
-          {
-            traceId: 'tr-ord-2',
-            spanId: 'root-2',
-            parentSpanId: null,
-            name: 'second',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: null,
-            entityId: null,
-            entityName: null,
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:02Z'),
-            endedAt: new Date('2026-01-01T00:00:03Z'),
-          },
-        ],
-      });
-
-      const result = await storage.listTraces({});
-      expect(result.spans).toHaveLength(3);
-      expect(result.spans[0]!.traceId).toBe('tr-ord-3');
-      expect(result.spans[1]!.traceId).toBe('tr-ord-2');
-      expect(result.spans[2]!.traceId).toBe('tr-ord-1');
     });
   });
 
@@ -2917,24 +2650,34 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       // In production, discovery MVs refresh automatically on a schedule.
       // In tests, we trigger an immediate refresh after inserting data.
       await triggerDiscoveryRefresh();
+
+      // Inject duplicate rows directly into the helper tables to model the
+      // intermediate state between an MV refresh and a `ReplacingMergeTree`
+      // background merge. The discovery read paths must dedupe these rows
+      // before returning them to callers — that's what the assertions below
+      // verify.
+      await injectDuplicateDiscoveryRows();
     });
 
     it('getMetricNames returns distinct names', async () => {
       const result = await storage.getMetricNames({});
       expect(result.names).toContain('mastra_agent_duration_ms');
       expect(result.names).toContain('mastra_tool_calls_started');
+      expect(result.names).toEqual([...new Set(result.names)]);
     });
 
     it('getMetricNames filters by prefix', async () => {
       const result = await storage.getMetricNames({ prefix: 'mastra_agent' });
       expect(result.names).toContain('mastra_agent_duration_ms');
       expect(result.names).not.toContain('mastra_tool_calls_started');
+      expect(result.names).toEqual([...new Set(result.names)]);
     });
 
     it('getMetricLabelKeys returns label keys', async () => {
       const result = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
       expect(result.keys).toContain('agent');
       expect(result.keys).toContain('status');
+      expect(result.keys).toEqual([...new Set(result.keys)]);
     });
 
     it('getMetricLabelValues returns values for a label key', async () => {
@@ -2943,6 +2686,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         labelKey: 'status',
       });
       expect(result.values).toContain('ok');
+      expect(result.values).toEqual([...new Set(result.values)]);
     });
 
     it('getEntityTypes returns distinct entity types', async () => {
@@ -2950,17 +2694,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.entityTypes).toContain('agent');
       expect(result.entityTypes).toContain('tool');
       expect(result.entityTypes).toContain('input_processor');
+      expect(result.entityTypes).toEqual([...new Set(result.entityTypes)]);
     });
 
     it('getEntityNames returns entity names', async () => {
       const result = await storage.getEntityNames({ entityType: EntityType.AGENT });
       expect(result.names).toContain('weatherAgent');
+      expect(result.names).toEqual([...new Set(result.names)]);
 
       const toolNames = await storage.getEntityNames({ entityType: EntityType.TOOL });
       expect(toolNames.names).toContain('metricTool');
+      expect(toolNames.names).toEqual([...new Set(toolNames.names)]);
 
       const processorNames = await storage.getEntityNames({ entityType: EntityType.INPUT_PROCESSOR });
       expect(processorNames.names).toContain('logProcessor');
+      expect(processorNames.names).toEqual([...new Set(processorNames.names)]);
     });
 
     it('getServiceNames returns service names', async () => {
@@ -2968,6 +2716,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.serviceNames).toContain('my-service');
       expect(result.serviceNames).toContain('metric-service');
       expect(result.serviceNames).toContain('log-service');
+      expect(result.serviceNames).toEqual([...new Set(result.serviceNames)]);
     });
 
     it('getEnvironments returns environments', async () => {
@@ -2975,6 +2724,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.environments).toContain('production');
       expect(result.environments).toContain('metric-env');
       expect(result.environments).toContain('log-env');
+      expect(result.environments).toEqual([...new Set(result.environments)]);
     });
 
     it('getTags returns distinct tags', async () => {
@@ -2983,6 +2733,107 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.tags).toContain('experiment');
       expect(result.tags).toContain('metric-tag');
       expect(result.tags).toContain('log-tag');
+      expect(result.tags).toEqual([...new Set(result.tags)]);
+    });
+
+    it('init() reconciles pre-existing MergeTree discovery tables to ReplacingMergeTree', async () => {
+      // Simulates an upgrade from an older deployment that created the
+      // discovery helper tables as MergeTree. init() should drop the MV
+      // and table, then recreate both with the current ReplacingMergeTree
+      // engine — preserving the discovery refresh behavior end-to-end.
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `mig_discovery_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_VALUES} (kind LowCardinality(String), key1 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, value)`,
+        });
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, key2, value)`,
+        });
+
+        // Seed refreshable MVs pointing at the legacy helper tables. This
+        // mirrors a real upgrade and proves the reconcile path drops the
+        // pre-existing MVs before recreating the tables — otherwise
+        // ClickHouse would refuse to drop a table that an MV still depends
+        // on, and the recreate would also fail with "view already exists".
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+        });
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+        });
+
+        const before = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+            query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(before.map(r => r.engine)).toEqual(['MergeTree', 'MergeTree']);
+
+        const beforeMvs = (await (
+          await scopedClient.query({
+            query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+            query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string }>;
+        expect(beforeMvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+
+        const migratedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        try {
+          await migratedStorage.init();
+
+          const after = (await (
+            await scopedClient.query({
+              query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+              query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string; engine: string }>;
+          // Use the same predicate that reconcileDiscoveryTables() uses to
+          // decide whether a table is already migrated, so this assertion
+          // passes on ClickHouse Cloud / replicated clusters where the
+          // engine is transparently rewritten to SharedReplacingMergeTree
+          // or ReplicatedReplacingMergeTree.
+          expect(after.map(r => r.name)).toEqual([TABLE_DISCOVERY_PAIRS, TABLE_DISCOVERY_VALUES]);
+          for (const row of after) {
+            expect(
+              isReplacingMergeTreeEngine(row.engine),
+              `expected ${row.name} engine to satisfy isReplacingMergeTreeEngine but got '${row.engine}'`,
+            ).toBe(true);
+          }
+
+          const mvs = (await (
+            await scopedClient.query({
+              query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+              query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string }>;
+          expect(mvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+        } finally {
+          await migratedStorage.dangerouslyClearAll();
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
     });
   });
 
@@ -5307,6 +5158,87 @@ async function triggerDiscoveryRefresh(): Promise<void> {
     await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
     await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
     await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+  } finally {
+    await client.close();
+  }
+}
+
+async function waitForValue<T>(
+  fn: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<T> {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const intervalMs = opts.intervalMs ?? 100;
+  const deadline = Date.now() + timeoutMs;
+
+  let lastValue: T | undefined;
+  while (Date.now() < deadline) {
+    lastValue = await fn();
+    if (predicate(lastValue)) {
+      return lastValue;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`Timed out waiting for expected value. Last value: ${JSON.stringify(lastValue)}`);
+}
+
+/**
+ * Inserts a second copy of every row already in the discovery helper tables.
+ * This models the window between a refreshable MV firing and
+ * `ReplacingMergeTree` collapsing the duplicate parts: identical rows live
+ * in separate parts and a plain `SELECT` returns them all. The discovery
+ * read paths must compensate with their own `SELECT DISTINCT`.
+ *
+ * Also asserts the duplicates are present so a regression in the seeding
+ * step shows up here instead of as a confusing "tests passed for the
+ * wrong reason" later on.
+ */
+async function injectDuplicateDiscoveryRows(): Promise<void> {
+  const { createClient } = await import('@clickhouse/client');
+  const { TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } = await import('./ddl');
+
+  const client = createClient({
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  });
+
+  try {
+    const tables: Array<{ table: string; keys: string }> = [
+      { table: TABLE_DISCOVERY_VALUES, keys: 'kind, key1, value' },
+      { table: TABLE_DISCOVERY_PAIRS, keys: 'kind, key1, key2, value' },
+    ];
+    for (const { table, keys } of tables) {
+      // Pause background merges around the duplicate-seed + check so a fast
+      // server can't collapse the inserted parts before the assertion runs.
+      // Without this, the test would intermittently observe rowsInParts ==
+      // distinctRows on hot servers and fail for reasons unrelated to the
+      // read-side DISTINCT behavior we're trying to exercise.
+      await client.command({ query: `SYSTEM STOP MERGES ${table}` });
+      try {
+        await client.command({ query: `INSERT INTO ${table} SELECT * FROM ${table}` });
+        const partsResult = await client.query({
+          query: `SELECT sum(rows) AS rowsInParts FROM system.parts WHERE database = currentDatabase() AND table = '${table}' AND active`,
+          format: 'JSONEachRow',
+        });
+        const rowsInParts = Number(((await partsResult.json()) as Array<{ rowsInParts: string }>)[0]?.rowsInParts ?? 0);
+        const distinctResult = await client.query({
+          query: `SELECT countDistinct(${keys}) AS distinctRows FROM ${table}`,
+          format: 'JSONEachRow',
+        });
+        const distinctRows = Number(
+          ((await distinctResult.json()) as Array<{ distinctRows: string }>)[0]?.distinctRows ?? 0,
+        );
+        expect(
+          rowsInParts,
+          `expected duplicates in ${table} but got rowsInParts=${rowsInParts}, distinctRows=${distinctRows}`,
+        ).toBeGreaterThan(distinctRows);
+      } finally {
+        await client.command({ query: `SYSTEM START MERGES ${table}` });
+      }
+    }
   } finally {
     await client.close();
   }

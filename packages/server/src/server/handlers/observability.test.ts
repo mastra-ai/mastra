@@ -13,6 +13,7 @@ import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import {
   LIST_TRACES_ROUTE,
+  LIST_TRACES_LIGHT_ROUTE,
   LIST_BRANCHES_ROUTE,
   GET_BRANCH_ROUTE,
   GET_TRACE_ROUTE,
@@ -44,7 +45,9 @@ const createMockObservabilityStore = () => ({
   getSpan: vi.fn(),
   getBranch: vi.fn(),
   listTraces: vi.fn(),
+  listTracesLight: vi.fn(),
   listBranches: vi.fn(),
+  listMetrics: vi.fn(),
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
@@ -875,164 +878,6 @@ describe('Observability Handlers', () => {
         after: 'cursor-1',
         limit: 5,
       });
-    });
-  });
-
-  describe('GET_BRANCH_ROUTE', () => {
-    it('should return branch when found', async () => {
-      const mockBranch = {
-        traceId: 'trace-123',
-        spans: [createSampleSpan({ traceId: 'trace-123', spanId: 'span-anchor' })],
-      };
-
-      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockResolvedValue(mockBranch);
-
-      const result = await GET_BRANCH_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        traceId: 'trace-123',
-        spanId: 'span-anchor',
-      });
-
-      expect(result).toEqual(mockBranch);
-      expect(mockObservabilityStore.getBranch).toHaveBeenCalledWith({
-        traceId: 'trace-123',
-        spanId: 'span-anchor',
-        depth: undefined,
-      });
-      expect(handleErrorSpy).not.toHaveBeenCalled();
-    });
-
-    it('should pass depth through to storage when provided', async () => {
-      const mockBranch = {
-        traceId: 'trace-123',
-        spans: [createSampleSpan({ traceId: 'trace-123', spanId: 'span-anchor' })],
-      };
-
-      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockResolvedValue(mockBranch);
-
-      await GET_BRANCH_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        traceId: 'trace-123',
-        spanId: 'span-anchor',
-        depth: 1,
-      });
-
-      expect(mockObservabilityStore.getBranch).toHaveBeenCalledWith({
-        traceId: 'trace-123',
-        spanId: 'span-anchor',
-        depth: 1,
-      });
-    });
-
-    it('should throw 404 when branch is not found', async () => {
-      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-
-      await expect(
-        GET_BRANCH_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          traceId: 'trace-123',
-          spanId: 'missing-span',
-        }),
-      ).rejects.toThrow(HTTPException);
-
-      try {
-        await GET_BRANCH_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          traceId: 'trace-123',
-          spanId: 'missing-span',
-        });
-      } catch (error) {
-        expect(error).toBeInstanceOf(HTTPException);
-        expect((error as HTTPException).status).toBe(404);
-        expect((error as HTTPException).message).toBe("Branch not found for span 'missing-span' in trace 'trace-123'");
-      }
-    });
-
-    it('should call handleError when storage throws', async () => {
-      const storageError = new Error('Database query failed');
-      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
-
-      await expect(
-        GET_BRANCH_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          traceId: 'trace-123',
-          spanId: 'span-anchor',
-        }),
-      ).rejects.toThrow();
-
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting branch');
-    });
-  });
-
-  describe('LIST_BRANCHES_ROUTE', () => {
-    it('should return paginated results with default parameters', async () => {
-      const mockResult = {
-        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
-        branches: [],
-      };
-
-      (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
-
-      const result = await LIST_BRANCHES_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-      });
-
-      expect(result).toEqual(mockResult);
-      expect(mockObservabilityStore.listBranches).toHaveBeenCalledWith({
-        filters: {},
-        pagination: {},
-        orderBy: {},
-      });
-      expect(handleErrorSpy).not.toHaveBeenCalled();
-    });
-
-    it('should pass filters, pagination, and orderBy to storage', async () => {
-      const mockResult = {
-        pagination: { total: 2, page: 0, perPage: 10, hasMore: false },
-        branches: [],
-      };
-
-      (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
-
-      const result = await LIST_BRANCHES_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        spanType: SpanType.AGENT_RUN,
-        entityName: 'Observer',
-        page: 1,
-        perPage: 5,
-        field: 'startedAt',
-        direction: 'DESC',
-      });
-
-      expect(result).toEqual(mockResult);
-      expect(mockObservabilityStore.listBranches).toHaveBeenCalledWith({
-        filters: { spanType: SpanType.AGENT_RUN, entityName: 'Observer' },
-        pagination: { page: 1, perPage: 5 },
-        orderBy: { field: 'startedAt', direction: 'DESC' },
-      });
-    });
-
-    it('should throw 500 when storage is not available', async () => {
-      const mastraWithoutStorage = createMockMastra(undefined);
-
-      await expect(
-        LIST_BRANCHES_ROUTE.handler({
-          ...createTestServerContext({ mastra: mastraWithoutStorage }),
-        }),
-      ).rejects.toThrow(HTTPException);
-    });
-
-    it('should call handleError when storage throws', async () => {
-      const storageError = new Error('Database query failed');
-      (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
-
-      await expect(
-        LIST_BRANCHES_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-        }),
-      ).rejects.toThrow();
-
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing branches');
     });
   });
 

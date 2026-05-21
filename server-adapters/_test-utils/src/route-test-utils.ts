@@ -434,6 +434,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';
 
+  // Builder registry route params
+  if (route.path.includes(':registryId')) params.registryId = 'skills-sh';
+
   return params;
 }
 

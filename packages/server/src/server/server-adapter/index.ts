@@ -44,20 +44,6 @@ export {
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
-function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
-  return route.requiresAuth !== false;
-}
-
-function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
-  const permission = getEffectivePermission(route);
-  if (!permission) return [];
-  return (Array.isArray(permission) ? permission : [permission]) as MastraFGAPermissionInput[];
-}
-
-function formatRoute(route: ServerRoute): string {
-  return `${route.method} ${route.path}`;
-}
-
 export interface OpenAPIConfig {
   title?: string;
   version?: string;
@@ -174,6 +160,56 @@ function isExpectedResponseCloseError(error: unknown): boolean {
 
 function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
   return Boolean(response.writableEnded || response.destroyed);
+}
+
+function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
+  return route.requiresAuth !== false;
+}
+
+function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
+  return `${route.method} ${route.path}`;
+}
+
+function getFGAProvider(mastra: any): IFGAProvider | undefined {
+  return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
+}
+
+function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
+  return {
+    path: route.path,
+    method: route.method,
+    requiresAuth: route.requiresAuth,
+    requiresPermission: route.requiresPermission,
+    fga: route.fga,
+  };
+}
+
+function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
+  return [getEffectivePermission(route), route.fga?.permission]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
+}
+
+async function resolveRouteFGAConfig(
+  fgaProvider: IFGAProvider,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<FGARouteConfig | null | undefined> {
+  if (route.fga) {
+    return route.fga;
+  }
+
+  const resolvedConfig = await fgaProvider.resolveRouteFGA?.({
+    route: getFGARouteInfo(route),
+    params,
+    requestContext,
+  });
+  if (resolvedConfig) {
+    return resolvedConfig;
+  }
+
+  return getBuiltInRouteFGAConfig(route);
 }
 
 function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
@@ -853,7 +889,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     const init: RequestInit = { method, headers: fetchHeaders, signal };
-    if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
         if (body instanceof ReadableStream) {
@@ -1079,11 +1115,20 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
-  const fgaConfig = route.fga;
-  if (!fgaConfig) return null;
-
-  const fgaProvider = mastra?.getServer?.()?.fga;
+  const fgaProvider = getFGAProvider(mastra);
   if (!fgaProvider) return null;
+
+  const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);
+  if (!fgaConfig) {
+    if (fgaProvider.requireForProtectedRoutes && isProtectedFGARoute(route)) {
+      return {
+        status: 403,
+        error: 'Forbidden',
+        message: 'FGA authorization denied: route FGA metadata is required',
+      };
+    }
+    return null;
+  }
 
   const user = requestContext?.get('user');
   if (!user) {
@@ -1105,9 +1150,10 @@ export async function checkRouteFGA(
       message: 'FGA authorization denied: route FGA metadata is incomplete',
     };
   }
+  const effectivePermission = route.path ? getEffectivePermission(route) : null;
   const permission =
     fgaConfig.permission ||
-    (route.path ? getEffectivePermission(route) : null) ||
+    effectivePermission ||
     `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
 
   const authorized = await fgaProvider.check(user, {

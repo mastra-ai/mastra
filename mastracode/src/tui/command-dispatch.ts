@@ -107,13 +107,25 @@ export async function dispatchSlashCommand(
   const args =
     command === 'goal' && rawArgsText && !goalSubcommands.has(firstGoalArg ?? '') ? [rawArgsText] : parsedArgs;
 
+  if (!command) {
+    return true;
+  }
+
   if (isGoalJudgeInputLocked(state) && !canRunSlashCommandDuringGoalJudge(command, args)) {
     showGoalJudgeInputLockInfo(state);
     return true;
   }
 
+  const ctx = buildCtx();
+  trackCommand(ctx, command);
+
   if (command.startsWith('goal/')) {
-    await handleGoalSourceCommand(state, command.slice('goal/'.length), args, buildCtx());
+    await handleGoalSourceCommand(state, command.slice('goal/'.length), args, ctx);
+    return true;
+  }
+
+  if (command.startsWith('skill/')) {
+    await handleSkillCommand(buildCtx(), command.slice('skill/'.length), args);
     return true;
   }
 

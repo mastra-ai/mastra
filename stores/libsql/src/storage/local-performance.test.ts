@@ -21,10 +21,6 @@ function createMockClient() {
       if (/PRAGMA\s+table_info/i.test(sql)) {
         return { rows: [], rowsAffected: 0 };
       }
-      // Harness duplicate-active-session detection returns no grouped rows when there are no duplicate sessions.
-      if (/FROM\s+mastra_harness_sessions/i.test(sql) && /HAVING\s+COUNT\(\*\)\s*>\s*1/i.test(sql)) {
-        return { rows: [], rowsAffected: 0 };
-      }
       if (/duplicate_count/i.test(sql)) {
         return { rows: [{ duplicate_count: 0 }], rowsAffected: 0 };
       }

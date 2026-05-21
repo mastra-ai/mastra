@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
@@ -16,6 +16,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { HARNESS_ROUTES } from './harness';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -150,7 +151,7 @@ export type ServerRoute<
    * requiresPermission: MastraFGAPermissions.AGENTS_READ
    * requiresPermission: MastraFGAPermissions.WORKFLOWS_EXECUTE
    */
-  requiresPermission?: MastraFGAPermissionInput;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /**
    * FGA authorization config for this route (EE feature).
    * If set, the user must have the specified permission on the resource.
@@ -158,19 +159,7 @@ export type ServerRoute<
    * @example
    * fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_EXECUTE }
    */
-  fga?: {
-    resourceType: string;
-    resourceIdParam?: string;
-    resourceId?:
-      | string
-      | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-    permission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
-  };
-  /**
-   * Harness-specific route auth metadata. The server auth boundary uses this
-   * to reject bearer-equivalent query credentials and to keep the optional SSE
-   * subscription-token fallback route-scoped.
-   */
+  fga?: FGARouteConfig;
   harnessAuth?: HarnessRouteAuthConfig;
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
@@ -194,6 +183,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
+  ...HARNESS_ROUTES,
   ...STORED_AGENTS_ROUTES,
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_PROMPT_BLOCKS_ROUTES,
@@ -205,8 +195,8 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
+  ...EDITOR_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
-  ...HARNESS_ROUTES,
   ...CHANNELS_ROUTES,
 ];
 
@@ -243,6 +233,7 @@ export type ServerRoutes = readonly [
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
+  ...typeof EDITOR_BUILDER_ROUTES,
   ...typeof CHANNELS_ROUTES,
 ];
 

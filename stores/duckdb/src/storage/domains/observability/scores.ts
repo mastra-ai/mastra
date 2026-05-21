@@ -241,7 +241,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
     `INSERT INTO score_events (
-      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
@@ -249,6 +249,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
      VALUES (${[
        v(s.scoreId),
        v(s.timestamp),
+       "nextval('score_events_cursor_id_seq')",
        v(s.traceId),
        v(s.spanId ?? null),
        v(s.experimentId ?? null),
@@ -298,6 +299,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     return `(${[
       v(legacyScore.scoreId),
       v(legacyScore.timestamp),
+      "nextval('score_events_cursor_id_seq')",
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
       v(legacyScore.experimentId ?? null),
@@ -337,7 +339,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
@@ -411,6 +413,26 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
     ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+async function getDeltaCursor(db: DuckDBConnection, filterClause: string, filterParams: unknown[]): Promise<string> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM score_events ${filterClause}`,
+    filterParams,
+  );
+
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM score_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
+}
+
+async function getStreamHeadCursor(db: DuckDBConnection): Promise<string> {
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM score_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }
 
 export async function getScoreById(db: DuckDBConnection, scoreId: string): Promise<ScoreRecord | null> {

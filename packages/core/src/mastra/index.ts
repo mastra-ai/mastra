@@ -4607,6 +4607,7 @@ export class Mastra<
       }
       this.#logger?.error(message, error);
     };
+    const stopAttemptedWorkers = new WeakSet<MastraWorker>();
     const pendingWorkerStartsAtShutdown = [...this.#pendingWorkerStarts];
     const timedOutWorkerStarts = new Set<PendingWorkerStart>();
     const waitForPendingWorkerStart = async (start: PendingWorkerStart) => {
@@ -4678,7 +4679,8 @@ export class Mastra<
     };
     const stopRunningWorkers = async () => {
       for (const worker of [...this.#workers].reverse()) {
-        if (worker.isRunning) {
+        if (worker.isRunning && !stopAttemptedWorkers.has(worker)) {
+          stopAttemptedWorkers.add(worker);
           try {
             await worker.stop();
             this.#latestWorkerStartTokens.delete(worker);

@@ -804,6 +804,7 @@ function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart 
 function extractToolResultAttachments(
   result: unknown,
   counter: ObserverAttachmentCounter,
+  attachmentFilter?: ObserverAttachmentFilter,
 ): { resultWithoutAttachments: unknown; attachments: ObserverInputAttachmentPart[] } {
   if (!isRecord(result) || result.type !== 'content' || !Array.isArray(result.value)) {
     return { resultWithoutAttachments: result, attachments: [] };
@@ -812,18 +813,22 @@ function extractToolResultAttachments(
   const record = result;
 
   const attachments: ObserverInputAttachmentPart[] = [];
+  let hadAttachmentBlocks = false;
   const newValue = (record.value as unknown[]).map(block => {
     const attachment = mapToolResultBlockToAttachment(block);
     if (!attachment) {
       return block;
     }
+    hadAttachmentBlocks = true;
 
-    attachments.push(toObserverInputAttachmentPart(attachment));
+    if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+      attachments.push(toObserverInputAttachmentPart(attachment));
+    }
     const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
     return { type: isRecord(block) ? block.type : undefined, placeholder };
   });
 
-  if (attachments.length === 0) {
+  if (!hadAttachmentBlocks) {
     return { resultWithoutAttachments: result, attachments };
   }
 
@@ -962,6 +967,7 @@ function formatObserverMessage(
           const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(
             resultForObserver,
             counter,
+            attachmentFilter,
           );
           if (extractedAttachments.length > 0) {
             attachments.push(...extractedAttachments);

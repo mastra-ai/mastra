@@ -81,7 +81,7 @@ export class MastraController {
       abortSignal: this.requestContext.abortSignal,
       getHeader: (name: string) => {
         const value = req.headers[name.toLowerCase()];
-        return Array.isArray(value) ? value.join(',') : value;
+        return Array.isArray(value) ? value.join(', ') : value;
       },
     });
   }

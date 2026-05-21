@@ -20,7 +20,6 @@ import { toSlug, assertStoredResourceScope, getStoredResourceScope, scopeStoredR
 
 import {
   assertReadAccess,
-  assertShareAccess,
   assertWriteAccess,
   getCallerAuthorId,
   matchesAuthorFilter,
@@ -450,17 +449,6 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       // No owner = always public, regardless of what the client sent.
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
       const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
-      const changesSharingMetadata =
-        (authorId !== undefined && authorId !== existing.authorId) ||
-        (resolvedVisibility !== undefined && resolvedVisibility !== existing.visibility);
-      if (changesSharingMetadata) {
-        assertShareAccess({
-          requestContext,
-          resource: 'stored-skills',
-          resourceId: storedSkillId,
-          record: existing,
-        });
-      }
 
       // Derive references/scripts/assets path arrays from the files tree
       const indexedPaths = files ? extractIndexedPathsFromFiles(files, { references, scripts, assets }) : {};

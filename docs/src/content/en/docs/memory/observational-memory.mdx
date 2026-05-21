@@ -104,7 +104,7 @@ const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
-      activateAfterIdle: '5m',
+      activateAfterIdle: 'auto',
       activateOnProviderChange: true,
     },
   },
@@ -495,14 +495,27 @@ Reflection works similarly — the Reflector runs in the background when observa
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens` — with the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety threshold as a multiplier of `messageTokens`. At `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Only matters if buffering can't keep up. |
-| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, or duration strings like `"5m"` or `"1hr"`. Set this to your prompt cache TTL if you want activation to happen before the next cold prompt. |
+| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
 | `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
 | `reflection.activateOnProviderChange` | `false` | Opts buffered reflections into provider-change activation. Reflections don't inherit top-level `activateOnProviderChange`. |
 | `reflection.blockAfter` | `1.2` | Safety threshold for reflection, same logic as observation. |
 
-If you're relying on prompt caching, set `activateAfterIdle` to match your cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations first and send a smaller compressed context window.
+If you're relying on prompt caching, set `activateAfterIdle` to `"auto"` or to a specific cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations first and send a smaller compressed context window.
+
+With `"auto"`, Mastra chooses an idle activation TTL from the active model provider:
+
+| Provider | Auto TTL |
+| - | - |
+| Anthropic, OpenRouter, unknown providers, xAI | 5 minutes |
+| DeepSeek | 1 hour |
+| Google Gemini | 24 hours |
+| Groq | 2 hours |
+| OpenAI with `providerOptions.openai.promptCacheRetention: "24h"` | 1 hour |
+| OpenAI with `providerOptions.openai.promptCacheRetention: "in_memory"` | 5 minutes |
+| OpenAI `gpt-4*`, `gpt-5`, `gpt-5-*`, `gpt-5.1*`, `gpt-5.2*`, `gpt-5.3*`, and `gpt-5.4*` | 5 minutes |
+| Other OpenAI models | 1 hour |
 
 ```typescript
 const memory = new Memory({
@@ -516,9 +529,9 @@ const memory = new Memory({
 })
 ```
 
-With a 5-minute prompt cache TTL, this activates buffered observations after 5 minutes of inactivity so the next uncached prompt uses compressed observations instead of a larger raw message window. If you prefer, `300_000` works the same way.
+With `"auto"`, this activates buffered observations based on the active provider's prompt cache behavior so the next uncached prompt uses compressed observations instead of a larger raw message window. If you prefer a fixed 5-minute TTL, use `"5m"` or `300_000`.
 
-Changing model or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered observations to activate before the new provider runs. That avoids sending a large raw window to a provider that can't reuse the previous prompt cache.
+Changing models or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered observations to activate before the new provider runs. That avoids sending a large raw window to a provider that can't reuse the previous prompt cache.
 
 ### Disabling
 
@@ -580,6 +593,7 @@ No manual migration needed. OM reads existing messages and observes them lazily 
 - **[Message history](/docs/memory/message-history)**: High-fidelity record of the current conversation
 - **[Working memory](/docs/memory/working-memory)**: Small, structured state (JSON or markdown) for user preferences, names, goals
 - **[Semantic Recall](/docs/memory/semantic-recall)**: RAG-based retrieval of relevant past messages
+- **[Multi-user threads](/docs/memory/multi-user-threads)**: How OM attributes facts to individual users when several people share a single thread
 
 If you're using working memory to store conversation summaries or ongoing state that grows over time, OM is a better fit. Working memory is for small, structured data; OM is for long-running event logs. OM also manages message history automatically—the `messageTokens` setting controls how much raw history remains before observation runs.
 

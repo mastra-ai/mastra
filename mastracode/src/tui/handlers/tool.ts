@@ -24,8 +24,24 @@ import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
+function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
+
 export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
+}
+
+function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
+  if (!ctx.state.quietMode) return;
+
+  component.setCompactToolModeColor(getCurrentModeColor(ctx));
+  component.setQuietModeDisplay('quiet');
+  component.setQuietPreviewLineLimit(ctx.state.quietModeMaxToolPreviewLines);
+}
+
+function reconcileToolBoundaries(ctx: EventHandlerContext): void {
+  reconcileChatBoundarySpacers(ctx.state.chatContainer);
 }
 
 function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unknown): void {
@@ -39,6 +55,27 @@ function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unkno
     }
   }
   ctx.addChildBeforeFollowUps(component as never);
+}
+
+function ensureSubmitPlanComponent(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  args?: unknown,
+): PlanApprovalInlineComponent {
+  const { state } = ctx;
+  let component = state.pendingSubmitPlanComponents.get(toolCallId);
+  if (!component) {
+    component = PlanApprovalInlineComponent.createStreaming(state.ui);
+    state.pendingSubmitPlanComponents.set(toolCallId, component);
+    state.lastSubmitPlanComponent = component;
+    ctx.addChildBeforeFollowUps(component);
+
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
+  }
+  component.updateArgs(args);
+  reconcileToolBoundaries(ctx);
+  return component;
 }
 
 /**
@@ -159,6 +196,12 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       return;
     }
 
+    if (toolName === 'submit_plan') {
+      ensureSubmitPlanComponent(ctx, toolCallId, args);
+      state.ui.requestRender();
+      return;
+    }
+
     if (isTaskMutationTool(toolName)) {
       state.taskToolInsertIndex = state.chatContainer.children.length;
       const component = new ToolExecutionComponentEnhanced(
@@ -254,7 +297,10 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   // Skip for subagent (handled by SubagentExecutionComponent),
   // task tools (they stream to or update the pinned TaskProgressComponent),
   // and ask_user (uses AskQuestionInlineComponent)
-  if (toolName === 'ask_user') {
+  if (toolName === 'submit_plan') {
+    ensureSubmitPlanComponent(ctx, toolCallId);
+    state.ui.requestRender();
+  } else if (toolName === 'ask_user') {
     if (state.goalManager?.isActive()) {
       return;
     }
@@ -424,7 +470,8 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   const component = state.pendingTools.get(toolCallId);
   if (component) {
     const isPendingTaskTool = state.pendingTaskToolIds?.has(toolCallId) ?? false;
-    if (isPendingTaskTool && isError) {
+    const effectiveIsError = isError || isToolResultError(result);
+    if (isPendingTaskTool && effectiveIsError) {
       insertTaskToolErrorComponent(ctx, component);
       state.allToolComponents.push(component);
     }

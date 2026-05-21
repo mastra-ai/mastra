@@ -328,6 +328,18 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
+   * Retrieves a lightweight list of traces with optional filtering.
+   */
+  async listTracesLight(_args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_TRACES_LIGHT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing lightweight traces',
+    });
+  }
+
+  /**
    * Lists trace branches across all traces. Unlike {@link listTraces} (which
    * returns one row per root-rooted trace), each row here is a single branch
    * anchor span, including ones nested under a different root entity -- useful

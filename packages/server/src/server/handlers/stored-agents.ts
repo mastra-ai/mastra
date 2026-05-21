@@ -24,7 +24,6 @@ import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceM
 import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import {
   assertReadAccess,
-  assertShareAccess,
   assertWriteAccess,
   getCallerAuthorId,
   matchesAuthorFilter,
@@ -509,17 +508,6 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // No owner = always public, regardless of what the client sent.
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
       const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
-      const changesSharingMetadata =
-        (authorId !== undefined && authorId !== existing.authorId) ||
-        (resolvedVisibility !== undefined && resolvedVisibility !== existing.visibility);
-      if (changesSharingMetadata) {
-        assertShareAccess({
-          requestContext,
-          resource: 'stored-agents',
-          resourceId: storedAgentId,
-          record: existing,
-        });
-      }
 
       // Enforce admin model allowlist (Phase 6) before persisting.
       if (model !== undefined) {

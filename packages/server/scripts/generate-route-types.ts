@@ -61,16 +61,12 @@ function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: bo
   });
 
   const auxiliaryDeclarations = [...auxiliaryTypeStore.definitions.values()]
-    .map(definition => stripImpossibleNeverIndexSignatures(printNode(definition.node)))
+    .map(definition => printNode(definition.node))
     .join('\n\n');
 
-  const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${stripImpossibleNeverIndexSignatures(printNode(node))};`;
+  const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${printNode(node)};`;
 
   return auxiliaryDeclarations ? `${auxiliaryDeclarations}\n\n${aliasDeclaration}` : aliasDeclaration;
-}
-
-function stripImpossibleNeverIndexSignatures(typeScript: string): string {
-  return typeScript.replace(/^\s*\[x: string\]: never;\n/gm, '');
 }
 
 function getRoutePart(
@@ -255,7 +251,13 @@ async function formatGeneratedFileContent(fileContent: string): Promise<string> 
 }
 
 const rawFileContent = generateRouteTypesFileContent();
-const fileContent = await formatGeneratedFileContent(rawFileContent);
+
+// Strip `[x: string]: never` index signatures emitted by zod-to-ts for `.strict()` schemas.
+// These conflict with concrete properties under `strict: true` in tsconfig, producing
+// TS errors like "Property 'modelId' of type 'string' is not assignable to 'string' index type 'never'".
+const cleanedFileContent = rawFileContent.replace(/\[x:\s*string\]:\s*never;?\s*\n?/g, '');
+
+const fileContent = await formatGeneratedFileContent(cleanedFileContent);
 const existingFileContent = fs.existsSync(OUTPUT_PATH) ? fs.readFileSync(OUTPUT_PATH, 'utf8') : null;
 
 if (existingFileContent !== fileContent) {

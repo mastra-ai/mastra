@@ -2,21 +2,14 @@ import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
-import type { IFGAProvider } from '../auth/ee/interfaces/fga';
+import type { FGARouteConfig, IFGAProvider } from '../auth/ee/interfaces/fga';
 import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions.generated';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
 
-type RouteFGAConfig = {
-  resourceType: string;
-  resourceIdParam?: string;
-  resourceId?:
-    | string
-    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-  permission?: MastraFGAPermissionInput;
-};
+type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
@@ -29,7 +22,7 @@ export type ApiRoute =
       openapi?: DescribeRouteOptions;
       cors?: CorsOptions;
       requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
       fga?: RouteFGAConfig;
       /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
       _mastraInternal?: true;
@@ -42,7 +35,7 @@ export type ApiRoute =
       openapi?: DescribeRouteOptions;
       cors?: CorsOptions;
       requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
       fga?: RouteFGAConfig;
       /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
       _mastraInternal?: true;
@@ -401,15 +394,10 @@ export type ServerConfig = {
    */
   fga?: IFGAProvider<any>;
 
-  storedResources?: {
-    scope?:
-      | boolean
-      | {
-          metadataKey?: string;
-          requireScope?: boolean;
-          resolve?: (args: { requestContext?: unknown; user?: unknown }) => string | undefined | Promise<string | undefined>;
-        };
-  };
+  /**
+   * Stored-resource route and handler behavior.
+   */
+  storedResources?: StoredResourcesConfig;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

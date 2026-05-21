@@ -42,7 +42,7 @@ export async function makeSSOLoginRequest(
   client: MastraClient,
   { redirectUri }: { redirectUri?: string },
 ): Promise<SSOLoginResponse> {
-  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
@@ -117,8 +117,8 @@ export function useSSOLogin() {
  *
  * @internal
  */
-export async function makeLogoutRequest(client: { options: any }): Promise<LogoutResponse> {
-  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
+export async function makeLogoutRequest(client: MastraClient): Promise<LogoutResponse> {
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 

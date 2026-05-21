@@ -273,7 +273,7 @@ export class MastraTUI {
           continue;
         }
 
-        this.sendOptimisticSignal(content, images, optimisticMessageId);
+        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -310,13 +310,10 @@ export class MastraTUI {
 
   private createUserSignalContent(content: string, images?: Array<{ data: string; mimeType: string }>) {
     return images?.length
-      ? {
-          role: 'user' as const,
-          content: [
-            { type: 'text' as const, text: content },
-            ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
-          ],
-        }
+      ? [
+          { type: 'text' as const, text: content },
+          ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
+        ]
       : content;
   }
 
@@ -353,8 +350,19 @@ export class MastraTUI {
     content: string,
     images: Array<{ data: string; mimeType: string }> | undefined,
     optimisticMessageId: string,
+    pendingNewThread: boolean,
   ): void {
     const send = () => {
+      this.clearIdleCounter();
+      this.state.analytics?.capture('mastracode_prompt_submitted', {
+        threadId: this.state.harness.getCurrentThreadId(),
+        resourceId: this.state.harness.getResourceId(),
+        mode: this.state.harness.getCurrentModeId(),
+        hasImages: Boolean(images?.length),
+        isFirstPromptInThread: pendingNewThread,
+        pendingNewThread,
+      });
+
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
@@ -379,6 +387,7 @@ export class MastraTUI {
     const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
 
     const send = () => {
+      this.clearIdleCounter();
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
 
       if (hasActiveRun) {
@@ -533,6 +542,10 @@ export class MastraTUI {
 
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
+    }
+
+    if (process.stdin.isTTY && !this.state.options.initialMessage) {
+      await this.showQuietModePreferencePromptIfNeeded();
     }
 
     // Check for updates after first render so network latency never blocks startup.

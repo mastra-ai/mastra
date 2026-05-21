@@ -2,6 +2,7 @@ import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useAui } from '@assistant-ui/react';
 
 import type { MastraUIMessage } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -15,6 +16,7 @@ import {
   isBrowserToolError,
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
+import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
@@ -39,6 +41,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
   const aui = useAui();
+  const queryClient = useQueryClient();
 
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {

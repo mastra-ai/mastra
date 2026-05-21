@@ -864,6 +864,7 @@ export class SkillsPG extends SkillsStorage {
       references: parseJsonResilient(row.references, 'references'),
       scripts: parseJsonResilient(row.scripts, 'scripts'),
       assets: parseJsonResilient(row.assets, 'assets'),
+      files: parseJsonResilient(row.files, 'files'),
       metadata: parseJsonResilient(row.metadata, 'metadata'),
       tree: parseJsonResilient(row.tree, 'tree'),
       changedFields: parseJsonResilient(row.changedFields, 'changedFields'),

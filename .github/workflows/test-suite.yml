@@ -24,7 +24,7 @@ jobs:
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
     if: inputs.has_code == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -83,7 +83,7 @@ jobs:
   e2e-test:
     name: E2E Test (${{ matrix.project }})
     if: inputs.has_code == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -147,7 +147,7 @@ jobs:
 
   merge-reports:
     name: Merge Test Reports
-    runs-on: ubuntu-24.04
+    runs-on: starsling-ubuntu-24.04
     needs: [unit-test, e2e-test]
     if: always()
     permissions:

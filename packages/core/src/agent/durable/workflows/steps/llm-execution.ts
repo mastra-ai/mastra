@@ -266,6 +266,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
                 tools: currentTools,
                 toolChoice: currentToolChoice,
+                providerOptions: currentProviderOptions,
                 activeTools: currentActiveTools,
                 modelSettings: currentModelSettings,
                 structuredOutput: structuredOutput as any,
@@ -277,6 +278,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
               currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
               currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentProviderOptions = processInputStepResult.providerOptions ?? currentProviderOptions;
               currentActiveTools = processInputStepResult.activeTools;
               currentModelSettings = {
                 ...currentModelSettings,
@@ -313,6 +315,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // structuring step instead of asking the model for json_schema.
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
+              providerOptions: currentProviderOptions as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(
                 currentTools as Record<string, unknown> | undefined,
                 currentActiveTools,

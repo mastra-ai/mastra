@@ -26,7 +26,7 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   execute: 'Execute',
   publish: 'Publish, activate, or restore',
   read: 'View',
-  share: 'Change visibility/audience (e.g. private↔public)',
+  share: 'Change visibility/audience',
   write: 'Create and modify',
 };
 
@@ -41,14 +41,7 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   a2a: 'agent-to-agent communication',
   'agent-builder': 'agent builder',
   agents: 'agents',
-  auth: 'auth',
   'background-tasks': 'background tasks',
-  channels: 'channels',
-  datasets: 'datasets',
-  embedders: 'embedders',
-  experiments: 'experiments',
-  harness: 'harness',
-  infrastructure: 'infrastructure',
   logs: 'logs',
   mcp: 'MCP servers',
   memory: 'memory and threads',
@@ -57,7 +50,7 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   processors: 'processors',
   schedules: 'schedules',
   scores: 'evaluation scores',
-  stored: 'any stored-* resource',
+  stored: 'all stored resource families',
   'stored-agents': 'stored agents',
   'stored-mcp-clients': 'stored MCP clients',
   'stored-prompt-blocks': 'stored prompt blocks',
@@ -74,51 +67,16 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * Some Mastra-owned permissions are part of the public RBAC surface even
- * when the route arrays that require them are not present in SERVER_ROUTES at
- * runtime. Seed them so generation never narrows existing role mappings.
+ * Compound permission patterns supported by the RBAC matcher.
  */
-const COMPATIBILITY_PERMISSIONS = [
-  'agent-builder:execute',
-  'agent-builder:read',
-  'agent-builder:write',
-  'auth:read',
-  'harness:delete',
-  'harness:read',
-  'harness:write',
-  'infrastructure:read',
-  'stored:delete',
+const ADDITIONAL_PERMISSION_PATTERNS = [
+  'stored:*',
   'stored:read',
   'stored:write',
-  'stored-agents:publish',
+  'stored:delete',
   'stored-agents:share',
-  'stored-mcp-clients:delete',
-  'stored-mcp-clients:publish',
-  'stored-mcp-clients:read',
-  'stored-mcp-clients:write',
-  'stored-prompt-blocks:delete',
-  'stored-prompt-blocks:publish',
-  'stored-prompt-blocks:read',
-  'stored-prompt-blocks:write',
-  'stored-scorers:delete',
-  'stored-scorers:publish',
-  'stored-scorers:read',
-  'stored-scorers:write',
-  'stored-skills:delete',
-  'stored-skills:publish',
-  'stored-skills:read',
   'stored-skills:share',
-  'stored-skills:write',
-  'stored-workspaces:delete',
-  'stored-workspaces:read',
-  'stored-workspaces:write',
-] as const;
-
-/**
- * Additional wildcard permission patterns supported by the RBAC matcher
- * that are not derived from compatibility permissions or server routes.
- */
-const ADDITIONAL_PERMISSION_PATTERNS = ['stored:*'];
+];
 
 /**
  * Generates a human-readable description for a permission pattern.

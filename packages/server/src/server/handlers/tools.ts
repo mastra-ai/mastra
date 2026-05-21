@@ -163,7 +163,6 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
   requiresAuth: true,
-  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: MastraFGAPermissions.TOOLS_READ },
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
       let tool: any;

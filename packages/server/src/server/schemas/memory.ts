@@ -44,10 +44,12 @@ const storageOrderBySchema = z
       }
       return val;
     },
-    z.object({
-      field: z.enum(['createdAt', 'updatedAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    }),
+    z
+      .object({
+        field: z.enum(['createdAt', 'updatedAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
   )
   .optional();
 
@@ -69,10 +71,12 @@ const messageOrderBySchema = z
       }
       return val;
     },
-    z.object({
-      field: z.enum(['createdAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    }),
+    z
+      .object({
+        field: z.enum(['createdAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
   )
   .optional();
 
@@ -240,28 +244,28 @@ const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
  * current shape before schema validation, so existing pinned clients continue
  * to work without server-side breakage.
  */
-export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
-  agentId: z.string().optional(),
-  resourceId: z.string().optional(),
-  metadata: z
-    .preprocess(
-      val => {
-        if (val === undefined) return val;
-        if (typeof val === 'string') {
-          try {
-            return JSON.parse(val);
-          } catch {
-            // Return invalid string to fail validation (z.record will reject string type)
-            return val;
-          }
-        }
-        return val;
-      },
-      z.record(z.string(), z.any()),
-    )
-    .optional(),
-  orderBy: storageOrderBySchema,
-});
+export const listThreadsQuerySchema = z.preprocess(val => {
+  if (val === null || typeof val !== 'object' || Array.isArray(val)) return val;
+  const record = val as Record<string, unknown>;
+  const rawOrderBy = record.orderBy;
+  // Only rewrite the legacy bare-string shape. Object / bracket-notation /
+  // JSON-stringified orderBy is left alone and handled by storageOrderBySchema.
+  if (typeof rawOrderBy !== 'string') return val;
+  // A JSON-stringified object is the current "stringified" shape, not legacy —
+  // let storageOrderBySchema's preprocess parse it.
+  const trimmed = rawOrderBy.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return val;
+  // Legacy shape detected: fuse into `{ field, direction }`.
+  const direction = typeof record.sortDirection === 'string' ? record.sortDirection : undefined;
+  const { sortDirection: _legacyDir, ...rest } = record;
+  return {
+    ...rest,
+    orderBy: {
+      field: rawOrderBy,
+      ...(direction !== undefined ? { direction } : {}),
+    },
+  };
+}, listThreadsQueryInnerSchema);
 
 /**
  * GET /memory/threads/:threadId

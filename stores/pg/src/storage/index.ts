@@ -22,7 +22,6 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
-import { HarnessPG } from './domains/harness';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -57,6 +56,7 @@ const ALL_DOMAINS = [
   FavoritesPG,
   HarnessPG,
   BackgroundTasksPG,
+  FavoritesPG,
   ChannelsPG,
   SchedulesPG,
 ] as const;

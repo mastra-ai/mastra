@@ -192,7 +192,59 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
 
   async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     try {
-      const { setFields, removeFields } = buildBackgroundTaskUpdateFields(update);
+      const setFields: Record<string, unknown> = {};
+      // ElectroDB's .set() ignores undefined values, so any field explicitly set
+      // to undefined must be cleared via .remove() instead.
+      const removeFields: string[] = [];
+
+      if ('status' in update && update.status !== undefined) {
+        setFields.status = update.status;
+      }
+      if ('retryCount' in update && update.retryCount !== undefined) {
+        setFields.retryCount = update.retryCount;
+      }
+      if ('result' in update) {
+        if (update.result === undefined || update.result === null) {
+          removeFields.push('result');
+        } else {
+          setFields.result = serializeJson(update.result);
+        }
+      }
+      if ('error' in update) {
+        if (update.error === undefined || update.error === null) {
+          removeFields.push('error');
+        } else {
+          setFields.error = serializeJson(update.error);
+        }
+      }
+      if ('suspendPayload' in update) {
+        if (update.suspendPayload === undefined || update.suspendPayload === null) {
+          removeFields.push('suspendPayload');
+        } else {
+          setFields.suspendPayload = serializeJson(update.suspendPayload);
+        }
+      }
+      if ('startedAt' in update) {
+        if (update.startedAt === undefined || update.startedAt === null) {
+          removeFields.push('startedAtIso');
+        } else {
+          setFields.startedAtIso = update.startedAt.toISOString();
+        }
+      }
+      if ('suspendedAt' in update) {
+        if (update.suspendedAt === undefined || update.suspendedAt === null) {
+          removeFields.push('suspendedAtIso');
+        } else {
+          setFields.suspendedAtIso = update.suspendedAt.toISOString();
+        }
+      }
+      if ('completedAt' in update) {
+        if (update.completedAt === undefined || update.completedAt === null) {
+          removeFields.push('completedAtIso');
+        } else {
+          setFields.completedAtIso = update.completedAt.toISOString();
+        }
+      }
 
       if (Object.keys(setFields).length === 0 && removeFields.length === 0) return;
 

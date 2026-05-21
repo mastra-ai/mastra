@@ -316,6 +316,16 @@ Mastra Code scans these directories for skills:
 
 Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
 
+Use `/skill/<name>` to activate a specific skill in the current conversation:
+
+```text
+/skill/release-check
+```
+
+Mastra Code loads the skill instructions and sends them to the agent before the next response.
+
+Set `user-invocable: false` in `SKILL.md` frontmatter to hide a skill from `/skill/<name>` autocomplete, the `/skills` listing, and direct activation. The agent can still load that skill automatically when relevant.
+
 Add `metadata.goal: true` to expose a skill as a goal entry point under `/goal/<skill-name>`:
 
 ```md title=".mastracode/skills/release-check/SKILL.md"

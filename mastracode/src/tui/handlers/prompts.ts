@@ -249,56 +249,39 @@ export async function handlePlanApproval(
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
-    const approvalComponent = new PlanApprovalInlineComponent(
-      {
-        planId,
-        title,
-        plan,
-        onApprove: async () => {
-          state.activeInlinePlanApproval = undefined;
-          await approvePlan(ctx, planId, title, plan);
+    const approvalOptions = {
+      planId,
+      title,
+      plan,
+      onApprove: async () => {
+        state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
+        await approvePlan(ctx, planId, title, plan);
 
-          // Fire a structured system-reminder signal to wake the freshly
-          // switched-to default-mode agent. The signal echoes back as a
-          // `system_reminder` content part and renders through the same
-          // path as any other reminder — no legacy XML regex, no companion
-          // `addUserMessage` call, so the reminder shows up exactly once.
-          //
-          // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
-          // for the aborted plan-mode run to fully idle before returning, so
-          // this signal always starts a fresh build-mode run instead of
-          // queuing onto the dying one.
-          try {
-            await state.harness.sendSignal({
-              type: 'system-reminder',
-              contents: 'The user has approved the plan, begin executing.',
-            }).accepted;
-          } catch (err) {
-            ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
-          }
-
-          resolve();
-        },
-        onGoal: async () => {
-          state.activeInlinePlanApproval = undefined;
-          await approvePlan(ctx, planId, title, plan);
-
-          // Hand off to the normal `/goal` flow. `startGoal` (default
-          // `trigger: 'send'`) sets + persists the goal, then fires the
-          // canonical structured goal-reminder via `harness.sendSignal` —
-          // identical to typing `/goal <objective>` by hand. No second
-          // reminder is sent; the goal judge in `handleAgentEnd` keeps the
-          // agent driving toward the goal after its first response.
-          //
-          // `approvePlan` already waited for the aborted plan-mode run to
-          // idle, so this signal starts a fresh build-mode run.
-          const objective = formatPlanGoalObjective(title, plan);
-          await ctx.startGoal(objective, 'Goal cancelled.');
+        // Fire a structured system-reminder signal to wake the freshly
+        // switched-to default-mode agent. The signal echoes back as a
+        // `system_reminder` content part and renders through the same
+        // path as any other reminder — no legacy XML regex, no companion
+        // `addUserMessage` call, so the reminder shows up exactly once.
+        //
+        // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
+        // for the aborted plan-mode run to fully idle before returning, so
+        // this signal always starts a fresh build-mode run instead of
+        // queuing onto the dying one.
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: 'The user has approved the plan, begin executing.',
+          }).accepted;
+        } catch (err) {
+          ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
+        }
 
         resolve();
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await approvePlan(ctx, planId, title, plan);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
@@ -315,6 +298,7 @@ export async function handlePlanApproval(
       },
       onReject: async (feedback?: string) => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await state.harness.respondToPlanApproval({
           planId,
           response: { action: 'rejected', feedback },
@@ -356,7 +340,7 @@ export async function handlePlanApproval(
     }
     state.ui.requestRender();
     state.chatContainer.invalidate();
-    approvalComponent.focused = true;
+    state.ui.setFocus(approvalComponent);
 
     ctx.notify('plan_approval', `Plan "${title}" requires approval`);
   });

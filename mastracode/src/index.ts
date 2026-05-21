@@ -135,8 +135,10 @@ export interface MastraCodeConfig {
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: HarnessConfig['browser'];
-  /** PubSub for signal routing. Required before crossProcessPubSub can disable file thread locks. */
+  /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
   pubsub?: PubSub;
+  /** Use Mastra Code's built-in Unix socket PubSub for local cross-process signal routing. */
+  unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
 }
@@ -234,14 +236,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceIdOverride = true;
   }
 
-  const signalsPubSub = config?.pubsub;
-  const crossProcessPubSub = config?.crossProcessPubSub ?? false;
-  const threadLockConfig = resolveMastraCodeThreadLockConfig({
-    pubsub: signalsPubSub,
-    crossProcessPubSub,
-    acquireThreadLock,
-    releaseThreadLock,
-  });
+  const configuredPubSub = config?.pubsub;
+  const useUnixSocketPubSub =
+    (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
+  const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
+  const crossProcessPubSub = config?.crossProcessPubSub ?? (!configuredPubSub && useUnixSocketPubSub);
+  if (crossProcessPubSub && !signalsPubSub) {
+    throw new Error('crossProcessPubSub requires a pubsub instance');
+  }
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
@@ -470,6 +472,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
+  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -519,6 +522,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveCavemanObservations !== undefined) {
     globalInitialState.cavemanObservations = effectiveCavemanObservations;
   }
+  if (effectiveObserveAttachments !== undefined) {
+    globalInitialState.observeAttachments = effectiveObserveAttachments;
+  }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
@@ -540,7 +546,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     storage,
     observability,
     memory,
-    pubsub: threadLockConfig.pubsub,
+    pubsub: signalsPubSub,
     stateSchema,
     subagents,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
@@ -645,7 +651,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
       return customModels;
     },
-    threadLock: threadLockConfig.threadLock,
+    threadLock: crossProcessPubSub
+      ? undefined
+      : {
+          acquire: acquireThreadLock,
+          release: releaseThreadLock,
+        },
   });
 
   // Sync hookManager session ID on thread changes

@@ -59,9 +59,12 @@ export default function PromptBlocks() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row className="justify-end">
+        <PageLayout.Row align="center" stack="responsive">
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />
+          </div>
           {isCmsAvailable && (
-            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
+            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" className="shrink-0">
               <Plus />
               Create Prompt
             </Button>

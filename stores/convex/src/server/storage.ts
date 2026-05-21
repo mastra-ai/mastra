@@ -21,32 +21,6 @@ const STORAGE_MUTATION_BATCH_SIZE = 25;
 
 type ConvexDocWithId = { _id: GenericId<string> };
 type StorageRecord = Record<string, unknown> & { id?: unknown };
-type JsonParseResult = { ok: true; value: any } | { ok: false; error: string };
-
-function parseWorkflowJson(value: string, field: string, runId: string): JsonParseResult {
-  try {
-    return { ok: true, value: JSON.parse(value) };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: `Invalid workflow ${field} JSON for runId ${runId}: ${message}` };
-  }
-}
-
-function parseStoredWorkflowSnapshot(existing: any, runId: string): JsonParseResult {
-  if (typeof existing.snapshot === 'string') {
-    return parseWorkflowJson(existing.snapshot, 'snapshot', runId);
-  }
-
-  try {
-    return {
-      ok: true,
-      value: JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(runId))),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: `Invalid workflow snapshot JSON for runId ${runId}: ${message}` };
-  }
-}
 
 async function mapInBatches<TInput, TOutput>(
   inputs: TInput[],
