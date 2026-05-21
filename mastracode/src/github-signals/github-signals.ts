@@ -722,7 +722,7 @@ export class GithubSignals {
       const baselinedSubscriptions = await Promise.all(
         Object.entries(metadata.subscriptions).map(async ([key, subscription]) => [
           key,
-          await this.baselineSubscription(subscription),
+          await this.baselineSubscription(subscription, { baselineMergeConflict: false }),
         ]),
       );
       if (baselinedSubscriptions.length === 0) return;
@@ -971,7 +971,7 @@ export class GithubSignals {
 
   async baselineSubscription(
     subscription: GithubPRSubscriptionMetadata,
-    options: { force?: boolean } = {},
+    options: { force?: boolean; baselineMergeConflict?: boolean } = {},
   ): Promise<GithubPRSubscriptionMetadata> {
     if (
       !options.force &&
@@ -1002,7 +1002,10 @@ export class GithubSignals {
           lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
           lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
           lastPrStateFingerprint: getSnapshotPrStateFingerprint(snapshot),
-          lastMergeConflictFingerprint: getSnapshotPrConflictFingerprint(snapshot),
+          lastMergeConflictFingerprint:
+            options.baselineMergeConflict === false
+              ? subscription.lastMergeConflictFingerprint
+              : getSnapshotPrConflictFingerprint(snapshot),
           lastErrorFingerprint: undefined,
           updatedAt: this.#options.now().toISOString(),
         };
@@ -1016,7 +1019,10 @@ export class GithubSignals {
         lastCommentFingerprints: getSnapshotCommentState(snapshot.comments),
         lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
         lastPrStateFingerprint: getSnapshotPrStateFingerprint(snapshot),
-        lastMergeConflictFingerprint: getSnapshotPrConflictFingerprint(snapshot),
+        lastMergeConflictFingerprint:
+          options.baselineMergeConflict === false
+            ? subscription.lastMergeConflictFingerprint
+            : getSnapshotPrConflictFingerprint(snapshot),
         lastErrorFingerprint: undefined,
         updatedAt: this.#options.now().toISOString(),
       };

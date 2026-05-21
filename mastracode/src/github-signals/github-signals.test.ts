@@ -2210,6 +2210,114 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('emits real conflicts from the shared-inbox snapshot fallback when no inbox row changes', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: needs main',
+        mergeable: true,
+        mergeableState: 'blocked',
+        headSha: 'sha-blocked',
+      }),
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+    ]);
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastMergeConflictFingerprint: undefined,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: 'PR #123 has merge conflicts: feat: needs merge work',
+        attributes: expect.objectContaining({ type: 'github-pr-conflict', kind: 'pr-conflict', pr: 123 }),
+      }),
+      expect.anything(),
+    );
+    github.destroy();
+  });
+
+  it('queues shared-inbox snapshot conflict notifications while active and drains them after output', async () => {
+    vi.useFakeTimers();
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+    ]);
+    const harness = createHarness();
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastMergeConflictFingerprint: undefined,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await processSignals(github, harness, []);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect((sendSignal.mock.calls as any[])[0]?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+
+    await processOutputResult(github, harness, []);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect((sendSignal.mock.calls as any[])[1]?.[0]).toMatchObject({
+      contents: 'PR #123 has merge conflicts: feat: needs merge work',
+      attributes: { type: 'github-pr-conflict', kind: 'pr-conflict', pr: 123 },
+    });
+    github.destroy();
+    vi.useRealTimers();
+  });
+
   it('polls active threads on the interval and queues full notifications behind a pending reminder', async () => {
     vi.useFakeTimers();
     const commandRunner = createSnapshotCommandRunner(
@@ -2808,6 +2916,70 @@ describe('GithubSignals', () => {
     vi.useRealTimers();
   });
 
+  it('does not silently baseline real conflicts for existing persisted subscriptions on startup', async () => {
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+    ]);
+    const github = new GithubSignals({ pollIntervalMs: 1_000, commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    const subscription = {
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const memory = {
+      listThreads: vi.fn(async () => ({
+        threads: [
+          {
+            id: 'thread-1',
+            title: 'Thread 1',
+            metadata: {
+              mastra: {
+                githubSignals: {
+                  processedSignalIds: [],
+                  subscriptions: { 'mastra-ai/mastra:123': subscription },
+                },
+              },
+            },
+          },
+        ],
+        total: 1,
+        page: 0,
+        perPage: 100,
+        hasMore: false,
+      })),
+      updateThread: vi.fn(async () => undefined),
+    };
+
+    await github.init({ memory, resourceId: 'resource-1' });
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: 'PR #123 has merge conflicts: feat: needs merge work',
+        attributes: expect.objectContaining({ type: 'github-pr-conflict', kind: 'pr-conflict', pr: 123 }),
+      }),
+      expect.anything(),
+    );
+    github.destroy();
+  });
+
   it('rehydrates persisted subscriptions with a silent startup baseline', async () => {
     vi.useFakeTimers();
     const commandRunner = createSnapshotCommandRunner([
@@ -3232,6 +3404,41 @@ describe('GithubSignals', () => {
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
       lastCommentTimestamp: '2026-01-02T00:02:00.000Z',
       lastReviewTimestamp: '2026-01-02T00:03:00.000Z',
+    });
+    github.destroy();
+  });
+
+  it('silently baselines existing conflicts on fresh subscribe', async () => {
+    const snapshots = [
+      createSnapshot({
+        title: 'feat: already conflicted',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+      createSnapshot({
+        title: 'feat: already conflicted',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+    ];
+    const commandRunner = createSnapshotCommandRunner(snapshots);
+    const harness = createHarness();
+    const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    const signal = ghSignals.prSubscribe({ prNumber: 123 }).toDBMessage({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+
+    await processSignals(github, harness, [signal]);
+    await github.markIdle({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
+      lastMergeConflictFingerprint: 'pr-conflict:dirty:sha-conflict',
     });
     github.destroy();
   });
