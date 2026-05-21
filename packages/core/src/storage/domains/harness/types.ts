@@ -533,6 +533,31 @@ export interface PersistedRequestContextInput {
   metadata?: Record<string, JsonValue>;
 }
 
+export type ProviderCallbackSelectorKind = 'installation' | 'route-key' | 'external-tenant';
+
+export interface HarnessProviderCallbackBinding {
+  id: string;
+  providerId: string;
+  selectorKind: ProviderCallbackSelectorKind;
+  selectorValue: string;
+  harnessName: string;
+  channelId: string;
+  origin: JsonValue;
+  status: 'active' | 'disabled' | 'undeliverable' | 'replaced';
+  createdAt: number;
+  updatedAt: number;
+  replacedAt?: number;
+  replacedByBindingId?: string;
+  lastError?: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
+}
+
+export interface ResolveProviderCallbackBindingResult {
+  binding: HarnessProviderCallbackBinding;
+  duplicate: boolean;
+  conflict: boolean;
+  replacedBindingId?: string;
+}
+
 export interface ChannelInboxItem {
   id: string;
   harnessName: string;

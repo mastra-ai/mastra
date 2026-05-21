@@ -16,6 +16,7 @@ import {
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
+  HarnessStorageProviderCallbackBindingTransitionError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
@@ -36,6 +37,7 @@ import type {
   ChannelInboxItem,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
+  HarnessProviderCallbackBinding,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadChannelActionReceiptResult,
   CreateOrLoadChannelActionTokenResult,
@@ -55,9 +57,11 @@ import type {
   JsonValue,
   OperationAdmissionEvidence,
   OperationAdmissionTombstone,
+  ProviderCallbackSelectorKind,
   QueueAdmissionReceipt,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
+  ResolveProviderCallbackBindingResult,
   SaveAttachmentReferenceInput,
   SaveAttachmentInput,
   SaveAttachmentResult,
@@ -1040,6 +1044,177 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   // -------------------------------------------------------------------------
+  // Provider callback binding ledger
+  // -------------------------------------------------------------------------
+
+  async resolveProviderCallbackBinding(
+    record: HarnessProviderCallbackBinding,
+    opts?: { replaceBindingId?: string },
+  ): Promise<ResolveProviderCallbackBindingResult> {
+    const incoming: HarnessProviderCallbackBinding = {
+      ...record,
+      harnessName: resolveHarnessName(record.harnessName, this.harnessName),
+    };
+    assertValidProviderCallbackBindingState(incoming);
+    const active = this.findActiveProviderCallbackBindingBySelector({
+      providerId: incoming.providerId,
+      selectorKind: incoming.selectorKind,
+      selectorValue: incoming.selectorValue,
+    });
+
+    if (opts?.replaceBindingId !== undefined) {
+      if (opts.replaceBindingId === incoming.id) {
+        throw new HarnessStorageProviderCallbackBindingTransitionError(
+          incoming.id,
+          incoming.status,
+          'replaced',
+          'replacement target must be different from the incoming binding',
+        );
+      }
+      if (incoming.status !== 'active') {
+        throw new HarnessStorageProviderCallbackBindingTransitionError(
+          incoming.id,
+          incoming.status,
+          'active',
+          'replacement binding must be active',
+        );
+      }
+      const existingById = this.findProviderCallbackBindingById(incoming.id);
+      if (existingById && !providerCallbackBindingsEqual(existingById, incoming)) {
+        throw new HarnessStorageProviderCallbackBindingTransitionError(
+          incoming.id,
+          existingById.status,
+          incoming.status,
+          'id is already owned by another provider callback binding',
+        );
+      }
+      const previous = this.findProviderCallbackBindingById(opts.replaceBindingId);
+      if (
+        previous?.status === 'replaced' &&
+        previous.replacedByBindingId === incoming.id &&
+        existingById &&
+        providerCallbackBindingsEqual(existingById, incoming)
+      ) {
+        return {
+          binding: existingById,
+          duplicate: true,
+          conflict: false,
+          replacedBindingId: previous.id,
+        };
+      }
+      if (
+        !previous ||
+        previous.status !== 'active' ||
+        previous.providerId !== incoming.providerId ||
+        previous.selectorKind !== incoming.selectorKind ||
+        previous.selectorValue !== incoming.selectorValue
+      ) {
+        throw new HarnessStorageProviderCallbackBindingTransitionError(
+          opts.replaceBindingId,
+          previous?.status,
+          'replaced',
+          'replacement target is missing, inactive, or owns a different selector',
+        );
+      }
+      if (active && active.id !== previous.id) {
+        if (existingById && providerCallbackBindingsEqual(existingById, incoming)) {
+          return { binding: existingById, duplicate: true, conflict: false, replacedBindingId: previous.id };
+        }
+        return { binding: active, duplicate: true, conflict: true };
+      }
+      const replacedAt = incoming.createdAt;
+      const replacedPrevious: HarnessProviderCallbackBinding = {
+        ...previous,
+        status: 'replaced',
+        replacedAt,
+        replacedByBindingId: incoming.id,
+        updatedAt: replacedAt,
+      };
+      this.db.harnessProviderCallbackBindings.set(previous.id, cloneJson(replacedPrevious));
+      this.db.harnessProviderCallbackBindings.set(incoming.id, cloneJson(incoming));
+      return { binding: cloneJson(incoming), duplicate: false, conflict: false, replacedBindingId: previous.id };
+    }
+
+    if (active) {
+      return {
+        binding: active,
+        duplicate: true,
+        conflict: !sameProviderCallbackBindingTarget(active, incoming),
+      };
+    }
+    const existingById = this.findProviderCallbackBindingById(incoming.id);
+    if (existingById) {
+      if (providerCallbackBindingsEqual(existingById, incoming)) {
+        return { binding: existingById, duplicate: true, conflict: false };
+      }
+      throw new HarnessStorageProviderCallbackBindingTransitionError(
+        incoming.id,
+        existingById.status,
+        incoming.status,
+        'id is already owned by another provider callback binding',
+      );
+    }
+    this.db.harnessProviderCallbackBindings.set(incoming.id, cloneJson(incoming));
+    return { binding: cloneJson(incoming), duplicate: false, conflict: false };
+  }
+
+  async loadProviderCallbackBindingBySelector(opts: {
+    providerId: string;
+    selectorKind: ProviderCallbackSelectorKind;
+    selectorValue: string;
+  }): Promise<HarnessProviderCallbackBinding | null> {
+    return this.findActiveProviderCallbackBindingBySelector(opts);
+  }
+
+  async markProviderCallbackBindingStatus(opts: {
+    bindingId: string;
+    status: Extract<HarnessProviderCallbackBinding['status'], 'active' | 'disabled' | 'undeliverable'>;
+    updatedAt?: number;
+    lastError?: HarnessProviderCallbackBinding['lastError'];
+  }): Promise<HarnessProviderCallbackBinding> {
+    const current = this.findProviderCallbackBindingById(opts.bindingId);
+    if (!current) {
+      throw new HarnessStorageProviderCallbackBindingTransitionError(
+        opts.bindingId,
+        undefined,
+        opts.status,
+        'binding was not found',
+      );
+    }
+    if (current.status === 'replaced') {
+      throw new HarnessStorageProviderCallbackBindingTransitionError(
+        current.id,
+        current.status,
+        opts.status,
+        'replaced bindings are terminal',
+      );
+    }
+    const updatedAt = opts.updatedAt ?? Date.now();
+    const active = this.findActiveProviderCallbackBindingBySelector({
+      providerId: current.providerId,
+      selectorKind: current.selectorKind,
+      selectorValue: current.selectorValue,
+    });
+    if (opts.status === 'active' && active && active.id !== current.id) {
+      throw new HarnessStorageProviderCallbackBindingTransitionError(
+        current.id,
+        current.status,
+        opts.status,
+        'another active binding owns this selector',
+      );
+    }
+    const next: HarnessProviderCallbackBinding = {
+      ...current,
+      status: opts.status,
+      updatedAt,
+      lastError: opts.lastError,
+    };
+    assertValidProviderCallbackBindingState(next);
+    this.db.harnessProviderCallbackBindings.set(next.id, cloneJson(next));
+    return cloneJson(next);
+  }
+
+  // -------------------------------------------------------------------------
   // Channel inbox ledger
   // -------------------------------------------------------------------------
 
@@ -1926,6 +2101,33 @@ export class InMemoryHarness extends HarnessStorage {
     return null;
   }
 
+  private findProviderCallbackBindingById(bindingId: string): HarnessProviderCallbackBinding | null {
+    const binding = this.db.harnessProviderCallbackBindings.get(bindingId);
+    return binding ? cloneJson(binding) : null;
+  }
+
+  private findActiveProviderCallbackBindingBySelector({
+    providerId,
+    selectorKind,
+    selectorValue,
+  }: {
+    providerId: string;
+    selectorKind: ProviderCallbackSelectorKind;
+    selectorValue: string;
+  }): HarnessProviderCallbackBinding | null {
+    for (const binding of this.db.harnessProviderCallbackBindings.values()) {
+      if (
+        binding.status === 'active' &&
+        binding.providerId === providerId &&
+        binding.selectorKind === selectorKind &&
+        binding.selectorValue === selectorValue
+      ) {
+        return cloneJson(binding);
+      }
+    }
+    return null;
+  }
+
   private findChannelActionTokenById({
     harnessName,
     channelId,
@@ -2156,6 +2358,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessOperationTombstones.clear();
     this.db.harnessSessionEvents.clear();
     this.db.harnessChannelInbox.clear();
+    this.db.harnessProviderCallbackBindings.clear();
     this.db.harnessChannelActionTokens.clear();
     this.db.harnessChannelActionReceipts.clear();
     this.db.harnessChannelOutbox.clear();
@@ -3044,6 +3247,80 @@ function channelInboxComparableValues(record: ChannelInboxItem): unknown[] {
     stableJsonString(record.attachments),
     record.lastError ? stableJsonString(record.lastError) : undefined,
   ];
+}
+
+function providerCallbackBindingsEqual(a: HarnessProviderCallbackBinding, b: HarnessProviderCallbackBinding): boolean {
+  return (
+    stableJsonString(providerCallbackBindingComparableValues(a)) ===
+    stableJsonString(providerCallbackBindingComparableValues(b))
+  );
+}
+
+function sameProviderCallbackBindingTarget(
+  a: HarnessProviderCallbackBinding,
+  b: HarnessProviderCallbackBinding,
+): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.channelId === b.channelId &&
+    stableJsonString(a.origin) === stableJsonString(b.origin)
+  );
+}
+
+function providerCallbackBindingComparableValues(record: HarnessProviderCallbackBinding): unknown[] {
+  return [
+    record.id,
+    record.providerId,
+    record.selectorKind,
+    record.selectorValue,
+    record.harnessName,
+    record.channelId,
+    stableJsonString(record.origin),
+    record.status,
+    record.createdAt,
+    record.updatedAt,
+    record.replacedAt,
+    record.replacedByBindingId,
+    record.lastError ? stableJsonString(record.lastError) : undefined,
+  ];
+}
+
+function assertValidProviderCallbackBindingState(record: HarnessProviderCallbackBinding): void {
+  if (!['installation', 'route-key', 'external-tenant'].includes(record.selectorKind)) {
+    throw new HarnessStorageProviderCallbackBindingTransitionError(
+      record.id,
+      undefined,
+      record.status,
+      `invalid selector kind "${record.selectorKind}"`,
+    );
+  }
+  if (!['active', 'disabled', 'undeliverable', 'replaced'].includes(record.status)) {
+    throw new HarnessStorageProviderCallbackBindingTransitionError(
+      record.id,
+      undefined,
+      record.status,
+      `invalid status "${record.status}"`,
+    );
+  }
+  if (record.status === 'replaced') {
+    if (record.replacedAt === undefined || record.replacedByBindingId === undefined) {
+      throw new HarnessStorageProviderCallbackBindingTransitionError(
+        record.id,
+        undefined,
+        record.status,
+        'replaced bindings require replacedAt and replacedByBindingId',
+      );
+    }
+    return;
+  }
+  if (record.replacedAt !== undefined || record.replacedByBindingId !== undefined) {
+    throw new HarnessStorageProviderCallbackBindingTransitionError(
+      record.id,
+      undefined,
+      record.status,
+      'non-replaced bindings cannot carry replacement metadata',
+    );
+  }
 }
 
 function stableJsonString(value: unknown): string {

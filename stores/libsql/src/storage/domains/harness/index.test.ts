@@ -12,6 +12,7 @@ import {
   TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_CHANNEL_OUTBOX,
   TABLE_HARNESS_MESSAGE_RESULTS,
+  TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_WAKEUPS,
@@ -24,6 +25,7 @@ import {
   HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageChannelOutboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
+  HarnessStorageProviderCallbackBindingTransitionError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
   HarnessStorageWakeupClaimConflictError,
@@ -34,6 +36,7 @@ import type {
   ChannelActionToken,
   ChannelInboxItem,
   ChannelOutboxItem,
+  HarnessProviderCallbackBinding,
   HarnessWakeupItem,
   SessionRecord,
   HarnessStorageParentSessionUnavailableError,
@@ -1043,6 +1046,275 @@ describe('HarnessLibSQL inbox response receipts', () => {
         },
       },
     });
+  });
+});
+
+describe('HarnessLibSQL provider callback binding ledger', () => {
+  let storage: HarnessLibSQL;
+  let client: Client;
+
+  beforeEach(async () => {
+    client = createHarnessTestClient();
+    storage = new HarnessLibSQL({ client });
+    await storage.init();
+  });
+
+  it('dedupes exact active selector bindings and creates active-selector indexes lazily', async () => {
+    const client = createHarnessTestClient();
+    const lazyStorage = new HarnessLibSQL({ client });
+    const executeSpy = vi.spyOn(client, 'execute');
+
+    await expect(lazyStorage.resolveProviderCallbackBinding(sampleProviderCallbackBinding())).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      binding: { id: 'callback-binding-1', status: 'active' },
+    });
+    await expect(
+      lazyStorage.resolveProviderCallbackBinding(sampleProviderCallbackBinding({ id: 'callback-binding-retry' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      binding: { id: 'callback-binding-1' },
+    });
+    await expect(indexNames(client, TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS)).resolves.toEqual(
+      expect.arrayContaining([
+        'idx_harness_provider_callback_active_selector',
+        'idx_harness_provider_callback_selector_status',
+      ]),
+    );
+    expect(indexCreateStatements(executeSpy.mock.calls, 'idx_harness_provider_callback_')).toHaveLength(2);
+  });
+
+  it('reports same selector with a different target as a conflict without retargeting', async () => {
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          channelId: 'sales',
+          origin: { route: 'sales-events' },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      binding: { id: 'callback-binding-1', channelId: 'support' },
+    });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-1', channelId: 'support' });
+  });
+
+  it('replaces active selector bindings and keeps replaced rows terminal', async () => {
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+
+    await expect(
+      storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding(), {
+        replaceBindingId: 'callback-binding-1',
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-disabled',
+          status: 'disabled',
+          harnessName: 'support-disabled',
+          channelId: 'support-disabled',
+          createdAt: 1500,
+          updatedAt: 1500,
+          origin: { route: 'support-events-disabled' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-1', status: 'active' });
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          harnessName: 'support-v2',
+          channelId: 'support-v2',
+          createdAt: 2000,
+          updatedAt: 2000,
+          origin: { route: 'support-events-v2' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      replacedBindingId: 'callback-binding-1',
+      binding: { id: 'callback-binding-2', harnessName: 'support-v2', status: 'active' },
+    });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-2' });
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          harnessName: 'support-v2',
+          channelId: 'support-v2',
+          createdAt: 2000,
+          updatedAt: 2000,
+          origin: { route: 'support-events-v2' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      replacedBindingId: 'callback-binding-1',
+      binding: { id: 'callback-binding-2', status: 'active' },
+    });
+    await expect(
+      storage.markProviderCallbackBindingStatus({ bindingId: 'callback-binding-1', status: 'active', updatedAt: 3000 }),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+  });
+
+  it('rejects replacement retries when the previous owner was not replaced by the duplicate id', async () => {
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+    const stalledReplacement = sampleProviderCallbackBinding({
+      id: 'callback-binding-2',
+      status: 'disabled',
+      harnessName: 'support-v2',
+      channelId: 'support-v2',
+      createdAt: 2000,
+      updatedAt: 2000,
+      origin: { route: 'support-events-v2' },
+    });
+    await client.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS}
+            (id, provider_id, selector_kind, selector_value, harness_name, channel_id, origin, status,
+             created_at, updated_at, replaced_at, replaced_by_binding_id, last_error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        stalledReplacement.id,
+        stalledReplacement.providerId,
+        stalledReplacement.selectorKind,
+        stalledReplacement.selectorValue,
+        stalledReplacement.harnessName,
+        stalledReplacement.channelId,
+        JSON.stringify(stalledReplacement.origin),
+        stalledReplacement.status,
+        stalledReplacement.createdAt,
+        stalledReplacement.updatedAt,
+        null,
+        null,
+        null,
+      ],
+    });
+
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          harnessName: 'support-v2',
+          channelId: 'support-v2',
+          createdAt: 2000,
+          updatedAt: 2000,
+          origin: { route: 'support-events-v2' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-1', status: 'active' });
+  });
+
+  it('loads provider binding JSON columns when the driver returns parsed values', async () => {
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+    await storage.markProviderCallbackBindingStatus({
+      bindingId: 'callback-binding-1',
+      status: 'undeliverable',
+      updatedAt: 2000,
+      lastError: { code: 'worker_unavailable', message: 'provider missing', retryable: true },
+    });
+    const originalExecute = client.execute.bind(client);
+    vi.spyOn(client, 'execute').mockImplementation(async args => {
+      const result = await originalExecute(args as Parameters<typeof client.execute>[0]);
+      if (typeof args === 'object' && 'sql' in args && args.sql.includes(TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS)) {
+        return {
+          ...result,
+          rows: result.rows.map(row => ({
+            ...row,
+            origin: typeof row.origin === 'string' ? JSON.parse(row.origin) : row.origin,
+            last_error: typeof row.last_error === 'string' ? JSON.parse(row.last_error) : row.last_error,
+          })),
+        };
+      }
+      return result;
+    });
+
+    await expect(
+      storage.markProviderCallbackBindingStatus({ bindingId: 'callback-binding-1', status: 'active', updatedAt: 3000 }),
+    ).resolves.toMatchObject({
+      id: 'callback-binding-1',
+      origin: { route: 'support-events' },
+      status: 'active',
+      lastError: undefined,
+    });
+  });
+
+  it('allows disabled or undeliverable bindings to reactivate when no active selector owner exists', async () => {
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+
+    await expect(
+      storage.markProviderCallbackBindingStatus({
+        bindingId: 'callback-binding-1',
+        status: 'disabled',
+        updatedAt: 2000,
+        lastError: { code: 'worker_unavailable', message: 'provider disabled', retryable: true },
+      }),
+    ).resolves.toMatchObject({ status: 'disabled', lastError: { code: 'worker_unavailable' } });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.markProviderCallbackBindingStatus({ bindingId: 'callback-binding-1', status: 'active', updatedAt: 3000 }),
+    ).resolves.toMatchObject({ status: 'active', lastError: undefined });
+    await expect(
+      storage.markProviderCallbackBindingStatus({
+        bindingId: 'callback-binding-1',
+        status: 'undeliverable',
+        updatedAt: 4000,
+        lastError: { code: 'worker_unavailable', message: 'provider undeliverable', retryable: true },
+      }),
+    ).resolves.toMatchObject({ status: 'undeliverable', lastError: { code: 'worker_unavailable' } });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.markProviderCallbackBindingStatus({ bindingId: 'callback-binding-1', status: 'active', updatedAt: 5000 }),
+    ).resolves.toMatchObject({ status: 'active', lastError: undefined });
   });
 });
 
@@ -2702,6 +2974,24 @@ function sampleChannelInbox(overrides: Partial<ChannelInboxItem> = {}): ChannelI
     },
     content: 'hello',
     attachments: [],
+    ...overrides,
+  };
+}
+
+function sampleProviderCallbackBinding(
+  overrides: Partial<HarnessProviderCallbackBinding> = {},
+): HarnessProviderCallbackBinding {
+  return {
+    id: 'callback-binding-1',
+    providerId: 'slack',
+    selectorKind: 'installation',
+    selectorValue: 'installation-1',
+    harnessName: 'default',
+    channelId: 'support',
+    origin: { route: 'support-events' },
+    status: 'active',
+    createdAt: 1000,
+    updatedAt: 1000,
     ...overrides,
   };
 }

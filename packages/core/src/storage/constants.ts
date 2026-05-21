@@ -54,6 +54,7 @@ export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tomb
 export const TABLE_HARNESS_SESSION_EVENTS = 'mastra_harness_session_events';
 export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
 export const TABLE_HARNESS_CHANNEL_INBOX = 'mastra_harness_channel_inbox';
+export const TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS = 'mastra_harness_provider_callback_bindings';
 export const TABLE_HARNESS_CHANNEL_ACTION_TOKENS = 'mastra_harness_channel_action_tokens';
 export const TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS = 'mastra_harness_channel_action_receipts';
 export const TABLE_HARNESS_CHANNEL_OUTBOX = 'mastra_harness_channel_outbox';
@@ -102,6 +103,7 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_SESSION_EVENTS
   | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
   | typeof TABLE_HARNESS_CHANNEL_INBOX
+  | typeof TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS
   | typeof TABLE_HARNESS_CHANNEL_ACTION_TOKENS
   | typeof TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS
   | typeof TABLE_HARNESS_CHANNEL_OUTBOX
@@ -820,6 +822,21 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     attachments: { type: 'jsonb', nullable: false },
     last_error: { type: 'jsonb', nullable: true },
   },
+  [TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    provider_id: { type: 'text', nullable: false },
+    selector_kind: { type: 'text', nullable: false },
+    selector_value: { type: 'text', nullable: false },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    origin: { type: 'jsonb', nullable: false },
+    status: { type: 'text', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    replaced_at: { type: 'bigint', nullable: true },
+    replaced_by_binding_id: { type: 'text', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+  },
   [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: {
     action_token_id: { type: 'text', nullable: false },
     harness_name: { type: 'text', nullable: false },
@@ -985,6 +1002,9 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_CHANNEL_INBOX]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_INBOX],
+  },
+  [TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS],
   },
   [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_TOKENS],

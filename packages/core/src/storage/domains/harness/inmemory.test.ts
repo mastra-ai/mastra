@@ -12,6 +12,7 @@ import {
   HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageChannelOutboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
+  HarnessStorageProviderCallbackBindingTransitionError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
   HarnessStorageWakeupClaimConflictError,
@@ -23,6 +24,7 @@ import type {
   ChannelActionToken,
   ChannelInboxItem,
   ChannelOutboxItem,
+  HarnessProviderCallbackBinding,
   HarnessWakeupItem,
   SessionRecord,
 } from './types';
@@ -818,6 +820,153 @@ describe('InMemoryHarness admission storage contract', () => {
         signalId: 'signal-2',
       }),
     ).resolves.toMatchObject({ status: 'completed', result: { text: 'new' } });
+  });
+});
+
+describe('InMemoryHarness provider callback binding ledger', () => {
+  it('dedupes exact active selector bindings and preserves the first target', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    await expect(storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding())).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      binding: { id: 'callback-binding-1', status: 'active' },
+    });
+    await expect(
+      storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding({ id: 'callback-binding-retry' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      binding: { id: 'callback-binding-1' },
+    });
+  });
+
+  it('reports same selector with a different target as a conflict without retargeting', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          channelId: 'sales',
+          origin: { route: 'sales-events' },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      binding: { id: 'callback-binding-1', channelId: 'support' },
+    });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-1', channelId: 'support' });
+  });
+
+  it('replaces active selector bindings and keeps replaced rows terminal', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+
+    await expect(
+      storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding(), {
+        replaceBindingId: 'callback-binding-1',
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-disabled',
+          status: 'disabled',
+          harnessName: 'support-disabled',
+          channelId: 'support-disabled',
+          createdAt: 1500,
+          updatedAt: 1500,
+          origin: { route: 'support-events-disabled' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-1', status: 'active' });
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          harnessName: 'support-v2',
+          channelId: 'support-v2',
+          createdAt: 2000,
+          updatedAt: 2000,
+          origin: { route: 'support-events-v2' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      replacedBindingId: 'callback-binding-1',
+      binding: { id: 'callback-binding-2', harnessName: 'support-v2', status: 'active' },
+    });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-2' });
+    await expect(
+      storage.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          harnessName: 'support-v2',
+          channelId: 'support-v2',
+          createdAt: 2000,
+          updatedAt: 2000,
+          origin: { route: 'support-events-v2' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      replacedBindingId: 'callback-binding-1',
+      binding: { id: 'callback-binding-2', status: 'active' },
+    });
+    await expect(
+      storage.markProviderCallbackBindingStatus({ bindingId: 'callback-binding-1', status: 'active', updatedAt: 3000 }),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+  });
+
+  it('allows disabled or undeliverable bindings to reactivate when no active selector owner exists', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.resolveProviderCallbackBinding(sampleProviderCallbackBinding());
+
+    await expect(
+      storage.markProviderCallbackBindingStatus({
+        bindingId: 'callback-binding-1',
+        status: 'undeliverable',
+        updatedAt: 2000,
+        lastError: { code: 'worker_unavailable', message: 'provider missing', retryable: true },
+      }),
+    ).resolves.toMatchObject({ status: 'undeliverable', lastError: { code: 'worker_unavailable' } });
+    await expect(
+      storage.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.markProviderCallbackBindingStatus({ bindingId: 'callback-binding-1', status: 'active', updatedAt: 3000 }),
+    ).resolves.toMatchObject({ status: 'active', lastError: undefined });
   });
 });
 
@@ -2167,6 +2316,24 @@ function sampleChannelInbox(overrides: Partial<ChannelInboxItem> = {}): ChannelI
     },
     content: 'hello',
     attachments: [],
+    ...overrides,
+  };
+}
+
+function sampleProviderCallbackBinding(
+  overrides: Partial<HarnessProviderCallbackBinding> = {},
+): HarnessProviderCallbackBinding {
+  return {
+    id: 'callback-binding-1',
+    providerId: 'slack',
+    selectorKind: 'installation',
+    selectorValue: 'installation-1',
+    harnessName: 'default',
+    channelId: 'support',
+    origin: { route: 'support-events' },
+    status: 'active',
+    createdAt: 1000,
+    updatedAt: 1000,
     ...overrides,
   };
 }

@@ -11,6 +11,7 @@ import type {
   ChannelDiagnosticsRows,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
+  HarnessProviderCallbackBinding,
   ChannelInboxInitialClaim,
   ChannelInboxItem,
   CreateOrLoadChannelActionReceiptResult,
@@ -34,8 +35,10 @@ import type {
   LoadedAttachment,
   OperationAdmissionEvidence,
   OperationAdmissionTombstone,
+  ProviderCallbackSelectorKind,
   QueueAdmissionReceipt,
   ReleaseSessionLeaseInput,
+  ResolveProviderCallbackBindingResult,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
   SaveAttachmentReferenceInput,
@@ -206,6 +209,29 @@ export class HarnessStorageChannelDiagnosticsUnsupportedError extends Error {
   readonly code = 'harness.storage.channel_diagnostics_unsupported' as const;
   constructor() {
     super('HarnessStorage channel diagnostics must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageProviderCallbackBindingUnsupportedError extends Error {
+  readonly name = 'HarnessStorageProviderCallbackBindingUnsupportedError';
+  readonly code = 'harness.storage.provider_callback_binding_unsupported' as const;
+  constructor() {
+    super('HarnessStorage provider callback bindings must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageProviderCallbackBindingTransitionError extends Error {
+  readonly name = 'HarnessStorageProviderCallbackBindingTransitionError';
+  readonly code = 'harness.storage.provider_callback_binding_transition_invalid' as const;
+  constructor(
+    public readonly bindingId: string,
+    public readonly fromStatus: HarnessProviderCallbackBinding['status'] | undefined,
+    public readonly toStatus: HarnessProviderCallbackBinding['status'],
+    reason: string,
+  ) {
+    super(
+      `Provider callback binding "${bindingId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
+    );
   }
 }
 
@@ -700,6 +726,34 @@ export abstract class HarnessStorage extends StorageDomain {
     limit: number;
   }): Promise<HarnessSessionEventRecord[]> {
     throw new HarnessStorageSessionEventReplayUnsupportedError();
+  }
+
+  // -------------------------------------------------------------------------
+  // Provider callback binding ledger
+  // -------------------------------------------------------------------------
+
+  async resolveProviderCallbackBinding(
+    _record: HarnessProviderCallbackBinding,
+    _opts?: { replaceBindingId?: string },
+  ): Promise<ResolveProviderCallbackBindingResult> {
+    throw new HarnessStorageProviderCallbackBindingUnsupportedError();
+  }
+
+  async loadProviderCallbackBindingBySelector(_opts: {
+    providerId: string;
+    selectorKind: ProviderCallbackSelectorKind;
+    selectorValue: string;
+  }): Promise<HarnessProviderCallbackBinding | null> {
+    throw new HarnessStorageProviderCallbackBindingUnsupportedError();
+  }
+
+  async markProviderCallbackBindingStatus(_opts: {
+    bindingId: string;
+    status: Extract<HarnessProviderCallbackBinding['status'], 'active' | 'disabled' | 'undeliverable'>;
+    updatedAt?: number;
+    lastError?: HarnessProviderCallbackBinding['lastError'];
+  }): Promise<HarnessProviderCallbackBinding> {
+    throw new HarnessStorageProviderCallbackBindingUnsupportedError();
   }
 
   // -------------------------------------------------------------------------
