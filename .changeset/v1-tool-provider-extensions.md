@@ -107,6 +107,13 @@ and cannot be cross-pinned at runtime). The server-side admin author
 filter on `GET /api/tool-providers/:providerId/connections?authorId=…`
 is preserved for a future global admin connections page.
 
+The `allowedScopes` prop on `<ConnectionPicker />` and
+`<ToolProvidersSection />` is replaced by a required `scope: Scope` prop.
+Surfaces declare the single scope they own (Builder → `per-author`, CMS
+Editor → `caller-supplied`); the in-picker visibility chooser is removed.
+The server-side `scope` query filter on
+`GET /api/tool-providers/:providerId/connections` is unchanged.
+
 **Fix: `toolProviders` survives reload on `PATCH /stored/agents/:id`**:
 
 The update handler destructured `toolProviders` from the request body and

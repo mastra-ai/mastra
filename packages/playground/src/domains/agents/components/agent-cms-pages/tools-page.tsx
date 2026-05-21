@@ -29,7 +29,7 @@ import { useTools } from '@/domains/tools/hooks/use-all-tools';
 // CMS editor surface: caller-supplied only. End-user connections are resolved
 // at runtime from `requestContext[MASTRA_RESOURCE_ID_KEY]` by the host app.
 // per-author / shared belong to the agent builder (single-author surface).
-const EDITOR_ALLOWED_SCOPES = ['caller-supplied'] as const;
+const EDITOR_SCOPE = 'caller-supplied' as const;
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -212,7 +212,7 @@ export function ToolsPage() {
 
         <MCPClientList />
 
-        <ToolProvidersSection form={form} readOnly={readOnly} allowedScopes={EDITOR_ALLOWED_SCOPES} />
+        <ToolProvidersSection form={form} readOnly={readOnly} scope={EDITOR_SCOPE} />
       </div>
     </ScrollArea>
   );

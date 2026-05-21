@@ -14,7 +14,7 @@ import { ToolProvidersSection } from '@/domains/tool-providers/components/tool-p
 // Builder is single-author surface: connections are private to the author.
 // `shared` and `caller-supplied` are out — shared belongs to editor/CMS multi-user
 // flows, caller-supplied is editor-only (host app resolves end-users at runtime).
-const BUILDER_ALLOWED_SCOPES = ['per-author'] as const;
+const BUILDER_SCOPE = 'per-author' as const;
 
 export interface AgentProfileTabsProps {
   availableAgentTools: AgentTool[];
@@ -80,7 +80,7 @@ export const AgentProfileTabs = ({
           {connectionsTabEnabled && (
             <TabContent value="connections" className={tabContentClassName}>
               <div className="h-full min-h-0 overflow-y-auto p-4">
-                <ToolProvidersSection form={form} readOnly={!isEditable} allowedScopes={BUILDER_ALLOWED_SCOPES} />
+                <ToolProvidersSection form={form} readOnly={!isEditable} scope={BUILDER_SCOPE} />
               </div>
             </TabContent>
           )}

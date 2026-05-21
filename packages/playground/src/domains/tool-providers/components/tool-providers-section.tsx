@@ -33,10 +33,9 @@ import type { ToolProvidersFormValue } from '@/domains/tool-providers/schemas';
  * react-hook-form context wraps the page. Mirrors the legacy
  * `IntegrationToolsSection` in shape but speaks the new shared-connection API.
  *
- * The picker mounts with all three scopes available by default. Editors must
- * explicitly pick a Visibility before they can create a new connection —
- * there is no implicit default. Hosts that want to restrict scopes (e.g. the
- * builder hiding `caller-supplied`) can narrow `allowedScopes`.
+ * The host declares the single visibility scope it owns via `scope` — the
+ * Builder locks to `'per-author'`, the CMS editor locks to `'caller-supplied'`.
+ * The picker has no in-app visibility chooser.
  */
 type FormShape = { toolProviders?: ToolProvidersFormValue };
 
@@ -51,21 +50,11 @@ interface ToolProvidersSectionProps {
 
   form: UseFormReturn<any>;
   readOnly?: boolean;
-  /**
-   * Scopes the host wants surfaced in the Visibility toggle. Defaults to all
-   * three for the CMS surface; pass a narrower list to hide options (e.g.
-   * `['per-author', 'shared']` in the builder).
-   */
-  allowedScopes?: readonly ('shared' | 'per-author' | 'caller-supplied')[];
+  /** The single visibility scope this surface owns. */
+  scope: 'shared' | 'per-author' | 'caller-supplied';
 }
 
-const DEFAULT_ALLOWED_SCOPES = ['per-author', 'shared', 'caller-supplied'] as const;
-
-export function ToolProvidersSection({
-  form,
-  readOnly = false,
-  allowedScopes = DEFAULT_ALLOWED_SCOPES,
-}: ToolProvidersSectionProps) {
+export function ToolProvidersSection({ form, readOnly = false, scope }: ToolProvidersSectionProps) {
   const { setValue, getValues, control } = form;
   const toolProviders = useWatch<FormShape, 'toolProviders'>({ control, name: 'toolProviders' });
 
@@ -331,7 +320,7 @@ export function ToolProvidersSection({
                   supportsRevoke={group.supportsRevoke}
                   connections={group.connections}
                   disabled={readOnly}
-                  allowedScopes={allowedScopes}
+                  scope={scope}
                   onChange={next => handleConnectionsChange(group.providerId, group.toolkit, next)}
                 />
               </Entity>

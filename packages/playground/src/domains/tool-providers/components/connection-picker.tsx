@@ -1,6 +1,6 @@
 import { AlertDialog, Badge, Button, DropdownMenu, Input, Txt, cn } from '@mastra/playground-ui';
 import { AlertCircle, Link2, MoreVertical, Plus, RefreshCw, Trash2, Unlink2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useAuthorize } from '../hooks/use-authorize';
 import { useConnectionFields } from '../hooks/use-connection-fields';
@@ -56,17 +56,11 @@ export interface ConnectionPickerProps {
   /** Disable inputs while parent form is busy. */
   disabled?: boolean;
   /**
-   * Whitelist of scopes the host exposes in the Visibility toggle. Users
-   * must explicitly pick one before they can connect — there is no default.
-   *
-   * - Omit (or pass `[]`) → no toggle, pins land without a `scope` field
-   *   (legacy behavior; runtime treats absent as `per-author`).
-   * - Provide a subset (e.g. `['per-author', 'shared']` for builder) → only
-   *   those radios render, and existing pinned/listed rows whose stored
-   *   scope is outside the whitelist are filtered out so the picker stays
-   *   internally consistent.
+   * The single visibility scope this surface owns. The picker uses it
+   * directly — there is no in-picker chooser. Builder surfaces lock to
+   * `'per-author'`; the CMS editor locks to `'caller-supplied'`.
    */
-  allowedScopes?: readonly ('per-author' | 'shared' | 'caller-supplied')[];
+  scope: 'per-author' | 'shared' | 'caller-supplied';
 }
 
 const LABEL_RE = /^[A-Za-z0-9 _-]+$/;
@@ -123,32 +117,16 @@ export const ConnectionPicker = ({
   connections,
   onChange,
   disabled,
-  allowedScopes,
+  scope,
 }: ConnectionPickerProps) => {
-  // When the host opts in to scope (by providing a non-empty `allowedScopes`),
-  // expose a Visibility toggle on the add-connection form. The user must
-  // explicitly pick a scope before "Connect" enables — there is no default.
-  // Hosts that omit it see no toggle and never produce a `scope` field on
-  // the pin.
-  const scopeToggleEnabled = Boolean(allowedScopes && allowedScopes.length > 0);
-  const allowedScopeSet = useMemo(() => new Set(allowedScopes ?? []), [allowedScopes]);
-  // When the host locks the surface to a single scope (e.g. builder → per-author,
-  // editor → caller-supplied), there's nothing to pick — auto-select it and
-  // hide the radios. Multi-scope hosts still force the user to choose.
-  const lockedScope = useMemo<'per-author' | 'shared' | 'caller-supplied' | null>(() => {
-    if (allowedScopes && allowedScopes.length === 1) return allowedScopes[0]!;
-    return null;
-  }, [allowedScopes]);
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
   const { data: currentUser } = useCurrentUser();
   const callerId = currentUser?.id;
 
-  const existing = useInfiniteConnections(providerId, toolkit, {
-    // When the surface is locked to a single scope, push that filter to the
-    // server so cross-scope rows never come back in the first place.
-    ...(lockedScope ? { scope: lockedScope } : {}),
-  });
+  // Push the surface-locked scope to the server so cross-scope rows never
+  // come back in the first place.
+  const existing = useInfiniteConnections(providerId, toolkit, { scope });
   const existingItems = useMemo(
     () => (existing.data?.pages ?? []).flatMap(page => page.items ?? []),
     [existing.data?.pages],
@@ -166,20 +144,6 @@ export const ConnectionPicker = ({
   // launching the popup so the server can upsert `tool_integration_connections` with the
   // user's chosen name in the same round-trip.
   const [newLabelDraft, setNewLabelDraft] = useState('');
-  // Scope draft for the next fresh connection. Only meaningful when the host
-  // opts in via `allowedScopes`. Starts `null` so the user is forced to pick
-  // a scope before connecting; reset back to `null` after every successful
-  // authorize so the next add starts unselected too.
-  const [newScopeDraft, setNewScopeDraft] = useState<'per-author' | 'shared' | 'caller-supplied' | null>(lockedScope);
-
-  // Keep the draft in sync if `allowedScopes` changes at runtime (e.g. host
-  // narrows scopes after mount). When locked, force the draft to the locked
-  // value; when unlocked, only seed if the user hasn't picked yet.
-  useEffect(() => {
-    if (lockedScope) {
-      setNewScopeDraft(prev => (prev === lockedScope ? prev : lockedScope));
-    }
-  }, [lockedScope]);
 
   const fieldFormError = useMemo(() => {
     if (!requiresFields) return undefined;
@@ -212,21 +176,13 @@ export const ConnectionPicker = ({
 
   // Existing provider connections that are not yet pinned to this agent
   // for this toolkit. Driven by the picker UI's "Use existing connection"
-  // affordance — pinning one reuses the persisted account label by default
-  // but the user can override it for this agent. When the host whitelists
-  // scopes (e.g. builder hides `caller-supplied`), rows whose stored scope
-  // is outside the whitelist are filtered out so they can't be pinned into
-  // a surface that doesn't model them.
+  // affordance — pinning one reuses the persisted account label by default.
+  // The server already filters by the surface-locked `scope` query param
+  // forwarded by `useInfiniteConnections`, so no client-side scope filter
+  // is needed.
   const unpinnedExisting = useMemo(
-    () =>
-      existingItems
-        .filter(item => !pinnedIds.has(item.connectionId))
-        .filter(item => {
-          if (!scopeToggleEnabled) return true;
-          const itemScope = (item.scope as 'per-author' | 'shared' | 'caller-supplied' | undefined) ?? 'per-author';
-          return allowedScopeSet.has(itemScope);
-        }),
-    [existingItems, pinnedIds, scopeToggleEnabled, allowedScopeSet],
+    () => existingItems.filter(item => !pinnedIds.has(item.connectionId)),
+    [existingItems, pinnedIds],
   );
 
   const errorsByIndex = useMemo(() => {
@@ -282,49 +238,6 @@ export const ConnectionPicker = ({
     return undefined;
   }, [newLabelDraft, labelWouldBeRequired, connections]);
 
-  const renderScopeToggle = () => {
-    if (!scopeToggleEnabled) return null;
-    // Single-scope surfaces lock the value — there's nothing to pick. The
-    // draft is auto-seeded to the locked scope so "Connect" enables without
-    // user interaction.
-    if (lockedScope) return null;
-    const baseId = `connection-scope-${toolkit}`;
-    const options: Array<{
-      value: 'per-author' | 'shared' | 'caller-supplied';
-      label: string;
-    }> = [
-      { value: 'per-author', label: 'Only me' },
-      { value: 'shared', label: 'Shared with editors' },
-      { value: 'caller-supplied', label: 'Caller-supplied (multi-tenant)' },
-    ];
-    return (
-      <div
-        role="radiogroup"
-        aria-label="Connection visibility"
-        className="flex items-center gap-3 text-ui-xs text-icon3"
-        data-testid={baseId}
-      >
-        <span className="font-medium">Visibility:</span>
-        {options
-          .filter(opt => allowedScopeSet.has(opt.value))
-          .map(opt => (
-            <label key={opt.value} className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="radio"
-                name={baseId}
-                value={opt.value}
-                checked={newScopeDraft === opt.value}
-                disabled={disabled || authorize.isPending}
-                onChange={() => setNewScopeDraft(opt.value)}
-                data-testid={`${baseId}-${opt.value}`}
-              />
-              <span>{opt.label}</span>
-            </label>
-          ))}
-      </div>
-    );
-  };
-
   const handleAdd = async () => {
     // If the provider declares additional fields (e.g. Confluence subdomain),
     // surface an inline form first instead of jumping straight to OAuth.
@@ -334,22 +247,14 @@ export const ConnectionPicker = ({
     }
     if (fieldFormError) return;
     if (newDraftError) return;
-    // When the host opts in to the scope toggle, the user must pick a scope
-    // before "Connect" enables. The button's disabled state already enforces
-    // this; the early-return is a defensive backstop.
-    if (scopeToggleEnabled && newScopeDraft === null) return;
     const config = requiresFields ? coerceFieldValues() : undefined;
     const label = newLabelDraft.trim();
-    // Only forward scope when the host opts in. Omitting scope on hosts that
-    // don't render the toggle keeps stored agents from accidentally pinning
-    // shared connections under a per-author bucket.
-    const scope = scopeToggleEnabled ? (newScopeDraft ?? undefined) : undefined;
     const result = await authorize.mutateAsync({
       providerId,
       toolkit,
       ...(config ? { config } : {}),
       ...(label ? { label } : {}),
-      ...(scope ? { scope } : {}),
+      scope,
     });
     if (result.status !== 'completed') return;
     // Carry the label onto the pin so the LLM-facing suffix matches the
@@ -362,14 +267,12 @@ export const ConnectionPicker = ({
         connectionId: result.connectionId,
         toolkit,
         ...(label ? { label } : {}),
-        ...(scope ? { scope } : {}),
+        scope,
       },
     ]);
     setShowFieldForm(false);
     setFieldValues({});
     setNewLabelDraft('');
-    // Reset the scope draft so the next add forces the user to pick again.
-    if (scopeToggleEnabled) setNewScopeDraft(null);
   };
 
   const handleReauthorize = async (index: number) => {
@@ -453,10 +356,10 @@ export const ConnectionPicker = ({
 
   const renderExistingSection = () => {
     if (!multipleAllowed && connections.length > 0) return null;
-    // Caller-supplied pins are markers — pinning an existing connection
-    // makes no sense because end-user accounts are created at runtime
-    // by the host app, not pre-listed in the editor.
-    if (newScopeDraft === 'caller-supplied') return null;
+    // Caller-supplied surfaces are declare-only — pinning an existing
+    // connection makes no sense because end-user accounts are created at
+    // runtime by the host app, not pre-listed in the editor.
+    if (scope === 'caller-supplied') return null;
     if (unpinnedExisting.length === 0) return null;
 
     return (
@@ -597,17 +500,14 @@ export const ConnectionPicker = ({
           <div className="flex items-center gap-2">
             <AlertCircle className="size-4 shrink-0 text-warning" />
             <Txt as="span" variant="ui-sm" className="text-warning">
-              {scopeToggleEnabled && newScopeDraft === null
-                ? 'Pick a visibility to start a new connection.'
-                : newScopeDraft === 'caller-supplied'
-                  ? 'No marker yet — mark this toolkit as caller-supplied so the host app resolves end-user connections at runtime.'
-                  : 'No connections yet — name your account and connect to enable these tools.'}
+              {scope === 'caller-supplied'
+                ? 'No marker yet — mark this toolkit as caller-supplied so the host app resolves end-user connections at runtime.'
+                : 'No connections yet — name your account and connect to enable these tools.'}
             </Txt>
           </div>
           {canAddMore && (
             <div className="flex flex-col gap-2">
-              {renderScopeToggle()}
-              {scopeToggleEnabled && newScopeDraft === null ? null : newScopeDraft === 'caller-supplied' ? (
+              {scope === 'caller-supplied' ? (
                 <div className="flex flex-col gap-2" data-testid={`connection-caller-supplied-${toolkit}`}>
                   <Txt as="span" variant="ui-xs" className="text-text-muted">
                     Tools resolve via <code>requestContext.set(MASTRA_RESOURCE_ID_KEY, &lt;userId&gt;)</code>. Each
@@ -645,12 +545,7 @@ export const ConnectionPicker = ({
                     size="sm"
                     variant="outline"
                     onClick={handleAdd}
-                    disabled={
-                      disabled ||
-                      authorize.isPending ||
-                      Boolean(newDraftError) ||
-                      (scopeToggleEnabled && newScopeDraft === null)
-                    }
+                    disabled={disabled || authorize.isPending || Boolean(newDraftError)}
                     data-testid={`connection-connect-${toolkit}`}
                   >
                     <Plus className="size-3" />
@@ -800,48 +695,36 @@ export const ConnectionPicker = ({
         </AlertDialog.Content>
       </AlertDialog>
 
-      {showAddButton && connections.length > 0 && newScopeDraft !== 'caller-supplied' && (
+      {showAddButton && connections.length > 0 && scope !== 'caller-supplied' && (
         <div className="flex flex-col gap-2">
-          {renderScopeToggle()}
-          {scopeToggleEnabled && newScopeDraft === null ? (
-            <Txt as="span" variant="ui-xs" className="text-text-muted">
-              Pick a visibility to add another connection.
-            </Txt>
-          ) : (
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <Input
-                  size="sm"
-                  value={newLabelDraft}
-                  placeholder="Account name for the new connection"
-                  onChange={e => setNewLabelDraft(e.target.value)}
-                  disabled={disabled || authorize.isPending}
-                  error={Boolean(newDraftError) && newLabelDraft.length > 0}
-                  aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
-                  data-testid={`connection-new-label-${toolkit}`}
-                />
-                {newDraftError && newLabelDraft.length > 0 && (
-                  <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>
-                )}
-              </div>
-              <Button
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <Input
                 size="sm"
-                variant="ghost"
-                onClick={handleAdd}
-                disabled={
-                  disabled ||
-                  authorize.isPending ||
-                  Boolean(newDraftError) ||
-                  (scopeToggleEnabled && newScopeDraft === null)
-                }
-                className={cn('self-start')}
-                data-testid={`connection-add-${toolkit}`}
-              >
-                <Plus className="size-3" />
-                Add connection
-              </Button>
+                value={newLabelDraft}
+                placeholder="Account name for the new connection"
+                onChange={e => setNewLabelDraft(e.target.value)}
+                disabled={disabled || authorize.isPending}
+                error={Boolean(newDraftError) && newLabelDraft.length > 0}
+                aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
+                data-testid={`connection-new-label-${toolkit}`}
+              />
+              {newDraftError && newLabelDraft.length > 0 && (
+                <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>
+              )}
             </div>
-          )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleAdd}
+              disabled={disabled || authorize.isPending || Boolean(newDraftError)}
+              className={cn('self-start')}
+              data-testid={`connection-add-${toolkit}`}
+            >
+              <Plus className="size-3" />
+              Add connection
+            </Button>
+          </div>
         </div>
       )}
     </div>

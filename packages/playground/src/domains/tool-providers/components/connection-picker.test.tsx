@@ -45,10 +45,10 @@ interface HarnessProps {
   multipleAllowed?: boolean;
   supportsRevoke?: boolean;
   onChange?: (next: PickerConnection[]) => void;
-  allowedScopes?: readonly ('per-author' | 'shared' | 'caller-supplied')[];
+  scope?: 'per-author' | 'shared' | 'caller-supplied';
 }
 
-const Harness = ({ initial, multipleAllowed = true, supportsRevoke, onChange, allowedScopes }: HarnessProps) => {
+const Harness = ({ initial, multipleAllowed = true, supportsRevoke, onChange, scope = 'per-author' }: HarnessProps) => {
   const [connections, setConnections] = useState<PickerConnection[]>(initial);
   const handleChange = (next: PickerConnection[]) => {
     setConnections(next);
@@ -66,7 +66,7 @@ const Harness = ({ initial, multipleAllowed = true, supportsRevoke, onChange, al
             supportsRevoke={supportsRevoke}
             connections={connections}
             onChange={handleChange}
-            allowedScopes={allowedScopes}
+            scope={scope}
           />
         </TooltipProvider>
       </QueryClientProvider>
@@ -337,6 +337,7 @@ describe('ConnectionPicker', () => {
         providerId: INTEGRATION_ID,
         toolkit: TOOL_SERVICE,
         config: { subdomain: 'acme' },
+        scope: 'per-author',
       });
     });
     const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
@@ -381,6 +382,7 @@ describe('ConnectionPicker', () => {
         providerId: INTEGRATION_ID,
         toolkit: TOOL_SERVICE,
         label: 'Work account',
+        scope: 'per-author',
       });
     });
 
@@ -390,6 +392,7 @@ describe('ConnectionPicker', () => {
       connectionId: 'ca_new',
       toolkit: TOOL_SERVICE,
       label: 'Work account',
+      scope: 'per-author',
     });
   });
 
@@ -405,6 +408,7 @@ describe('ConnectionPicker', () => {
       expect(authorizeMock).toHaveBeenCalledWith({
         providerId: INTEGRATION_ID,
         toolkit: TOOL_SERVICE,
+        scope: 'per-author',
       });
     });
   });
@@ -629,45 +633,15 @@ describe('ConnectionPicker', () => {
     expect(owner.textContent).toContain('user-bob');
   });
 
-  it('hides the scope toggle when allowedScopes is omitted', () => {
-    renderPicker({ initial: [] });
-    expect(screen.queryByTestId(`connection-scope-${TOOL_SERVICE}`)).toBeNull();
-  });
-
-  it('renders the scope toggle with no selection when host opts in', () => {
-    renderPicker({ initial: [], allowedScopes: ['per-author', 'shared', 'caller-supplied'] });
-    expect(screen.getByTestId(`connection-scope-${TOOL_SERVICE}`)).toBeTruthy();
-    expect((screen.getByTestId(`connection-scope-${TOOL_SERVICE}-per-author`) as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId(`connection-scope-${TOOL_SERVICE}-shared`) as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId(`connection-scope-${TOOL_SERVICE}-caller-supplied`) as HTMLInputElement).checked).toBe(
-      false,
-    );
-  });
-
-  it('only renders radios in allowedScopes (builder hides caller-supplied)', () => {
-    renderPicker({ initial: [], allowedScopes: ['per-author', 'shared'] });
-    expect(screen.getByTestId(`connection-scope-${TOOL_SERVICE}-per-author`)).toBeTruthy();
-    expect(screen.getByTestId(`connection-scope-${TOOL_SERVICE}-shared`)).toBeTruthy();
-    expect(screen.queryByTestId(`connection-scope-${TOOL_SERVICE}-caller-supplied`)).toBeNull();
-  });
-
-  it('does not render the connect form until a scope is picked', () => {
-    renderPicker({ initial: [], allowedScopes: ['per-author', 'shared'] });
-    expect(screen.queryByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeNull();
-    expect(screen.queryByTestId(`connection-connect-${TOOL_SERVICE}`)).toBeNull();
-  });
-
   it('forwards scope on authorize and pin for a freshly-created connection', async () => {
     authorizeMock.mockResolvedValueOnce({ status: 'completed', connectionId: 'new-1' });
     const changes: PickerConnection[][] = [];
     renderPicker({
       initial: [],
-      allowedScopes: ['per-author', 'shared'],
+      scope: 'per-author',
       onChange: next => changes.push(next),
     });
 
-    // User must pick scope first.
-    fireEvent.click(screen.getByTestId(`connection-scope-${TOOL_SERVICE}-per-author`));
     await act(async () => {
       fireEvent.click(screen.getByTestId(`connection-connect-${TOOL_SERVICE}`));
     });
@@ -675,23 +649,6 @@ describe('ConnectionPicker', () => {
     expect(authorizeMock).toHaveBeenCalledWith(expect.objectContaining({ scope: 'per-author', toolkit: TOOL_SERVICE }));
     const last = changes[changes.length - 1];
     expect(last?.[0]).toMatchObject({ connectionId: 'new-1', scope: 'per-author' });
-  });
-
-  it('does not forward scope when host omits allowedScopes', async () => {
-    authorizeMock.mockResolvedValueOnce({ status: 'completed', connectionId: 'new-2' });
-    const changes: PickerConnection[][] = [];
-    renderPicker({ initial: [], onChange: next => changes.push(next) });
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId(`connection-connect-${TOOL_SERVICE}`));
-    });
-
-    expect(authorizeMock).toHaveBeenCalledTimes(1);
-    const args = authorizeMock.mock.calls[0]![0] as Record<string, unknown>;
-    expect(args.scope).toBeUndefined();
-    const last = changes[changes.length - 1];
-    expect(last?.[0]).toMatchObject({ connectionId: 'new-2' });
-    expect((last?.[0] as { scope?: string }).scope).toBeUndefined();
   });
 
   it('renders a Shared badge on existing rows whose scope is shared', async () => {
@@ -709,24 +666,8 @@ describe('ConnectionPicker', () => {
         }),
       ),
     );
-    renderPicker({ initial: [], allowedScopes: ['per-author', 'shared'] });
+    renderPicker({ initial: [], scope: 'shared' });
     expect(await screen.findByTestId(`connection-existing-shared-${TOOL_SERVICE}-ca_shared`)).toBeTruthy();
-  });
-
-  it('filters existing rows whose scope is outside allowedScopes', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/tool-providers/${INTEGRATION_ID}/connections`, () =>
-        HttpResponse.json({
-          items: [
-            { connectionId: 'ca_per', status: 'active', label: 'Mine', scope: 'per-author' },
-            { connectionId: 'ca_caller', status: 'active', label: 'Caller', scope: 'caller-supplied' },
-          ],
-        }),
-      ),
-    );
-    renderPicker({ initial: [], allowedScopes: ['per-author', 'shared'] });
-    expect(await screen.findByTestId(`connection-existing-${TOOL_SERVICE}-ca_per`)).toBeTruthy();
-    expect(screen.queryByTestId(`connection-existing-${TOOL_SERVICE}-ca_caller`)).toBeNull();
   });
 
   it('inherits persisted scope when pinning an existing connection', async () => {
@@ -747,7 +688,7 @@ describe('ConnectionPicker', () => {
     const changes: PickerConnection[][] = [];
     renderPicker({
       initial: [],
-      allowedScopes: ['per-author', 'shared'],
+      scope: 'shared',
       onChange: next => changes.push(next),
     });
 
@@ -763,23 +704,14 @@ describe('ConnectionPicker', () => {
     });
   });
 
-  it('hides existing-connections section and label input when scope draft is caller-supplied', () => {
-    renderPicker({ initial: [], allowedScopes: ['per-author', 'shared', 'caller-supplied'] });
-    fireEvent.click(screen.getByTestId(`connection-scope-${TOOL_SERVICE}-caller-supplied`));
-    expect(screen.queryByTestId(`connection-picker-${TOOL_SERVICE}-existing`)).toBeNull();
-    expect(screen.queryByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeNull();
-    expect(screen.getByTestId(`connection-caller-supplied-${TOOL_SERVICE}`)).toBeTruthy();
-  });
-
   it('creates a sentinel caller-supplied pin without invoking authorize', async () => {
     const changes: PickerConnection[][] = [];
     renderPicker({
       initial: [],
-      allowedScopes: ['per-author', 'shared', 'caller-supplied'],
+      scope: 'caller-supplied',
       onChange: next => changes.push(next),
     });
 
-    fireEvent.click(screen.getByTestId(`connection-scope-${TOOL_SERVICE}-caller-supplied`));
     const markBtn = screen.getByTestId(`connection-mark-caller-supplied-${TOOL_SERVICE}`);
     await act(async () => {
       fireEvent.click(markBtn);
@@ -808,39 +740,15 @@ describe('ConnectionPicker', () => {
     expect(screen.queryByTestId(`connection-label-${TOOL_SERVICE}-0`)).toBeNull();
   });
 
-  it('locks scope and hides radios when allowedScopes has a single entry (builder per-author)', async () => {
-    authorizeMock.mockResolvedValueOnce({ status: 'completed', connectionId: 'new-pa' });
-    const changes: PickerConnection[][] = [];
-    renderPicker({
-      initial: [],
-      allowedScopes: ['per-author'],
-      onChange: next => changes.push(next),
-    });
-
-    // Radios are not rendered when there's only one allowed scope.
-    expect(screen.queryByTestId(`connection-scope-${TOOL_SERVICE}`)).toBeNull();
-    // Connect form renders immediately — no upfront scope picking required.
-    expect(screen.getByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId(`connection-connect-${TOOL_SERVICE}`));
-    });
-
-    expect(authorizeMock).toHaveBeenCalledWith(expect.objectContaining({ scope: 'per-author', toolkit: TOOL_SERVICE }));
-    const last = changes[changes.length - 1];
-    expect(last?.[0]).toMatchObject({ connectionId: 'new-pa', scope: 'per-author' });
-  });
-
   it('renders the declare-only flow immediately when locked to caller-supplied (editor)', async () => {
     const changes: PickerConnection[][] = [];
     renderPicker({
       initial: [],
-      allowedScopes: ['caller-supplied'],
+      scope: 'caller-supplied',
       onChange: next => changes.push(next),
     });
 
-    // No radios, no label input, no Connect button — just the marker CTA.
-    expect(screen.queryByTestId(`connection-scope-${TOOL_SERVICE}`)).toBeNull();
+    // No label input, no Connect button — just the marker CTA.
     expect(screen.queryByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeNull();
     expect(screen.queryByTestId(`connection-connect-${TOOL_SERVICE}`)).toBeNull();
 
@@ -865,7 +773,7 @@ describe('ConnectionPicker', () => {
         }),
       ),
     );
-    renderPicker({ initial: [], allowedScopes: ['caller-supplied'] });
+    renderPicker({ initial: [], scope: 'caller-supplied' });
     expect(screen.queryByTestId(`connection-picker-${TOOL_SERVICE}-existing`)).toBeNull();
   });
 
