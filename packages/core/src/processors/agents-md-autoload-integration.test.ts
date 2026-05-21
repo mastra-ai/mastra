@@ -257,7 +257,8 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     );
 
     const injector = new AgentsMDInjector({
-      pathExists: (path: string) => path === '/repo/AGENTS.md' || path === '/repo/src/index.ts',
+      pathExists: (path: string) =>
+        path === '/repo/AGENTS.md' || path === '/repo/src/index.ts' || path === '/repo/src/other.ts',
       isDirectory: (path: string) => path === '/repo' || path === '/repo/src',
       readFile: () => AGENTS_MD_CONTENT,
     });

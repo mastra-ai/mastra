@@ -181,7 +181,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     );
   });
 
-  it('sendSignal rotates the response message ID before adding the signal', async () => {
+  it('sendSignal rotates the response message ID and updates the step result', async () => {
     const rotateResponseMessageId = vi.fn(() => 'rotated-id');
 
     const runner = new ProcessorRunner({
@@ -201,7 +201,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
       agentName: 'test-agent',
     });
 
-    await runner.runProcessInputStep({
+    const result = await runner.runProcessInputStep({
       messageList,
       stepNumber: 0,
       steps: [],
@@ -213,7 +213,12 @@ describe('sendSignal integration through ProcessorRunner', () => {
       writer: { custom: async () => {} },
     });
 
+    // rotateResponseMessageId was invoked
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+
+    // The step result's messageId reflects the rotated value, proving the
+    // rotation propagated to the step state (not just the callback invocation).
+    expect(result.messageId).toBe('rotated-id');
   });
 
   it('multiple sendSignal calls from different processors are all preserved', async () => {
