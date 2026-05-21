@@ -202,7 +202,7 @@ export const WithTrailingCell: Story = {
         <DataList.TopCell>Name</DataList.TopCell>
         <DataList.TopCell>Path</DataList.TopCell>
         <DataList.TopCell>Description</DataList.TopCell>
-        <DataList.TopCell>{' '}</DataList.TopCell>
+        <DataList.TopCell> </DataList.TopCell>
       </DataList.Top>
       {[
         { name: 'web-search', path: '/skills/web-search', description: 'Search the web and return summaries.' },
