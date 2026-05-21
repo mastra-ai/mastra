@@ -147,3 +147,13 @@ allowlist). Rows whose toolkit has no pinned connection show an inline
 "Set up connection" button that switches the active tab to Connections.
 The Connections tab remains the source of truth for OAuth, labels, and
 scopes.
+
+Fix `agentBuilderTool` silently dropping Composio (integration) tool
+selections. `routeToolInputToFormKeys` now returns a fourth bucket
+(`toolProvidersFragment`) keyed by `providerId` → `slug` → `{ toolkit,
+description? }`, and the builder hook shallow-merges it into the form's
+`toolProviders[providerId].tools` so user-pinned connections survive. The
+builder client tool is also gated on `useAllProviderTools().isLoading` to
+avoid exposing a partially-populated `tools` enum/description to the LLM
+on agent create — without the gate, the LLM could fire before integration
+ids were available and silently omit them.

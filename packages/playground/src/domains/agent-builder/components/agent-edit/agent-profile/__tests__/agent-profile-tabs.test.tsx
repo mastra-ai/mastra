@@ -95,7 +95,7 @@ describe('AgentProfileTabs', () => {
     );
 
     const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toEqual(['Instructions', 'Model', 'Tools', 'Skills']);
+    expect(tabs).toEqual(['Instructions', 'Model', 'Tools', 'Connections', 'Skills']);
   });
 
   it('hides the Tools tab when no tools are available', () => {
@@ -144,6 +144,6 @@ describe('AgentProfileTabs', () => {
     );
 
     const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toEqual(['Instructions']);
+    expect(tabs).toEqual(['Instructions', 'Connections']);
   });
 });

@@ -40,6 +40,8 @@ const renderBuilderTool = (
     features?: typeof features;
     availableSkills?: StoredSkillResponse[];
     availableModels?: ModelInfo[];
+    integrationToolsLoading?: boolean;
+    defaultValues?: Partial<AgentBuilderEditFormValues>;
   } = {},
 ) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = {
@@ -48,7 +50,15 @@ const renderBuilderTool = (
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: {} },
+      defaultValues: {
+        name: '',
+        description: '',
+        instructions: '',
+        tools: {},
+        agents: {},
+        skills: {},
+        ...options.defaultValues,
+      },
     });
     formRef.current = methods;
     return React.createElement(FormProvider, methods, children);
@@ -61,6 +71,7 @@ const renderBuilderTool = (
         availableAgentTools,
         availableSkills: options.availableSkills,
         availableModels: options.availableModels,
+        integrationToolsLoading: options.integrationToolsLoading,
       }),
     {
       wrapper: Wrapper,
@@ -168,6 +179,107 @@ describe('useAgentBuilderTool execute routing', () => {
 
     expect(form().getValues('tools')).toEqual({ 'tool-a': true });
     expect(form().getValues('workflows')).toEqual({ 'wf-1': true });
+  });
+
+  it('routes integration tool ids into form.toolProviders, preserving existing connections', async () => {
+    const availableAgentTools: AgentTool[] = [
+      {
+        id: 'composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        description: 'Fetch Gmail emails',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'gmail',
+      },
+    ];
+
+    const { tool, form } = renderBuilderTool(availableAgentTools, {
+      defaultValues: {
+        toolProviders: {
+          composio: {
+            tools: {},
+            connections: {
+              gmail: [
+                {
+                  kind: 'author',
+                  toolkit: 'gmail',
+                  connectionId: 'ca_existing',
+                  label: 'personal',
+                  scope: 'per-author',
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    await tool!.execute!({
+      name: 'Gmail agent',
+      instructions: 'fetch mail',
+      tools: [{ id: 'composio:GMAIL_FETCH_EMAILS', name: 'GMAIL_FETCH_EMAILS' }],
+    } as any);
+
+    const next = form().getValues('toolProviders');
+    expect(next).toEqual({
+      composio: {
+        tools: {
+          GMAIL_FETCH_EMAILS: { toolkit: 'gmail', description: 'Fetch Gmail emails' },
+        },
+        connections: {
+          gmail: [
+            {
+              kind: 'author',
+              toolkit: 'gmail',
+              connectionId: 'ca_existing',
+              label: 'personal',
+              scope: 'per-author',
+            },
+          ],
+        },
+      },
+    });
+    // Integration ids must NOT leak into the native tools allowlist.
+    expect(form().getValues('tools')).toEqual({});
+  });
+
+  it('writes both native tools and integration toolProviders when the LLM emits a mix', async () => {
+    const availableAgentTools: AgentTool[] = [
+      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
+      {
+        id: 'composio:SLACK_POST',
+        name: 'SLACK_POST',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'slack',
+      },
+    ];
+
+    const { tool, form } = renderBuilderTool(availableAgentTools);
+
+    await tool!.execute!({
+      name: 'Mixed agent',
+      instructions: 'do things',
+      tools: [
+        { id: 'tool-a', name: 'Tool A' },
+        { id: 'composio:SLACK_POST', name: 'SLACK_POST' },
+      ],
+    } as any);
+
+    expect(form().getValues('tools')).toEqual({ 'tool-a': true });
+    expect(form().getValues('toolProviders')).toEqual({
+      composio: {
+        tools: { SLACK_POST: { toolkit: 'slack' } },
+        connections: {},
+      },
+    });
+  });
+
+  it('returns undefined from the hook while the integration tool catalog is loading', () => {
+    const { tool } = renderBuilderTool([], { integrationToolsLoading: true });
+    expect(tool).toBeUndefined();
   });
 
   it('writes selected model to the form with a cleaned provider id', async () => {
