@@ -99,6 +99,11 @@ export class UnixSocketPubSub extends PubSub {
     return this.#isBroker;
   }
 
+  /** Number of remote clients currently connected to this broker. Always 0 for non-broker instances. */
+  get remoteClientCount(): number {
+    return this.#isBroker ? this.#brokerClients.size : 0;
+  }
+
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     await this.#ensureStarted();
     if (this.#isBroker) {
@@ -389,13 +394,18 @@ export class UnixSocketPubSub extends PubSub {
 
     this.#deliverLocal(topic, brokerEvent);
 
-    const frame: ServerFrame = { type: 'event', topic, event: brokerEvent };
+    // Skip serialization entirely when no remote clients could receive the event.
+    if (this.#brokerClients.size === 0) return;
+
+    let frame: ServerFrame | undefined;
     for (const client of this.#brokerClients.values()) {
       if (!client.subscriptions.has(topic) || client.socket.destroyed) continue;
+      // Lazily build the frame only when we know at least one client needs it.
+      frame ??= { type: 'event', topic, event: brokerEvent };
       const write = writeFrame(client.socket, frame).catch(() => {});
       this.#pendingWrites.push(write);
     }
-    await this.flush();
+    if (frame) await this.flush();
   }
 
   #deliverLocal(topic: string, event: Event) {

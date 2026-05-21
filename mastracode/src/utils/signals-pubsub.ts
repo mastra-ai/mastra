@@ -1,27 +1,13 @@
-import { createHash } from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { PerThreadPubSub } from '@mastra/core/events';
 
-import { UnixSocketPubSub } from '@mastra/core/events';
-
-import { getAppDataDir } from './project.js';
-
-function getSignalsDir(): string {
-  const dir = path.join(getAppDataDir(), 'signals');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  return dir;
-}
-
-function shortHash(value: string): string {
-  return createHash('sha256').update(value).digest('hex').slice(0, 16);
-}
-
-export function getSignalsPubSubSocketPath(resourceId: string): string {
-  return path.join(getSignalsDir(), `${shortHash(resourceId)}.sock`);
-}
-
-export function createSignalsPubSub(resourceId: string): UnixSocketPubSub {
-  return new UnixSocketPubSub(getSignalsPubSubSocketPath(resourceId));
+/**
+ * Creates a per-thread PubSub for cross-process signal coordination.
+ *
+ * Each thread gets its own Unix socket (in /tmp for automatic cleanup).
+ * Processes on different threads never exchange data. A solo process on a
+ * thread has zero serialization overhead — the broker only serializes when
+ * another process joins the same thread's socket.
+ */
+export function createSignalsPubSub(resourceId: string): PerThreadPubSub {
+  return new PerThreadPubSub(resourceId);
 }
