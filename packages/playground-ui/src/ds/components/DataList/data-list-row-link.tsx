@@ -25,9 +25,7 @@ export function DataListRowLink({
   featured,
 }: DataListRowLinkProps) {
   const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
-  const resolvedStyle = hasColumnOverride
-    ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` }
-    : style;
+  const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
   return (
     <Link
       href={to}
