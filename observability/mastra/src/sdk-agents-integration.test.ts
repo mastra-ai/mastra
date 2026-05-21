@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
+import { ClaudeSDKAgent } from '@mastra/core/sdk-agents/claude';
 import { CursorSDKAgent } from '@mastra/core/sdk-agents/cursor';
 import { MockStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
@@ -48,6 +49,42 @@ function createCursorAgent() {
   };
 }
 
+function createClaudeQuery() {
+  return async function* () {
+    yield {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        delta: {
+          type: 'text_delta',
+          text: 'Claude SDK result',
+        },
+      },
+    };
+    yield {
+      type: 'result',
+      subtype: 'success',
+      result: 'Claude SDK result',
+      errors: [],
+      usage: {
+        input_tokens: 12,
+        output_tokens: 5,
+        cache_read_input_tokens: 2,
+        cache_creation_input_tokens: 1,
+      },
+      total_cost_usd: 0.0123,
+      modelUsage: {
+        'claude-sonnet-4-6': {
+          input_tokens: 12,
+          output_tokens: 5,
+          cache_read_input_tokens: 2,
+          cache_creation_input_tokens: 1,
+        },
+      },
+    };
+  };
+}
+
 function createMastraWithSDKAgent(testExporter: TestExporter) {
   const agent = new CursorSDKAgent({
     id: 'cursor-agent',
@@ -69,6 +106,32 @@ function createMastraWithSDKAgent(testExporter: TestExporter) {
     }),
     agents: {
       cursorAgent: agent,
+    },
+  });
+}
+
+function createMastraWithClaudeSDKAgent(testExporter: TestExporter) {
+  const agent = new ClaudeSDKAgent({
+    id: 'claude-agent',
+    name: 'Claude Agent',
+    description: 'Claude SDK agent',
+    agent: createClaudeQuery(),
+    model: 'claude-sonnet-4-6',
+  });
+
+  return new Mastra({
+    storage: new MockStore(),
+    observability: new Observability({
+      sensitiveDataFilter: false,
+      configs: {
+        test: {
+          serviceName: 'sdk-agent-integration-test',
+          exporters: [testExporter],
+        },
+      },
+    }),
+    agents: {
+      claudeAgent: agent,
     },
   });
 }
@@ -171,6 +234,95 @@ describe('SDK agent observability integration', () => {
     });
     expect(modelStepSpan?.parentSpanId).toBe(modelGenerationSpan?.id);
     expect(modelChunkSpans.length).toBeGreaterThan(0);
+    expectCompleteTrace(testExporter);
+  });
+
+  it('exports Claude SDK estimated cost on auto-extracted model token metrics', async () => {
+    const testExporter = new TestExporter();
+    const mastra = createMastraWithClaudeSDKAgent(testExporter);
+    const agent = mastra.getAgent('claudeAgent');
+
+    const result = await agent.generate('Generate prompt', { runId: 'claude-cost-run' });
+    await mastra.observability.getDefaultInstance()?.flush();
+
+    const [modelGenerationSpan] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+    const inputTokenMetrics = testExporter.getMetricsByName('mastra_model_total_input_tokens');
+    const outputTokenMetrics = testExporter.getMetricsByName('mastra_model_total_output_tokens');
+    const costMetric = inputTokenMetrics.find(metric => metric.costContext?.costMetadata?.source === 'sdk_estimate');
+
+    expect(result.text).toBe('Claude SDK result');
+    expect(modelGenerationSpan?.attributes).toMatchObject({
+      model: 'claude-sonnet-4-6',
+      provider: '@anthropic-ai/claude-agent-sdk',
+      usage: {
+        inputTokens: 15,
+        outputTokens: 5,
+      },
+      costContext: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        estimatedCost: 0.0123,
+        costUnit: 'USD',
+      },
+    });
+    expect(costMetric).toMatchObject({
+      name: 'mastra_model_total_input_tokens',
+      value: 15,
+      costContext: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        estimatedCost: 0.0123,
+        costUnit: 'USD',
+        costMetadata: {
+          source: 'sdk_estimate',
+          sdkProvider: '@anthropic-ai/claude-agent-sdk',
+          sdkCostField: 'total_cost_usd',
+          allocation: 'query_total',
+        },
+      },
+    });
+    expect(outputTokenMetrics.some(metric => metric.costContext?.costMetadata?.source === 'sdk_estimate')).toBe(false);
+    expectCompleteTrace(testExporter);
+  });
+
+  it('exports Claude SDK estimated cost on streamed auto-extracted model token metrics', async () => {
+    const testExporter = new TestExporter();
+    const mastra = createMastraWithClaudeSDKAgent(testExporter);
+    const agent = mastra.getAgent('claudeAgent');
+
+    const result = await agent.stream('Stream prompt', { runId: 'claude-stream-cost-run' });
+    expect(await result.text).toBe('Claude SDK result');
+    await mastra.observability.getDefaultInstance()?.flush();
+
+    const [modelGenerationSpan] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+    const inputTokenMetrics = testExporter.getMetricsByName('mastra_model_total_input_tokens');
+    const costMetric = inputTokenMetrics.find(metric => metric.costContext?.costMetadata?.source === 'sdk_estimate');
+
+    expect(modelGenerationSpan?.attributes).toMatchObject({
+      model: 'claude-sonnet-4-6',
+      provider: '@anthropic-ai/claude-agent-sdk',
+      streaming: true,
+      usage: {
+        inputTokens: 15,
+        outputTokens: 5,
+      },
+      costContext: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        estimatedCost: 0.0123,
+        costUnit: 'USD',
+      },
+    });
+    expect(costMetric?.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      estimatedCost: 0.0123,
+      costUnit: 'USD',
+      costMetadata: {
+        source: 'sdk_estimate',
+        allocation: 'query_total',
+      },
+    });
     expectCompleteTrace(testExporter);
   });
 });
