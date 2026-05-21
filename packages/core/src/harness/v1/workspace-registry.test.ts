@@ -8,7 +8,7 @@
  * `HarnessWorkspaceLostError`).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
@@ -86,16 +86,74 @@ describe('WorkspaceRegistry — shared', () => {
     expect(calls).toBe(1);
   });
 
-  it('eager: true provisions the workspace synchronously from the Harness constructor', async () => {
+  it('eager: true provisions the shared workspace from Harness init', async () => {
     let constructed = 0;
     const factory = () => {
       constructed++;
       return makeWorkspace('eager');
     };
-    new Harness(baseConfig({ workspace: { kind: 'shared' as const, workspace: factory, eager: true } }));
-    // Constructor fires acquireShared() — give the microtask a tick to land.
+    const harness = new Harness(
+      baseConfig({ workspace: { kind: 'shared' as const, workspace: factory, eager: true } }),
+    );
+
     await new Promise(r => setImmediate(r));
+    expect(constructed).toBe(0);
+
+    await harness.init();
     expect(constructed).toBe(1);
+  });
+
+  it('deduplicates concurrent shared workspace teardown', async () => {
+    let releaseDestroy!: () => void;
+    const destroy = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          releaseDestroy = resolve;
+        }),
+    );
+    const workspace = { ...makeWorkspace('shared'), destroy } as unknown as Workspace;
+    const harness = new Harness(baseConfig({ workspace: { kind: 'shared' as const, workspace, eager: true } }));
+
+    await harness.init();
+    const firstDestroy = harness._workspaceRegistry.destroyShared();
+    const secondDestroy = harness._workspaceRegistry.destroyShared();
+    releaseDestroy();
+    await Promise.all([firstDestroy, secondDestroy]);
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not recreate the shared workspace while shutdown is destroying it', async () => {
+    let releaseDestroy!: () => void;
+    const destroy = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          releaseDestroy = resolve;
+        }),
+    );
+    let calls = 0;
+    const workspace = { ...makeWorkspace('shared'), destroy } as unknown as Workspace;
+    const harness = new Harness(
+      baseConfig({
+        workspace: {
+          kind: 'shared' as const,
+          eager: true,
+          workspace: () => {
+            calls++;
+            return workspace;
+          },
+        },
+      }),
+    );
+
+    await harness.init();
+    const shutdown = harness._workspaceRegistry.shutdown();
+    await expect(harness.getWorkspace()).rejects.toThrow('workspace registry is shut down');
+    releaseDestroy();
+    await shutdown;
+
+    expect(calls).toBe(1);
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });
 

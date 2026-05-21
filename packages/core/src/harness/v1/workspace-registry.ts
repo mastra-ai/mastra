@@ -28,6 +28,7 @@ import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-pr
 interface SharedEntry {
   workspace?: Workspace;
   resolving?: Promise<Workspace>;
+  destroying?: Promise<void>;
   initialized: boolean;
 }
 
@@ -80,6 +81,7 @@ export class WorkspaceRegistry {
   private readonly _perResource = new Map<string, PerResourceEntry>();
   private readonly _perSession = new Map<string, PerSessionEntry>();
   private readonly _resolvedProvider?: WorkspaceProvider;
+  private _closed = false;
 
   constructor(opts: { config?: HarnessWorkspaceConfig; emitter: EventEmitter }) {
     this._config = opts.config;
@@ -149,6 +151,11 @@ export class WorkspaceRegistry {
     if (!this._shared || !this._config || this._config.kind !== 'shared') {
       throw new HarnessConfigError('workspace', 'no shared workspace configured');
     }
+    this._assertOpen();
+    if (this._shared.destroying) {
+      await this._shared.destroying;
+      this._assertOpen();
+    }
     if (this._shared.workspace) {
       return this._shared.workspace;
     }
@@ -174,6 +181,11 @@ export class WorkspaceRegistry {
         await ws.init();
         this._shared!.initialized = true;
       }
+      if (this._closed) {
+        await this._destroyWorkspace(ws);
+        this._shared!.initialized = false;
+        throw new HarnessConfigError('workspace', 'workspace registry is shut down');
+      }
       this._shared!.workspace = ws;
       this._emitStatus({ status: 'ready' });
       return ws;
@@ -188,16 +200,27 @@ export class WorkspaceRegistry {
   }
 
   async destroyShared(): Promise<void> {
+    if (!this._shared) return;
+    if (this._shared.destroying) return this._shared.destroying;
+    if (!this._shared.workspace) return;
+    const destroy = this._destroySharedOnce();
+    this._shared.destroying = destroy;
+    try {
+      await destroy;
+    } finally {
+      if (this._shared.destroying === destroy) {
+        this._shared.destroying = undefined;
+      }
+    }
+  }
+
+  private async _destroySharedOnce(): Promise<void> {
     if (!this._shared || !this._shared.workspace) return;
     const ws = this._shared.workspace;
-    this._emitStatus({ status: 'destroying' });
-    try {
-      await ws.destroy();
-    } catch (err) {
-      this._emitError({ err });
-    }
     this._shared.workspace = undefined;
     this._shared.initialized = false;
+    this._emitStatus({ status: 'destroying' });
+    await this._destroyWorkspace(ws);
     this._emitStatus({ status: 'destroyed' });
   }
 
@@ -207,6 +230,7 @@ export class WorkspaceRegistry {
 
   async acquirePerResource(opts: AcquirePerResourceOpts): Promise<Workspace> {
     this._assertKind('per-resource');
+    this._assertOpen();
     const existing = this._perResource.get(opts.resourceId);
     if (existing) {
       existing.refCount += 1;
@@ -274,6 +298,7 @@ export class WorkspaceRegistry {
 
   async acquirePerSession(opts: AcquirePerSessionOpts): Promise<Workspace> {
     this._assertKind('per-session');
+    this._assertOpen();
     const existing = this._perSession.get(opts.sessionId);
     if (existing) {
       existing.refCount += 1;
@@ -329,6 +354,7 @@ export class WorkspaceRegistry {
 
   inheritPerSession(opts: InheritPerSessionOpts): Workspace {
     this._assertKind('per-session');
+    this._assertOpen();
     const parent = this._perSession.get(opts.parentSessionId);
     if (!parent) {
       throw new HarnessConfigError(
@@ -383,6 +409,7 @@ export class WorkspaceRegistry {
   // -------------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
+    this._closed = true;
     // Iterate over unique per-session entries (multiple ids can point to the
     // same physical entry under `inherit`). De-dup via Set on object identity.
     const seenSessionEntries = new Set<PerSessionEntry>();
@@ -432,6 +459,20 @@ export class WorkspaceRegistry {
         'workspace.kind',
         `expected "${expected}", got "${this._config?.kind ?? 'unconfigured'}"`,
       );
+    }
+  }
+
+  private _assertOpen(): void {
+    if (this._closed) {
+      throw new HarnessConfigError('workspace', 'workspace registry is shut down');
+    }
+  }
+
+  private async _destroyWorkspace(workspace: Workspace): Promise<void> {
+    try {
+      await workspace.destroy();
+    } catch (err) {
+      this._emitError({ err });
     }
   }
 

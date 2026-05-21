@@ -659,6 +659,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     await this.validateEELicense();
     await this.validateAgentBuilderLicense();
     await this.validateFGAPolicyCoverage();
+    await this.mastra.init();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
   }

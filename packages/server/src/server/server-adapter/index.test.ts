@@ -2,6 +2,7 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 import type { IFGAProvider } from '@mastra/core/auth/ee';
+import type { ChannelProvider } from '@mastra/core/channels';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from './index';
@@ -77,6 +78,69 @@ describe('custom route forwarding', () => {
       deleted: '123',
       reason: 'no longer needed',
     });
+  });
+});
+
+describe('server init readiness', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('awaits Mastra init before registering routes', async () => {
+    const events: string[] = [];
+    const mastra = new Mastra({ logger: false });
+    vi.spyOn(mastra, 'init').mockImplementation(async () => {
+      events.push('mastra:init');
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    vi.spyOn(adapter, 'registerCustomApiRoutes').mockImplementation(async () => {
+      events.push('custom-routes');
+    });
+    vi.spyOn(adapter, 'registerRoutes').mockImplementation(async () => {
+      events.push('routes');
+    });
+
+    await adapter.init();
+
+    expect(events).toEqual(['mastra:init', 'custom-routes', 'routes']);
+  });
+
+  it('does not register routes when Mastra init fails', async () => {
+    const mastra = new Mastra({ logger: false });
+    vi.spyOn(mastra, 'init').mockRejectedValue(new Error('harness readiness failed'));
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const registerCustomApiRoutes = vi.spyOn(adapter, 'registerCustomApiRoutes');
+    const registerRoutes = vi.spyOn(adapter, 'registerRoutes');
+
+    await expect(adapter.init()).rejects.toThrow('harness readiness failed');
+
+    expect(registerCustomApiRoutes).not.toHaveBeenCalled();
+    expect(registerRoutes).not.toHaveBeenCalled();
+  });
+
+  it('does not register channel routes when channel initialization fails without Harness', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const channel: ChannelProvider = {
+      id: 'failing-channel',
+      getRoutes: () => [
+        {
+          path: '/channels/failing/webhook',
+          method: 'POST',
+          handler: vi.fn(),
+        },
+      ],
+      initialize: vi.fn().mockRejectedValue(new Error('channel readiness failed')),
+    };
+    const mastra = new Mastra({
+      channels: { failing: channel },
+      logger: false,
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const registerRoutes = vi.spyOn(adapter, 'registerRoutes');
+
+    await expect(adapter.init()).rejects.toThrow('channel readiness failed');
+
+    expect(registerRoutes).not.toHaveBeenCalled();
   });
 });
 
