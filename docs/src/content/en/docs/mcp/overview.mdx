@@ -62,6 +62,42 @@ For connecting to OAuth-protected MCP servers, see the [OAuth Authentication](/r
 
 :::
 
+## Connect local project-file servers
+
+Some stdio MCP servers work against local files in your project instead of a remote API. For example, a formula workbook server can let an agent update input cells, recalculate outputs, and persist workbook state as JSON.
+
+The following example starts [Bilig WorkPaper](https://github.com/proompteng/bilig) as a local writable MCP server and stores the workbook at `./pricing.workpaper.json`:
+
+```typescript title="src/mastra/mcp/workpaper-mcp-client.ts"
+import { MCPClient } from '@mastra/mcp'
+
+export const workpaperMcpClient = new MCPClient({
+  id: 'workpaper-mcp-client',
+  servers: {
+    bilig: {
+      command: 'npm',
+      args: [
+        'exec',
+        '--yes',
+        '--package',
+        '@bilig/workpaper@0.131.2',
+        '--',
+        'bilig-workpaper-mcp',
+        '--workpaper',
+        './pricing.workpaper.json',
+        '--init-demo-workpaper',
+        '--writable',
+      ],
+      requireToolApproval: true,
+    },
+  },
+})
+```
+
+Because this server can write to disk, `requireToolApproval: true` keeps each workbook edit behind Mastra's human approval flow. Pass `await workpaperMcpClient.listTools()` to an agent, then ask it to update workbook inputs, read calculated outputs, and verify the persisted JSON before returning an answer.
+
+Use the same pattern for any local-file MCP server: keep the server command explicit, require approval when tools can mutate files, and ask the agent to return readback or persistence evidence.
+
 ## Using `MCPClient` with an agent
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
