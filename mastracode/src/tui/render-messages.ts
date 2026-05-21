@@ -31,6 +31,21 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+
+type MessageWithAttributes = HarnessMessage & {
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+};
+
+function getUserMessageLabel(message: MessageWithAttributes, fallbackLabel?: string): string | undefined {
+  if (message.attributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
+  return fallbackLabel;
+}
+
+function getPendingUserMessageLabel(isInterjection?: boolean): string | undefined {
+  return isInterjection ? WHILE_ACTIVE_USER_MESSAGE_LABEL : undefined;
+}
+
 function getCurrentModeColor(state: TUIState): string | undefined {
   return state.harness.getCurrentMode?.()?.color;
 }
@@ -229,8 +244,9 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  const label = getPendingUserMessageLabel(pending.isInterjection);
   const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
-    ...(pending.isInterjection ? { label: 'interjection' } : {}),
+    ...(label ? { label } : {}),
   });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
@@ -265,8 +281,9 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
+    const label = getPendingUserMessageLabel(pending.isInterjection);
     const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
-      ...(pending.isInterjection ? { label: 'interjection' } : {}),
+      ...(label ? { label } : {}),
     });
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
@@ -410,8 +427,9 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
+    const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
-      ...(options?.label ? { label: options.label } : {}),
+      ...(label ? { label } : {}),
     });
 
     state.messageComponentsById.set(message.id, userComponent);

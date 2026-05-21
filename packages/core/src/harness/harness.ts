@@ -167,6 +167,7 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
     id,
     type: 'user-message',
     contents: rawContents as AgentSignalContents,
+    attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
     createdAt: getStringValue(payload.createdAt),
   });
   const content = signalContentsToHarnessContent(signal.contents);
@@ -177,6 +178,7 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
     role: 'user',
     content,
     createdAt: signal.createdAt,
+    attributes: signal.attributes,
   };
 }
 
@@ -1986,6 +1988,7 @@ export class Harness<TState = {}> {
             role: 'user',
             content: signalContent,
             createdAt: msg.createdAt,
+            attributes: signal.attributes,
           };
         }
       }

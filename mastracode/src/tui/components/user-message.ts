@@ -71,9 +71,9 @@ class BorderedBox {
     // Box inner width = content width + prompt prefix (the "│ " and " │" add the padding)
     let boxInner = maxContentWidth + 2;
     // When a label is present, ensure the box is wide enough so the top border
-    // (╭── label ──...──╮) doesn't exceed the content/bottom border width.
+    // (╭ label ──...──╮) doesn't exceed the content/bottom border width.
     if (this.label) {
-      const labelOverhead = ` ${this.label} `.length + 4; // ╭── + label + ╮
+      const labelOverhead = ` ${this.label} `.length + 2; // ╭ + label + ╮
       const neededBoxWidth = Math.max(boxInner + 4, labelOverhead);
       boxInner = neededBoxWidth - 4;
     }
@@ -85,13 +85,13 @@ class BorderedBox {
     const promptPrefix = chalk.hex(tintHex(mastra.green, 1))('»') + ' ';
     const promptWidth = 2;
 
-    // Top border: ╭──...──╮ or ╭── label ──...──╮
+    // Top border: ╭──...──╮ or ╭ label ──...──╮
     if (this.label) {
       const labelText = ` ${this.label} `;
       const labelLen = labelText.length;
-      const remaining = Math.max(0, boxWidth - 2 - 2 - labelLen);
+      const remaining = Math.max(0, boxWidth - 2 - labelLen);
       lines.push(
-        borderColor('╭──') + chalk.hex(theme.getTheme().dim)(labelText) + borderColor(`${'─'.repeat(remaining)}╮`),
+        borderColor('╭') + chalk.hex(theme.getTheme().dim)(labelText) + borderColor(`${'─'.repeat(remaining)}╮`),
       );
     } else {
       lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));

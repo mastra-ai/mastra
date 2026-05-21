@@ -332,7 +332,7 @@ export class MastraTUI {
     const messageId = `user-${Date.now()}`;
     const isInterjection = this.state.harness.isCurrentThreadStreamActive();
     addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
-      ...(isInterjection ? { label: 'interjection' } : {}),
+      ...(isInterjection ? { label: 'steer' } : {}),
     });
     this.state.ui.requestRender();
     return messageId;
