@@ -1,5 +1,5 @@
-import type { PostableMessage } from './agent-channels';
 import { chatModule } from './chat-lazy';
+import type { PostableMessage } from './types';
 
 // ---------------------------------------------------------------------------
 // Lazy accessors for Chat SDK card primitives (loaded after initialize())

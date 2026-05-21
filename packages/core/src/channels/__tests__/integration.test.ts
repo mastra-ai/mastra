@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage/mock';
-import type { ChannelConfig } from '../agent-channels';
+import type { ChannelConfig } from '../types';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {

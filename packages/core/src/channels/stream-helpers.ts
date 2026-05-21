@@ -1,7 +1,6 @@
 import type { StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
-import type { PostableMessage, ToolDisplayEvent } from './agent-channels';
 import {
   formatArgsSummary,
   formatResult,
@@ -10,6 +9,7 @@ import {
   formatToolRunning,
   stripToolPrefix,
 } from './formatting';
+import type { PostableMessage, ToolDisplayEvent } from './types';
 
 /**
  * Approval card metadata stashed when a driver posts an approval card. The

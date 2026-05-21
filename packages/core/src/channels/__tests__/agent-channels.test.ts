@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
-import { AgentChannels, matchesDomain, extractUrls } from '../agent-channels';
+import { AgentChannels } from '../agent-channels';
+import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {

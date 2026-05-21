@@ -2,7 +2,6 @@ import type { Adapter, StreamChunk, Thread } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
-import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './agent-channels';
 import { chatModule } from './chat-lazy';
 import { formatToolApproval } from './formatting';
 import { asOmChunk, renderOmTaskUpdate } from './om';
@@ -14,6 +13,7 @@ import {
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
+import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;

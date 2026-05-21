@@ -1,5 +1,362 @@
+import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+
 import type { Mastra } from '../mastra';
-import type { ApiRoute } from '../server/types';
+import type { ApiRoute, CorsOptions } from '../server/types';
+import type { InlineLinkEntry } from './inline-media';
+import type { TypingStatusFn } from './typing-status';
+
+export type { InlineLinkEntry } from './inline-media';
+
+// =============================================================================
+// Agent-side configuration types (consumer-facing)
+// =============================================================================
+
+/** Message content that can be posted to a channel. */
+export type PostableMessage = string | CardElement;
+
+/** Per-adapter configuration shared across all `toolDisplay` modes. */
+export interface ChannelAdapterBaseConfig {
+  adapter: Adapter;
+  /**
+   * CORS configuration for the generated webhook route for this adapter.
+   */
+  cors?: CorsOptions;
+  /**
+   * Start a persistent Gateway WebSocket listener for this adapter
+   * (default: `true`).
+   *
+   * Only relevant for adapters that support it (e.g. Discord).
+   * Required for receiving DMs, @mentions, and reactions. Set to `false` for
+   * serverless deployments that only need slash commands via HTTP Interactions.
+   */
+  gateway?: boolean;
+
+  /**
+   * Override how errors are rendered in the chat.
+   * Return a user-friendly message instead of exposing the raw error.
+   *
+   * @default `"❌ Error: <error.message>"`
+   */
+  formatError?: (error: Error) => PostableMessage;
+
+  /**
+   * Stream agent text deltas to this adapter as the agent generates them, instead of
+   * buffering and posting once per step. On adapters with native streaming (e.g. Slack)
+   * this is rendered live; on adapters without it (e.g. Discord) the Chat SDK falls back
+   * to post + edit, which can feel noisy — leave it off there.
+   *
+   * - `false` (default) — buffer text and post once per `step-finish`.
+   * - `true` — stream with default options.
+   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval.
+   *
+   * @default false
+   */
+  streaming?: boolean | { updateIntervalMs?: number };
+
+  /**
+   * Show platform typing indicators (and adaptive status text where supported,
+   * e.g. Slack Assistant mode displays `<App Name> <status>`).
+   *
+   * - `true` (default) — use built-in defaults:
+   *   - `text-delta` → `'is typing…'`
+   *   - `tool-call` → `` `is calling ${toolName}…` ``
+   *   - `tool-call-approval` → `'is waiting for approval…'`
+   * - `false` — disable all typing indicators for this adapter. Useful when
+   *   `streaming: true` or `toolDisplay: 'timeline' | 'grouped'` already
+   *   surface progress via the live widget.
+   * - `(chunk, ctx) => string | false` — custom function called on every chunk
+   *   in the agent stream. Return a string to set the typing status; return
+   *   `false`/`null`/`undefined` to leave the current status unchanged. The
+   *   function fully replaces the defaults (no merging) — import
+   *   `defaultTypingStatus` from `@mastra/core/channels` to fall back to
+   *   defaults for chunks you don't handle.
+   *
+   * @example
+   * ```ts
+   * import { defaultTypingStatus } from '@mastra/core/channels';
+   *
+   * typingStatus: (chunk, ctx) => {
+   *   if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
+   *     return 'is searching docs…';
+   *   }
+   *   return defaultTypingStatus(chunk, ctx);
+   * }
+   * ```
+   *
+   * @default true
+   */
+  typingStatus?: boolean | TypingStatusFn;
+}
+
+/**
+ * How tool calls are rendered in the channel.
+ *
+ * String modes:
+ * - `'cards'` — per-tool "Running…" → "Result" Block Kit cards. Default when
+ *   `streaming: false`. Requires `streaming: false`.
+ * - `'text'` — per-tool plain-text messages (no Block Kit). Good for platforms
+ *   without rich card rendering (e.g. Discord). Requires `streaming: false`.
+ * - `'timeline'` — emit `task_update` chunks into the active streaming session
+ *   so each tool renders as an inline task card alongside text. Default when
+ *   `streaming: true`. Requires `streaming: true`. Slack renders this
+ *   natively; other adapters may render a placeholder.
+ * - `'grouped'` — same as `'timeline'` but tasks combine into a single plan
+ *   widget (`StreamingPlan({ groupTasks: 'plan' })`). Requires `streaming: true`.
+ * - `'hidden'` — execute tools silently. Only the typing status indicates work.
+ *
+ * Function form: custom renderer. See {@link ToolDisplayFn}.
+ *
+ * Mismatched string modes (e.g. `'cards'` with `streaming: true`) warn once
+ * per platform and fall back to the streaming-appropriate default.
+ */
+export type ToolDisplay = 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn;
+
+/**
+ * Custom tool-call renderer. Called once per tool lifecycle event (running,
+ * result, error, approval). Returns either a postable message (closes the
+ * streaming session if open, posts/edits the message, then reopens on the
+ * next chunk), a streaming chunk (pushed into the streaming session — opens
+ * one lazily if needed), or `undefined` to skip the event.
+ *
+ * In static drivers (`streaming: false`), returning `{ kind: 'stream' }`
+ * flattens the chunk to a plain-text fallback message.
+ */
+export type ToolDisplayFn = (event: ToolDisplayEvent, ctx: ToolDisplayContext) => ToolDisplayResult;
+
+/** Per-event payload passed to {@link ToolDisplayFn}. */
+export type ToolDisplayEvent =
+  | {
+      kind: 'running';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+    }
+  | {
+      kind: 'result';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      result: unknown;
+      resultText: string;
+      durationMs: number;
+      isError: boolean;
+    }
+  | {
+      kind: 'error';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      error: unknown;
+      errorText: string;
+      durationMs: number;
+    }
+  | {
+      kind: 'approval';
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      toolCallId: string;
+    };
+
+/** Context about which driver is consuming the function-form result. */
+export interface ToolDisplayContext {
+  /** Which driver is consuming the result. */
+  mode: 'streaming' | 'static';
+  /** Adapter platform key (e.g. `'slack'`, `'discord'`). */
+  platform: string;
+}
+
+/** Return value from a {@link ToolDisplayFn}. */
+export type ToolDisplayResult =
+  | { kind: 'post'; message: PostableMessage; replace?: boolean }
+  | { kind: 'stream'; chunk: StreamChunk }
+  | undefined
+  | void;
+
+/** Per-adapter configuration. */
+export interface ChannelAdapterConfig extends ChannelAdapterBaseConfig {
+  /** See {@link ToolDisplay} for mode descriptions. */
+  toolDisplay?: ToolDisplay;
+}
+
+/**
+ * Handler function for channel events.
+ * Receives the thread, message, and the default handler implementation.
+ * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
+ */
+export type ChannelHandler = (
+  thread: Thread,
+  message: Message,
+  defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+) => Promise<void>;
+
+/**
+ * Handler configuration for channel events.
+ * - `undefined` or omitted → use default handler
+ * - `false` → disable handler entirely
+ * - function → custom handler (receives defaultHandler as 3rd arg to wrap/extend)
+ */
+export type ChannelHandlerConfig = ChannelHandler | false | undefined;
+
+/** Handler overrides for built-in channel event handlers. */
+export interface ChannelHandlers {
+  /**
+   * Handler for direct messages to the bot.
+   * Default: Routes to agent.stream and posts the response.
+   */
+  onDirectMessage?: ChannelHandlerConfig;
+
+  /**
+   * Handler for @mentions of the bot in channels.
+   * Default: Routes to agent.stream and posts the response.
+   */
+  onMention?: ChannelHandlerConfig;
+
+  /**
+   * Handler for messages in subscribed threads.
+   * Default: Routes to agent.stream and posts the response.
+   */
+  onSubscribedMessage?: ChannelHandlerConfig;
+}
+
+/** Configuration for agent chat channels. */
+export interface ChannelConfig {
+  /** Platform adapters keyed by name (e.g. 'slack', 'discord'). */
+  adapters: Record<string, Adapter | ChannelAdapterConfig>;
+
+  /**
+   * Override built-in event handlers.
+   * Use this to customize how the agent responds to DMs, mentions, etc.
+   *
+   * @example
+   * ```ts
+   * handlers: {
+   *   // Wrap the default handler with logging
+   *   onDirectMessage: async (thread, message, defaultHandler) => {
+   *     console.log('Received DM:', message.text);
+   *     await defaultHandler(thread, message);
+   *   },
+   *   // Disable mention handling entirely
+   *   onMention: false,
+   * }
+   * ```
+   */
+  handlers?: ChannelHandlers;
+
+  /**
+   * Which media types to send inline to the model (as file parts).
+   * Everything else is described as text metadata so the agent knows about the
+   * file without crashing models that reject unsupported types.
+   *
+   * - **Array of globs** — e.g. `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']` (default), `['image/*', 'video/*']`
+   * - **Function** — `(mimeType: string) => boolean`
+   *
+   * @default `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`
+   *
+   * @example
+   * ```ts
+   * // Gemini supports video/audio natively
+   * inlineMedia: ['image/*', 'video/*', 'audio/*']
+   *
+   * // Send everything inline
+   * inlineMedia: () => true
+   * ```
+   */
+  inlineMedia?: string[] | ((mimeType: string) => boolean);
+
+  /**
+   * Promote URLs found in message text to file parts so the model can "see" linked
+   * content (images, videos, PDFs, etc.) instead of just the raw URL text.
+   *
+   * Each entry matches a domain. When a URL in the message matches, it's added as
+   * a `file` part alongside the text. Use a string for domains where a HEAD request
+   * determines the Content-Type, or an object to force a specific mime type (useful
+   * for sites like YouTube where HEAD returns `text/html` but the model treats the
+   * URL as video).
+   *
+   * - **String** — domain to match; HEAD determines the mime type
+   * - **Object** `{ match, mimeType }` — domain + forced mime type (skips HEAD)
+   * - `'*'` — match all URLs (HEAD each one)
+   * - `undefined` (default) — disabled, no URLs are promoted
+   *
+   * For string entries (or `'*'`), the resolved Content-Type is checked against
+   * `inlineMedia` — only matching types become file parts. For object entries with
+   * a forced `mimeType`, the file part is always added.
+   *
+   * @example
+   * ```ts
+   * // Gemini can process YouTube URLs natively as video
+   * inlineLinks: [
+   *   { match: 'youtube.com', mimeType: 'video/*' },
+   *   { match: 'youtu.be', mimeType: 'video/*' },
+   * ]
+   *
+   * // HEAD-check linked images from any domain
+   * inlineLinks: ['*']
+   *
+   * // Mix: force YouTube, HEAD-check everything else
+   * inlineLinks: [
+   *   { match: 'youtube.com', mimeType: 'video/*' },
+   *   'imgur.com',
+   *   'i.redd.it',
+   * ]
+   * ```
+   */
+  inlineLinks?: InlineLinkEntry[];
+
+  /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
+  state?: StateAdapter;
+
+  /** The bot's display name (default: agent's name, or `'Mastra'`). */
+  userName?: string;
+
+  /**
+   * Fetch recent thread messages from the platform to provide context when the agent
+   * is mentioned mid-conversation. Only fetches on the first mention in a thread —
+   * once subscribed, the agent has full history via Mastra's memory system.
+   *
+   * @example
+   * ```ts
+   * threadContext: { maxMessages: 15 } // Fetch more context
+   * threadContext: { maxMessages: 0 }  // Disable (opt-out)
+   * ```
+   */
+  threadContext?: {
+    /**
+     * Maximum number of recent platform messages to fetch (default: 10).
+     * Only applies to non-DM threads where the agent isn't already subscribed.
+     * Set to 0 to disable.
+     */
+    maxMessages?: number;
+  };
+
+  /**
+   * Whether to include channel tools (add_reaction, remove_reaction).
+   * Set to `false` for models that don't support function calling.
+   *
+   * @default true
+   */
+  tools?: boolean;
+
+  /**
+   * Additional options passed directly to the Chat SDK.
+   * Use this for advanced configuration not exposed by Mastra.
+   *
+   * @see https://github.com/vercel/chat
+   * @example
+   * ```ts
+   * chatOptions: {
+   *   dedupeTtlMs: 600000, // 10 minute deduplication window
+   *   fallbackStreamingPlaceholderText: '⏳',
+   * }
+   * ```
+   */
+  chatOptions?: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
+}
 
 // =============================================================================
 // Channel Info (discovery types for Editor/UI)

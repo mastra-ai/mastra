@@ -12,7 +12,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
-import type { ChannelConfig } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,

@@ -2,7 +2,6 @@ import type { Adapter, Thread } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
-import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './agent-channels';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
@@ -12,6 +11,7 @@ import {
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
+import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
 
 export interface StaticDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
