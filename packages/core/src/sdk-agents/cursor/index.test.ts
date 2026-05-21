@@ -4,14 +4,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { isAgentCompatible } from '../../agent';
 import { CursorSDKAgent } from './index';
 
-function createTurnEndedUpdate(): InteractionUpdate {
+function createTurnEndedUpdate({
+  inputTokens = 10,
+  outputTokens = 4,
+  cacheReadTokens = 2,
+  cacheWriteTokens = 3,
+}: {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+} = {}): InteractionUpdate {
   return {
     type: 'turn-ended',
     usage: {
-      inputTokens: 10,
-      outputTokens: 4,
-      cacheReadTokens: 2,
-      cacheWriteTokens: 3,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
     },
   } as InteractionUpdate;
 }
@@ -62,9 +72,11 @@ function createRun({
   } as Run;
 }
 
-function createSDKAgent(run: Run) {
+function createSDKAgent(run: Run, updates: InteractionUpdate[] = [createTurnEndedUpdate()]) {
   const send = vi.fn(async (_message: string, options?: SendOptions) => {
-    await options?.onDelta?.({ update: createTurnEndedUpdate() });
+    for (const update of updates) {
+      await options?.onDelta?.({ update });
+    }
     return run;
   });
   const sdkAgent = {
@@ -137,6 +149,36 @@ describe('CursorSDKAgent', () => {
       }),
     );
     expect(onDelta).toHaveBeenCalledWith({ update: createTurnEndedUpdate() });
+  });
+
+  it('sums usage across Cursor turn-ended updates', async () => {
+    const { sdkAgent } = createSDKAgent(createRun(), [
+      createTurnEndedUpdate({
+        inputTokens: 10,
+        outputTokens: 4,
+        cacheReadTokens: 2,
+        cacheWriteTokens: 3,
+      }),
+      createTurnEndedUpdate({
+        inputTokens: 7,
+        outputTokens: 5,
+        cacheReadTokens: 11,
+        cacheWriteTokens: 13,
+      }),
+    ]);
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      agent: sdkAgent,
+    });
+
+    const result = await agent.generate('Generate prompt');
+
+    expect(result.usage.inputTokens).toBe(46);
+    expect(result.usage.outputTokens).toBe(9);
+    expect(result.usage.totalTokens).toBe(55);
+    expect(result.usage.cachedInputTokens).toBe(13);
+    expect(result.usage.cacheCreationInputTokens).toBe(16);
   });
 
   it('stream emits Mastra chunks and resolves text from Cursor stream messages', async () => {
