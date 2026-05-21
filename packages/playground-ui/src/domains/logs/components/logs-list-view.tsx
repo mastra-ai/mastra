@@ -1,7 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
-import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
+import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/DataList';
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
 const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';

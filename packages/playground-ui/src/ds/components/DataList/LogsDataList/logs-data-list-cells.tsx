@@ -1,4 +1,4 @@
-import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
+import { DataListCell, DataListMonoCell } from '../data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
