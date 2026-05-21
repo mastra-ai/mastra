@@ -94,6 +94,7 @@ export class ClaudeSDKAgent extends Agent {
       prompt,
       runId,
       streaming: false,
+      method: 'generate',
       options,
       mastra: this.#mastra,
     });
@@ -133,6 +134,7 @@ export class ClaudeSDKAgent extends Agent {
       prompt,
       runId,
       streaming: true,
+      method: 'stream',
       options,
       mastra: this.#mastra,
     });

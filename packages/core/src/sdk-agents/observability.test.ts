@@ -196,7 +196,12 @@ describe('SDK agent observability', () => {
       type: SpanType.AGENT_RUN,
       entityId: 'cursor-agent',
       entityName: 'Cursor Agent',
-      metadata: { runId: 'mastra-run' },
+      metadata: {
+        runId: 'mastra-run',
+        sdkAgent: true,
+        sdkProvider: '@cursor/sdk',
+        sdkMethod: 'generate',
+      },
     });
     expect(modelSpan.options).toMatchObject({
       type: SpanType.MODEL_GENERATION,
@@ -204,6 +209,12 @@ describe('SDK agent observability', () => {
         model: 'gpt-5.5',
         provider: '@cursor/sdk',
         streaming: false,
+      },
+      metadata: {
+        runId: 'mastra-run',
+        sdkAgent: true,
+        sdkProvider: '@cursor/sdk',
+        sdkMethod: 'generate',
       },
     });
     expect(modelSpan.end).toHaveBeenCalledWith(
@@ -273,6 +284,38 @@ describe('SDK agent observability', () => {
       }),
     );
     expect(agentSpan.end).toHaveBeenCalledWith({ output: { text: 'streamed text' } });
+  });
+
+  it('marks Cursor generate spans as errored when the SDK send fails', async () => {
+    const rootSpan = createMockSpan();
+    const sdkError = new Error('Cursor SDK failed');
+    const sdkAgent = {
+      agentId: 'cursor-sdk-agent',
+      send: vi.fn(async () => {
+        throw sdkError;
+      }),
+    } as unknown as SDKAgent;
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      agent: sdkAgent,
+      model: { id: 'gpt-5.5' },
+    });
+
+    await expect(
+      agent.generate('Generate prompt', {
+        runId: 'failed-run',
+        tracingContext: { currentSpan: rootSpan },
+      }),
+    ).rejects.toThrow('Cursor SDK failed');
+
+    const agentSpan = rootSpan.children[0];
+    const modelSpan = agentSpan.children[0];
+
+    expect(modelSpan.error).toHaveBeenCalledWith({ error: sdkError });
+    expect(agentSpan.error).toHaveBeenCalledWith({ error: sdkError });
+    expect(modelSpan.end).not.toHaveBeenCalled();
+    expect(agentSpan.end).not.toHaveBeenCalled();
   });
 
   it('records Claude generate spans with cost metadata preserved in the output', async () => {
@@ -357,5 +400,51 @@ describe('SDK agent observability', () => {
       }),
     );
     expect(agentSpan.end).toHaveBeenCalledWith({ output: { text: 'streamed text' } });
+  });
+
+  it('marks Claude stream spans as errored when the SDK stream fails', async () => {
+    const rootSpan = createMockSpan();
+    const query = vi.fn<ClaudeQueryFunction>(() =>
+      createClaudeQuery([
+        {
+          type: 'result',
+          subtype: 'error_during_execution',
+          errors: ['Claude stream failed'],
+          duration_ms: 25,
+          duration_api_ms: 20,
+          is_error: true,
+          num_turns: 1,
+          total_cost_usd: 0.0123,
+          permission_denials: [],
+          uuid: 'message-uuid',
+          session_id: 'session-id',
+        } as ClaudeSDKMessage,
+      ]),
+    );
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      agent: query,
+      model: 'claude-sonnet-4-6',
+    });
+
+    const stream = await agent.stream('Stream prompt', {
+      runId: 'failed-stream-run',
+      tracingContext: { currentSpan: rootSpan },
+    });
+    await expect(stream.text).rejects.toThrow('Claude stream failed');
+    await stream.consumeStream().catch(() => undefined);
+
+    const agentSpan = rootSpan.children[0];
+    const modelSpan = agentSpan.children[0];
+
+    expect(modelSpan.error).toHaveBeenCalledWith({
+      error: expect.objectContaining({ message: 'Claude stream failed' }),
+    });
+    expect(agentSpan.error).toHaveBeenCalledWith({
+      error: expect.objectContaining({ message: 'Claude stream failed' }),
+    });
+    expect(modelSpan.end).not.toHaveBeenCalled();
+    expect(agentSpan.end).not.toHaveBeenCalled();
   });
 });

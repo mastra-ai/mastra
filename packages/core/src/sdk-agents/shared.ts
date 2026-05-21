@@ -188,6 +188,7 @@ export type SDKAgentTelemetryOptions<OUTPUT = unknown> = {
   prompt: string;
   runId: string;
   streaming: boolean;
+  method: 'generate' | 'stream';
   options?: SDKAgentRunOptions<OUTPUT>;
   mastra?: Mastra;
 };
@@ -209,6 +210,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
   prompt,
   runId,
   streaming,
+  method,
   options,
   mastra,
 }: SDKAgentTelemetryOptions<OUTPUT>): SDKAgentTelemetry<OUTPUT> {
@@ -228,6 +230,9 @@ export function createSDKAgentTelemetry<OUTPUT>({
     },
     metadata: {
       runId,
+      sdkAgent: true,
+      sdkProvider: provider,
+      sdkMethod: method,
     },
     tracingOptions: options?.tracingOptions,
     tracingContext: options?.tracingContext,
@@ -248,6 +253,9 @@ export function createSDKAgentTelemetry<OUTPUT>({
     },
     metadata: {
       runId,
+      sdkAgent: true,
+      sdkProvider: provider,
+      sdkMethod: method,
     },
     requestContext,
   });
