@@ -32,12 +32,14 @@ export function generateConversationHistory({
   messageCount = 5,
   toolFrequency = 3,
   toolNames = ['weather', 'calculator', 'search'],
+  startTime = Date.now(),
 }: {
   threadId: string;
   resourceId?: string;
   messageCount?: number;
   toolFrequency?: number;
   toolNames?: (keyof typeof toolArgs)[];
+  startTime?: number;
 }): {
   messages: MastraMessageV1[];
   messagesV2: MastraDBMessage[];
@@ -50,7 +52,6 @@ export function generateConversationHistory({
   // Arguments for different tools
 
   const messages: MastraDBMessage[] = [];
-  const startTime = Date.now();
 
   // Generate message pairs (user message followed by assistant response)
   for (let i = 0; i < messageCount; i++) {
@@ -124,7 +125,7 @@ export function generateConversationHistory({
       id: `message-${messages.length + 1 * 2}`,
       threadId,
       resourceId,
-      createdAt: new Date(startTime + messages.length + 1 * 2000), // Each pair 2 seconds apart
+      createdAt: new Date(startTime + messages.length * 1000),
     });
     counts.messages++;
   }
