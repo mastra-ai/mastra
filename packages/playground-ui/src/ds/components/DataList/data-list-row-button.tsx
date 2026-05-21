@@ -11,13 +11,24 @@ export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataLi
  * can attach a ref and `data-index` to each rendered row.
  */
 export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButtonProps>(
-  ({ children, className, type = 'button', flushLeft, colStart, featured, style, ...rest }, ref) => {
+  ({ children, className, type = 'button', flushLeft, flushRight, colStart, colEnd, featured, style, ...rest }, ref) => {
+    const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
+    const resolvedStyle = hasColumnOverride
+      ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` }
+      : style;
     return (
       <button
         ref={ref}
         type={type}
-        className={cn(...dataListRowStyles, 'text-left', flushLeft && 'ml-0!', featured && 'bg-surface4', className)}
-        style={colStart ? { ...style, gridColumn: `${colStart} / -1` } : style}
+        className={cn(
+          ...dataListRowStyles,
+          'text-left',
+          flushLeft && 'ml-0!',
+          flushRight && 'mr-0!',
+          featured && 'bg-surface4',
+          className,
+        )}
+        style={resolvedStyle}
         {...rest}
       >
         {children}
