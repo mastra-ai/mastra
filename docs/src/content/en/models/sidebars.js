@@ -223,6 +223,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crof',
+          label: 'CrofAI',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },
@@ -315,6 +320,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/inception',
           label: 'Inception',
+        },
+        {
+          type: 'doc',
+          id: 'providers/inceptron',
+          label: 'Inceptron',
         },
         {
           type: 'doc',
