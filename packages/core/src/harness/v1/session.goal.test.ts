@@ -11,14 +11,40 @@ import { Agent } from '../../agent';
 import type { GoalState } from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
+import type { MastraModelOutput } from '../../stream/base/output';
 import { HarnessValidationError } from './errors';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
 import type { Session } from './session';
 
+interface FakeRun {
+  text?: string;
+  runId?: string;
+  finishReason?: 'stop' | 'suspended';
+  holdUntil?: Promise<void>;
+}
+
 class FakeAgent extends Agent<any, any, any> {
+  streamCalls: Array<{ messages: unknown; options: any }> = [];
+  runs: FakeRun[] = [];
+
   constructor(id = 'default') {
     super({ id, name: id, instructions: 'fake', model: 'openai/gpt-4o-mini' as any });
+  }
+
+  enqueueRun(run: FakeRun): void {
+    this.runs.push(run);
+  }
+
+  async stream(messages: unknown, options?: any): Promise<MastraModelOutput> {
+    this.streamCalls.push({ messages, options });
+    const run = this.runs.shift() ?? {};
+    const output = buildOutput({
+      ...run,
+      runId: run.runId ?? options?.runId ?? `fake-run-${this.streamCalls.length}`,
+    });
+    this._internalRegisterStreamRun(output, (options ?? {}) as any);
+    return output;
   }
 }
 
@@ -41,6 +67,18 @@ function record(session: Session, types?: HarnessEvent['type'][]): HarnessEvent[
     if (!types || types.includes(event.type)) events.push(event);
   });
   return events;
+}
+
+function installJudge(
+  session: Session,
+  fn: (goal: GoalState) => Promise<{ decision: 'done' | 'continue' | 'waiting'; reason: string }>,
+): void {
+  session.__testJudge = fn;
+}
+
+function extractSignalContents(messages: unknown): unknown {
+  if (!messages || typeof messages !== 'object') return undefined;
+  return (messages as { contents?: unknown }).contents;
 }
 
 describe('Session.setGoal()', () => {
@@ -155,6 +193,131 @@ describe('Session goal lifecycle', () => {
   });
 });
 
+describe('Session goal judge loop', () => {
+  it('emits goal_judged and goal_done when the judge returns done', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', kickoff: false });
+    installJudge(session, async () => ({ decision: 'done', reason: 'finished' }));
+    const events = record(session, ['goal_judged', 'goal_done', 'goal_paused']);
+    agent.enqueueRun({ finishReason: 'stop', text: 'all done' });
+
+    await session.message({ content: 'do work' });
+
+    const judged = events.find(event => event.type === 'goal_judged') as { decision: { decision: string } } | undefined;
+    const done = events.find(event => event.type === 'goal_done');
+    expect(judged?.decision.decision).toBe('done');
+    expect(done).toBeDefined();
+    expect(session.getGoal()?.status).toBe('done');
+    expect(session.getGoal()?.turnsUsed).toBe(1);
+  });
+
+  it('does not advance turnsUsed when the judge returns waiting', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', kickoff: false });
+    installJudge(session, async () => ({ decision: 'waiting', reason: 'awaiting user' }));
+    agent.enqueueRun({ finishReason: 'stop', text: 'ask user' });
+
+    await session.message({ content: 'do work' });
+
+    expect(session.getGoal()?.status).toBe('active');
+    expect(session.getGoal()?.turnsUsed).toBe(0);
+  });
+
+  it('enqueues a continuation when the judge returns continue and skips re-judging on it', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', kickoff: false });
+    let judgeCalls = 0;
+    installJudge(session, async () => {
+      judgeCalls++;
+      return { decision: 'continue', reason: 'keep going' };
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'turn 1' });
+    agent.enqueueRun({ finishReason: 'stop', text: 'turn 2 (continuation)' });
+
+    await session.message({ content: 'kick off' });
+    await waitFor(() => agent.streamCalls.length >= 2);
+    await session.waitForIdle({ timeoutMs: 1000 });
+
+    expect(judgeCalls).toBe(1);
+    expect(session.getGoal()?.turnsUsed).toBe(1);
+    expect(extractSignalContents(agent.streamCalls[1]!.messages)).toMatch(/<system-reminder type="goal-judge">/);
+  });
+
+  it('pauses with reason budget_exhausted when turnsUsed reaches maxTurns', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', maxTurns: 1, kickoff: false });
+    installJudge(session, async () => ({ decision: 'continue', reason: 'keep going' }));
+    const events = record(session, ['goal_paused']);
+    agent.enqueueRun({ finishReason: 'stop', text: 'turn 1' });
+
+    await session.message({ content: 'kick off' });
+
+    expect(session.getGoal()?.status).toBe('paused');
+    expect((events[0] as { reason: string }).reason).toBe('budget_exhausted');
+    expect(session.getRecord().pendingQueue).toEqual([]);
+  });
+
+  it('pauses with reason judge_failed when the judge throws', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', kickoff: false });
+    installJudge(session, async () => {
+      throw new Error('boom');
+    });
+    const events = record(session, ['goal_paused', 'goal_judged']);
+    agent.enqueueRun({ finishReason: 'stop', text: 'turn 1' });
+
+    await session.message({ content: 'kick off' });
+
+    expect(session.getGoal()?.status).toBe('paused');
+    const paused = events.find(event => event.type === 'goal_paused') as { reason: string } | undefined;
+    expect(paused?.reason).toBe('judge_failed');
+    expect(events.some(event => event.type === 'goal_judged')).toBe(false);
+  });
+
+  it('discards verdicts for a goal that was cleared mid-judge', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'first', kickoff: false });
+    installJudge(session, async () => {
+      await session.clearGoal();
+      return { decision: 'done', reason: 'stale' };
+    });
+    const events = record(session, ['goal_judged', 'goal_done']);
+    agent.enqueueRun({ finishReason: 'stop', text: 'turn 1' });
+
+    await session.message({ content: 'go' });
+
+    expect(events).toEqual([]);
+    expect(session.getGoal()).toBeUndefined();
+  });
+
+  it('uses the no-assistant-message fallback without calling the judge', async () => {
+    const { harness, agent } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'ship X', maxTurns: 5, kickoff: false });
+    let judgeCalls = 0;
+    installJudge(session, async () => {
+      judgeCalls++;
+      return { decision: 'continue', reason: 'unused' };
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: '' });
+    agent.enqueueRun({ finishReason: 'stop', text: 'follow-up' });
+
+    await session.message({ content: 'go' });
+    await waitFor(() => agent.streamCalls.length >= 2);
+
+    expect(judgeCalls).toBe(0);
+    expect(extractSignalContents(agent.streamCalls[1]!.messages)).toBe(
+      '<system-reminder type="goal-judge">[Goal attempt 0/5] The goal is not yet complete. Judge feedback: No response yet, keep working.\n\nContinue working toward the goal: ship X</system-reminder>',
+    );
+  });
+});
+
 describe('Session goal continuation wording', () => {
   it('setGoal kickoff wraps the objective in <system-reminder type="goal">', async () => {
     const { harness } = setup({ goals: { defaultJudgeModel: 'judge:test' } });
@@ -182,6 +345,64 @@ describe('Session goal continuation wording', () => {
     );
   });
 });
+
+async function waitFor(check: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (check()) return;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  throw new Error('condition was not met before timeout');
+}
+
+function buildOutput(run: FakeRun): MastraModelOutput {
+  const fullOutput = {
+    text: run.text ?? 'ok',
+    usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+    finishReason: run.finishReason ?? 'stop',
+    object: undefined,
+    steps: [],
+    warnings: [],
+    providerMetadata: undefined,
+    request: {},
+    reasoning: [],
+    reasoningText: undefined,
+    toolCalls: [],
+    toolResults: [],
+    sources: [],
+    files: [],
+    response: { id: 'response-1', timestamp: new Date(), modelId: 'fake', messages: [], uiMessages: [] },
+    totalUsage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+    error: undefined,
+    tripwire: undefined,
+    traceId: undefined,
+    spanId: undefined,
+    runId: run.runId ?? 'fake-run',
+    suspendPayload: undefined,
+    messages: [],
+    rememberedMessages: [],
+  };
+  let finished!: () => void;
+  const finishedPromise = new Promise<void>(resolve => {
+    finished = resolve;
+  });
+  const fullStream = (async function* () {
+    if (run.holdUntil) await run.holdUntil;
+    finished();
+  })();
+  return {
+    runId: fullOutput.runId,
+    getFullOutput: async () => {
+      if (run.holdUntil) await run.holdUntil;
+      return fullOutput;
+    },
+    fullStream,
+    text: Promise.resolve(fullOutput.text),
+    finishReason: Promise.resolve(fullOutput.finishReason),
+    usage: Promise.resolve(fullOutput.usage),
+    _waitUntilFinished: () => finishedPromise,
+  } as unknown as MastraModelOutput;
+}
 
 describe('Session.updateJudgeDefaults()', () => {
   it('updates judge model on the in-flight goal without resetting turnsUsed', async () => {

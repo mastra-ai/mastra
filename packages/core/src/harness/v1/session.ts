@@ -1,11 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { z } from 'zod';
+import { z } from 'zod';
 
+import { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import { createSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
+import { ModelRouterLanguageModel } from '../../llm/model/router';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import type {
+  GoalJudgeDecision,
   HarnessStorage,
   OperationAdmissionTombstone,
   PendingResume,
@@ -90,6 +94,28 @@ const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mc
 const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'];
 const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
+const JUDGE_TRUNCATE_LIMIT = 4000;
+
+const JUDGE_SYSTEM_PROMPT = `You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.
+
+Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
+
+Use "done" when the goal is fully achieved.
+Use "waiting" only when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint. Do not use "waiting" merely because the assistant asked a question or could benefit from user input.
+Use "continue" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.
+If your previous decision was "waiting" for an explicit user checkpoint, keep choosing "waiting" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.
+If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose "continue" when the assistant should proceed to the next step. Do not choose "waiting" for judge-controlled checkpoints, because that would mean waiting for yourself.
+
+Your "reason" field is sent back to the assistant as guidance when the goal is not yet done - be specific about what still needs to be accomplished. When choosing "continue", write the reason as an instruction for what the assistant should do next. When choosing "waiting", explain what specific user checkpoint is still outstanding.`;
+
+const GoalJudgeSchema = z.object({
+  decision: z
+    .enum(['done', 'continue', 'waiting'])
+    .describe(
+      'Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal',
+    ),
+  reason: z.string().describe('Brief explanation of what was accomplished or what remains to be done'),
+});
 
 function escapeGoalXml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -101,6 +127,15 @@ function buildKickoffContinuation(objective: string): string {
 
 function buildResumeContinuation(objective: string): string {
   return `Continue working toward the goal: ${objective}`;
+}
+
+function buildJudgeContinuation(opts: { turn: number; max: number; objective: string; judgeReason: string }): string {
+  const message = `[Goal attempt ${opts.turn}/${opts.max}] The goal is not yet complete. Judge feedback: ${opts.judgeReason}\n\nContinue working toward the goal: ${opts.objective}`;
+  return `<system-reminder type="goal-judge">${escapeGoalXml(message)}</system-reminder>`;
+}
+
+function truncateForJudge(value: string): string {
+  return value.length > JUDGE_TRUNCATE_LIMIT ? value.slice(0, JUDGE_TRUNCATE_LIMIT) + '\n...[truncated]' : value;
 }
 
 function pendingResumeForDisplay(pending: SessionRecord['pendingResume']): SessionDisplayPending | null {
@@ -120,6 +155,7 @@ export class Session {
   private flushChain: Promise<void> = Promise.resolve();
   private currentTurnAbortController?: AbortController;
   private currentQueuedItemId?: string;
+  private currentQueuedItemSource?: 'user' | 'goal';
   private currentRunId?: string;
   private currentTraceId?: string;
   private draining = false;
@@ -128,6 +164,7 @@ export class Session {
   private readonly toolInputBuffers = new Map<string, { toolName: string; text: string }>();
   private readonly activeSubagents = new Map<string, ActiveSubagentState>();
   private readonly queueWaiters = new Map<string, QueueWaiter>();
+  __testJudge?: (goal: GoalState) => Promise<Omit<GoalJudgeDecision, 'judgedAt'>>;
 
   constructor(opts: SessionConstructorOptions) {
     this.harness = opts.harness;
@@ -1044,6 +1081,7 @@ export class Session {
     if (this.currentTurnAbortController === controller) {
       this.currentTurnAbortController = undefined;
       this.currentQueuedItemId = undefined;
+      this.currentQueuedItemSource = undefined;
       this.activeTools.clear();
       this.toolInputBuffers.clear();
       this.notifyMaybeIdle();
@@ -1277,6 +1315,7 @@ export class Session {
       },
     }));
     await this.maybeCaptureSuspend(full);
+    await this.runGoalJudge(full, this.currentQueuedItemSource === 'goal');
   }
 
   private async maybeCaptureSuspend(full: FullOutput<unknown>): Promise<void> {
@@ -1365,6 +1404,226 @@ export class Session {
         [queuedItem.id]: receipt,
       },
     }));
+    void this._kickQueueDrain();
+  }
+
+  private async runGoalJudge(turn: FullOutput<unknown>, wasGoalDriven: boolean): Promise<void> {
+    if (wasGoalDriven) return;
+
+    const goal = this.record.goal;
+    if (!goal || goal.status !== 'active') return;
+
+    const evaluatedGoalId = goal.id;
+    if (turn.finishReason === 'suspended') return;
+
+    const context = await this.getJudgeContext(turn);
+    if (this.record.goal?.id !== evaluatedGoalId || this.record.goal.status !== 'active') return;
+
+    if (!context.lastAssistantContent) {
+      if (goal.turnsUsed >= goal.maxTurns) {
+        await this.flushUpdate(prev =>
+          prev.goal && prev.goal.id === evaluatedGoalId
+            ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+            : prev,
+        );
+        this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'budget_exhausted' });
+        return;
+      }
+      await this.enqueueGoalContinuation(
+        goal,
+        buildJudgeContinuation({
+          turn: goal.turnsUsed,
+          max: goal.maxTurns,
+          objective: goal.objective,
+          judgeReason: 'No response yet, keep working.',
+        }),
+      );
+      return;
+    }
+
+    let decision: GoalJudgeDecision;
+    try {
+      decision = await this.callJudge(goal, turn);
+    } catch {
+      if (this.record.goal?.id !== evaluatedGoalId) return;
+      await this.flushUpdate(prev =>
+        prev.goal && prev.goal.id === evaluatedGoalId
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          : prev,
+      );
+      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'judge_failed' });
+      return;
+    }
+
+    if (this.record.goal?.id !== evaluatedGoalId) return;
+
+    const turnsUsed = decision.decision === 'waiting' ? goal.turnsUsed : goal.turnsUsed + 1;
+    const updated: GoalState = { ...goal, turnsUsed, lastDecision: decision };
+    await this.flushUpdate(prev => (prev.goal?.id === evaluatedGoalId ? { ...prev, goal: updated } : prev));
+
+    this._emit({
+      type: 'goal_judged',
+      goalId: evaluatedGoalId,
+      decision,
+      turnsUsed,
+      maxTurns: updated.maxTurns,
+    });
+
+    if (decision.decision === 'done') {
+      await this.flushUpdate(prev =>
+        prev.goal && prev.goal.id === evaluatedGoalId
+          ? { ...prev, goal: { ...prev.goal, status: 'done' as const } }
+          : prev,
+      );
+      this._emit({ type: 'goal_done', goalId: evaluatedGoalId, reason: decision.reason, turnsUsed });
+      return;
+    }
+
+    if (decision.decision === 'waiting') return;
+
+    if (turnsUsed >= updated.maxTurns) {
+      await this.flushUpdate(prev =>
+        prev.goal && prev.goal.id === evaluatedGoalId
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          : prev,
+      );
+      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'budget_exhausted' });
+      return;
+    }
+
+    if (this.record.goal?.id !== evaluatedGoalId || this.record.goal.status !== 'active') return;
+    await this.enqueueGoalContinuation(
+      updated,
+      buildJudgeContinuation({
+        turn: turnsUsed,
+        max: updated.maxTurns,
+        objective: updated.objective,
+        judgeReason: decision.reason,
+      }),
+    );
+  }
+
+  private async callJudge(goal: GoalState, turn: FullOutput<unknown>): Promise<GoalJudgeDecision> {
+    const hook = this.__testJudge;
+    if (hook) {
+      const verdict = await hook(goal);
+      return { ...verdict, judgedAt: Date.now() };
+    }
+
+    const context = await this.getJudgeContext(turn);
+    const judgeAgent = this.createJudgeAgent(goal);
+    const memory = await judgeAgent.getMemory({ requestContext: new RequestContext() });
+    const judgeThreadId = `${this.record.id}-${goal.id}`;
+
+    if (memory) {
+      const existing = await memory.getThreadById({ threadId: judgeThreadId });
+      if (!existing) {
+        await memory.createThread({
+          threadId: judgeThreadId,
+          resourceId: this.resourceId,
+          title: `Goal judge: ${goal.objective.slice(0, 80)}`,
+          metadata: {
+            goalJudge: true,
+            parentSessionId: this.id,
+            goalId: goal.id,
+          },
+        });
+      }
+    }
+
+    const truncatedAssistant = truncateForJudge(context.lastAssistantContent ?? 'No response yet, keep working.');
+    const recentUser = context.lastUserContent
+      ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
+      : '';
+    const prompt = `Goal: ${goal.objective}${recentUser}\n\nLatest assistant message:\n${truncatedAssistant}`;
+
+    const stream = await judgeAgent.stream(prompt, {
+      ...(memory ? { memory: { thread: judgeThreadId, resource: this.resourceId } } : {}),
+      structuredOutput: { schema: GoalJudgeSchema },
+    } as never);
+
+    await (stream as unknown as { consumeStream?: () => Promise<void> }).consumeStream?.();
+    const full = (await (stream as unknown as { getFullOutput: () => Promise<unknown> }).getFullOutput()) as {
+      object?: unknown;
+    };
+    const obj = full.object as { decision: 'done' | 'continue' | 'waiting'; reason: string } | undefined;
+    if (!obj || typeof obj !== 'object') {
+      throw new Error('judge returned no structured output');
+    }
+    return { decision: obj.decision, reason: obj.reason, judgedAt: Date.now() };
+  }
+
+  private async getJudgeContext(turn?: FullOutput<unknown>): Promise<{
+    lastUserContent: string | null;
+    assistantStepsSinceLastUser: number;
+    lastAssistantContent: string | null;
+  }> {
+    let messages: HarnessMessage[] = [];
+    try {
+      messages = await this.listMessages();
+    } catch {
+      messages = [];
+    }
+
+    let lastUserIndex = -1;
+    let lastAssistantContent: string | null = null;
+
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg = messages[i] as { role?: string; content?: unknown } | undefined;
+      if (!msg) continue;
+      if (!lastAssistantContent && msg.role === 'assistant') {
+        lastAssistantContent = this.extractTextContent(msg.content);
+      }
+      if (msg.role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+
+    if (!lastAssistantContent && turn) {
+      const text = (turn as { text?: string }).text;
+      if (typeof text === 'string' && text.length > 0) {
+        lastAssistantContent = text;
+      }
+    }
+
+    const lastUserContent =
+      lastUserIndex >= 0 ? this.extractTextContent((messages[lastUserIndex] as { content?: unknown }).content) : null;
+    const assistantStepsSinceLastUser =
+      lastUserIndex >= 0
+        ? messages.slice(lastUserIndex + 1).filter(message => (message as { role?: string }).role === 'assistant')
+            .length
+        : 0;
+
+    return {
+      lastUserContent,
+      assistantStepsSinceLastUser,
+      lastAssistantContent,
+    };
+  }
+
+  private extractTextContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter(part => (part as { type?: string })?.type === 'text')
+        .map(part => (part as { text?: string }).text ?? '')
+        .join('\n');
+    }
+    return String(content ?? '');
+  }
+
+  private createJudgeAgent(goal: GoalState): Agent {
+    const model = new ModelRouterLanguageModel(goal.judgeModelId as never);
+    return new Agent({
+      id: 'goal-judge',
+      name: 'Goal Judge',
+      instructions: JUDGE_SYSTEM_PROMPT,
+      model,
+      mastra: this.harness.mastra,
+      inputProcessors: [new ProviderHistoryCompat()],
+      errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    });
   }
 
   private async admitQueueInternal(
@@ -1547,6 +1806,7 @@ export class Session {
         const item = this.record.pendingQueue?.[0];
         if (!item) break;
         this.currentQueuedItemId = item.id;
+        this.currentQueuedItemSource = item.source ?? 'user';
         await this.updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
           ...receipt,
           status: receipt.status === 'queued' ? 'admitting' : receipt.status,
