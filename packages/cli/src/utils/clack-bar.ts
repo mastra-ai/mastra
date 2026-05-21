@@ -1,13 +1,17 @@
-import { styleText } from 'node:util';
+import pc from 'picocolors';
 
-const isUnicodeSupported =
-  process.platform !== 'win32' ? process.env.TERM !== 'linux' : Boolean(process.env.CI || process.env.WT_SESSION);
-
-const barChar = isUnicodeSupported ? '\u2502' : '|';
-const bar = styleText('gray', barChar);
+let _bar: string | undefined;
+async function getBar(): Promise<string> {
+  if (_bar === undefined) {
+    const { S_BAR } = await import('@clack/prompts');
+    _bar = pc.gray(S_BAR);
+  }
+  return _bar;
+}
 
 /** Write a line to stdout prefixed with the clack pipe for visual continuity. */
-export function writeBarLine(line: string): void {
+export async function writeBarLine(line: string): Promise<void> {
+  const bar = await getBar();
   process.stdout.write(`${bar}  ${line}\n`);
 }
 
@@ -18,6 +22,7 @@ export function writeBarLine(line: string): void {
  */
 export async function withBarPrefix<T>(fn: () => Promise<T>): Promise<T> {
   const originalWrite = process.stdout.write.bind(process.stdout);
+  const prefix = await getBar();
 
   process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
     const str = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString();
@@ -25,7 +30,7 @@ export async function withBarPrefix<T>(fn: () => Promise<T>): Promise<T> {
       .split('\n')
       .map((line: string, i: number, arr: string[]) => {
         if (i === arr.length - 1 && line === '') return '';
-        return `${bar}  ${line}`;
+        return `${prefix}  ${line}`;
       })
       .join('\n');
     return originalWrite(prefixed, ...(args as []));

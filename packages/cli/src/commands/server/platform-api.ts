@@ -428,13 +428,13 @@ async function pollServerLogs(deployId: string, token: string, orgId: string, si
       if (data) {
         const newBuild = data.buildLogs.slice(printedBuild);
         for (const line of newBuild) {
-          writeBarLine(line);
+          await writeBarLine(line);
         }
         printedBuild = data.buildLogs.length;
 
         const newDeploy = data.deployLogs.slice(printedDeploy);
         for (const line of newDeploy) {
-          writeBarLine(line);
+          await writeBarLine(line);
         }
         printedDeploy = data.deployLogs.length;
       }

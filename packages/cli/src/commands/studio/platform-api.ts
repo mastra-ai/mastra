@@ -247,7 +247,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
           skipNextUrlMeta = false;
           if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
         }
-        writeBarLine(data);
+        await writeBarLine(data);
       }
     }
   }
