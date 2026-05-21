@@ -1,6 +1,6 @@
 import { AlertDialog, Badge, Button, DropdownMenu, Input, Txt, cn } from '@mastra/playground-ui';
 import { AlertCircle, Link2, MoreVertical, Plus, RefreshCw, Trash2, Unlink2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAuthorize } from '../hooks/use-authorize';
 import { useConnectionFields } from '../hooks/use-connection-fields';
@@ -133,6 +133,13 @@ export const ConnectionPicker = ({
   // the pin.
   const scopeToggleEnabled = Boolean(allowedScopes && allowedScopes.length > 0);
   const allowedScopeSet = useMemo(() => new Set(allowedScopes ?? []), [allowedScopes]);
+  // When the host locks the surface to a single scope (e.g. builder → per-author,
+  // editor → caller-supplied), there's nothing to pick — auto-select it and
+  // hide the radios. Multi-scope hosts still force the user to choose.
+  const lockedScope = useMemo<'per-author' | 'shared' | 'caller-supplied' | null>(() => {
+    if (allowedScopes && allowedScopes.length === 1) return allowedScopes[0]!;
+    return null;
+  }, [allowedScopes]);
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
 
@@ -156,6 +163,9 @@ export const ConnectionPicker = ({
     // `authorId: undefined` is meaningful for admin "All authors"; the hook
     // already omits the param when not provided, which is exactly what we
     // want for non-admin (defer to server).
+    // When the surface is locked to a single scope, push that filter to the
+    // server so cross-scope rows never come back in the first place.
+    ...(lockedScope ? { scope: lockedScope } : {}),
   });
   const existingItems = useMemo(
     () => (existing.data?.pages ?? []).flatMap(page => page.items ?? []),
@@ -178,7 +188,16 @@ export const ConnectionPicker = ({
   // opts in via `allowedScopes`. Starts `null` so the user is forced to pick
   // a scope before connecting; reset back to `null` after every successful
   // authorize so the next add starts unselected too.
-  const [newScopeDraft, setNewScopeDraft] = useState<'per-author' | 'shared' | 'caller-supplied' | null>(null);
+  const [newScopeDraft, setNewScopeDraft] = useState<'per-author' | 'shared' | 'caller-supplied' | null>(lockedScope);
+
+  // Keep the draft in sync if `allowedScopes` changes at runtime (e.g. host
+  // narrows scopes after mount). When locked, force the draft to the locked
+  // value; when unlocked, only seed if the user hasn't picked yet.
+  useEffect(() => {
+    if (lockedScope) {
+      setNewScopeDraft(prev => (prev === lockedScope ? prev : lockedScope));
+    }
+  }, [lockedScope]);
 
   const fieldFormError = useMemo(() => {
     if (!requiresFields) return undefined;
@@ -283,6 +302,10 @@ export const ConnectionPicker = ({
 
   const renderScopeToggle = () => {
     if (!scopeToggleEnabled) return null;
+    // Single-scope surfaces lock the value — there's nothing to pick. The
+    // draft is auto-seeded to the locked scope so "Connect" enables without
+    // user interaction.
+    if (lockedScope) return null;
     const baseId = `connection-scope-${toolkit}`;
     const options: Array<{
       value: 'per-author' | 'shared' | 'caller-supplied';

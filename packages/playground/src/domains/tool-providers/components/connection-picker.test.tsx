@@ -886,6 +886,67 @@ describe('ConnectionPicker', () => {
     expect(screen.queryByTestId(`connection-label-${TOOL_SERVICE}-0`)).toBeNull();
   });
 
+  it('locks scope and hides radios when allowedScopes has a single entry (builder per-author)', async () => {
+    authorizeMock.mockResolvedValueOnce({ status: 'completed', connectionId: 'new-pa' });
+    const changes: PickerConnection[][] = [];
+    renderPicker({
+      initial: [],
+      allowedScopes: ['per-author'],
+      onChange: next => changes.push(next),
+    });
+
+    // Radios are not rendered when there's only one allowed scope.
+    expect(screen.queryByTestId(`connection-scope-${TOOL_SERVICE}`)).toBeNull();
+    // Connect form renders immediately — no upfront scope picking required.
+    expect(screen.getByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId(`connection-connect-${TOOL_SERVICE}`));
+    });
+
+    expect(authorizeMock).toHaveBeenCalledWith(expect.objectContaining({ scope: 'per-author', toolkit: TOOL_SERVICE }));
+    const last = changes[changes.length - 1];
+    expect(last?.[0]).toMatchObject({ connectionId: 'new-pa', scope: 'per-author' });
+  });
+
+  it('renders the declare-only flow immediately when locked to caller-supplied (editor)', async () => {
+    const changes: PickerConnection[][] = [];
+    renderPicker({
+      initial: [],
+      allowedScopes: ['caller-supplied'],
+      onChange: next => changes.push(next),
+    });
+
+    // No radios, no label input, no Connect button — just the marker CTA.
+    expect(screen.queryByTestId(`connection-scope-${TOOL_SERVICE}`)).toBeNull();
+    expect(screen.queryByTestId(`connection-new-label-${TOOL_SERVICE}`)).toBeNull();
+    expect(screen.queryByTestId(`connection-connect-${TOOL_SERVICE}`)).toBeNull();
+
+    const markBtn = screen.getByTestId(`connection-mark-caller-supplied-${TOOL_SERVICE}`);
+    await act(async () => {
+      fireEvent.click(markBtn);
+    });
+
+    expect(authorizeMock).not.toHaveBeenCalled();
+    const last = changes[changes.length - 1];
+    expect(last?.[0]).toMatchObject({
+      toolkit: TOOL_SERVICE,
+      scope: 'caller-supplied',
+    });
+  });
+
+  it('hides the existing-connections section when locked to caller-supplied', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-providers/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [{ connectionId: 'ca_per', status: 'active', label: 'Mine', scope: 'per-author' }],
+        }),
+      ),
+    );
+    renderPicker({ initial: [], allowedScopes: ['caller-supplied'] });
+    expect(screen.queryByTestId(`connection-picker-${TOOL_SERVICE}-existing`)).toBeNull();
+  });
+
   it('omits reauthorize and disconnect-everywhere actions for caller-supplied pins', async () => {
     renderPicker({
       initial: [

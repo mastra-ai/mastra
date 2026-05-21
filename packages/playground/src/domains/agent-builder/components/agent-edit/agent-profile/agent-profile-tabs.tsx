@@ -11,7 +11,10 @@ import { Tools } from './tools';
 import { useBuilderModelPolicy } from '@/domains/builder';
 import { ToolProvidersSection } from '@/domains/tool-providers/components/tool-providers-section';
 
-const BUILDER_ALLOWED_SCOPES = ['per-author', 'shared'] as const;
+// Builder is single-author surface: connections are private to the author.
+// `shared` and `caller-supplied` are out — shared belongs to editor/CMS multi-user
+// flows, caller-supplied is editor-only (host app resolves end-users at runtime).
+const BUILDER_ALLOWED_SCOPES = ['per-author'] as const;
 
 export interface AgentProfileTabsProps {
   availableAgentTools: AgentTool[];

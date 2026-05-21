@@ -12,6 +12,13 @@ export interface UseInfiniteConnectionsOpts {
   limit?: number;
   /** Disable the query entirely. */
   enabled?: boolean;
+  /**
+   * Server-side scope filter. When a surface locks the picker to a single
+   * scope (e.g. builder → per-author, editor → caller-supplied), forward it
+   * so listings don't include rows that the picker would just hide
+   * client-side.
+   */
+  scope?: 'per-author' | 'shared' | 'caller-supplied';
 }
 
 /**
@@ -30,10 +37,10 @@ export const useInfiniteConnections = (
   opts: UseInfiniteConnectionsOpts = {},
 ) => {
   const client = useMastraClient();
-  const { authorId, limit, enabled = true } = opts;
+  const { authorId, limit, enabled = true, scope } = opts;
 
   return useInfiniteQuery({
-    queryKey: ['tool-integration-connections', providerId, toolkit, { authorId, limit }],
+    queryKey: ['tool-integration-connections', providerId, toolkit, { authorId, limit, scope }],
     enabled: enabled && !!providerId && !!toolkit,
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
@@ -41,6 +48,7 @@ export const useInfiniteConnections = (
         toolkit: toolkit!,
         ...(authorId !== undefined ? { authorId } : {}),
         ...(limit !== undefined ? { limit } : {}),
+        ...(scope ? { scope } : {}),
         ...(pageParam ? { cursor: pageParam } : {}),
       }),
     getNextPageParam: lastPage => (lastPage as { nextCursor?: string }).nextCursor ?? undefined,
