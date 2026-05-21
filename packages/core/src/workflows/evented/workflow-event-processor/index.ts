@@ -1352,6 +1352,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         // `EventedRun.start` since it can't ride pubsub events. Walk the parent
         // chain so nested workflow runs inherit it.
         tracingContext: this.resolveRunTracingContext(runId),
+        tracingPolicy: workflow.options?.tracingPolicy,
       });
     }
     requestContext = Object.fromEntries(rc.entries());

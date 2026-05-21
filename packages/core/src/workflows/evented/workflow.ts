@@ -14,8 +14,14 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
-import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext, TracingContext } from '../../observability';
+import {
+  EntityType,
+  SpanType,
+  createObservabilityContext,
+  getOrCreateSpan,
+  resolveObservabilityContext,
+} from '../../observability';
+import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
 import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
@@ -1598,6 +1604,7 @@ export class EventedWorkflow<
         inputSchema: this.inputSchema,
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
+        tracingPolicy: this.options?.tracingPolicy,
       });
 
     this.runs.set(runIdToUse, run);
@@ -1671,6 +1678,7 @@ export class EventedRun<
     inputSchema?: StandardSchemaWithJSON<TInput>;
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
+    tracingPolicy?: TracingPolicy;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -1758,33 +1766,57 @@ export class EventedRun<
 
     this.setupAbortHandler();
 
-    // The evented engine's events are serialized over pubsub, so the
-    // non-serializable `currentSpan` on `tracingContext` can't ride them.
-    // Hold it on Mastra, keyed by runId, so the event processor can nest each
-    // step's spans under the run's parent span.
-    if (tracingContext?.currentSpan) {
-      this.mastra?.__registerRunTracingContext(this.runId, tracingContext);
+    // The evented engine runs steps from serialized pubsub events, which can't
+    // carry the non-serializable AISpan. Create the WORKFLOW_RUN span here and
+    // hold it on Mastra keyed by runId; the event processor nests each step's
+    // spans under it (see `WorkflowEventProcessor.resolveRunTracingContext`).
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
+      entityName: this.workflowId,
+      input: inputDataToUse,
+      metadata: { resourceId: this.resourceId, runId: this.runId },
+      tracingPolicy: this.tracingPolicy,
+      tracingContext,
+      requestContext,
+      mastra: this.mastra,
+    });
+    if (workflowSpan) {
+      this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
 
-    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      graph: this.executionGraph,
-      serializedStepGraph: this.serializedStepGraph,
-      input: inputDataToUse,
-      initialState: initialStateToUse,
-      pubsub: this.mastra.pubsub,
-      retryConfig: this.retryConfig,
-      requestContext,
-      abortController: this.abortController,
-      perStep,
-      outputOptions,
-    });
-
-    // console.dir({ startResult: result }, { depth: null });
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    try {
+      result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: inputDataToUse,
+        initialState: initialStateToUse,
+        pubsub: this.mastra.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext,
+        abortController: this.abortController,
+        perStep,
+        outputOptions,
+      });
+    } catch (error) {
+      workflowSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
+      this.mastra?.__unregisterRunTracingContext(this.runId);
+      throw error;
+    }
 
     if (result.status !== 'suspended') {
+      if (result.status === 'failed') {
+        const err = (result as { error?: unknown }).error;
+        workflowSpan?.error({ error: err instanceof Error ? err : new Error(String(err)) });
+      } else {
+        workflowSpan?.end({ output: (result as { result?: unknown }).result });
+      }
       this.mastra?.__unregisterRunTracingContext(this.runId);
       this.cleanup?.();
     }
