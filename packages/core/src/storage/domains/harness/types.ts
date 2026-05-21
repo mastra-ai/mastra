@@ -141,6 +141,8 @@ export interface GoalState {
   lastDecision?: GoalJudgeDecision;
 }
 
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
 /**
  * Per-session workspace state, only populated under a resumable per-session
  * workspace provider.

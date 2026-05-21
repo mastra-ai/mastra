@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { JsonValue } from '../../storage/domains/harness';
 import type { TaskItem } from '../tools';
 import { HarnessEventSerializationError, HarnessValidationError } from './errors';
 import type { EventSerializationReason } from './errors';
@@ -380,6 +381,101 @@ export type HarnessEvent =
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 export type HarnessEventUnsubscribe = () => void;
 
+export const HARNESS_EVENT_ID_PREFIX = 'harness-v1';
+
+export interface ParsedHarnessEventId {
+  epoch: string;
+  sequence: number;
+}
+
+export function formatHarnessEventId(epoch: string, sequence: number): string {
+  if (epoch.length === 0 || epoch.includes(':')) {
+    throw new HarnessValidationError('eventId.epoch', 'epoch must be non-empty and must not contain ":"');
+  }
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw new HarnessValidationError('eventId.sequence', 'sequence must be a non-negative safe integer');
+  }
+  return `${HARNESS_EVENT_ID_PREFIX}:${epoch}:${sequence}`;
+}
+
+export function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
+  const parts = eventId.split(':');
+  if (parts.length !== 3 || parts[0] !== HARNESS_EVENT_ID_PREFIX || parts[1] === '' || parts[2] === '') {
+    throw new HarnessValidationError('lastEventId', 'expected event id grammar harness-v1:<epoch>:<seq>');
+  }
+  const sequenceText = parts[2]!;
+  if (!/^(0|[1-9][0-9]*)$/.test(sequenceText)) {
+    throw new HarnessValidationError('lastEventId', 'event id sequence must be an unsigned decimal integer');
+  }
+  const sequence = Number(sequenceText);
+  if (!Number.isSafeInteger(sequence)) {
+    throw new HarnessValidationError('lastEventId', 'event id sequence must be within JavaScript safe integer range');
+  }
+  return { epoch: parts[1]!, sequence };
+}
+
+export function snapshotHarnessEventForJson(value: unknown, path = 'event'): JsonValue {
+  const seen = new WeakSet<object>();
+  return snapshotJsonValue(value, path, seen);
+}
+
+export function projectHarnessPublicError(err: unknown): { code: string; message: string } {
+  if (err instanceof Error) {
+    return { code: (err as { code?: string }).code ?? err.name ?? 'harness.message_failed', message: err.message };
+  }
+  return { code: 'harness.message_failed', message: String(err) };
+}
+
+function snapshotJsonValue(value: unknown, path: string, seen: WeakSet<object>): JsonValue {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      ...projectHarnessPublicError(value),
+    };
+  }
+
+  if (value === null) return null;
+  const type = typeof value;
+  if (type === 'string' || type === 'boolean') return value as JsonValue;
+  if (type === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+    }
+    return value as JsonValue;
+  }
+  if (type === 'undefined' || type === 'function' || type === 'symbol' || type === 'bigint') {
+    throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  }
+
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+    seen.add(value);
+    const snapshot = value.map((item, index) => snapshotJsonValue(item, `${path}[${index}]`, seen));
+    seen.delete(value);
+    return snapshot;
+  }
+
+  if (value instanceof Date || value instanceof Map || value instanceof Set) {
+    throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  }
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  }
+
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== null && proto !== Object.prototype) {
+    throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  }
+  if (seen.has(value as object)) throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  seen.add(value as object);
+  const snapshot: Record<string, JsonValue> = {};
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    snapshot[key] = snapshotJsonValue((value as Record<string, unknown>)[key], `${path}.${key}`, seen);
+  }
+  seen.delete(value as object);
+  return snapshot;
+}
+
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
 
 export type EmitInput = DistributiveOmit<HarnessEvent, 'id' | 'timestamp' | 'sessionId'>;
@@ -390,12 +486,20 @@ export interface EmitterScope {
 
 export class EventEmitter {
   private readonly listeners: HarnessEventListener[] = [];
-  private readonly epoch: string = randomUUID();
-  private seq = 0;
+  private readonly epoch: string;
+  private seq: number;
   private readonly scope: EmitterScope;
+  private readonly onEvent?: HarnessEventListener;
 
-  constructor(scope: EmitterScope = {}) {
+  constructor(
+    scope: EmitterScope = {},
+    opts: { onEvent?: HarnessEventListener; epoch?: string; nextSequence?: number } = {},
+  ) {
     this.scope = scope;
+    this.onEvent = opts.onEvent;
+    this.epoch = opts.epoch ?? randomUUID();
+    this.seq = opts.nextSequence ?? 0;
+    formatHarnessEventId(this.epoch, this.seq);
   }
 
   subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
@@ -410,7 +514,7 @@ export class EventEmitter {
     const sessionId = overrides?.sessionId ?? this.scope.sessionId;
     const stamped = {
       ...event,
-      id: `${this.epoch}-${this.seq++}`,
+      id: formatHarnessEventId(this.epoch, this.seq++),
       timestamp: Date.now(),
       ...(sessionId !== undefined && { sessionId }),
     } as HarnessEvent;
@@ -431,6 +535,16 @@ export class EventEmitter {
   }
 
   private dispatch(event: HarnessEvent): void {
+    if (this.onEvent) {
+      try {
+        const result = this.onEvent(event);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(err => console.error('[harness/v1] event persistence rejected:', err));
+        }
+      } catch (err) {
+        console.error('[harness/v1] event persistence threw:', err);
+      }
+    }
     for (const listener of [...this.listeners]) {
       try {
         const result = listener(event);

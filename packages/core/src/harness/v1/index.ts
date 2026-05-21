@@ -10,9 +10,13 @@ export { Harness } from './harness';
 export { Session } from './session';
 export {
   EventEmitter,
+  HARNESS_EVENT_ID_PREFIX,
   assertCustomEventType,
   assertJsonSerializable,
+  formatHarnessEventId,
+  parseHarnessEventId,
   sessionCreatedPayload,
+  snapshotHarnessEventForJson,
   suspensionRequiredFor,
 } from './events';
 export { nonDurableProvider } from './workspace-provider';
