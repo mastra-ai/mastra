@@ -89,8 +89,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const observeAttachments = state?.observeAttachments ?? true;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments ? 1 : 0}`;
+    const observeAttachments: 'auto' | boolean = state?.observeAttachments ?? 'auto';
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }

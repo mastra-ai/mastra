@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
 import type { ModelByInputTokens } from './model-by-input-tokens';
+import type { ObserverAttachmentFilter } from './observer-agent';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -95,6 +97,21 @@ export class ObserverRunner {
     return agent;
   }
 
+  /**
+   * Resolve the attachment filter for a given model. When set to `'auto'`,
+   * the provider capabilities registry is consulted to decide whether the
+   * model accepts multimodal input.
+   */
+  private resolveAttachmentFilter(model: ConcreteObservationModel): ObserverAttachmentFilter {
+    const raw = this.observationConfig.observeAttachments;
+    if (raw !== 'auto') return raw;
+
+    const modelId = typeof model === 'string' ? model : String(model);
+    const supports = modelSupportsAttachments(modelId);
+    // When capabilities data is unavailable, default to true (forward attachments)
+    return supports ?? true;
+  }
+
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
     if (abortSignal?.aborted) {
       throw new Error('The operation was aborted.');
@@ -134,6 +151,8 @@ export class ObserverRunner {
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model);
 
+    const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model);
+
     const observerMessages = [
       {
         role: 'user' as const,
@@ -143,7 +162,7 @@ export class ObserverRunner {
         }),
       },
       buildObserverHistoryMessage(messagesToObserve, {
-        attachmentFilter: this.observationConfig.observeAttachments,
+        attachmentFilter,
       }),
     ];
 
@@ -259,6 +278,8 @@ export class ObserverRunner {
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true);
 
+    const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model);
+
     const observerMessages = [
       {
         role: 'user' as const,
@@ -271,7 +292,7 @@ export class ObserverRunner {
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
-        attachmentFilter: this.observationConfig.observeAttachments,
+        attachmentFilter: multiThreadAttachmentFilter,
       }),
     ];
 

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
+import type { ModelCapabilities, ProviderCapabilities, ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -16,6 +16,7 @@ import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } f
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };
+export type { ModelCapabilities, ProviderCapabilities } from './gateways/base.js';
 
 interface RegistryData {
   providers: Record<string, ProviderConfig>;
@@ -71,6 +72,7 @@ const CACHE_DIR = () => path.join(os.homedir(), '.cache', 'mastra');
 const CACHE_FILE = () => path.join(CACHE_DIR(), 'gateway-refresh-time');
 const GLOBAL_PROVIDER_REGISTRY_JSON = () => path.join(CACHE_DIR(), 'provider-registry.json');
 const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.generated.d.ts');
+const GLOBAL_PROVIDER_CAPABILITIES_JSON = () => path.join(CACHE_DIR(), 'provider-capabilities.json');
 
 let modelRouterCacheFailed = false;
 
@@ -154,6 +156,29 @@ function syncGlobalCacheToLocal(): void {
       if (shouldCopyJson) {
         // Use atomic write to prevent corruption from concurrent writes
         atomicWriteFileSync(localJsonPath, globalJsonContent, 'utf-8');
+      }
+    }
+
+    // Sync capabilities JSON if global exists and differs from local
+    const globalCapabilitiesExists = fs.existsSync(GLOBAL_PROVIDER_CAPABILITIES_JSON());
+    if (globalCapabilitiesExists) {
+      const globalCapContent = fs.readFileSync(GLOBAL_PROVIDER_CAPABILITIES_JSON(), 'utf-8');
+      try {
+        JSON.parse(globalCapContent);
+      } catch {
+        try {
+          fs.unlinkSync(GLOBAL_PROVIDER_CAPABILITIES_JSON());
+        } catch {
+          // Ignore deletion errors
+        }
+      }
+      const localCapPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
+      let shouldCopyCap = true;
+      if (fs.existsSync(localCapPath)) {
+        shouldCopyCap = fs.readFileSync(localCapPath, 'utf-8') !== globalCapContent;
+      }
+      if (shouldCopyCap) {
+        atomicWriteFileSync(localCapPath, globalCapContent, 'utf-8');
       }
     }
 
@@ -423,6 +448,78 @@ export function getRegisteredProviders(): string[] {
   return Object.keys(providers);
 }
 
+// ---------------------------------------------------------------------------
+// Provider capabilities (per-model attachment / modality metadata)
+// ---------------------------------------------------------------------------
+
+let capabilitiesData: Record<string, ProviderCapabilities> | null = null;
+
+function loadCapabilities(useDynamicLoading: boolean): Record<string, ProviderCapabilities> {
+  if (capabilitiesData) return capabilitiesData;
+
+  if (useDynamicLoading) {
+    const packageRoot = getPackageRoot();
+    const paths = [
+      path.join(packageRoot, 'dist', 'provider-capabilities.json'),
+      path.join(packageRoot, 'src', 'llm', 'model', 'provider-capabilities.json'),
+      path.join(process.cwd(), 'packages/core/src/llm/model/provider-capabilities.json'),
+    ];
+    for (const p of paths) {
+      try {
+        const content = fs.readFileSync(p, 'utf-8');
+        capabilitiesData = JSON.parse(content) as Record<string, ProviderCapabilities>;
+        return capabilitiesData;
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  // Try static import from src (bundled at build time)
+  try {
+    const packageRoot = getPackageRoot();
+    const staticPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
+    if (fs.existsSync(staticPath)) {
+      const content = fs.readFileSync(staticPath, 'utf-8');
+      capabilitiesData = JSON.parse(content) as Record<string, ProviderCapabilities>;
+      return capabilitiesData;
+    }
+  } catch {
+    // Fall through
+  }
+
+  capabilitiesData = {};
+  return capabilitiesData;
+}
+
+/**
+ * Look up capabilities for a specific model.
+ * @param modelRouterId - Full model router ID (e.g. "openai/gpt-4o", "deepseek/deepseek-v4-flash")
+ * @returns The model's capabilities, or undefined if not found in the registry
+ */
+export function getModelCapabilities(modelRouterId: string): ModelCapabilities | undefined {
+  const { provider, modelId } = parseModelString(modelRouterId);
+  if (!provider) return undefined;
+  const registry = GatewayRegistry.getInstance();
+  const caps = loadCapabilities(registry['useDynamicLoading']);
+  return caps[provider]?.[modelId];
+}
+
+/**
+ * Check whether a model supports image/file attachments.
+ * Returns `true` if the model advertises attachment support or has multimodal
+ * input modalities (image, pdf, audio, video). Returns `undefined` when no
+ * capabilities data is available for the model (caller should fall back to
+ * their own default).
+ */
+export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
+  const caps = getModelCapabilities(modelRouterId);
+  if (!caps) return undefined;
+  if (caps.attachment) return true;
+  const nonTextInputs = caps.inputModalities.filter(m => m !== 'text');
+  return nonTextInputs.length > 0;
+}
+
 /**
  * Type guard to check if a string is a valid OpenAI-compatible model ID
  */
@@ -533,7 +630,7 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, capabilities } = await fetchProvidersFromGateways(gateways);
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();
@@ -541,7 +638,13 @@ export class GatewayRegistry {
       // Write to global cache first (so all projects can benefit)
       try {
         fs.mkdirSync(CACHE_DIR(), { recursive: true });
-        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON(), GLOBAL_PROVIDER_TYPES_DTS(), providers, models);
+        await writeRegistryFiles(
+          GLOBAL_PROVIDER_REGISTRY_JSON(),
+          GLOBAL_PROVIDER_TYPES_DTS(),
+          providers,
+          models,
+          capabilities,
+        );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
@@ -551,7 +654,7 @@ export class GatewayRegistry {
       const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
       const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
+      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, capabilities);
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
       // Copy to src/ only when explicitly requested (e.g., running the generation script)
@@ -563,12 +666,19 @@ export class GatewayRegistry {
         // Copy the already-generated files
         await fs.promises.copyFile(distJsonPath, srcJsonPath);
         await fs.promises.copyFile(distTypesPath, srcTypesPath);
+
+        const distCapPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
+        const srcCapPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-capabilities.json');
+        if (fs.existsSync(distCapPath)) {
+          await fs.promises.copyFile(distCapPath, srcCapPath);
+        }
         // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
       }
 
       // Clear the in-memory cache to force reload (dynamic loading only)
       if (this.useDynamicLoading) {
         registryData = null;
+        capabilitiesData = null;
       }
 
       this.lastRefreshTime = new Date();

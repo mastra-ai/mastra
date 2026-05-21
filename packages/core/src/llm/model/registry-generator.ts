@@ -5,7 +5,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { MastraModelGateway, ProviderConfig } from './gateways/base.js';
+import type { MastraModelGateway, ProviderCapabilities, ProviderConfig } from './gateways/base.js';
 
 /**
  * Write a file atomically using the write-to-temp-then-rename pattern.
@@ -50,9 +50,11 @@ export async function atomicWriteFile(
  * @param gateways - Array of gateway instances to fetch from
  * @returns Object containing providers and models records
  */
-export async function fetchProvidersFromGateways(
-  gateways: MastraModelGateway[],
-): Promise<{ providers: Record<string, ProviderConfig>; models: Record<string, string[]> }> {
+export async function fetchProvidersFromGateways(gateways: MastraModelGateway[]): Promise<{
+  providers: Record<string, ProviderConfig>;
+  models: Record<string, string[]>;
+  capabilities: Record<string, ProviderCapabilities>;
+}> {
   const enabledGateways: MastraModelGateway[] = [];
 
   for (const gateway of gateways) {
@@ -63,6 +65,7 @@ export async function fetchProvidersFromGateways(
 
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
+  const allCapabilities: Record<string, ProviderCapabilities> = {};
 
   const maxRetries = 3;
 
@@ -75,6 +78,12 @@ export async function fetchProvidersFromGateways(
 
         // models.dev is a provider registry, not a true gateway - don't prefix its providers
         const isProviderRegistry = gateway.id === 'models.dev';
+
+        // Collect capabilities if the gateway exposes them
+        const gatewayCapabilities =
+          'getCapabilities' in gateway && typeof (gateway as any).getCapabilities === 'function'
+            ? ((gateway as any).getCapabilities() as Record<string, ProviderCapabilities>)
+            : undefined;
 
         for (const [providerId, config] of Object.entries(providers)) {
           // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
@@ -89,6 +98,11 @@ export async function fetchProvidersFromGateways(
           allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering
           allModels[typeProviderId] = config.models.sort();
+
+          // Merge capabilities for this provider if available
+          if (gatewayCapabilities?.[providerId]) {
+            allCapabilities[typeProviderId] = gatewayCapabilities[providerId];
+          }
         }
 
         lastError = null;
@@ -110,7 +124,7 @@ export async function fetchProvidersFromGateways(
     }
   }
 
-  return { providers: allProviders, models: allModels };
+  return { providers: allProviders, models: allModels, capabilities: allCapabilities };
 }
 
 /**
@@ -199,6 +213,7 @@ export async function writeRegistryFiles(
   typesPath: string,
   providers: Record<string, ProviderConfig>,
   models: Record<string, string[]>,
+  capabilities?: Record<string, ProviderCapabilities>,
 ): Promise<void> {
   // 0. Ensure directories exist
   const jsonDir = path.dirname(jsonPath);
@@ -218,4 +233,10 @@ export async function writeRegistryFiles(
   // 2. Generate .d.ts file with type-only declarations (also atomic)
   const typeContent = generateTypesContent(models);
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
+
+  // 3. Write provider-capabilities.json alongside the registry if capabilities were provided
+  if (capabilities && Object.keys(capabilities).length > 0) {
+    const capabilitiesPath = path.join(jsonDir, 'provider-capabilities.json');
+    await atomicWriteFile(capabilitiesPath, JSON.stringify(capabilities, null, 2), 'utf-8');
+  }
 }

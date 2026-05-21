@@ -14,13 +14,22 @@ import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
-import type { GatewayLanguageModel, ProviderConfig } from './base.js';
+import type { GatewayLanguageModel, ProviderCapabilities, ProviderConfig } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+
+interface ModelsDevModelInfo {
+  id: string;
+  name?: string;
+  status?: string;
+  modalities?: { input?: string[]; output?: string[] };
+  attachment?: boolean;
+  [key: string]: unknown;
+}
 
 interface ModelsDevProviderInfo {
   id: string;
   name: string;
-  models: Record<string, any>;
+  models: Record<string, ModelsDevModelInfo>;
   env?: string[]; // Array of env var names
   api?: string; // Base API URL
   npm?: string; // NPM package name
@@ -87,6 +96,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   readonly name = 'models.dev';
 
   private providerConfigs: Record<string, ProviderConfig> = {};
+  private providerCapabilities: Record<string, ProviderCapabilities> = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -127,10 +137,18 @@ export class ModelsDevGateway extends MastraModelGateway {
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
         // Filter out deprecated models before collecting model IDs
-        const modelIds = Object.entries(providerInfo.models)
-          .filter(([, modelInfo]) => modelInfo?.status !== 'deprecated')
-          .map(([modelId]) => modelId)
-          .sort();
+        const activeModels = Object.entries(providerInfo.models).filter(
+          ([, modelInfo]) => modelInfo?.status !== 'deprecated',
+        );
+        const modelIds = activeModels.map(([modelId]) => modelId).sort();
+
+        // Extract per-model capabilities
+        const capabilities: ProviderCapabilities = {};
+        for (const [modelId, modelInfo] of activeModels) {
+          const inputMods = modelInfo?.modalities?.input ?? ['text'];
+          const attachment = modelInfo?.attachment ?? false;
+          capabilities[modelId] = { inputModalities: inputMods, attachment };
+        }
 
         // Get the API URL - overrides take priority over models.dev data
         const url = PROVIDER_OVERRIDES[normalizedId]?.url || providerInfo.api;
@@ -171,6 +189,7 @@ export class ModelsDevGateway extends MastraModelGateway {
               ? providerInfo.npm
               : undefined),
         };
+        this.providerCapabilities[normalizedId] = capabilities;
       }
     }
 
@@ -178,6 +197,14 @@ export class ModelsDevGateway extends MastraModelGateway {
     this.providerConfigs = providerConfigs;
 
     return providerConfigs;
+  }
+
+  /**
+   * Return per-model capabilities collected during the last `fetchProviders()` call.
+   * Keyed by provider ID → model ID → capabilities.
+   */
+  getCapabilities(): Record<string, ProviderCapabilities> {
+    return this.providerCapabilities;
   }
 
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {

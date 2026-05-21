@@ -20,6 +20,22 @@ export interface ProviderConfig {
 }
 
 /**
+ * Per-model capability metadata extracted from gateway sources (e.g. models.dev).
+ * Used at runtime to decide whether a model supports attachments, images, etc.
+ */
+export interface ModelCapabilities {
+  /** Input modalities the model accepts (e.g. ['text'], ['text', 'image', 'pdf']). */
+  inputModalities: string[];
+  /** Whether the model's API accepts file/image attachment parts. */
+  attachment: boolean;
+}
+
+/**
+ * Provider-level capabilities: maps model IDs to their capabilities.
+ */
+export type ProviderCapabilities = Record<string, ModelCapabilities>;
+
+/**
  * Union type for language models that can be returned by gateways.
  * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
  */
