@@ -1256,9 +1256,65 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            for await (const part of run.output.fullStream) {
+            const fullStream = run.output.fullStream as ReadableStream<unknown> | AsyncIterable<unknown> | undefined;
+            const isTerminalPart = (part: any) =>
+              part?.type === 'finish' ||
+              part?.type === 'error' ||
+              part?.type === 'abort' ||
+              part?.type === 'tool-call-suspended';
+
+            if (fullStream && typeof (fullStream as ReadableStream<unknown>).getReader === 'function') {
+              const reader = (fullStream as ReadableStream<unknown>).getReader();
+              let readerReleased = false;
+              try {
+                while (true) {
+                  const { value: part, done: streamDone } = await reader.read();
+                  if (streamDone) break;
+                  yield part as any;
+                  if (done) break;
+                  if (isTerminalPart(part)) {
+                    // After a terminal chunk, drain remaining stream data in the
+                    // background to prevent backpressure from blocking upstream
+                    // processing (e.g. OM), while allowing the generator to
+                    // immediately serve subsequent runs.
+                    readerReleased = true;
+                    void (async () => {
+                      try {
+                        while (true) {
+                          const { done: d } = await reader.read();
+                          if (d) break;
+                        }
+                      } catch {}
+                      reader.releaseLock();
+                    })();
+                    break;
+                  }
+                }
+              } finally {
+                if (!readerReleased) {
+                  reader.releaseLock();
+                }
+              }
+              continue;
+            }
+
+            const iterator = fullStream?.[Symbol.asyncIterator]?.();
+            if (!iterator) {
+              throw new TypeError('Thread run fullStream must be a ReadableStream or AsyncIterable');
+            }
+            while (true) {
+              const { value: part, done: streamDone } = await iterator.next();
+              if (streamDone) break;
               yield part as any;
               if (done) break;
+              if (isTerminalPart(part)) {
+                void (async () => {
+                  try {
+                    while (!(await iterator.next()).done) {}
+                  } catch {}
+                })();
+                break;
+              }
             }
           }
         } finally {
