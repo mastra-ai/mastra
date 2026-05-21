@@ -155,7 +155,6 @@ export function SkillChatComposer({
         isRunning={isRunning}
         emptyState={emptyState}
         skeletonTestId="skill-builder-conversation-messages-skeleton"
-        agentId={BUILDER_AGENT_ID}
       />
       <ChatComposer
         draft={draft}

@@ -81,7 +81,7 @@ describe('ChatComposer', () => {
     expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
     expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
     expect(container.className).toContain('border-border1');
-    expect(container.className).toContain('focus-within:border-[var(--agent-color-fg)]');
+    expect(container.className).toContain('focus-within:border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-within:ring');
   });
 
@@ -93,6 +93,6 @@ describe('ChatComposer', () => {
     expect(container.className).toContain('border-border1');
     expect(container.className).not.toContain('border-accent1Dark');
     expect(container.className).not.toContain('border-accent5Dark');
-    expect(container.className).not.toContain('focus-within:border-[var(--agent-color-fg)]');
+    expect(container.className).not.toContain('focus-within:border-[var(--agent-color-bg)]');
   });
 });

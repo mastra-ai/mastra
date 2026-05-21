@@ -11,7 +11,6 @@ import { useAgentBuilderTool } from '../../hooks/use-agent-builder-tool';
 import type { AvailableWorkspace } from '../../hooks/use-agent-builder-tool';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { useChatDraft } from '../../hooks/use-chat-draft';
-import { CONNECT_CHANNEL_TOOL_NAME, useConnectChannelTool } from '../../hooks/use-connect-channel-tool';
 import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from '../../hooks/use-create-skill-tool';
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
@@ -30,12 +29,7 @@ interface ConversationPanelProviderProps {
   availableSkills?: StoredSkillResponse[];
   toolsReady?: boolean;
   agentId: string;
-  /**
-   * Whether the connectChannel client tool should be wired into chat. Mirrors the
-   * gating of the "Publish to…" dropdown so the model can only trigger a connect
-   * flow when a manual publish is also possible.
-   */
-  canPublishToChannel?: boolean;
+
   children: ReactNode;
 }
 
@@ -51,7 +45,6 @@ export const ConversationPanelProvider = ({
   availableSkills = [],
   toolsReady = true,
   agentId,
-  canPublishToChannel = false,
   children,
 }: ConversationPanelProviderProps) => {
   const builderThreadId = getBuilderThreadId(agentId);
@@ -86,14 +79,12 @@ export const ConversationPanelProvider = ({
   const formValues = useWatch({ control }) as AgentBuilderEditFormValues;
 
   const createSkillTool = useCreateSkillTool({ availableWorkspaces });
-  const connectChannelTool = useConnectChannelTool();
   const clientTools = useMemo(
     () => ({
       ...agentBuilderTools,
-      ...(canPublishToChannel ? { [CONNECT_CHANNEL_TOOL_NAME]: connectChannelTool } : {}),
       ...(features.skills ? { [CREATE_SKILL_TOOL_NAME]: createSkillTool } : {}),
     }),
-    [agentBuilderTools, canPublishToChannel, connectChannelTool, createSkillTool, features.skills],
+    [agentBuilderTools, createSkillTool, features.skills],
   );
 
   const conversationContextValue = useMemo(
@@ -162,14 +153,14 @@ export const ConversationPanel = (props: ConversationPanelProps) => (
 const ConversationMessageList = () => {
   const messages = useStreamMessages();
   const isRunning = useStreamRunning();
-  const { isLoading: isConversationLoading, agentId } = useContext(ConversationContext);
+  const { isLoading: isConversationLoading } = useContext(ConversationContext);
+
   return (
     <MessageList
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}
       skeletonTestId="agent-builder-conversation-messages-skeleton"
-      agentId={agentId}
     />
   );
 };

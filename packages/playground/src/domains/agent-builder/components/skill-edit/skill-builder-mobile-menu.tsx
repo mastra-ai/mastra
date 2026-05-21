@@ -62,8 +62,8 @@ function VisibilityMenuItem({ skillId, disabled }: VisibilityMenuItemProps) {
         <DropdownMenu.Item
           data-testid="skill-builder-mobile-menu-visibility-add"
           disabled={disabled}
-          onSelect={event => {
-            event.preventDefault();
+          closeOnClick={false}
+          onSelect={() => {
             requestChange('public');
           }}
         >
@@ -74,8 +74,8 @@ function VisibilityMenuItem({ skillId, disabled }: VisibilityMenuItemProps) {
         <DropdownMenu.Item
           data-testid="skill-builder-mobile-menu-visibility-remove"
           disabled={disabled}
-          onSelect={event => {
-            event.preventDefault();
+          closeOnClick={false}
+          onSelect={() => {
             requestChange('private');
           }}
         >

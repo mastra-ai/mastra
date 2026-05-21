@@ -236,13 +236,9 @@ describe('WizardProvider', () => {
     expect(getByTestId('step').textContent).toBe('instructions');
   });
 
-  it('throws when useWizard is called outside the provider', () => {
-    // Swallow the React error-boundary log noise during this expected-throw test.
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      expect(() => render(<Probe />)).toThrow(/useWizard must be used inside <WizardProvider>/);
-    } finally {
-      errSpy.mockRestore();
-    }
+  it('returns a safe end-step default when useWizard is called outside the provider', () => {
+    const { getByTestId } = render(<Probe />);
+    expect(getByTestId('step').textContent).toBe('end');
+    expect(getByTestId('steps').textContent).toBe('');
   });
 });

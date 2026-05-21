@@ -1,21 +1,30 @@
 import {
   Card,
-  CodeEditor,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Icon,
   MarkdownRenderer,
   Skeleton,
-  TextFieldBlock,
   Txt,
 } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
-import { AlignLeft, Check, ChevronRight, FileText, Globe, Loader2, Sparkles, Type, Wrench } from 'lucide-react';
+import {
+  AlignLeft,
+  Check,
+  ChevronRight,
+  FileText,
+  Globe,
+  Loader2,
+  Wrench,
+  Zap,
+  GlobeLockIcon,
+  Building,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import { Controller, useFormContext } from 'react-hook-form';
-import { CONNECT_CHANNEL_TOOL_NAME } from '../../hooks/use-connect-channel-tool';
-import { ConnectChannelMessage } from '../agent-edit/connect-channel-message';
+import { useFormContext } from 'react-hook-form';
+import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
+import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
@@ -28,17 +37,13 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
-import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
+import { ProviderLogo } from '@/domains/llm';
 
-export const MessageRow = ({
-  message,
-  agentId,
-  isStreaming = false,
-}: {
+interface MessageRowProps {
   message: MastraUIMessage;
-  agentId?: string;
-  isStreaming?: boolean;
-}) => {
+}
+
+export const MessageRow = ({ message }: MessageRowProps) => {
   return (
     <>
       {message.parts.map((part, index) => {
@@ -47,105 +52,107 @@ export const MessageRow = ({
           case 'text':
             return <Txtmessage key={key} txt={part.text} role={message.role} />;
 
-          case 'reasoning':
-            return part.state === 'streaming' ? (
-              <ReasoningMessage key={key} text="Anayzing the agent requirements..." streaming />
-            ) : (
-              <ReasoningMessage key={key} text="Requirements analyzed, preparing the agent." />
-            );
+          case 'reasoning': {
+            if (part.state !== 'streaming') return null;
+
+            return <ReasoningMessage key={key} text="Reasoning..." streaming />;
+          }
 
           case 'dynamic-tool': {
+            if (part?.state !== 'output-available') return null;
             switch (part.toolName) {
-              case CONNECT_CHANNEL_TOOL_NAME: {
-                const platform = (part.input as { platform?: string } | undefined)?.platform ?? 'slack';
-                return (
-                  <ToolCard key={key}>
-                    <ConnectChannelMessage platformId={platform} agentId={agentId} />
-                  </ToolCard>
-                );
+              case SET_AGENT_NAME_TOOL_NAME: {
+                return <MessageSetAgentName key={key} />;
               }
-              case SET_AGENT_NAME_TOOL_NAME:
-                return <MessageSetAgentName key={key} disabled={isStreaming} />;
-              case SET_AGENT_DESCRIPTION_TOOL_NAME:
-                return <MessageSetAgentDescription key={key} disabled={isStreaming} />;
-              case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
-                return <MessageSetAgentInstructions key={key} disabled={isStreaming} />;
+
+              case SET_AGENT_DESCRIPTION_TOOL_NAME: {
+                return <MessageSetAgentDescription key={key} />;
+              }
+
+              case SET_AGENT_INSTRUCTIONS_TOOL_NAME: {
+                return <MessageSetAgentInstructions key={key} />;
+              }
+
               case SET_AGENT_TOOLS_TOOL_NAME: {
-                const input = (part.input as { tools?: { id: string; name: string }[] } | undefined) ?? {};
-                return <MessageSetAgentTools key={key} tools={input.tools ?? []} />;
+                return <MessageSetAgentTools key={key} />;
               }
+
               case SET_AGENT_SKILLS_TOOL_NAME: {
-                const input = (part.input as { skills?: { id: string; name: string }[] } | undefined) ?? {};
-                return <MessageSetAgentSkills key={key} skills={input.skills ?? []} />;
+                return <MessageSetAgentSkills key={key} />;
               }
+
               case SET_AGENT_MODEL_TOOL_NAME: {
-                const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
-                return (
-                  <MessageSetAgentModel
-                    key={key}
-                    model={input.model ?? { provider: '', name: '' }}
-                    disabled={isStreaming}
-                  />
-                );
+                return <MessageSetAgentModel key={key} />;
               }
+
               case SET_AGENT_BROWSER_ENABLED_TOOL_NAME: {
-                const input = (part.input as { browserEnabled?: boolean } | undefined) ?? {};
-                return <MessageSetAgentBrowserEnabled key={key} browserEnabled={input.browserEnabled ?? false} />;
+                return <MessageSetAgentBrowserEnabled key={key} />;
               }
+
               case SET_AGENT_WORKSPACE_ID_TOOL_NAME: {
-                const input = (part.input as { workspaceId?: string } | undefined) ?? {};
-                return <MessageSetAgentWorkspaceId key={key} workspaceId={input.workspaceId ?? ''} />;
+                return <MessageSetAgentWorkspaceId key={key} />;
               }
+
               default: {
+                if (part.toolName === 'skill') {
+                  return <SkillTool name={(part.input as { name?: string } | undefined)?.name ?? 'unknown'} />;
+                }
+
                 const extra = part as { input?: unknown; output?: unknown };
                 return <GenericTool key={key} toolName={part.toolName} input={extra.input} output={extra.output} />;
               }
             }
           }
 
-          case `tool-${CONNECT_CHANNEL_TOOL_NAME}`: {
-            const platform = (part.input as { platform?: string } | undefined)?.platform ?? 'slack';
-            return (
-              <ToolCard key={key}>
-                <ConnectChannelMessage platformId={platform} agentId={agentId} />
-              </ToolCard>
-            );
+          case `tool-${SET_AGENT_NAME_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentName key={key} />;
           }
 
-          case `tool-${SET_AGENT_NAME_TOOL_NAME}`:
-            return <MessageSetAgentName key={key} disabled={isStreaming} />;
-          case `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`:
-            return <MessageSetAgentDescription key={key} disabled={isStreaming} />;
-          case `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`:
-            return <MessageSetAgentInstructions key={key} disabled={isStreaming} />;
+          case `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentDescription key={key} />;
+          }
+
+          case `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentInstructions key={key} />;
+          }
           case `tool-${SET_AGENT_TOOLS_TOOL_NAME}`: {
-            const input = (part.input as { tools?: { id: string; name: string }[] } | undefined) ?? {};
-            return <MessageSetAgentTools key={key} tools={input.tools ?? []} />;
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentTools key={key} />;
           }
           case `tool-${SET_AGENT_SKILLS_TOOL_NAME}`: {
-            const input = (part.input as { skills?: { id: string; name: string }[] } | undefined) ?? {};
-            return <MessageSetAgentSkills key={key} skills={input.skills ?? []} />;
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentSkills key={key} />;
           }
           case `tool-${SET_AGENT_MODEL_TOOL_NAME}`: {
-            const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
-            return (
-              <MessageSetAgentModel
-                key={key}
-                model={input.model ?? { provider: '', name: '' }}
-                disabled={isStreaming}
-              />
-            );
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentModel key={key} />;
           }
           case `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`: {
-            const input = (part.input as { browserEnabled?: boolean } | undefined) ?? {};
-            return <MessageSetAgentBrowserEnabled key={key} browserEnabled={input.browserEnabled ?? false} />;
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentBrowserEnabled key={key} />;
           }
           case `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`: {
-            const input = (part.input as { workspaceId?: string } | undefined) ?? {};
-            return <MessageSetAgentWorkspaceId key={key} workspaceId={input.workspaceId ?? ''} />;
+            if (part?.state !== 'output-available') return null;
+
+            return <MessageSetAgentWorkspaceId key={key} />;
           }
 
           default: {
+            if (part.type === 'tool-skill' && part.state === 'output-available') {
+              const input = (part.input as { name?: string } | undefined) ?? {};
+              return <SkillTool name={input.name ?? 'unknown'} />;
+            }
+
             if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
               const toolName = part.type.slice('tool-'.length);
               const extra = part as { input?: unknown; output?: unknown };
@@ -228,59 +235,6 @@ export const ReasoningMessage = ({ text, streaming = false }: { text: string; st
   );
 };
 
-const words = [
-  'loading',
-  'cooking',
-  'processing',
-  'preparing',
-  'building',
-  'rendering',
-  'fetching',
-  'compiling',
-  'generating',
-  'brewing',
-  'mixing',
-  'heating',
-  'baking',
-  'roasting',
-  'simmering',
-  'boiling',
-  'frying',
-  'grilling',
-  'steaming',
-  'toasting',
-  'melting',
-  'blending',
-  'stirring',
-  'whisking',
-  'kneading',
-  'assembling',
-  'crafting',
-  'forging',
-  'shaping',
-  'forming',
-  'spinning',
-  'warming',
-  'igniting',
-  'starting',
-  'booting',
-  'charging',
-  'spooling',
-  'buffering',
-  'calculating',
-  'computing',
-  'decoding',
-  'encoding',
-  'hydrating',
-  'marinating',
-  'infusing',
-  'curing',
-  'plating',
-  'serving',
-  'finishing',
-  'settling',
-];
-
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
     <div className="flex flex-col gap-6" data-testid={testId}>
@@ -297,15 +251,6 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   );
 };
 
-export const ToolExecutionMessage = () => {
-  const [randomWord] = useState(() => words[Math.floor(Math.random() * words.length)]);
-  return (
-    <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {randomWord.charAt(0).toUpperCase() + randomWord.slice(1)}...
-    </Txt>
-  );
-};
-
 const safeStringify = (value: unknown): string => {
   if (value === undefined) return '';
   try {
@@ -315,7 +260,7 @@ const safeStringify = (value: unknown): string => {
   }
 };
 
-export const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
+const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
   const inputJson = safeStringify(input);
   const outputJson = safeStringify(output);
   const hasOutput = outputJson.length > 0;
@@ -378,262 +323,118 @@ export const ToolCard = ({ children, testId }: { children: ReactNode; testId?: s
   </Card>
 );
 
-const ToolMessageLine = ({ children }: { children: ReactNode }) => (
-  <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4" as="div">
-    {children}
-  </Txt>
-);
-
-const ToolCardField = ({
-  icon,
-  label,
-  helpText,
-  children,
-}: {
-  icon: ReactNode;
-  label: string;
-  helpText: string;
-  children: ReactNode;
-}) => (
-  <ToolCard>
-    <div className="flex items-start gap-3">
-      <div className="mt-1 text-neutral4">{icon}</div>
-      <div className="flex flex-col gap-2 flex-1 min-w-0">
-        <div className="flex flex-col gap-0.5">
-          <Txt variant="ui-md" className="text-neutral6" as="div">
-            {label}
-          </Txt>
-          <Txt variant="ui-sm" className="text-neutral3" as="div">
-            {helpText}
-          </Txt>
-        </div>
-        {children}
-      </div>
+const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
+  <div className="flex items-start gap-2 min-w-0 max-w-full">
+    <div className="pt-0.5">
+      <Icon>{icon}</Icon>
     </div>
-  </ToolCard>
+    <Txt variant="ui-md" className="text-neutral3 min-w-0 flex-1 truncate" as="div">
+      {label} <strong className="font-semibold text-neutral6">{value}</strong>
+    </Txt>
+  </div>
 );
 
-export const MessageSetAgentName = ({ disabled = false }: { disabled?: boolean }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
+const MessageSetAgentName = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const name = watch('name');
+
+  if (!name) return null;
+
+  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent name:" value={name} />;
+};
+
+const MessageSetAgentDescription = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const description = watch('description');
+
+  if (!description) return null;
+
+  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent description:" value={description} />;
+};
+
+const MessageSetAgentInstructions = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const instructions = watch('instructions');
+
+  if (!instructions) return null;
+
+  return <SkillToolLine icon={<FileText />} label="Setting the agent instructions:" value={instructions} />;
+};
+
+const MessageSetAgentTools = () => {
+  const { agentId, toolsData, agentsData, workflowsData } = useAgentPrimitives();
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const selectedTools = watch('tools');
+  const selectedAgents = watch('agents');
+  const selectedWorkflows = watch('workflows');
+
+  const availableAgentTools = useAvailableAgentTools({
+    toolsData,
+    agentsData,
+    workflowsData,
+    selectedTools,
+    selectedAgents,
+    selectedWorkflows,
+    excludeAgentId: agentId,
+  });
+
+  const enabled = availableAgentTools.filter(t => t.isChecked);
+  const value = enabled.length === 0 ? 'none' : enabled.map(t => t.name).join(', ');
+
+  return <SkillToolLine icon={<Wrench />} label="Enabling tools:" value={value} />;
+};
+
+const MessageSetAgentSkills = () => {
+  const { availableSkills } = useAgentPrimitives();
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const skillsField = watch('skills') as Record<string, boolean> | undefined;
+  const enabled = skillsField ? availableSkills.filter(s => skillsField[s.id] === true) : [];
+  const value = enabled.length === 0 ? 'none' : enabled.map(s => s.name).join(', ');
+
+  return <SkillToolLine icon={<Zap />} label="Enabling skills:" value={value} />;
+};
+
+const MessageSetAgentModel = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const model = watch('model');
+
+  if (!model) return null;
+
   return (
-    <ToolCardField
-      icon={<Type className="size-5 shrink-0" aria-hidden />}
-      label="Agent name"
-      helpText="The display name shown to users."
-    >
-      <Controller
-        control={control}
-        name="name"
-        render={({ field }) => (
-          <TextFieldBlock
-            name={field.name}
-            label="Agent name"
-            labelIsHidden
-            size="md"
-            placeholder="Untitled agent"
-            value={field.value ?? ''}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            disabled={disabled}
-            testId="agent-builder-chat-set-agent-name-input"
-          />
-        )}
-      />
-    </ToolCardField>
+    <SkillToolLine
+      icon={<ProviderLogo providerId={model.provider} size={16} />}
+      label="Setting agent model to"
+      value={`${model.provider}/${model.name}`}
+    />
   );
 };
 
-export const MessageSetAgentDescription = ({ disabled = false }: { disabled?: boolean }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
+const MessageSetAgentBrowserEnabled = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const browserEnabled = watch('browserEnabled');
+
   return (
-    <ToolCardField
-      icon={<AlignLeft className="size-5 shrink-0" aria-hidden />}
-      label="Agent description"
-      helpText="A short summary shown when browsing agents."
-    >
-      <Controller
-        control={control}
-        name="description"
-        render={({ field }) => (
-          <TextFieldBlock
-            name={field.name}
-            label="Agent description"
-            labelIsHidden
-            size="md"
-            placeholder="What is this agent for?"
-            value={field.value ?? ''}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            disabled={disabled}
-            testId="agent-builder-chat-set-agent-description-input"
-          />
-        )}
-      />
-    </ToolCardField>
+    <SkillToolLine
+      icon={browserEnabled ? <Globe /> : <GlobeLockIcon />}
+      label="Browser access"
+      value={browserEnabled ? 'enabled' : 'disabled'}
+    />
   );
 };
 
-export const MessageSetAgentInstructions = ({ disabled = false }: { disabled?: boolean }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-  return (
-    <ToolCard>
-      <Collapsible>
-        <CollapsibleTrigger
-          className="flex w-full items-start gap-3 text-left"
-          data-testid="agent-builder-chat-set-agent-instructions-trigger"
-        >
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <FileText className="size-5 shrink-0 text-neutral4 mt-0.5" aria-hidden />
-            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-              <Txt variant="ui-md" className="text-neutral6" as="div">
-                Agent instructions
-              </Txt>
-              <Txt variant="ui-sm" className="text-neutral3" as="div">
-                The system prompt that guides the agent. Click to view or edit.
-              </Txt>
-            </div>
-          </div>
-          <ChevronRight className="size-4 shrink-0 text-neutral4 mt-1" aria-hidden />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div
-            className="mt-3 rounded-md border border-border1/60 bg-surface1 overflow-hidden"
-            data-testid="agent-builder-chat-set-agent-instructions-editor"
-          >
-            <Controller
-              control={control}
-              name="instructions"
-              render={({ field }) => (
-                <CodeEditor
-                  value={field.value ?? ''}
-                  onChange={field.onChange}
-                  language="markdown"
-                  editable={!disabled}
-                  placeholder="You are a helpful assistant that…"
-                  showCopyButton={false}
-                  className="min-h-[160px] max-h-[320px] overflow-auto border-0 bg-transparent p-3 rounded-none"
-                />
-              )}
-            />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </ToolCard>
-  );
+const MessageSetAgentWorkspaceId = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const workspaceId = watch('workspaceId');
+
+  if (!workspaceId) return null;
+
+  return <SkillToolLine icon={<Building />} label="Setting workspace to" value={workspaceId} />;
 };
 
-export const MessageSetAgentTools = ({ tools }: { tools: { id: string; name: string }[] }) => (
-  <ToolCard>
-    <div className="flex items-start gap-3">
-      <Wrench className="size-5 shrink-0 text-neutral4" aria-hidden />
-      <div className="flex flex-col gap-2 flex-1 min-w-0">
-        <div className="flex flex-col gap-0.5">
-          <Txt variant="ui-md" className="text-neutral6" as="div">
-            {tools.length === 0 ? 'No tools enabled' : `${tools.length} tool${tools.length === 1 ? '' : 's'} enabled`}
-          </Txt>
-          <Txt variant="ui-sm" className="text-neutral3" as="div">
-            Your agent will use these tools to complete tasks.
-          </Txt>
-        </div>
-        {tools.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5">
-            {tools.map(t => (
-              <li key={t.id} className="rounded-md border border-border1 bg-surface3 px-2 py-1">
-                <Txt variant="ui-sm" className="text-neutral6 truncate" as="span">
-                  {t.name}
-                </Txt>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  </ToolCard>
-);
+interface SkillToolProps {
+  name: string;
+}
 
-export const MessageSetAgentSkills = ({ skills }: { skills: { id: string; name: string }[] }) => (
-  <ToolCard>
-    <ToolMessageLine>Enabling skills: {skills.map(s => s.name).join(', ')}</ToolMessageLine>
-  </ToolCard>
-);
-
-export const MessageSetAgentModel = ({
-  model,
-  disabled = false,
-}: {
-  model: { provider: string; name: string };
-  disabled?: boolean;
-}) => {
-  const { control, setValue } = useFormContext<AgentBuilderEditFormValues>();
-  const fallbackLabel =
-    model.provider && model.name ? `${model.provider}/${model.name}` : 'Pick the AI model that powers your agent.';
-  return (
-    <ToolCardField
-      icon={<Sparkles className="size-5 shrink-0" aria-hidden />}
-      label="Agent model"
-      helpText={fallbackLabel}
-    >
-      <Controller
-        control={control}
-        name="model"
-        render={({ field }) => {
-          const provider = field.value?.provider ?? '';
-          const modelId = field.value?.name ?? '';
-          return (
-            <div
-              className="flex flex-col gap-2 min-w-0 sm:flex-row sm:items-center"
-              data-testid="agent-builder-chat-set-agent-model"
-            >
-              <div className="flex-1 basis-0 min-w-0">
-                <LLMProviders
-                  value={provider}
-                  onValueChange={next => {
-                    const cleaned = cleanProviderId(next);
-                    setValue('model', { provider: cleaned, name: '' }, { shouldDirty: true });
-                  }}
-                  disabled={disabled}
-                  className="w-full !min-w-0"
-                />
-              </div>
-              <div className="flex-1 basis-0 min-w-0">
-                <LLMModels
-                  llmId={provider}
-                  value={modelId}
-                  onValueChange={next => {
-                    setValue('model', { provider: cleanProviderId(provider), name: next }, { shouldDirty: true });
-                  }}
-                  disabled={disabled}
-                  className="w-full !min-w-0"
-                />
-              </div>
-            </div>
-          );
-        }}
-      />
-    </ToolCardField>
-  );
-};
-
-export const MessageSetAgentBrowserEnabled = ({ browserEnabled }: { browserEnabled: boolean }) => (
-  <ToolCard>
-    <div className="flex items-start gap-3">
-      <Globe className="size-5 shrink-0 text-neutral4" aria-hidden />
-      <div className="flex flex-col gap-0.5">
-        <Txt variant="ui-md" className="text-neutral6" as="div">
-          {browserEnabled ? 'Browser access enabled' : 'Browser access disabled'}
-        </Txt>
-        <Txt variant="ui-sm" className="text-neutral3" as="div">
-          {browserEnabled
-            ? 'Your agent will now be able to interact with web pages'
-            : 'Your agent will no longer interact with web pages'}
-        </Txt>
-      </div>
-    </div>
-  </ToolCard>
-);
-
-export const MessageSetAgentWorkspaceId = ({ workspaceId }: { workspaceId: string }) => (
-  <ToolCard>
-    <ToolMessageLine>Setting workspace to: {workspaceId}</ToolMessageLine>
-  </ToolCard>
+const SkillTool = ({ name }: SkillToolProps) => (
+  <SkillToolLine icon={<Zap />} label="Using super-powers:" value={name} />
 );

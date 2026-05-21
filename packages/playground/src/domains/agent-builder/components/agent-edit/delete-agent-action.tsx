@@ -1,4 +1,4 @@
-import { AlertDialog, DropdownMenu, IconButton, toast } from '@mastra/playground-ui';
+import { AlertDialog, Button, DropdownMenu, IconButton, toast } from '@mastra/playground-ui';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -54,17 +54,18 @@ const DeleteAgentDialog = ({ open, onOpenChange, agentName, isPending, onConfirm
         <AlertDialog.Cancel data-testid="agent-builder-delete-agent-cancel" disabled={isPending}>
           Cancel
         </AlertDialog.Cancel>
-        <AlertDialog.Action
+        <Button
+          variant="destructive"
           data-testid="agent-builder-delete-agent-confirm"
           disabled={isPending}
-          onClick={event => {
-            // Prevent default so the dialog stays open while the request is in flight.
-            event.preventDefault();
+          onClick={() => {
+            // Use a plain button (not AlertDialog.Close) so the dialog stays
+            // open while the request is in flight and on error.
             onConfirm();
           }}
         >
           {isPending ? 'Deleting…' : 'Delete agent'}
-        </AlertDialog.Action>
+        </Button>
       </AlertDialog.Footer>
     </AlertDialog.Content>
   </AlertDialog>
