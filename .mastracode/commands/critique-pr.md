@@ -44,7 +44,8 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
 3. Check how edge cases are handled
 4. Verify integration points with existing code
 5. After reviewing the code, verify the PR title and description match the actual diff; call out mismatches
-6. Document your understanding in the summary file
+6. Check whether the changes require a changeset, docs updates, package-local AGENTS.md instructions, or other repository PR requirements, and call out any missing required items
+7. Document your understanding in the summary file
 
 ### Stage 4: Present to User
 
