@@ -1,4 +1,4 @@
-import { StatusBadge, Txt } from '@mastra/playground-ui';
+import { Skeleton, StatusBadge, Txt } from '@mastra/playground-ui';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -19,7 +19,40 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   const { canPublishToChannel } = useEditPage();
   const { requestPublishAndConnect, dialog, channelDialog } = usePublishAndConnectChannel(agentId);
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div
+        className="flex h-full min-h-0 items-center justify-center px-6 py-8"
+        data-testid="integrations-detail-picker-loading"
+      >
+        <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+
+          <div className="flex flex-wrap items-stretch justify-center gap-4">
+            <div className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6">
+              <Skeleton className="size-14 rounded-xl" />
+              <div className="flex flex-col items-center gap-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-badge-default w-20 rounded-full" />
+            </div>
+            <div className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6">
+              <Skeleton className="size-14 rounded-xl" />
+              <div className="flex flex-col items-center gap-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-badge-default w-20 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (platforms.length === 0) {
     return (

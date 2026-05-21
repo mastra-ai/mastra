@@ -75,8 +75,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
       .sort((a, b) => a.providerName.localeCompare(b.providerName));
   }, [policyAllowedModels]);
 
-  const isProviderChecked = (providerId: string) =>
-    selectedProviders === null || selectedProviders.has(providerId);
+  const isProviderChecked = (providerId: string) => selectedProviders === null || selectedProviders.has(providerId);
 
   const handleToggleProvider = (providerId: string) => {
     setSelectedProviders(prev => {
@@ -92,7 +91,40 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   };
 
   if (isLoading) {
-    return <Skeleton className="h-40 w-full" />;
+    return (
+      <div className="h-full overflow-y-auto">
+        <div
+          className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 px-6 overflow-y-auto"
+          data-testid="model-card-picker-loading"
+        >
+          <div className="shrink-0 max-w-[30ch]">
+            <Skeleton className="h-10 w-full rounded-md" />
+          </div>
+
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Skeleton className="h-badge-default w-20 rounded-full" />
+            <Skeleton className="h-badge-default w-24 rounded-full" />
+            <Skeleton className="h-badge-default w-20 rounded-full" />
+            <Skeleton className="h-badge-default w-28 rounded-full" />
+            <Skeleton className="h-badge-default w-24 rounded-full" />
+          </div>
+
+          <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-4 w-24" />
+              <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const provider = cleanProviderId(model?.provider ?? '');
