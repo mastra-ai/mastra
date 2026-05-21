@@ -3,8 +3,10 @@ import { dirname, join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } from './source-hash';
 
-vi.unmock('node:fs/promises');
-vi.unmock('fs/promises');
+vi.hoisted(() => {
+  vi.doUnmock('node:fs/promises');
+  vi.doUnmock('fs/promises');
+});
 
 // Use a local .test-tmp dir instead of os.tmpdir() — some CI runners
 // (e.g. starsling-ubuntu) have flaky /tmp behaviour with rapid write/read cycles.
