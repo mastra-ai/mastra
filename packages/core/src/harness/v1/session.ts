@@ -31,6 +31,7 @@ import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe, EmitInput } from './events';
 import type { Harness } from './harness';
 import type { HarnessMessage, HarnessMode, ToolCategory } from './shared';
+import { ASK_USER_TOOL_ID, harnessBuiltInTools, SUBMIT_PLAN_TOOL_ID } from './tools';
 import type {
   AgentResult,
   AgentStream,
@@ -81,8 +82,8 @@ const QUEUE_DUPLICATE_WAIT_TIMEOUT_MS = 30_000;
 const QUEUE_DUPLICATE_WAIT_INTERVAL_MS = 100;
 const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'];
-const ASK_USER_TOOL_NAME = 'ask_user';
-const SUBMIT_PLAN_TOOL_NAME = 'submit_plan';
+const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
+const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 
 export class Session {
   private readonly harness: Harness;
@@ -935,7 +936,7 @@ export class Session {
   }
 
   private buildToolsets(mode: HarnessMode, callAdditional?: ToolsInput): Record<string, ToolsInput> | undefined {
-    const toolsets: Record<string, ToolsInput> = {};
+    const toolsets: Record<string, ToolsInput> = { 'harness:builtin': harnessBuiltInTools };
     if (mode.tools) toolsets[`mode:${mode.id}`] = mode.tools;
     if (mode.additionalTools) toolsets[`mode:${mode.id}:add`] = mode.additionalTools;
     if (callAdditional) toolsets['call:additional'] = callAdditional;

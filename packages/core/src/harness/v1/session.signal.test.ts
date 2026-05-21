@@ -86,7 +86,7 @@ describe('Session.signal()', () => {
     });
 
     expect(other.calls).toHaveLength(1);
-    expect(Object.keys(other.calls[0]!.options.toolsets)).toEqual(['mode:other', 'call:additional']);
+    expect(Object.keys(other.calls[0]!.options.toolsets)).toEqual(['harness:builtin', 'mode:other', 'call:additional']);
     expect(other.calls[0]!.options.requestContext.get('harness')).toMatchObject({
       sessionId: session.id,
       modeId: 'other',

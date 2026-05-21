@@ -9,6 +9,22 @@
 export { Harness } from './harness';
 export { Session } from './session';
 export {
+  ASK_USER_TOOL_ID,
+  SUBMIT_PLAN_TOOL_ID,
+  TASK_CHECK_TOOL_ID,
+  TASK_METADATA_KEY,
+  TASK_METADATA_NAMESPACE,
+  TASK_WRITE_TOOL_ID,
+  askUser,
+  askUserOptionSchema,
+  askUserSelectionModeSchema,
+  harnessBuiltInTools,
+  submitPlan,
+  taskCheck,
+  taskItemSchema,
+  taskWrite,
+} from './tools';
+export {
   EventEmitter,
   HARNESS_EVENT_ID_PREFIX,
   assertCustomEventType,
@@ -21,6 +37,7 @@ export {
 } from './events';
 export { nonDurableProvider } from './workspace-provider';
 
+export type { AskUserOption, AskUserSelectionMode, TaskItem } from './tools';
 export type {
   HarnessMessage,
   HarnessMessageContent,

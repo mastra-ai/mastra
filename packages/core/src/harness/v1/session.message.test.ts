@@ -100,7 +100,7 @@ describe('Session.message()', () => {
     expect(other.calls).toHaveLength(1);
     expect(other.calls[0]!.options.model).toBe('openai/gpt-4.1');
     expect(other.calls[0]!.options.instructions).toBe('other instructions');
-    expect(Object.keys(other.calls[0]!.options.toolsets)).toEqual(['mode:other', 'call:additional']);
+    expect(Object.keys(other.calls[0]!.options.toolsets)).toEqual(['harness:builtin', 'mode:other', 'call:additional']);
     expect(other.calls[0]!.options.requestContext.get('harness')).toMatchObject({
       sessionId: session.id,
       threadId: session.threadId,
