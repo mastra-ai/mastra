@@ -488,7 +488,23 @@ export class AgentChannels {
    */
   private pendingApprovalCards = new Map<
     string,
-    { messageId?: string; displayName: string; argsSummary: string; startedAt: number }
+    {
+      messageId?: string;
+      displayName: string;
+      argsSummary: string;
+      startedAt: number;
+      /**
+       * runId for the suspended workflow run. Stashed when the approval card is
+       * posted so the click handler can resume the correct run by `toolCallId`
+       * without crawling persisted message metadata. The metadata path keys by
+       * `toolName` and collides when the LLM calls the same tool in parallel
+       * (e.g. weather(Vancouver) + weather(SF)) — only the latest write
+       * survives, so a lookup for the earlier call's toolCallId would miss.
+       */
+      runId?: string;
+      toolName?: string;
+      args?: Record<string, unknown>;
+    }
   >();
 
   /**
@@ -669,6 +685,10 @@ export class AgentChannels {
         try {
           const approved = actionId.startsWith('tool_approve:');
           const toolCallId = actionId.split(':')[1];
+          if (!toolCallId) {
+            this.log('info', `Missing toolCallId in action event actionId=${actionId}`);
+            return;
+          }
 
           const sdkThread = event.thread as Thread | null;
           if (!sdkThread) {
@@ -719,37 +739,50 @@ export class AgentChannels {
             mastra,
           });
 
-          // Find the runId from pendingToolApprovals in message history
-          const storage = mastra.getStorage();
-          const memoryStore = storage ? await storage.getStore('memory') : undefined;
-          if (!memoryStore) {
-            throw new Error('Storage is required for tool approval lookups');
-          }
-
-          const { messages } = await memoryStore.listMessages({
-            threadId: mastraThread.id,
-            perPage: 50,
-            orderBy: { field: 'createdAt', direction: 'DESC' },
-          });
-
-          // Search for the pendingToolApprovals metadata containing our toolCallId
+          // Look up the runId for this toolCallId. Prefer the in-memory
+          // `pendingApprovalCards` map (set when the approval card was posted)
+          // because it's keyed by toolCallId and survives parallel same-tool
+          // approvals. Fall back to the persisted `pendingToolApprovals`
+          // metadata for cases where the bot restarted between card post and
+          // click (the metadata path is lossy for parallel same-tool calls
+          // since core keys those by toolName — only the latest survives).
           let runId: string | undefined;
           let toolName: string | undefined;
           let toolArgs: Record<string, unknown> | undefined;
-          for (const msg of messages) {
-            const pending = msg.content?.metadata?.pendingToolApprovals as
-              | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
-              | undefined;
-            if (pending) {
-              for (const toolData of Object.values(pending)) {
-                if (toolData.toolCallId === toolCallId) {
-                  runId = toolData.runId;
-                  toolName = toolData.toolName;
-                  toolArgs = toolData.args;
-                  break;
+
+          const stashed = this.pendingApprovalCards.get(toolCallId);
+          if (stashed?.runId) {
+            runId = stashed.runId;
+            toolName = stashed.toolName;
+            toolArgs = stashed.args;
+          } else {
+            const storage = mastra.getStorage();
+            const memoryStore = storage ? await storage.getStore('memory') : undefined;
+            if (!memoryStore) {
+              throw new Error('Storage is required for tool approval lookups');
+            }
+
+            const { messages } = await memoryStore.listMessages({
+              threadId: mastraThread.id,
+              perPage: 50,
+              orderBy: { field: 'createdAt', direction: 'DESC' },
+            });
+
+            for (const msg of messages) {
+              const pending = msg.content?.metadata?.pendingToolApprovals as
+                | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
+                | undefined;
+              if (pending) {
+                for (const toolData of Object.values(pending)) {
+                  if (toolData.toolCallId === toolCallId) {
+                    runId = toolData.runId;
+                    toolName = toolData.toolName;
+                    toolArgs = toolData.args;
+                    break;
+                  }
                 }
+                if (runId) break;
               }
-              if (runId) break;
             }
           }
 
@@ -815,6 +848,10 @@ export class AgentChannels {
               } else {
                 throw err;
               }
+            } finally {
+              // Stash entry is no longer needed; the resumed decline stream
+              // won't emit a tool-result for this call.
+              this.pendingApprovalCards.delete(toolCallId);
             }
             return;
           }
@@ -2005,6 +2042,21 @@ export class AgentChannels {
         const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
 
         await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
+
+        // Stash the runId by toolCallId so the click handler can resume the
+        // correct run directly, without crawling persisted message metadata.
+        // The metadata path keys by toolName and collides on parallel
+        // same-tool approvals — only the latest write survives, so the
+        // earlier call's click would silently miss.
+        this.pendingApprovalCards.set(toolCallId, {
+          messageId: channelMsgId,
+          displayName,
+          argsSummary,
+          startedAt: Date.now(),
+          runId: chunk.runId,
+          toolName,
+          args: toolArgs,
+        });
         continue;
       }
 
