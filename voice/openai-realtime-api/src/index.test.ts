@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { WebSocket } from 'ws';
 import { OpenAIRealtimeVoice } from './index';
 
 // Mock RealtimeClient
@@ -83,6 +84,17 @@ describe('OpenAIRealtimeVoice', () => {
 
       await voice.connect();
       voice.send(testArray);
+    });
+  });
+
+  describe('connect', () => {
+    it('should not send the deprecated OpenAI-Beta header', async () => {
+      await voice.connect();
+
+      expect(WebSocket).toHaveBeenCalled();
+      const headers = vi.mocked(WebSocket).mock.calls[0]?.[2]?.headers as Record<string, string>;
+      expect(headers).toHaveProperty('Authorization');
+      expect(headers).not.toHaveProperty('OpenAI-Beta');
     });
   });
 
