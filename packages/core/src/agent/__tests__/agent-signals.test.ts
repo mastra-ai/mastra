@@ -2085,13 +2085,13 @@ describe('Agent signals', () => {
         contents: 'hello',
         attributes: { existing: 'yes' },
         deliveryAttributes: {
-          ifActive: { deliveryType: 'interjection' },
-          ifIdle: { deliveryType: 'new-message' },
+          ifActive: { delivery: 'interjection' },
+          ifIdle: { delivery: 'message' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'active');
-      expect(resolved.attributes).toEqual({ existing: 'yes', deliveryType: 'interjection' });
+      expect(resolved.attributes).toEqual({ existing: 'yes', delivery: 'interjection' });
       expect(resolved.deliveryAttributes).toBeUndefined();
     });
 
@@ -2100,13 +2100,13 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { deliveryType: 'interjection' },
-          ifIdle: { deliveryType: 'new-message' },
+          ifActive: { delivery: 'interjection' },
+          ifIdle: { delivery: 'message' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'idle');
-      expect(resolved.attributes).toEqual({ deliveryType: 'new-message' });
+      expect(resolved.attributes).toEqual({ delivery: 'message' });
       expect(resolved.deliveryAttributes).toBeUndefined();
     });
 
@@ -2115,7 +2115,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { deliveryType: 'interjection' },
+          ifActive: { delivery: 'interjection' },
         },
       });
 
@@ -2139,14 +2139,14 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'fix the bug',
         deliveryAttributes: {
-          ifActive: { deliveryType: 'interjection' },
+          ifActive: { delivery: 'interjection' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'active');
       expect(resolved.toLLMMessage()).toEqual({
         role: 'user',
-        content: '<user-message deliveryType="interjection">fix the bug</user-message>',
+        content: '<user-message delivery="interjection">fix the bug</user-message>',
       });
     });
 
@@ -2155,18 +2155,18 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'fix the bug',
         deliveryAttributes: {
-          ifActive: { deliveryType: 'interjection' },
+          ifActive: { delivery: 'interjection' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'active');
       const db = resolved.toDBMessage({ threadId: 't', resourceId: 'r' });
       expect((db.content.metadata!.signal as Record<string, unknown>).attributes).toEqual({
-        deliveryType: 'interjection',
+        delivery: 'interjection',
       });
 
       const dataPart = resolved.toDataPart();
-      expect(dataPart.data.attributes).toEqual({ deliveryType: 'interjection' });
+      expect(dataPart.data.attributes).toEqual({ delivery: 'interjection' });
     });
 
     it('idle-resolved user-message without attributes renders as plain text', () => {
@@ -2174,7 +2174,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { deliveryType: 'interjection' },
+          ifActive: { delivery: 'interjection' },
         },
       });
 
@@ -2214,8 +2214,8 @@ describe('Agent signals', () => {
           type: 'user-message',
           contents: 'interjection test',
           deliveryAttributes: {
-            ifActive: { deliveryType: 'interjection' },
-            ifIdle: { deliveryType: 'new-message' },
+            ifActive: { delivery: 'interjection' },
+            ifIdle: { delivery: 'message' },
           },
         },
         {
@@ -2230,8 +2230,8 @@ describe('Agent signals', () => {
         pubsub,
       );
 
-      // Since no active run, it should go idle path and get 'new-message'
-      expect(idleResult.signal.attributes).toEqual({ deliveryType: 'new-message' });
+      // Since no active run, it should go idle path and get 'message'
+      expect(idleResult.signal.attributes).toEqual({ delivery: 'message' });
       expect(idleResult.signal.deliveryAttributes).toBeUndefined();
     });
   });

@@ -5,8 +5,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { SignalDeliveryAttributes } from '@mastra/core/agent';
+import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -90,8 +90,8 @@ export type { MastraTUIOptions } from './state.js';
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
 const USER_SIGNAL_DELIVERY_ATTRIBUTES: SignalDeliveryAttributes = {
-  ifActive: { deliveryType: 'interjection' },
-  ifIdle: { deliveryType: 'new-message' },
+  ifActive: { delivery: 'interjection' },
+  ifIdle: { delivery: 'message' },
 };
 
 /** How often to recheck for updates during a long-running session (ms). */
@@ -330,7 +330,10 @@ export class MastraTUI {
 
   private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
     const messageId = `user-${Date.now()}`;
-    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId));
+    const isInterjection = this.state.harness.isCurrentThreadStreamActive();
+    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
+      ...(isInterjection ? { label: 'interjection' } : {}),
+    });
     this.state.ui.requestRender();
     return messageId;
   }
@@ -408,7 +411,7 @@ export class MastraTUI {
       });
 
       if (hasActiveRun) {
-        addPendingUserMessage(this.state, signal.id, content, images);
+        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
       } else {
         addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
       }

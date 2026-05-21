@@ -22,14 +22,16 @@ class BorderedBox {
   private child: { render(width: number): string[]; invalidate?(): void };
   private pending: boolean;
   private borderColor?: string;
+  private label?: string;
 
   constructor(
     child: { render(width: number): string[]; invalidate?(): void },
-    options: { pending?: boolean; borderColor?: string } = {},
+    options: { pending?: boolean; borderColor?: string; label?: string } = {},
   ) {
     this.child = child;
     this.pending = options.pending ?? false;
     this.borderColor = options.borderColor;
+    this.label = options.label;
   }
 
   invalidate() {
@@ -76,8 +78,15 @@ class BorderedBox {
     const promptPrefix = chalk.hex(tintHex(mastra.green, 1))('»') + ' ';
     const promptWidth = 2;
 
-    // Top border: ╭──...──╮
-    lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));
+    // Top border: ╭──...──╮ or ╭── label ──...──╮
+    if (this.label) {
+      const labelText = ` ${this.label} `;
+      const labelLen = labelText.length;
+      const remaining = Math.max(0, boxWidth - 2 - 2 - labelLen);
+      lines.push(borderColor('╭──') + chalk.hex(theme.getTheme().dim)(labelText) + borderColor(`${'─'.repeat(remaining)}╮`));
+    } else {
+      lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));
+    }
 
     // Content lines with side borders, first line gets "> " prefix
     for (let i = 0; i < trimmedLines.length; i++) {
@@ -103,7 +112,7 @@ export class UserMessageComponent extends Container {
   constructor(
     text: string,
     markdownTheme: MarkdownTheme = getMarkdownTheme(),
-    options: { pending?: boolean; borderColor?: string } = {},
+    options: { pending?: boolean; borderColor?: string; label?: string } = {},
   ) {
     super();
 
@@ -112,7 +121,7 @@ export class UserMessageComponent extends Container {
       italic: false,
     });
 
-    this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor }));
+    this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor, label: options.label }));
   }
 
   getChatSpacingKind(): ChatSpacingKind {
