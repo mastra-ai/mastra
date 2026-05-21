@@ -59,6 +59,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_harness_channel_outbox: new Map(),
       mastra_harness_provider_callback_bindings: new Map(),
       mastra_harness_wakeups: new Map(),
+      mastra_harness_workspace_actions: new Map(),
     };
   }
 

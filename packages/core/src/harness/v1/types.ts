@@ -653,6 +653,83 @@ export interface HarnessMcpToolDescriptor {
 }
 
 /**
+ * Source kinds exposed by the read-only desktop action catalog.
+ */
+export type HarnessActionCatalogSourceKind = 'skill' | 'mcp-tool';
+
+export interface HarnessActionCatalogSkillSource {
+  kind: 'skill';
+  /** Skill name usable with `session.skills.use(name, ...)`. */
+  skillName: string;
+  /** Workspace path when the descriptor came from workspace discovery. */
+  filePath?: string;
+}
+
+export interface HarnessActionCatalogMcpToolSource {
+  kind: 'mcp-tool';
+  /** Registered MCP server key. */
+  serverKey: string;
+  /** Tool id/name within the server. */
+  toolName: string;
+}
+
+export type HarnessActionCatalogSource = HarnessActionCatalogSkillSource | HarnessActionCatalogMcpToolSource;
+
+/**
+ * Read-only action catalog entry for desktop hosts.
+ *
+ * Entries are inventory only. They carry enough metadata for palettes,
+ * forms, shortcuts, and permission summaries, but do not expose execution or
+ * lifecycle controls. Callers execute through the owning source surface
+ * (`session.skills.use`, MCP tool runtime, or a future router).
+ */
+export interface HarnessActionCatalogEntry {
+  /** Stable local catalog id, namespaced by source kind. */
+  id: string;
+  /** Source reference that can be used to locate the owning descriptor. */
+  source: HarnessActionCatalogSource;
+  /** Current availability hint for catalog UIs. */
+  status: 'available';
+  /** User-facing action label. */
+  label: string;
+  /** Optional human-readable description. */
+  description?: string;
+  /** Optional source category, currently skill-owned when present. */
+  category?: string;
+  /** Optional host-owned icon token. */
+  icon?: string;
+  /** Keyboard or command palette shortcuts. */
+  shortcuts?: readonly HarnessSkillActionShortcut[];
+  /** JSON-schema-like input descriptor for action forms. */
+  inputSchema?: unknown;
+  /** JSON-schema-like output descriptor for result previews. */
+  outputSchema?: unknown;
+  /** Artifact MIME types or host-owned artifact ids this action may produce. */
+  artifactTypes?: readonly string[];
+  /** Permission hints for preflight UI. Enforcement remains separate. */
+  permissions?: HarnessSkillActionPermissionHints;
+  /** MCP-specific display metadata when the source is an MCP tool. */
+  mcp?: {
+    serverName: string;
+    serverVersion: string;
+    toolType?: string;
+    strict?: boolean;
+    meta?: Record<string, unknown>;
+  };
+}
+
+export interface HarnessActionCatalogListOptions {
+  /** Case-insensitive substring search across labels, ids, descriptions, and source refs. */
+  query?: string;
+  /** Optional source-kind filter. */
+  source?: HarnessActionCatalogSourceKind;
+  /** Maximum entries to return. Defaults to 100; valid range is 0 through 500. */
+  limit?: number;
+  /** Number of filtered entries to skip before applying `limit`. */
+  offset?: number;
+}
+
+/**
  * Options for {@link Session.skills.use}. See §4.6.
  */
 export interface UseSkillOptions {
@@ -748,6 +825,20 @@ export type HarnessConfig = HarnessConfigCommon &
   );
 
 export interface HarnessConfigCommon {
+  /**
+   * Operator-managed compatibility token for the configured runtime surface:
+   * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
+   * bindings, workspace provider wiring, and wrappers that affect run
+   * semantics. Harness does not derive this value. Operators bump it when a
+   * change is incompatible with non-terminal persisted work.
+   *
+   * When set, recoverable work snapshots the token and later fails closed with
+   * `harness.runtime_dependency_drifted` if replay/resume observes a different
+   * current token, including when a previously configured token is later unset.
+   * Legacy rows without a snapshot continue ID-only validation.
+   */
+  runtimeCompatibilityGeneration?: string;
+
   /**
    * Operating modes. Each mode pins a backing agent and may override or
    * extend its tool surface and instructions. Mode ids must be unique;

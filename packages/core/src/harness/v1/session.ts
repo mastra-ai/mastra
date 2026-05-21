@@ -105,6 +105,9 @@ import type {
   AgentStream,
   AttachmentRef,
   GoalOptions,
+  HarnessActionCatalogEntry,
+  HarnessActionCatalogListOptions,
+  HarnessActionCatalogSourceKind,
   HarnessMcpServerDescriptor,
   HarnessMcpToolDescriptor,
   HarnessMode,
@@ -112,6 +115,7 @@ import type {
   InboxResponseResult,
   HarnessRequestContext,
   HarnessSkill,
+  HarnessSkillActionMetadata,
   UseSkillOptions,
   ListMessagesOptions,
   MessageAdmissionResult,
@@ -163,6 +167,14 @@ type QueueResumeRecoveryResult =
 type ResumeResponseMode = 'agent-result' | 'inbox-receipt';
 type InboxReceiptResponseOptions = InboxResponseOptions & { responseId: string };
 type LegacyInboxResponseOptions = Omit<InboxResponseOptions, 'responseId'> & { responseId?: undefined };
+type ActionCatalogSkillDescriptor = Pick<
+  HarnessSkill,
+  'name' | 'description' | 'filePath' | 'category' | 'action' | 'metadata'
+>;
+type ActionCatalogMcpCacheEntry = {
+  entries: HarnessActionCatalogEntry[];
+  expiresAt?: number;
+};
 
 /**
  * Tool IDs the harness translates from `tool-call-approval` /
@@ -177,6 +189,15 @@ const MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS = 100;
 const MESSAGE_RESULT_EVIDENCE_BACKGROUND_OBSERVE_TIMEOUT_MS = 5_000;
 const QUEUE_ACCEPTED_RECOVERY_STALE_MS = 30_000;
 const QUEUE_POST_RUN_FINALIZATION_RETRY_MS = 1_000;
+const ACTION_CATALOG_DEFAULT_LIMIT = 100;
+const ACTION_CATALOG_MAX_LIMIT = 500;
+const ACTION_CATALOG_MCP_LIST_TIMEOUT_MS = 2_000;
+const ACTION_CATALOG_MCP_FAILURE_CACHE_MS = 5_000;
+const ACTION_CATALOG_SOURCE_KINDS: readonly HarnessActionCatalogSourceKind[] = ['skill', 'mcp-tool'];
+const ACTION_CATALOG_SOURCE_ORDER: Record<HarnessActionCatalogSourceKind, number> = {
+  skill: 0,
+  'mcp-tool': 1,
+};
 const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'required',
   'properties',
@@ -245,6 +266,110 @@ function createModePrepareStep(mode: HarnessMode): AgentExecutionOptionsBase<unk
     activeTools: Object.keys(tools ?? {}).filter(
       toolName => !workspaceToolNames.has(toolName) || allowedWorkspaceTools.has(toolName),
     ),
+  });
+}
+
+function encodeActionCatalogIdPart(value: string): string {
+  return encodeURIComponent(value);
+}
+
+function compareActionCatalogIds(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+function cloneActionCatalogEntry(entry: HarnessActionCatalogEntry): HarnessActionCatalogEntry {
+  return cloneMcpCatalogValue(entry) as HarnessActionCatalogEntry;
+}
+
+function cloneActionCatalogStringArray(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || item.length === 0)) {
+    return undefined;
+  }
+  return [...value];
+}
+
+function cloneActionCatalogShortcuts(value: unknown): HarnessSkillActionMetadata['shortcuts'] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const shortcuts = value.map(item => {
+    if (!isPlainMcpCatalogObject(item) || typeof item.id !== 'string' || item.id.length === 0) return undefined;
+    const keys = cloneActionCatalogStringArray(item.keys);
+    if (item.keys !== undefined && !keys) return undefined;
+    if (item.label !== undefined && typeof item.label !== 'string') return undefined;
+    return {
+      id: item.id,
+      ...(item.label ? { label: item.label } : {}),
+      ...(keys ? { keys } : {}),
+    };
+  });
+  return shortcuts.some(shortcut => !shortcut) ? undefined : (shortcuts as HarnessSkillActionMetadata['shortcuts']);
+}
+
+function cloneActionCatalogPermissions(value: unknown): HarnessSkillActionMetadata['permissions'] | undefined {
+  if (!isPlainMcpCatalogObject(value)) return undefined;
+  const tools = cloneActionCatalogStringArray(value.tools);
+  const fileScopes = cloneActionCatalogStringArray(value.fileScopes);
+  const networkScopes = cloneActionCatalogStringArray(value.networkScopes);
+  const mcpScopes = cloneActionCatalogStringArray(value.mcpScopes);
+  if (
+    (value.tools !== undefined && !tools) ||
+    (value.fileScopes !== undefined && !fileScopes) ||
+    (value.networkScopes !== undefined && !networkScopes) ||
+    (value.mcpScopes !== undefined && !mcpScopes)
+  ) {
+    return undefined;
+  }
+  return {
+    ...(tools ? { tools } : {}),
+    ...(fileScopes ? { fileScopes } : {}),
+    ...(networkScopes ? { networkScopes } : {}),
+    ...(mcpScopes ? { mcpScopes } : {}),
+  };
+}
+
+function cloneActionMetadataLike(value: unknown): HarnessSkillActionMetadata | undefined {
+  if (!isPlainMcpCatalogObject(value)) return undefined;
+  if (value.displayName !== undefined && typeof value.displayName !== 'string') return undefined;
+  if (value.icon !== undefined && typeof value.icon !== 'string') return undefined;
+  const shortcuts = cloneActionCatalogShortcuts(value.shortcuts);
+  const inputSchema = cloneMcpCatalogRecord(value.inputSchema);
+  const outputSchema = cloneMcpCatalogRecord(value.outputSchema);
+  const artifactTypes = cloneActionCatalogStringArray(value.artifactTypes);
+  const permissions = cloneActionCatalogPermissions(value.permissions);
+  if (
+    (value.shortcuts !== undefined && !shortcuts) ||
+    (value.inputSchema !== undefined && !inputSchema) ||
+    (value.outputSchema !== undefined && !outputSchema) ||
+    (value.artifactTypes !== undefined && !artifactTypes) ||
+    (value.permissions !== undefined && !permissions)
+  ) {
+    return undefined;
+  }
+  return {
+    ...(value.displayName ? { displayName: value.displayName } : {}),
+    ...(value.icon ? { icon: value.icon } : {}),
+    ...(shortcuts ? { shortcuts } : {}),
+    ...(inputSchema ? { inputSchema } : {}),
+    ...(outputSchema ? { outputSchema } : {}),
+    ...(artifactTypes ? { artifactTypes } : {}),
+    ...(permissions ? { permissions } : {}),
+  };
+}
+
+function withActionCatalogMcpListTimeout<T>(run: (abortSignal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutError = new Error(`MCP tool catalog did not resolve within ${ACTION_CATALOG_MCP_LIST_TIMEOUT_MS}ms`);
+  const work = run(controller.signal);
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, ACTION_CATALOG_MCP_LIST_TIMEOUT_MS);
+  });
+  return Promise.race([work, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
   });
 }
 
@@ -589,6 +714,10 @@ export class Session {
   // -------------------------------------------------------------------------
   private _skillsCache?: HarnessSkill[];
   private _skillsResolving?: Promise<HarnessSkill[]>;
+  private _actionsSkillEntriesCache?: HarnessActionCatalogEntry[];
+  private _actionsSkillEntriesResolving?: Promise<HarnessActionCatalogEntry[]>;
+  private _actionsMcpEntriesCacheByServer = new Map<string, ActionCatalogMcpCacheEntry>();
+  private _actionsMcpEntriesResolvingByServer = new Map<string, Promise<HarnessActionCatalogEntry[]>>();
 
   // -------------------------------------------------------------------------
   // Thread subscription — §4.2 signal routing.
@@ -1486,6 +1615,27 @@ export class Session {
     },
   });
 
+  // -------------------------------------------------------------------------
+  // Action catalog — PF-576 / PF-552 desktop palette inventory.
+  //
+  // This is a read-only aggregate over skill action metadata and MCP tool
+  // descriptors. It intentionally exposes no execution or lifecycle controls;
+  // callers use the source surfaces referenced by each entry.
+  // -------------------------------------------------------------------------
+
+  readonly actions = Object.freeze({
+    /** List/search local desktop action catalog entries. */
+    list: (options?: HarnessActionCatalogListOptions): Promise<HarnessActionCatalogEntry[]> =>
+      this._actionsList(options),
+    /** Convenience wrapper for `list({ query, ...options })`. */
+    search: (
+      query: string,
+      options?: Omit<HarnessActionCatalogListOptions, 'query'>,
+    ): Promise<HarnessActionCatalogEntry[]> => this._actionsSearch(query, options),
+    /** Refresh already-materialized workspace skills and clear cached action catalog discovery. */
+    refresh: (): Promise<void> => this._actionsRefresh(),
+  });
+
   private _mcpListServers(): HarnessMcpServerDescriptor[] {
     this._assertLive('mcp.listServers()');
     return this._harness._listMcpServers().map(([key, server]) => this._projectMcpServer(key, server));
@@ -1498,13 +1648,18 @@ export class Session {
     return server ? this._projectMcpServer(key, server) : undefined;
   }
 
-  private async _mcpListTools(key: string): Promise<HarnessMcpToolDescriptor[] | undefined> {
+  private async _mcpListTools(
+    key: string,
+    abortSignal: AbortSignal = new AbortController().signal,
+    opts: { resolveWorkspace?: boolean } = {},
+  ): Promise<HarnessMcpToolDescriptor[] | undefined> {
     const server = this._harness._getMcpServer(key);
     if (!server) return undefined;
     const requestContext = await this._buildRequestContext({
       modeId: this._record.modeId,
       modelId: this._record.modelId,
-      abortSignal: new AbortController().signal,
+      abortSignal,
+      resolveWorkspace: opts.resolveWorkspace,
     });
     const toolList = await server.getToolListInfo(requestContext);
     const convertedTools = server.tools();
@@ -1561,6 +1716,297 @@ export class Session {
     };
   }
 
+  private async _actionsSearch(
+    query: string,
+    options?: Omit<HarnessActionCatalogListOptions, 'query'>,
+  ): Promise<HarnessActionCatalogEntry[]> {
+    this._assertLive('actions.search()');
+    if (typeof query !== 'string') {
+      throw new HarnessValidationError('actions.search()', 'query must be a string');
+    }
+    if (options !== undefined && (!options || typeof options !== 'object' || Array.isArray(options))) {
+      throw new HarnessValidationError('actions.search()', 'options must be an object');
+    }
+    return this._actionsList({ ...options, query });
+  }
+
+  private async _actionsList(options?: HarnessActionCatalogListOptions): Promise<HarnessActionCatalogEntry[]> {
+    this._assertLive('actions.list()');
+    const normalized = this._normalizeActionCatalogOptions(options);
+    if (normalized.limit === 0) return [];
+    const entries = await this._buildActionCatalogEntries(normalized.source);
+    const filtered = entries.filter(entry => this._matchesActionCatalogOptions(entry, normalized));
+    return filtered
+      .sort((a, b) => {
+        const sourceOrder = ACTION_CATALOG_SOURCE_ORDER[a.source.kind] - ACTION_CATALOG_SOURCE_ORDER[b.source.kind];
+        return sourceOrder === 0 ? compareActionCatalogIds(a.id, b.id) : sourceOrder;
+      })
+      .slice(normalized.offset, normalized.offset + normalized.limit)
+      .map(entry => cloneActionCatalogEntry(entry));
+  }
+
+  private async _actionsRefresh(): Promise<void> {
+    this._assertLive('actions.refresh()');
+    const clearActionAndSkillCatalogCaches = () => {
+      this._skillsCache = undefined;
+      this._skillsResolving = undefined;
+      this._actionsSkillEntriesCache = undefined;
+      this._actionsSkillEntriesResolving = undefined;
+      this._actionsMcpEntriesCacheByServer.clear();
+      this._actionsMcpEntriesResolvingByServer.clear();
+    };
+    clearActionAndSkillCatalogCaches();
+    try {
+      await this._workspace?.skills?.refresh();
+    } finally {
+      clearActionAndSkillCatalogCaches();
+    }
+  }
+
+  private _normalizeActionCatalogOptions(options?: HarnessActionCatalogListOptions): {
+    query: string;
+    source?: HarnessActionCatalogSourceKind;
+    limit: number;
+    offset: number;
+  } {
+    if (options !== undefined && (!options || typeof options !== 'object' || Array.isArray(options))) {
+      throw new HarnessValidationError('actions.list()', 'options must be an object');
+    }
+    const query = options?.query ?? '';
+    if (typeof query !== 'string') {
+      throw new HarnessValidationError('actions.list()', 'query must be a string');
+    }
+    const source = options?.source;
+    if (source !== undefined && !ACTION_CATALOG_SOURCE_KINDS.includes(source)) {
+      throw new HarnessValidationError(
+        'actions.list()',
+        `source must be one of ${ACTION_CATALOG_SOURCE_KINDS.join(' | ')}`,
+      );
+    }
+    const limit = options?.limit ?? ACTION_CATALOG_DEFAULT_LIMIT;
+    if (!Number.isInteger(limit) || limit < 0 || limit > ACTION_CATALOG_MAX_LIMIT) {
+      throw new HarnessValidationError(
+        'actions.list()',
+        `limit must be an integer between 0 and ${ACTION_CATALOG_MAX_LIMIT}`,
+      );
+    }
+    const offset = options?.offset ?? 0;
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new HarnessValidationError('actions.list()', 'offset must be a non-negative integer');
+    }
+    return { query: query.trim().toLowerCase(), source, limit, offset };
+  }
+
+  private _matchesActionCatalogOptions(
+    entry: HarnessActionCatalogEntry,
+    options: { query: string; source?: HarnessActionCatalogSourceKind; limit: number; offset: number },
+  ): boolean {
+    if (options.source !== undefined && entry.source.kind !== options.source) return false;
+    if (options.query.length === 0) return true;
+    const haystack = this._actionCatalogSearchText(entry).toLowerCase();
+    return haystack.includes(options.query);
+  }
+
+  private _actionCatalogSearchText(entry: HarnessActionCatalogEntry): string {
+    const parts = [entry.id, entry.label, entry.description, entry.category];
+    if (entry.source.kind === 'skill') {
+      parts.push(entry.source.skillName, entry.source.filePath);
+    } else {
+      parts.push(entry.source.serverKey, entry.source.toolName, entry.mcp?.serverName);
+    }
+    if (entry.shortcuts) {
+      for (const shortcut of entry.shortcuts) {
+        parts.push(shortcut.id, shortcut.label, ...(shortcut.keys ?? []));
+      }
+    }
+    return parts.filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n');
+  }
+
+  private async _buildActionCatalogEntries(
+    source?: HarnessActionCatalogSourceKind,
+  ): Promise<HarnessActionCatalogEntry[]> {
+    const skillEntries = source === 'mcp-tool' ? [] : await this._resolveSkillActionCatalogEntries();
+    const mcpEntries: HarnessActionCatalogEntry[] = [];
+    if (source !== 'skill') {
+      mcpEntries.push(...(await this._resolveMcpActionCatalogEntries()));
+    }
+    return [...skillEntries, ...mcpEntries];
+  }
+
+  private async _resolveSkillActionCatalogEntries(): Promise<HarnessActionCatalogEntry[]> {
+    if (this._actionsSkillEntriesCache) return this._actionsSkillEntriesCache;
+    if (this._actionsSkillEntriesResolving) return this._actionsSkillEntriesResolving;
+
+    const build = async (): Promise<HarnessActionCatalogEntry[]> => {
+      const codeSkills = this._harness._listCodeSkills();
+      const entries: ActionCatalogSkillDescriptor[] = [...codeSkills];
+      try {
+        const workspace = await this.getWorkspace();
+        const workspaceSkills = workspace?.skills;
+        if (workspaceSkills) {
+          const workspaceEntries = await workspaceSkills.list();
+          const codeNames = new Set(codeSkills.map(skill => skill.name));
+          for (const meta of workspaceEntries) {
+            if (codeNames.has(meta.name)) continue;
+            entries.push({
+              name: meta.name,
+              description: meta.description,
+              ...(meta.path ? { filePath: meta.path } : {}),
+              ...(meta.metadata ? { metadata: meta.metadata } : {}),
+            });
+          }
+        }
+      } catch {
+        // The action catalog is an inventory surface. Keep code-registered
+        // actions available even when workspace skill discovery is unavailable.
+      }
+      return entries.flatMap(skill => this._projectSkillActionCatalogEntry(skill));
+    };
+
+    const pending = build();
+    this._actionsSkillEntriesResolving = pending;
+    try {
+      const result = await pending;
+      if (this._actionsSkillEntriesResolving === pending) {
+        this._actionsSkillEntriesCache = result;
+      }
+      return result;
+    } finally {
+      if (this._actionsSkillEntriesResolving === pending) {
+        this._actionsSkillEntriesResolving = undefined;
+      }
+    }
+  }
+
+  private _projectSkillActionCatalogEntry(skill: ActionCatalogSkillDescriptor): HarnessActionCatalogEntry[] {
+    const action = skill.action ?? cloneActionMetadataLike(skill.metadata?.action);
+    if (!action) return [];
+    const idSource = skill.filePath ?? skill.name;
+    return [
+      {
+        id: `skill:${encodeActionCatalogIdPart(idSource)}`,
+        source: {
+          kind: 'skill',
+          skillName: skill.name,
+          ...(skill.filePath ? { filePath: skill.filePath } : {}),
+        },
+        status: 'available',
+        label: action.displayName ?? skill.name,
+        description: skill.description,
+        ...(skill.category ? { category: skill.category } : {}),
+        ...(action.icon ? { icon: action.icon } : {}),
+        ...(action.shortcuts
+          ? { shortcuts: cloneMcpCatalogValue(action.shortcuts) as HarnessActionCatalogEntry['shortcuts'] }
+          : {}),
+        ...(action.inputSchema ? { inputSchema: cloneMcpCatalogValue(action.inputSchema) } : {}),
+        ...(action.outputSchema ? { outputSchema: cloneMcpCatalogValue(action.outputSchema) } : {}),
+        ...(action.artifactTypes ? { artifactTypes: [...action.artifactTypes] } : {}),
+        ...(action.permissions
+          ? { permissions: cloneMcpCatalogValue(action.permissions) as HarnessActionCatalogEntry['permissions'] }
+          : {}),
+      },
+    ];
+  }
+
+  private _projectMcpToolActionCatalogEntry(
+    server: HarnessMcpServerDescriptor,
+    tool: HarnessMcpToolDescriptor,
+  ): HarnessActionCatalogEntry {
+    return {
+      id: `mcp-tool:${encodeActionCatalogIdPart(server.key)}:${encodeActionCatalogIdPart(tool.name)}`,
+      source: { kind: 'mcp-tool', serverKey: server.key, toolName: tool.name },
+      status: 'available',
+      label: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      ...(tool.inputSchema !== undefined ? { inputSchema: cloneMcpCatalogValue(tool.inputSchema) } : {}),
+      ...(tool.outputSchema !== undefined ? { outputSchema: cloneMcpCatalogValue(tool.outputSchema) } : {}),
+      permissions: { mcpScopes: [server.key] },
+      mcp: {
+        serverName: server.name,
+        serverVersion: server.version,
+        ...(tool.toolType ? { toolType: tool.toolType } : {}),
+        ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+        ...(tool.meta ? { meta: cloneMcpCatalogValue(tool.meta) as Record<string, unknown> } : {}),
+      },
+    };
+  }
+
+  private _actionMcpCatalogCacheKey(server: HarnessMcpServerDescriptor, workspaceId: string): string {
+    return [server.key, this._record.modeId, this._record.modelId ?? '', workspaceId].join('\0');
+  }
+
+  private _getCachedMcpActionCatalogEntries(cacheKey: string): HarnessActionCatalogEntry[] | undefined {
+    const cached = this._actionsMcpEntriesCacheByServer.get(cacheKey);
+    if (!cached) return undefined;
+    if (cached.expiresAt === undefined || cached.expiresAt > Date.now()) {
+      return cached.entries;
+    }
+    this._actionsMcpEntriesCacheByServer.delete(cacheKey);
+    return undefined;
+  }
+
+  private async _resolveMcpActionCatalogEntries(): Promise<HarnessActionCatalogEntry[]> {
+    const results = await Promise.all(
+      this._mcpListServers().map(server => this._resolveMcpActionCatalogEntriesForServer(server)),
+    );
+    return results.flat();
+  }
+
+  private _startMcpActionCatalogEntriesForServer(
+    server: HarnessMcpServerDescriptor,
+    cacheKey: string,
+  ): Promise<HarnessActionCatalogEntry[]> {
+    const pending = withActionCatalogMcpListTimeout(async abortSignal => {
+      const tools = await this._mcpListTools(server.key, abortSignal, { resolveWorkspace: false });
+      return (tools ?? []).map(tool => this._projectMcpToolActionCatalogEntry(server, tool));
+    });
+    pending.catch(() => {
+      // `pending` is observed below for cache/single-flight cleanup; attach
+      // this noop handler immediately so timeout rejection is never unhandled.
+    });
+    this._actionsMcpEntriesResolvingByServer.set(cacheKey, pending);
+
+    pending
+      .then(entries => {
+        if (this._actionsMcpEntriesResolvingByServer.get(cacheKey) === pending) {
+          this._actionsMcpEntriesCacheByServer.set(cacheKey, { entries });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (this._actionsMcpEntriesResolvingByServer.get(cacheKey) === pending) {
+          this._actionsMcpEntriesResolvingByServer.delete(cacheKey);
+        }
+      });
+
+    return pending;
+  }
+
+  private async _resolveMcpActionCatalogEntriesForServer(
+    server: HarnessMcpServerDescriptor,
+  ): Promise<HarnessActionCatalogEntry[]> {
+    const cacheKey = this._actionMcpCatalogCacheKey(server, this._workspace?.id ?? '');
+    const cached = this._getCachedMcpActionCatalogEntries(cacheKey);
+    if (cached) return cached;
+
+    const pending =
+      this._actionsMcpEntriesResolvingByServer.get(cacheKey) ??
+      this._startMcpActionCatalogEntriesForServer(server, cacheKey);
+    try {
+      return await pending;
+    } catch {
+      const entries: HarnessActionCatalogEntry[] = [];
+      if (this._actionsMcpEntriesResolvingByServer.get(cacheKey) === pending) {
+        this._actionsMcpEntriesCacheByServer.set(cacheKey, {
+          entries,
+          expiresAt: Date.now() + ACTION_CATALOG_MCP_FAILURE_CACHE_MS,
+        });
+        this._actionsMcpEntriesResolvingByServer.delete(cacheKey);
+      }
+      return entries;
+    }
+  }
+
   private async _skillsList(): Promise<HarnessSkill[]> {
     this._assertLive('skills.list()');
     return this._resolveSkills();
@@ -1586,6 +2032,10 @@ export class Session {
     // `_skillsResolving === undefined` branch and start a fresh build).
     this._skillsCache = undefined;
     this._skillsResolving = undefined;
+    this._actionsSkillEntriesCache = undefined;
+    this._actionsSkillEntriesResolving = undefined;
+    this._actionsMcpEntriesCacheByServer.clear();
+    this._actionsMcpEntriesResolvingByServer.clear();
   }
 
   /**
@@ -7366,6 +7816,7 @@ export class Session {
     abortSignal: AbortSignal;
     persistedRequestContext?: PersistedRequestContextInput;
     requestContext?: RequestContext;
+    resolveWorkspace?: boolean;
   }): Promise<RequestContext> {
     const session = this;
     const stateSnapshot = (this._record.state ?? {}) as unknown;
@@ -7373,15 +7824,19 @@ export class Session {
       ? clonePersistedRequestContext(turn.persistedRequestContext)
       : undefined;
     // Resolve the workspace eagerly so tools see a populated `ctx.workspace`
-    // without each tool re-awaiting. Errors here surface as the turn's
-    // failure; workspace_error is still emitted via the registry.
+    // without each tool re-awaiting. Catalog-only callers can opt out to avoid
+    // provisioning a workspace for read-only inventory.
     let workspace: Workspace | undefined;
-    try {
-      workspace = await this._getWorkspaceUnchecked();
-    } catch {
-      // Leave undefined — tools that need a workspace will get a null slot.
-      // The registry has already emitted workspace_error so subscribers know.
-      workspace = undefined;
+    if (turn.resolveWorkspace === false) {
+      workspace = this._workspace;
+    } else {
+      try {
+        workspace = await this._getWorkspaceUnchecked();
+      } catch {
+        // Leave undefined — tools that need a workspace will get a null slot.
+        // The registry has already emitted workspace_error so subscribers know.
+        workspace = undefined;
+      }
     }
     const harnessSlot: HarnessRequestContext<unknown> = {
       harnessId: this._harness.ownerId,

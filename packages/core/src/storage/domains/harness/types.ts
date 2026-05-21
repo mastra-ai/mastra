@@ -440,6 +440,12 @@ export interface HarnessRuntimeDependencyRefs {
   modeId: string;
   agentId?: string;
   /**
+   * Operator-managed compatibility token captured at admission/resume time.
+   * When present, recovered work must match the current Harness runtime
+   * generation before invoking agents. Omitted means legacy ID-only evidence.
+   */
+  runtimeCompatibilityGeneration?: string;
+  /**
    * Evidence-only selected model id. The current Harness model catalog is a
    * UX surface, not an execution registry, so recovery does not fail closed on
    * this field until a stable runtime model registry exists.
@@ -472,6 +478,59 @@ export interface HarnessSessionEventReplayState {
   epoch: string;
   oldestSequence: number;
   newestSequence: number;
+}
+
+export interface WorkspaceActionJournalPath {
+  rootId: string;
+  rootPath: string;
+  path: string;
+  relativePath: string;
+}
+
+export interface WorkspaceActionJournalEntry {
+  id: string;
+  harnessName: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  actionKind: 'file' | 'command' | 'network' | 'mcp';
+  operation?: string;
+  action: JsonValue;
+  policyDecision: 'allow' | 'ask' | 'deny';
+  policyReasons: string[];
+  matchedRules: JsonValue[];
+  path?: WorkspaceActionJournalPath;
+  toPath?: WorkspaceActionJournalPath;
+  cwd?: WorkspaceActionJournalPath;
+  actor?: JsonValue;
+  requestId?: string;
+  result?: JsonValue;
+  createdAt: number;
+}
+
+export interface AppendWorkspaceActionJournalEntryResult {
+  created: boolean;
+}
+
+/**
+ * Session-scoped workspace action journal query. `resourceId` is required as a
+ * tenant/resource isolation fence; `threadId` narrows the session's observed
+ * thread when the caller wants that exact committed identity. Pagination is a
+ * stable `(createdAt, id)` cursor in ascending order.
+ */
+export interface ListWorkspaceActionJournalInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  threadId?: string;
+  actionKind?: WorkspaceActionJournalEntry['actionKind'];
+  operation?: string;
+  policyDecision?: WorkspaceActionJournalEntry['policyDecision'];
+  after?: {
+    createdAt: number;
+    id: string;
+  };
+  limit: number;
 }
 
 export interface InboxResponseReceipt {

@@ -59,6 +59,7 @@ export const TABLE_HARNESS_CHANNEL_ACTION_TOKENS = 'mastra_harness_channel_actio
 export const TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS = 'mastra_harness_channel_action_receipts';
 export const TABLE_HARNESS_CHANNEL_OUTBOX = 'mastra_harness_channel_outbox';
 export const TABLE_HARNESS_WAKEUPS = 'mastra_harness_wakeups';
+export const TABLE_HARNESS_WORKSPACE_ACTIONS = 'mastra_harness_workspace_actions';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -107,7 +108,8 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_CHANNEL_ACTION_TOKENS
   | typeof TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS
   | typeof TABLE_HARNESS_CHANNEL_OUTBOX
-  | typeof TABLE_HARNESS_WAKEUPS;
+  | typeof TABLE_HARNESS_WAKEUPS
+  | typeof TABLE_HARNESS_WORKSPACE_ACTIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -967,6 +969,26 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     result: { type: 'jsonb', nullable: true },
     last_error: { type: 'jsonb', nullable: true },
   },
+  [TABLE_HARNESS_WORKSPACE_ACTIONS]: {
+    id: { type: 'text', nullable: false },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    action_kind: { type: 'text', nullable: false },
+    operation: { type: 'text', nullable: true },
+    action: { type: 'jsonb', nullable: false },
+    policy_decision: { type: 'text', nullable: false },
+    policy_reasons: { type: 'jsonb', nullable: false },
+    matched_rules: { type: 'jsonb', nullable: false },
+    path: { type: 'jsonb', nullable: true },
+    to_path: { type: 'jsonb', nullable: true },
+    cwd: { type: 'jsonb', nullable: true },
+    actor: { type: 'jsonb', nullable: true },
+    request_id: { type: 'text', nullable: true },
+    result: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+  },
 };
 
 /**
@@ -1018,6 +1040,10 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_WAKEUPS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_WAKEUPS],
+  },
+  [TABLE_HARNESS_WORKSPACE_ACTIONS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_WORKSPACE_ACTIONS],
+    compositePrimaryKey: ['harness_name', 'session_id', 'id'],
   },
 };
 

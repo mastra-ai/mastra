@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ChannelProvider } from '../channels';
 import { PubSub } from '../events/pubsub';
 import type { Event, EventCallback, SubscribeOptions } from '../events/types';
 import { Harness } from '../harness/v1/harness';
@@ -1308,6 +1309,91 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     });
 
     expect(mastra.workers.map(worker => worker.name)).toContain('harnessWakeups');
+  });
+
+  it('uses Mastra init and shutdown as the Harness readiness lifecycle without implicit worker startup', async () => {
+    const harness = new Harness({
+      modes: [],
+      sessions: { storage: new InMemoryHarness({ db: new InMemoryDB() }) },
+    });
+    const harnessInit = vi.spyOn(harness, 'init');
+    const harnessShutdown = vi.spyOn(harness, 'shutdown');
+    const worker = new ControllableWorker();
+    const mastra = new Mastra({
+      harnesses: { default: harness },
+      workers: [worker],
+      logger: false,
+    });
+
+    expect(mastra.getLifecycleStatus()).toBe('constructed');
+    expect(mastra.isHarnessReady()).toBe(false);
+    expect(worker.startCalls).toBe(0);
+
+    await mastra.init();
+
+    expect(harnessInit).toHaveBeenCalledTimes(1);
+    expect(worker.initCalls).toBe(0);
+    expect(worker.startCalls).toBe(0);
+    expect(mastra.getLifecycleStatus()).toBe('ready');
+    expect(mastra.isHarnessReady()).toBe(true);
+
+    await mastra.startWorkers();
+
+    expect(worker.initCalls).toBe(1);
+    expect(worker.startCalls).toBe(1);
+
+    await mastra.shutdown();
+
+    expect(worker.stopCalls).toBeGreaterThanOrEqual(1);
+    expect(harnessShutdown).toHaveBeenCalledTimes(1);
+    expect(mastra.getLifecycleStatus()).toBe('stopped');
+    expect(mastra.isHarnessReady()).toBe(false);
+    await expect(mastra.startWorkers()).rejects.toThrow('Mastra workers cannot be started after shutdown has started');
+  });
+
+  it('allows Mastra init retry after a transient Harness readiness failure', async () => {
+    const harness = new Harness({
+      modes: [],
+      sessions: { storage: new InMemoryHarness({ db: new InMemoryDB() }) },
+    });
+    const harnessInit = vi
+      .spyOn(harness, 'init')
+      .mockRejectedValueOnce(new Error('transient readiness failed'))
+      .mockResolvedValueOnce(undefined);
+    const mastra = new Mastra({ harnesses: { default: harness }, logger: false });
+
+    await expect(mastra.init()).rejects.toThrow('transient readiness failed');
+    expect(mastra.getLifecycleStatus()).toBe('failed');
+    await expect(mastra.startWorkers()).rejects.toThrow('readiness failed');
+
+    await mastra.init();
+
+    expect(harnessInit).toHaveBeenCalledTimes(2);
+    expect(mastra.getLifecycleStatus()).toBe('ready');
+    expect(mastra.isHarnessReady()).toBe(true);
+  });
+
+  it('surfaces Harness channel initialization failures through Mastra init', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const channel: ChannelProvider = {
+      id: 'failing-channel',
+      getRoutes: () => [],
+      initialize: vi.fn().mockRejectedValue(new Error('channel init failed')),
+    };
+    const mastra = new Mastra({
+      harnesses: {
+        default: new Harness({
+          modes: [],
+          sessions: { storage: new InMemoryHarness({ db: new InMemoryDB() }) },
+        }),
+      },
+      channels: { failing: channel },
+      logger: false,
+    });
+
+    await expect(mastra.init()).rejects.toThrow('channel init failed');
+    expect(mastra.getLifecycleStatus()).toBe('failed');
+    expect(mastra.isHarnessReady()).toBe(false);
   });
 
   it('registers harness wakeup worker when storage is attached after construction', () => {

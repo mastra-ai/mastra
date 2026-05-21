@@ -49,6 +49,22 @@ await harness.selectOrCreateThread()
 await harness.sendMessage({ content: 'Hello!' })
 ```
 
+## Session action catalog
+
+Harness v1 sessions expose a read-only action catalog for desktop command palettes. The catalog combines skill action metadata with MCP tool descriptors. It does not execute actions or grant permissions.
+
+```typescript
+const session = await defaultHarness.session({
+  resourceId: 'project-123',
+  threadId: { fresh: true },
+})
+
+const actions = await session.actions.list({ query: 'ticket', limit: 20 })
+const mcpActions = await session.actions.search('workspace', { source: 'mcp-tool' })
+```
+
+Use the returned `source` field to route execution through the owning surface, such as `session.skills.use()` for skill entries. Call `session.actions.refresh()` after the host changes available skills or MCP tools and needs a fresh catalog.
+
 ## Constructor parameters
 
 <PropertiesTable

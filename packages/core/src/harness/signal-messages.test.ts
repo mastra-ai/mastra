@@ -135,6 +135,8 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'active-run-id',
     });
+    // Simulate an active run from the harness consumer's perspective
+    (harness as any).currentRunId = 'active-run-id';
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',

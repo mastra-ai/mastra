@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
@@ -104,6 +104,47 @@ describe('Mastra Channel Integration', () => {
 
       const channels = mastra.getChannels();
       expect(Object.keys(channels)).toEqual(['agent1', 'agent2']);
+    });
+
+    it('surfaces and retries agent channel initialization through Mastra init', async () => {
+      const agent = createTestAgent('agent1', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+      const initialize = vi
+        .spyOn(agent.getChannels()!, 'initialize')
+        .mockRejectedValueOnce(new Error('agent channel readiness failed'))
+        .mockResolvedValueOnce(undefined);
+      const mastra = new Mastra({
+        logger: false,
+        agents: { agent },
+        storage: new InMemoryStore(),
+      });
+
+      expect(initialize).not.toHaveBeenCalled();
+      await expect(mastra.init()).rejects.toThrow('agent channel readiness failed');
+      await mastra.init();
+
+      expect(initialize).toHaveBeenCalledTimes(2);
+    });
+
+    it('marks readiness failed when a late-added agent channel fails initialization', async () => {
+      const agent = createTestAgent('late-agent', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+      vi.spyOn(agent.getChannels()!, 'initialize').mockRejectedValueOnce(new Error('late channel failed'));
+      const mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+
+      await mastra.init();
+      expect(mastra.getLifecycleStatus()).toBe('ready');
+
+      mastra.addAgent(agent, 'late-agent');
+
+      await vi.waitFor(() => {
+        expect(mastra.getLifecycleStatus()).toBe('failed');
+      });
     });
 
     it('returns empty when no agents have channels', () => {
