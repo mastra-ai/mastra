@@ -23,6 +23,7 @@ export class MastraLLMVNext extends MastraBase {
   #firstModel: ModelManagerModelConfig;
   #internalInputProcessors: InputProcessorOrWorkflow[];
   #internalErrorProcessors: ErrorProcessorOrWorkflow[];
+  #registeredInternalProcessors = new WeakSet<object>();
 
   constructor({
     mastra,
@@ -45,11 +46,7 @@ export class MastraLLMVNext extends MastraBase {
 
     if (mastra) {
       this.#mastra = mastra;
-      for (const processor of [...this.#internalInputProcessors, ...this.#internalErrorProcessors]) {
-        if ('__registerMastra' in processor && typeof processor.__registerMastra === 'function') {
-          processor.__registerMastra(mastra);
-        }
-      }
+      this.#registerInternalProcessors(mastra);
       if (mastra.getLogger()) {
         this.__setLogger(this.#mastra.getLogger());
       }
@@ -77,9 +74,15 @@ export class MastraLLMVNext extends MastraBase {
 
   __registerMastra(p: Mastra) {
     this.#mastra = p;
+    this.#registerInternalProcessors(p);
+  }
+
+  #registerInternalProcessors(mastra: Mastra) {
     for (const processor of [...this.#internalInputProcessors, ...this.#internalErrorProcessors]) {
+      if (this.#registeredInternalProcessors.has(processor)) continue;
       if ('__registerMastra' in processor && typeof processor.__registerMastra === 'function') {
-        processor.__registerMastra(p);
+        processor.__registerMastra(mastra);
+        this.#registeredInternalProcessors.add(processor);
       }
     }
   }
