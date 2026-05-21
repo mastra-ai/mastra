@@ -460,21 +460,31 @@ interface ProviderCapabilityFile {
 
 const providerCapCache = new Map<string, string[] | null>();
 
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function findCapabilitiesDirs(_useDynamicLoading: boolean): string[] {
   const packageRoot = getPackageRoot();
-  const candidates = [
-    path.join(packageRoot, 'dist', 'capabilities'),
-    path.join(packageRoot, 'src', 'llm', 'model', 'capabilities'),
-    path.join(process.cwd(), 'packages/core/src/llm/model/capabilities'),
-  ];
+  const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
+  const sourceCapabilitiesDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+  const workspaceSourceCapabilitiesDir = path.join(process.cwd(), 'packages/core/src/llm/model/capabilities');
 
-  return candidates.filter(dir => {
-    try {
-      return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
-    } catch {
-      return false;
-    }
-  });
+  const dirs = isDirectory(distCapabilitiesDir) ? [distCapabilitiesDir] : [];
+
+  // Published packages only include dist/. Source fallbacks are for local workspace/dev
+  // runs where @mastra/core may resolve through a stale partial dist while checked-in
+  // source capability files are available.
+  if (isDirectory(sourceCapabilitiesDir)) dirs.push(sourceCapabilitiesDir);
+  if (workspaceSourceCapabilitiesDir !== sourceCapabilitiesDir && isDirectory(workspaceSourceCapabilitiesDir)) {
+    dirs.push(workspaceSourceCapabilitiesDir);
+  }
+
+  return dirs;
 }
 
 let capabilitiesDirCache: string[] | undefined;
