@@ -447,12 +447,14 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     } else {
       const currentModelId = harness.getCurrentModelId();
       const defaultModelId = harness.getCurrentMode().defaultModelId;
-      const fallbackModelId = currentModelId || defaultModelId;
+      const fallbackModelId = defaultModelId || currentModelId;
       if (fallbackModelId) {
         const validated = await validateConfiguredModel(fallbackModelId, `(mode: ${args.mode})`);
         if (validated === 1) return validated;
+        await harness.switchModel({ modelId: fallbackModelId });
+        if (!emit) process.stderr.write(`[model] ${fallbackModelId} (mode: ${args.mode})\n`);
       } else {
-        const warnMsg = `--mode ${args.mode} has no configured model, using default`;
+        const warnMsg = `--mode ${args.mode} has no configured model`;
         if (emit) emit({ type: 'warning', message: warnMsg });
         else process.stderr.write(`Warning: ${warnMsg}\n`);
       }

@@ -851,9 +851,55 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     expect(exitCode).toBe(0);
     expect(harness.getCurrentModeId()).toBe('fast');
-    expect(stderrCalls.join('')).toContain('--mode fast has no configured model, using default');
+    expect(stderrCalls.join('')).toContain('--mode fast has no configured model');
     // No model_changed event should have been emitted
     expect(events.find(e => e.type === 'model_changed')).toBeUndefined();
+  });
+
+  it('no effectiveDefaults switches to the selected mode default model before starting a run', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response') }),
+      customModels: [
+        { id: 'openai/gpt-4o', provider: 'openai', modelName: 'gpt-4o', hasApiKey: true },
+        {
+          id: 'cerebras/zai-glm-4.7',
+          provider: 'cerebras',
+          modelName: 'zai-glm-4.7',
+          hasApiKey: true,
+        },
+      ],
+      modes: [
+        { id: 'build', name: 'Build', default: true, defaultModelId: 'openai/gpt-4o' },
+        { id: 'fast', name: 'Fast', defaultModelId: 'cerebras/zai-glm-4.7' },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+    await harness.switchModel({ modelId: 'openai/gpt-4o' });
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      mode: 'fast',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getCurrentModeId()).toBe('fast');
+    expect(harness.getCurrentModelId()).toBe('cerebras/zai-glm-4.7');
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'model_changed',
+          modeId: 'fast',
+          modelId: 'cerebras/zai-glm-4.7',
+        }),
+      ]),
+    );
   });
 
   it('no effectiveDefaults validates the selected mode default model before starting a run', async () => {
