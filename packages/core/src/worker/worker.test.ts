@@ -581,6 +581,150 @@ describe('HarnessWakeupWorker', () => {
     );
   });
 
+  it('admits channel wakeups when the registered binding matches the persisted snapshot', async () => {
+    const item = sampleWakeup({ requestContext: sampleWakeupChannelContext() });
+    const storage = createWakeupStorage([item]);
+    const admit = vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-channel', duplicate: false });
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding: vi.fn().mockReturnValue(sampleWakeupChannelBinding()),
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(admit).toHaveBeenCalledWith(item);
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: item.id, status: 'queued', queuedItemId: 'queued-channel' }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a channel wakeup binding is missing', async () => {
+    const item = sampleWakeup({ requestContext: sampleWakeupChannelContext() });
+    const storage = createWakeupStorage([item]);
+    const session = vi.fn().mockResolvedValue({
+      resourceId: item.resourceId,
+      threadId: item.threadId,
+      _admitWakeupQueue: vi.fn(),
+    });
+    const getChannelBinding = vi.fn().mockReturnValue(undefined);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(getChannelBinding).toHaveBeenCalledWith('support');
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'channel_binding_closed', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a channel wakeup lacks a binding snapshot', async () => {
+    const item = sampleWakeup({
+      requestContext: sampleWakeupChannelContext({
+        bindingId: undefined,
+      }),
+    });
+    const storage = createWakeupStorage([item]);
+    const session = vi.fn().mockResolvedValue({
+      resourceId: item.resourceId,
+      threadId: item.threadId,
+      _admitWakeupQueue: vi.fn(),
+    });
+    const getChannelBinding = vi.fn().mockReturnValue(sampleWakeupChannelBinding());
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(getChannelBinding).not.toHaveBeenCalled();
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'channel_binding_closed', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a channel wakeup binding snapshot is stale', async () => {
+    const item = sampleWakeup({ requestContext: sampleWakeupChannelContext() });
+    const storage = createWakeupStorage([item]);
+    const admit = vi.fn();
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding: vi.fn().mockReturnValue(sampleWakeupChannelBinding({ bindingId: 'support-binding-2' })),
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(admit).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'channel_binding_closed', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
   it('marks retryable failures failed with a later retry time', async () => {
     const item = sampleWakeup({ attempts: 2 });
     const storage = createWakeupStorage([item]);
@@ -1008,6 +1152,56 @@ function sampleWakeup(overrides: Partial<HarnessWakeupItem> = {}): HarnessWakeup
     requestContext: { metadata: { source: 'test' } },
     content: 'scheduled work',
     attachments: [],
+    ...overrides,
+  };
+}
+
+function sampleWakeupChannelContext(
+  overrides: Partial<{
+    origin: 'inbound' | 'binding';
+    harnessName: string;
+    channelId: string;
+    providerId: string;
+    platform: string;
+    externalThreadId: string;
+    externalMessageId: string;
+    bindingId: string;
+  }> = {},
+) {
+  return {
+    channel: {
+      origin: 'inbound' as const,
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack-provider',
+      platform: 'slack',
+      externalThreadId: 'thread-ext-1',
+      externalMessageId: 'message-ext-1',
+      bindingId: 'support-binding',
+      ...overrides,
+    },
+  };
+}
+
+function sampleWakeupChannelBinding(
+  overrides: Partial<{
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    providerId: string;
+    platform: string;
+    callbackTarget: string;
+    durableId: string;
+  }> = {},
+) {
+  return {
+    harnessName: 'default',
+    channelId: 'support',
+    bindingId: 'support-binding',
+    providerId: 'slack-provider',
+    platform: 'slack',
+    callbackTarget: 'https://channels.example.test/slack',
+    durableId: 'default:support:support-binding',
     ...overrides,
   };
 }

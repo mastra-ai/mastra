@@ -18,8 +18,17 @@ type WakeupSession = {
   ) => Promise<{ accepted: true; queuedItemId: string; duplicate: boolean }>;
 };
 
+type WakeupChannelBinding = {
+  harnessName: string;
+  channelId: string;
+  bindingId: string;
+  providerId: string;
+  platform: string;
+};
+
 type WakeupHarness = {
   session(opts: { sessionId?: string; resourceId?: string; threadId?: string }): Promise<WakeupSession>;
+  getChannelBinding?: (channelId: string) => WakeupChannelBinding | undefined;
   _internalGetSessionStorage?: () => HarnessStorage | undefined;
 };
 
@@ -251,6 +260,7 @@ export class HarnessWakeupWorker extends MastraWorker {
         claimTtlMs: this.#config.claimTtlMs,
         claimRenewMs: this.#config.claimRenewMs,
         operation: async () => {
+          this.#assertWakeupChannelBinding(harness, item);
           const session = await this.#resolveSession(harness, storage, item);
           if (session._admitWakeupQueue) return session._admitWakeupQueue(item);
           throw Object.assign(new Error('Harness session does not expose wakeup queue admission'), {
@@ -275,6 +285,41 @@ export class HarnessWakeupWorker extends MastraWorker {
     }
 
     await this.#markWakeupQueued(storage, item, claimId, result.queuedItemId);
+  }
+
+  #assertWakeupChannelBinding(harness: WakeupHarness, item: HarnessWakeupItem): void {
+    const channel = item.requestContext?.channel;
+    if (!channel) return;
+
+    const failClosed = (message: string): never => {
+      throw Object.assign(new Error(message), {
+        code: 'channel_binding_closed',
+        retryable: false,
+      });
+    };
+
+    if (channel.harnessName !== item.harnessName) {
+      failClosed('Harness wakeup channel context does not match the wakeup harness');
+    }
+    if (channel.bindingId === undefined) {
+      failClosed('Harness wakeup channel context is missing a binding snapshot');
+    }
+
+    const binding = harness.getChannelBinding?.(channel.channelId);
+    if (binding !== undefined) {
+      if (
+        binding.harnessName !== item.harnessName ||
+        binding.channelId !== channel.channelId ||
+        binding.providerId !== channel.providerId ||
+        binding.platform !== channel.platform ||
+        binding.bindingId !== channel.bindingId
+      ) {
+        failClosed('Harness wakeup channel binding no longer matches the persisted channel snapshot');
+      }
+      return;
+    } else {
+      failClosed('Harness wakeup channel binding is unavailable');
+    }
   }
 
   async #markWakeupQueued(
@@ -523,6 +568,9 @@ function projectWakeupError(error: unknown): { code: HarnessRowErrorCode; messag
   }
   if (name === 'HarnessAdmissionConflictError') {
     return { code: 'channel_payload_conflict', message, retryable: false };
+  }
+  if (rawCode === 'channel_binding_closed') {
+    return { code: 'channel_binding_closed', message, retryable: false };
   }
   if (rawCode === 'harness.storage.wakeup_session_unavailable') {
     return { code: 'worker_unavailable', message, retryable: false };
