@@ -23,12 +23,7 @@ import {
   type SlackConfigTokens,
   type StoredSlashCommand,
 } from './schemas';
-import type {
-  SlackProviderConfig,
-  SlashCommandConfig,
-  SlackConnectOptions,
-  SlackAdapterChannelConfig,
-} from './types';
+import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions, SlackAdapterChannelConfig } from './types';
 
 const PLATFORM = 'slack';
 
