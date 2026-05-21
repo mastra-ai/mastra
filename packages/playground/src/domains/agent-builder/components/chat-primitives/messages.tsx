@@ -4,13 +4,14 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Icon,
   MarkdownRenderer,
   Skeleton,
   TextFieldBlock,
   Txt,
 } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
-import { AlignLeft, Check, ChevronRight, FileText, Globe, Loader2, Sparkles, Type, Wrench } from 'lucide-react';
+import { AlignLeft, Check, ChevronRight, FileText, Globe, Loader2, Sparkles, Type, Wrench, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Controller, useFormContext } from 'react-hook-form';
@@ -28,16 +29,14 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
-import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
 
 interface MessageRowProps {
   message: MastraUIMessage;
   agentId?: string;
   isStreaming?: boolean;
-  mode?: 'edit' | 'view';
 }
 
-export const MessageRow = ({ message, agentId, isStreaming = false, mode }: MessageRowProps) => {
+export const MessageRow = ({ message, agentId, isStreaming = false }: MessageRowProps) => {
   return (
     <>
       {message.parts.map((part, index) => {
@@ -47,21 +46,9 @@ export const MessageRow = ({ message, agentId, isStreaming = false, mode }: Mess
             return <Txtmessage key={key} txt={part.text} role={message.role} />;
 
           case 'reasoning': {
-            if (!part.state) return null;
+            if (part.state !== 'streaming') return null;
 
-            if (mode === 'view') {
-              return part.state === 'streaming' ? (
-                <ReasoningMessage key={key} text="Anayzing the user's requirements..." streaming />
-              ) : (
-                <ReasoningMessage key={key} text="Requirements analyzed." />
-              );
-            }
-
-            return part.state === 'streaming' ? (
-              <ReasoningMessage key={key} text="Anayzing the agent requirements..." streaming />
-            ) : (
-              <ReasoningMessage key={key} text="Requirements analyzed, preparing the agent." />
-            );
+            return <ReasoningMessage key={key} text="Reasoning..." streaming />;
           }
 
           case 'dynamic-tool': {
@@ -101,13 +88,7 @@ export const MessageRow = ({ message, agentId, isStreaming = false, mode }: Mess
               case SET_AGENT_MODEL_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
                 const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
-                return (
-                  <MessageSetAgentModel
-                    key={key}
-                    model={input.model ?? { provider: '', name: '' }}
-                    disabled={isStreaming}
-                  />
-                );
+                return <MessageSetAgentModel key={key} model={input.model ?? { provider: '', name: '' }} />;
               }
               case SET_AGENT_BROWSER_ENABLED_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
@@ -121,6 +102,11 @@ export const MessageRow = ({ message, agentId, isStreaming = false, mode }: Mess
               }
               default: {
                 if (part?.state !== 'output-available') return null;
+
+                if (part.toolName === 'skill') {
+                  return <SkillTool name={(part.input as { name?: string } | undefined)?.name ?? 'unknown'} />;
+                }
+
                 const extra = part as { input?: unknown; output?: unknown };
                 return <GenericTool key={key} toolName={part.toolName} input={extra.input} output={extra.output} />;
               }
@@ -169,13 +155,7 @@ export const MessageRow = ({ message, agentId, isStreaming = false, mode }: Mess
             if (part?.state !== 'output-available') return null;
 
             const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
-            return (
-              <MessageSetAgentModel
-                key={key}
-                model={input.model ?? { provider: '', name: '' }}
-                disabled={isStreaming}
-              />
-            );
+            return <MessageSetAgentModel key={key} model={input.model ?? { provider: '', name: '' }} />;
           }
           case `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`: {
             if (part?.state !== 'output-available') return null;
@@ -191,6 +171,11 @@ export const MessageRow = ({ message, agentId, isStreaming = false, mode }: Mess
           }
 
           default: {
+            if (part.type === 'tool-skill' && part.state === 'output-available') {
+              const input = (part.input as { name?: string } | undefined) ?? {};
+              return <SkillTool name={input.name ?? 'unknown'} />;
+            }
+
             if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
               const toolName = part.type.slice('tool-'.length);
               const extra = part as { input?: unknown; output?: unknown };
@@ -438,7 +423,7 @@ const ToolCardField = ({
   icon: ReactNode;
   label: string;
   helpText: string;
-  children: ReactNode;
+  children?: ReactNode;
 }) => (
   <ToolCard>
     <div className="flex items-start gap-3">
@@ -602,14 +587,7 @@ export const MessageSetAgentSkills = ({ skills }: { skills: { id: string; name: 
   </ToolCard>
 );
 
-export const MessageSetAgentModel = ({
-  model,
-  disabled = false,
-}: {
-  model: { provider: string; name: string };
-  disabled?: boolean;
-}) => {
-  const { control, setValue } = useFormContext<AgentBuilderEditFormValues>();
+export const MessageSetAgentModel = ({ model }: { model: { provider: string; name: string } }) => {
   const fallbackLabel =
     model.provider && model.name ? `${model.provider}/${model.name}` : 'Pick the AI model that powers your agent.';
   return (
@@ -617,45 +595,7 @@ export const MessageSetAgentModel = ({
       icon={<Sparkles className="size-5 shrink-0" aria-hidden />}
       label="Agent model"
       helpText={fallbackLabel}
-    >
-      <Controller
-        control={control}
-        name="model"
-        render={({ field }) => {
-          const provider = field.value?.provider ?? '';
-          const modelId = field.value?.name ?? '';
-          return (
-            <div
-              className="flex flex-col gap-2 min-w-0 sm:flex-row sm:items-center"
-              data-testid="agent-builder-chat-set-agent-model"
-            >
-              <div className="flex-1 basis-0 min-w-0">
-                <LLMProviders
-                  value={provider}
-                  onValueChange={next => {
-                    const cleaned = cleanProviderId(next);
-                    setValue('model', { provider: cleaned, name: '' }, { shouldDirty: true });
-                  }}
-                  disabled={disabled}
-                  className="w-full !min-w-0"
-                />
-              </div>
-              <div className="flex-1 basis-0 min-w-0">
-                <LLMModels
-                  llmId={provider}
-                  value={modelId}
-                  onValueChange={next => {
-                    setValue('model', { provider: cleanProviderId(provider), name: next }, { shouldDirty: true });
-                  }}
-                  disabled={disabled}
-                  className="w-full !min-w-0"
-                />
-              </div>
-            </div>
-          );
-        }}
-      />
-    </ToolCardField>
+    />
   );
 };
 
@@ -682,3 +622,20 @@ export const MessageSetAgentWorkspaceId = ({ workspaceId }: { workspaceId: strin
     <ToolMessageLine>Setting workspace to: {workspaceId}</ToolMessageLine>
   </ToolCard>
 );
+
+interface SkillToolProps {
+  name: string;
+}
+
+const SkillTool = ({ name }: SkillToolProps) => {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon>
+        <Zap />
+      </Icon>
+      <Txt variant="ui-md" className="text-neutral3" as="div">
+        Using super-powers: <strong className="font-semibold text-neutral6">{name}</strong>
+      </Txt>
+    </div>
+  );
+};

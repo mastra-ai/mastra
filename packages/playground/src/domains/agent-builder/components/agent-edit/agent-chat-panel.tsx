@@ -160,7 +160,6 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
 
   return (
     <MessageList
-      mode="view"
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}

@@ -151,7 +151,6 @@ export function SkillChatComposer({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <MessageList
-        mode="edit"
         messages={messages}
         isRunning={isRunning}
         emptyState={emptyState}
