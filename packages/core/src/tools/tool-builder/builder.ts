@@ -98,6 +98,25 @@ function buildJsonOverrideSchema(
   const original = originalSchema as { '~standard'?: { validate?: (v: unknown) => any } } | undefined;
   const originalValidate = original?.['~standard']?.validate?.bind(original['~standard']);
 
+  // Standard Schema for *just* the injected override fields, so we can validate
+  // malformed override payloads (e.g. `_background: { enabled: "yes" }`) before
+  // merging them into the result. Matches the Zod v4 `.extend()` path's
+  // behavior, which validates these fields as part of the object.
+  // See https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282600679
+  const splicedProperties =
+    splicedJsonSchema && typeof splicedJsonSchema === 'object' && 'properties' in splicedJsonSchema
+      ? ((splicedJsonSchema.properties ?? {}) as Record<string, JSONSchema7Definition>)
+      : {};
+  const injectedProperties: Record<string, JSONSchema7Definition> = {};
+  for (const key of injectedKeys) {
+    if (splicedProperties[key] !== undefined) injectedProperties[key] = splicedProperties[key];
+  }
+  const injectedValidator = toStandardSchema({
+    type: 'object',
+    properties: injectedProperties,
+    additionalProperties: false,
+  } as any);
+
   const stripInjected = (input: unknown) => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return { stripped: input, injected: {} };
     const injected: Record<string, unknown> = {};
@@ -110,21 +129,52 @@ function buildJsonOverrideSchema(
   };
 
   const validate = (input: unknown) => {
-    if (!originalValidate) return fallback['~standard'].validate(input);
     const { stripped, injected } = stripInjected(input);
-    const result = originalValidate(stripped) as
-      | { value: unknown }
-      | { issues: readonly unknown[] }
-      | Promise<{ value: unknown } | { issues: readonly unknown[] }>;
-    const merge = (r: { value: unknown } | { issues: readonly unknown[] }) => {
-      if ('value' in r && r.value && typeof r.value === 'object' && !Array.isArray(r.value)) {
-        return { value: { ...(r.value as Record<string, unknown>), ...injected } };
+
+    const baseResult = originalValidate
+      ? (originalValidate(stripped) as
+          | { value: unknown }
+          | { issues: readonly unknown[] }
+          | Promise<{ value: unknown } | { issues: readonly unknown[] }>)
+      : fallback['~standard'].validate(stripped);
+
+    const injectedResult = injectedValidator['~standard'].validate(injected);
+
+    const combine = (
+      base: { value: unknown } | { issues: readonly unknown[] },
+      inj: { value: unknown } | { issues: readonly unknown[] },
+    ) => {
+      const baseIssues = 'issues' in base ? (base.issues ?? []) : [];
+      const injIssues = 'issues' in inj ? (inj.issues ?? []) : [];
+      if (baseIssues.length || injIssues.length) {
+        return { issues: [...baseIssues, ...injIssues] };
       }
-      return r;
+      const baseValue = (base as { value: unknown }).value;
+      const injValue = (inj as { value: unknown }).value;
+      if (baseValue && typeof baseValue === 'object' && !Array.isArray(baseValue)) {
+        const injMerged =
+          injValue && typeof injValue === 'object' && !Array.isArray(injValue)
+            ? (injValue as Record<string, unknown>)
+            : injected;
+        return { value: { ...(baseValue as Record<string, unknown>), ...injMerged } };
+      }
+      return base;
     };
-    return result && typeof (result as Promise<unknown>).then === 'function'
-      ? (result as Promise<{ value: unknown } | { issues: readonly unknown[] }>).then(merge)
-      : merge(result as { value: unknown } | { issues: readonly unknown[] });
+
+    const baseIsPromise = baseResult && typeof (baseResult as Promise<unknown>).then === 'function';
+    const injIsPromise = injectedResult && typeof (injectedResult as Promise<unknown>).then === 'function';
+    if (baseIsPromise || injIsPromise) {
+      return Promise.all([baseResult, injectedResult]).then(([b, i]) =>
+        combine(
+          b as { value: unknown } | { issues: readonly unknown[] },
+          i as { value: unknown } | { issues: readonly unknown[] },
+        ),
+      );
+    }
+    return combine(
+      baseResult as { value: unknown } | { issues: readonly unknown[] },
+      injectedResult as { value: unknown } | { issues: readonly unknown[] },
+    );
   };
 
   return {

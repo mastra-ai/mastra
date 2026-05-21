@@ -121,6 +121,34 @@ describe('CoreToolBuilder background override injection', () => {
       const [parsed] = execute.mock.calls[0]!;
       expect(parsed).toMatchObject({ query: 'DOCS', mode: 'fast', _background: { enabled: true } });
     });
+
+    // The JSON-fallback validate wrapper used to strip injected fields, run the
+    // original validator on the rest, then merge injected back untouched —
+    // letting malformed `_background` payloads (e.g. `enabled: "yes"`) reach
+    // `execute()`. Lock in that the injected subset is now validated against
+    // the override JSON Schema, matching the Zod v4 `.extend()` path.
+    // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282600679
+    it('rejects malformed _background payload on the JSON fallback path', async () => {
+      const execute = vi.fn();
+      const tool = createTool({
+        id: 'v3-bad-bg-tool',
+        description: 'Zod v3 tool with malformed _background guard',
+        inputSchema: z3.object({ query: z3.string() }),
+        execute,
+      });
+
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+        backgroundTaskEnabled: true,
+      });
+
+      const schema = tool.inputSchema as any;
+      const result = schema['~standard'].validate({ query: 'ok', _background: { enabled: 'yes' } });
+      const resolved = result && typeof result.then === 'function' ? await result : result;
+      expect(resolved).toHaveProperty('issues');
+      expect((resolved as { issues: readonly unknown[] }).issues.length).toBeGreaterThan(0);
+    });
   });
 
   describe('Zod v4 input schema', () => {
