@@ -90,8 +90,8 @@ export type { MastraTUIOptions } from './state.js';
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
 const USER_SIGNAL_DELIVERY_ATTRIBUTES: SignalDeliveryAttributes = {
-  ifActive: { delivery: 'while-active' },
-  ifIdle: { delivery: 'message' },
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
 };
 
 /** How often to recheck for updates during a long-running session (ms). */

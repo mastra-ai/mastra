@@ -21,19 +21,21 @@ type SignalFilePart = {
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
+export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 /**
  * Conditional attributes that are resolved and merged into `attributes` based on
  * whether the signal is delivered to an active agent run or starts a new (idle) run.
  *
  * @experimental
  */
+export type SignalDeliveryBranch = {
+  attributes?: AgentSignalAttributes;
+};
+
 export type SignalDeliveryAttributes = {
-  ifActive?: Record<string, string | number | boolean | null | undefined>;
-  ifIdle?: Record<string, string | number | boolean | null | undefined>;
+  ifActive?: SignalDeliveryBranch;
+  ifIdle?: SignalDeliveryBranch;
 };
 
 export type AgentSignalInput = {
@@ -42,7 +44,7 @@ export type AgentSignalInput = {
   acceptedAt?: Date | string;
   type: AgentSignalType;
   contents: AgentSignalContents;
-  attributes?: Record<string, string | number | boolean | null | undefined>;
+  attributes?: AgentSignalAttributes;
   metadata?: Record<string, unknown>;
   /**
    * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
@@ -51,8 +53,8 @@ export type AgentSignalInput = {
    */
   providerOptions?: MastraProviderMetadata;
   /**
-   * Conditional attributes merged into `attributes` based on whether the signal is
-   * delivered to an active run (`ifActive`) or starts a new idle run (`ifIdle`).
+   * Conditional branch attributes merged into top-level `attributes` based on whether
+   * the signal is delivered to an active run (`ifActive`) or starts a new idle run (`ifIdle`).
    * Call `resolveDeliveryAttributes()` to produce a signal with the correct attributes.
    *
    * @experimental
@@ -71,7 +73,7 @@ export type AgentSignalDataPart = {
     contents: AgentSignalContents;
     createdAt: string;
     acceptedAt?: string;
-    attributes?: Record<string, string | number | boolean | null | undefined>;
+    attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
   };
 };
@@ -124,7 +126,7 @@ function assertXmlName(name: string, label: string): void {
   }
 }
 
-function signalAttributesToXml(attributes?: AgentSignalInput['attributes']): string {
+function signalAttributesToXml(attributes?: AgentSignalAttributes): string {
   if (!attributes) {
     return '';
   }
@@ -318,7 +320,7 @@ function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
   );
 }
 
-function hasMeaningfulAttributes(attributes?: AgentSignalInput['attributes']): boolean {
+function hasMeaningfulAttributes(attributes?: AgentSignalAttributes): boolean {
   if (!attributes) return false;
   return Object.keys(attributes).some(key => {
     const value = attributes[key];
@@ -466,16 +468,17 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
 
 /**
  * Resolve `deliveryAttributes` into concrete `attributes` on a signal.
- * Returns a new signal with the conditional branch (`ifActive` or `ifIdle`)
- * merged into `attributes` and `deliveryAttributes` removed.
+ * Returns a new signal with the selected branch's `attributes` merged into
+ * top-level `attributes` and `deliveryAttributes` removed.
  *
  * @experimental
  */
 export function resolveDeliveryAttributes(signal: CreatedAgentSignal, delivery: 'active' | 'idle'): CreatedAgentSignal {
-  const extra = delivery === 'active' ? signal.deliveryAttributes?.ifActive : signal.deliveryAttributes?.ifIdle;
+  const branch = delivery === 'active' ? signal.deliveryAttributes?.ifActive : signal.deliveryAttributes?.ifIdle;
+  const extra = branch?.attributes;
   if (!extra || Object.keys(extra).length === 0) {
     if (!signal.deliveryAttributes) return signal;
-    // Strip deliveryAttributes even if the selected branch is empty.
+    // Strip deliveryAttributes even if the selected branch attributes are empty.
     return createSignal({ ...signal, deliveryAttributes: undefined });
   }
   return createSignal({
@@ -526,7 +529,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       signalMetadata?.attributes &&
       typeof signalMetadata.attributes === 'object' &&
       !Array.isArray(signalMetadata.attributes)
-        ? (signalMetadata.attributes as AgentSignalInput['attributes'])
+        ? (signalMetadata.attributes as AgentSignalAttributes)
         : undefined,
     metadata:
       signalMetadata?.metadata && typeof signalMetadata.metadata === 'object' && !Array.isArray(signalMetadata.metadata)

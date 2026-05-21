@@ -29,8 +29,8 @@ import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mast
 import type { TUIState } from '../state.js';
 
 const EXPECTED_USER_SIGNAL_DELIVERY_ATTRIBUTES = {
-  ifActive: { delivery: 'while-active' },
-  ifIdle: { delivery: 'message' },
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
 };
 
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {

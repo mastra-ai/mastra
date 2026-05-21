@@ -162,9 +162,10 @@ agent.sendSignal(
   {
     type: 'user-message',
     contents: 'Also cover the edge cases.',
+    attributes: { source: 'chat' },
     deliveryAttributes: {
-      ifActive: { delivery: 'while-active' },
-      ifIdle: { delivery: 'message' },
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
     },
   },
   {
@@ -177,16 +178,16 @@ agent.sendSignal(
 When the agent is working, the model sees:
 
 ```xml
-<user-message delivery="while-active">Also cover the edge cases.</user-message>
+<user-message source="chat" delivery="while-active">Also cover the edge cases.</user-message>
 ```
 
 When the agent is idle:
 
 ```xml
-<user-message delivery="message">Also cover the edge cases.</user-message>
+<user-message source="chat" delivery="message">Also cover the edge cases.</user-message>
 ```
 
-The `ifActive` branch merges into `attributes` when the signal is delivered to a running agent loop. The `ifIdle` branch merges when the signal wakes an idle thread. If the selected branch is `undefined`, no extra attributes are added.
+Top-level `attributes` always apply. The selected branch's `attributes` are merged into them at delivery time. The `ifActive.attributes` branch merges when the signal is delivered to a running agent loop. The `ifIdle.attributes` branch merges when the signal wakes an idle thread. If the selected branch or its `attributes` field is `undefined`, no extra attributes are added.
 
 Delivery attributes work with any signal type and can carry any key-value pairs — the `delivery` attribute shown above is just a convention used by mastracode.
 

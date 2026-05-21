@@ -2085,8 +2085,8 @@ describe('Agent signals', () => {
         contents: 'hello',
         attributes: { existing: 'yes' },
         deliveryAttributes: {
-          ifActive: { delivery: 'while-active' },
-          ifIdle: { delivery: 'message' },
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: { attributes: { delivery: 'message' } },
         },
       });
 
@@ -2100,8 +2100,8 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { delivery: 'while-active' },
-          ifIdle: { delivery: 'message' },
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: { attributes: { delivery: 'message' } },
         },
       });
 
@@ -2110,12 +2110,27 @@ describe('Agent signals', () => {
       expect(resolved.deliveryAttributes).toBeUndefined();
     });
 
-    it('resolveDeliveryAttributes strips deliveryAttributes when selected branch is empty', () => {
+    it('resolveDeliveryAttributes strips deliveryAttributes when selected branch has no attributes', () => {
       const signal = createSignal({
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { delivery: 'while-active' },
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: {},
+        },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, 'idle');
+      expect(resolved.attributes).toBeUndefined();
+      expect(resolved.deliveryAttributes).toBeUndefined();
+    });
+
+    it('resolveDeliveryAttributes strips deliveryAttributes when selected branch is missing', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        deliveryAttributes: {
+          ifActive: { attributes: { delivery: 'while-active' } },
         },
       });
 
@@ -2139,7 +2154,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'fix the bug',
         deliveryAttributes: {
-          ifActive: { delivery: 'while-active' },
+          ifActive: { attributes: { delivery: 'while-active' } },
         },
       });
 
@@ -2155,7 +2170,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'fix the bug',
         deliveryAttributes: {
-          ifActive: { delivery: 'while-active' },
+          ifActive: { attributes: { delivery: 'while-active' } },
         },
       });
 
@@ -2174,7 +2189,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { delivery: 'while-active' },
+          ifActive: { attributes: { delivery: 'while-active' } },
         },
       });
 
@@ -2216,8 +2231,8 @@ describe('Agent signals', () => {
           type: 'user-message',
           contents: 'while-active test',
           deliveryAttributes: {
-            ifActive: { delivery: 'while-active' },
-            ifIdle: { delivery: 'message' },
+            ifActive: { attributes: { delivery: 'while-active' } },
+            ifIdle: { attributes: { delivery: 'message' } },
           },
         },
         {
@@ -2249,8 +2264,8 @@ describe('Agent signals', () => {
           type: 'user-message',
           contents: 'idle test',
           deliveryAttributes: {
-            ifActive: { delivery: 'while-active' },
-            ifIdle: { delivery: 'message' },
+            ifActive: { attributes: { delivery: 'while-active' } },
+            ifIdle: { attributes: { delivery: 'message' } },
           },
         },
         {
