@@ -598,7 +598,7 @@ function hasClosedPrState(notification: GithubInboxNotification) {
 function isMergeConflictState(value: unknown) {
   if (value === false) return true;
   if (typeof value !== 'string') return false;
-  return ['conflicting', 'dirty', 'blocked'].includes(value.toLowerCase());
+  return ['conflicting', 'dirty'].includes(value.toLowerCase());
 }
 
 function hasMergeConflict(notification: GithubInboxNotification) {
@@ -1952,31 +1952,10 @@ export class GithubSignals {
     const delivered: PendingGithubNotification[] = [];
     for (const pending of bucket.notifications) {
       if (await this.#hasNotificationDelivery(pending.deliveryClaim)) continue;
-      if (pending.notification.kind === 'pr-conflict' && !(await this.#isPendingConflictStillCurrent(bucket))) continue;
       await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification, sendSignal);
       delivered.push(pending);
     }
     return delivered;
-  }
-
-  async #isPendingConflictStillCurrent(bucket: PendingGithubNotificationBucket) {
-    try {
-      const snapshot = await this.#loadPullRequestSnapshot(bucket.subscription);
-      const currentFingerprint = getSnapshotPrConflictFingerprint(snapshot);
-      if (currentFingerprint) return true;
-
-      const acknowledgedSubscription: ActiveSubscription = {
-        ...(bucket.acknowledgeAfterDelivery ?? bucket.subscription),
-        lastMergeConflictFingerprint: currentFingerprint,
-        lastErrorFingerprint: undefined,
-        nextPollAt: undefined,
-        updatedAt: this.#options.now().toISOString(),
-      };
-      bucket.acknowledgeAfterDelivery = acknowledgedSubscription;
-      return false;
-    } catch {
-      return true;
-    }
   }
 
   async #acknowledgePendingDelivery(
