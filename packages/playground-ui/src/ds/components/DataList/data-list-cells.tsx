@@ -21,7 +21,7 @@ export function DataListCell({ children, className, height = 'default', as, ...r
     <Component
       className={cn(
         'relative grid items-center text-ui-md whitespace-nowrap text-neutral3',
-        height === 'compact' ? 'py-2' : 'py-4',
+        height === 'compact' ? 'py-2' : 'py-3',
         className,
       )}
       {...rest}
@@ -104,15 +104,17 @@ export interface DataListMonoCellProps {
   children: ReactNode;
   /** Override classes on the inner span (e.g. swap the default `text-neutral3` tone). */
   className?: string;
+  /** Cell vertical padding. Defaults to `compact` to match other identifier cells. */
+  height?: 'default' | 'compact';
 }
 
 /**
- * Compact mono-typography cell with truncation. Shared by any column that
+ * Mono-typography cell with truncation. Shared by any column that
  * shows code-like text (input previews, JSON summaries, identifiers, etc.).
  */
-export function DataListMonoCell({ children, className }: DataListMonoCellProps) {
+export function DataListMonoCell({ children, className, height = 'compact' }: DataListMonoCellProps) {
   return (
-    <DataListCell height="compact" className="min-w-0">
+    <DataListCell height={height} className="min-w-0">
       <span className={cn('block text-ui-smd font-mono text-neutral3 truncate', className)}>{children}</span>
     </DataListCell>
   );
