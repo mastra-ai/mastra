@@ -157,3 +157,12 @@ builder client tool is also gated on `useAllProviderTools().isLoading` to
 avoid exposing a partially-populated `tools` enum/description to the LLM
 on agent create — without the gate, the LLM could fire before integration
 ids were available and silently omit them.
+
+Fix saved `toolProviders` never reaching the runnable `Agent`.
+`createAgentFromStoredConfig` now calls `resolveStoredToolProviders`
+alongside the legacy `integrationTools` path, threading `requestContext`
+and the stored `authorId` so per-author (Agent Builder) and
+caller-supplied (Studio agent editor) Composio connections resolve
+correctly at execute time. Without this, agents saved through either
+surface persisted their Composio selections but the LLM never saw any of
+those tools.
