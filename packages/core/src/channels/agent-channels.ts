@@ -1793,10 +1793,11 @@ export class AgentChannels {
         continue;
       }
 
-      if (chunk.type === 'reasoning-delta') {
-        setTypingStatus('Thinking…');
-        continue;
-      }
+      // Note: we intentionally do NOT set a `Thinking…` typing status on
+      // `reasoning-delta` or `tool-result`. The platform's own typing
+      // indicator already conveys "the agent is doing something"; layering
+      // `Thinking…` on top tended to get stuck on screen after the run
+      // finished and added noise between tool calls.
 
       // --- File (e.g. model-generated image): post as attachment ---
       if (chunk.type === 'file') {
@@ -1825,6 +1826,10 @@ export class AgentChannels {
 
       // --- Text flush triggers ---
       if (chunk.type === 'step-finish') {
+        // In `'grouped'` mode keep the streaming session open across steps
+        // so the whole run renders as a single StreamingPlan post instead
+        // of one widget per step.
+        if (toolDisplay === 'grouped') continue;
         await flushText();
         continue;
       }
@@ -1873,7 +1878,12 @@ export class AgentChannels {
       if (chunk.type === 'tool-call') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
         const displayName = stripToolPrefix(chunk.payload.toolName);
-        setTypingStatus(`Calling ${displayName}…`);
+        // `'timeline'` / `'grouped'` already render the in-progress task in the
+        // streaming widget — a `Calling X…` typing indicator on top of that is
+        // just visual noise.
+        if (toolDisplay !== 'timeline' && toolDisplay !== 'grouped') {
+          setTypingStatus(`Calling ${displayName}…`);
+        }
         const rawArgs = (
           typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
         ) as Record<string, unknown>;
@@ -1905,7 +1915,11 @@ export class AgentChannels {
           // as its own platform message. Slack's AI Assistant widget always
           // renders tasks above markdown body within a single post, so
           // interleaving text and tools requires separate messages.
-          if (streamingSession && toolCalls.size === 0) {
+          // In `'grouped'` mode we keep the streaming session open across
+          // text+tool turns so the plan widget accumulates every task in one
+          // post. Splitting on the first tool produced one widget per step,
+          // which buried earlier tool calls.
+          if (streamingSession && toolCalls.size === 0 && toolDisplay !== 'grouped') {
             await closeStreamingSession();
           }
           if (!streamingSession) streamingSession = openStreamingSession();
@@ -1917,12 +1931,17 @@ export class AgentChannels {
           if (toolDisplay === 'grouped') {
             streamingSession.push({ type: 'plan_update', title: displayName });
           }
+          // For `'grouped'` fold args inline into the title so the at-a-glance
+          // widget stays a single line per call (e.g. `read_file foo.md`).
+          // `'timeline'` keeps args on a second `details` line — each task has
+          // its own row so the extra line reads fine and is more scannable.
+          const taskTitle = toolDisplay === 'grouped' && argsSummary ? `${displayName} ${argsSummary}` : displayName;
           streamingSession.push({
             type: 'task_update',
             id: chunk.payload.toolCallId,
-            title: displayName,
+            title: taskTitle,
             status: 'in_progress',
-            details: argsSummary || undefined,
+            details: toolDisplay === 'grouped' ? undefined : argsSummary || undefined,
           });
           toolCalls.set(chunk.payload.toolCallId, {
             displayName,
@@ -1956,9 +1975,6 @@ export class AgentChannels {
       // --- Tool result ---
       if (chunk.type === 'tool-result') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-        // Tool finished — revert status until the next text/tool/reasoning chunk
-        // sets a more specific one.
-        setTypingStatus('Thinking…');
 
         // Look in the per-run tracked tools first; fall back to any approval card that was
         // posted by the click handler (the resumed run's tool-result arrives via the thread
@@ -1983,14 +1999,24 @@ export class AgentChannels {
         // `'timeline'` / `'grouped'`: complete the task in place. We don't
         // repeat `details` here — the Chat SDK appends to the existing task
         // entry by id, so re-sending the args would show them twice.
+        //
+        // For `'grouped'` we suppress the full result body and just mark the
+        // task complete — `grouped` is an at-a-glance summary of what the
+        // agent did, not a detailed trace. Errors still get the full text so
+        // failures stay debuggable. `'timeline'` shows the full result.
         if (toolDisplay === 'timeline' || toolDisplay === 'grouped') {
           if (!streamingSession) streamingSession = openStreamingSession();
+          // Mirror the inline-args title from the tool-call handler so the
+          // completed task keeps the same `read_file foo.md` label instead
+          // of collapsing back to the bare tool name.
+          const taskTitle = toolDisplay === 'grouped' && argsSummary ? `${displayName} ${argsSummary}` : displayName;
+          const groupedOutput = chunk.payload.isError ? resultText || undefined : undefined;
           streamingSession.push({
             type: 'task_update',
             id: chunk.payload.toolCallId,
-            title: displayName,
+            title: taskTitle,
             status: chunk.payload.isError ? 'error' : 'complete',
-            output: resultText || undefined,
+            output: toolDisplay === 'grouped' ? groupedOutput : resultText || undefined,
           });
           continue;
         }
