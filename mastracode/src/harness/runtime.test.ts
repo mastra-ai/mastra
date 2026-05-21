@@ -4,7 +4,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MastraCodeHarnessV1 } from './harness-v1-adapter.js';
+import { MastraCodeHarnessRuntime } from './runtime.js';
 
 type RunSpec = {
   text?: string;
@@ -14,14 +14,14 @@ type RunSpec = {
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 };
 
-class AdapterFakeAgent extends Agent<any, any, any> {
+class RuntimeFakeAgent extends Agent<any, any, any> {
   calls: Array<{ messages: unknown; options: any }> = [];
   private runs: RunSpec[] = [];
 
-  constructor(id = 'adapter-agent') {
+  constructor(id = 'runtime-agent') {
     super({
       id,
-      name: 'Adapter Agent',
+      name: 'Runtime Agent',
       instructions: 'fake',
       model: 'openai/gpt-4o-mini' as any,
     });
@@ -34,7 +34,7 @@ class AdapterFakeAgent extends Agent<any, any, any> {
   async stream(messages: unknown, options?: any): Promise<any> {
     this.calls.push({ messages, options });
     const run = this.runs.shift() ?? {};
-    const runId = options?.runId ?? 'adapter-run';
+    const runId = options?.runId ?? 'runtime-run';
     const out = buildOutput(runId, run);
     this._internalRegisterStreamRun(out, (options ?? {}) as any);
     return out;
@@ -44,7 +44,7 @@ class AdapterFakeAgent extends Agent<any, any, any> {
 function buildOutput(runId: string, spec: RunSpec) {
   const usage = spec.usage ?? { inputTokens: 2, outputTokens: 3 };
   const fullOutput = {
-    text: spec.text ?? 'adapter response',
+    text: spec.text ?? 'runtime response',
     usage,
     totalUsage: usage,
     finishReason: spec.finishReason ?? 'stop',
@@ -92,28 +92,28 @@ function buildOutput(runId: string, spec: RunSpec) {
   };
 }
 
-function createHarness(agent = new AdapterFakeAgent()) {
-  const harness = new MastraCodeHarnessV1({
-    id: 'adapter-harness',
-    storage: new InMemoryStore({ id: 'adapter-storage' }),
+function createHarness(agent = new RuntimeFakeAgent()) {
+  const harness = new MastraCodeHarnessRuntime({
+    id: 'runtime-harness',
+    storage: new InMemoryStore({ id: 'runtime-storage' }),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
     initialState: { currentModelId: 'openai/gpt-4o-mini' },
   } as any);
   return { harness, agent };
 }
 
-describe('MastraCodeHarnessV1', () => {
+describe('MastraCodeHarnessRuntime', () => {
   it('seeds currentModelId from the default mode when initial state omits it', () => {
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-default-model',
-      storage: new InMemoryStore({ id: 'adapter-storage-default-model' }),
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-default-model',
+      storage: new InMemoryStore({ id: 'runtime-storage-default-model' }),
       modes: [
         {
           id: 'default',
           name: 'Default',
           default: true,
           defaultModelId: 'openai/gpt-4o-mini',
-          agent: new AdapterFakeAgent(),
+          agent: new RuntimeFakeAgent(),
         },
       ],
       initialState: {},
@@ -124,10 +124,10 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('honors disabled built-in tools on v1 mode surfaces', () => {
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-disabled-tools',
-      storage: new InMemoryStore({ id: 'adapter-storage-disabled-tools' }),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: new AdapterFakeAgent() }],
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-disabled-tools',
+      storage: new InMemoryStore({ id: 'runtime-storage-disabled-tools' }),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: new RuntimeFakeAgent() }],
       initialState: { currentModelId: 'openai/gpt-4o-mini' },
       disableBuiltinTools: ['ask_user', 'task_update'],
     } as any);
@@ -158,13 +158,13 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('re-resolves function-valued mode agents before each v1 turn', async () => {
-    const first = new AdapterFakeAgent('first-agent');
-    const second = new AdapterFakeAgent('second-agent');
+    const first = new RuntimeFakeAgent('first-agent');
+    const second = new RuntimeFakeAgent('second-agent');
     first.enqueueRun({});
     second.enqueueRun({});
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-dynamic-agent',
-      storage: new InMemoryStore({ id: 'adapter-storage-dynamic-agent' }),
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-dynamic-agent',
+      storage: new InMemoryStore({ id: 'runtime-storage-dynamic-agent' }),
       modes: [
         {
           id: 'default',
@@ -327,11 +327,11 @@ describe('MastraCodeHarnessV1', () => {
       const harnessCtx = requestContext.get('harness') as { getState: () => Record<string, unknown> };
       return harnessCtx.getState().memoryEnabled ? memory : undefined;
     });
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-memory',
-      storage: new InMemoryStore({ id: 'adapter-storage-memory' }),
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-memory',
+      storage: new InMemoryStore({ id: 'runtime-storage-memory' }),
       memory: memoryFactory,
-      modes: [{ id: 'default', name: 'Default', default: true, agent: new AdapterFakeAgent() }],
+      modes: [{ id: 'default', name: 'Default', default: true, agent: new RuntimeFakeAgent() }],
       initialState: { currentModelId: 'openai/gpt-4o-mini', memoryEnabled: true },
     } as any);
 
@@ -361,10 +361,10 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('keeps OM model helpers on adapter state instead of legacy internals', async () => {
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-om',
-      storage: new InMemoryStore({ id: 'adapter-storage-om' }),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: new AdapterFakeAgent() }],
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-om',
+      storage: new InMemoryStore({ id: 'runtime-storage-om' }),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: new RuntimeFakeAgent() }],
       initialState: { currentModelId: 'openai/gpt-4o-mini' },
       resolveModel: (modelId: string) => ({ modelId }),
     } as any);
@@ -438,12 +438,12 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('transitions approved plans to the configured default mode', async () => {
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-plan-mode',
-      storage: new InMemoryStore({ id: 'adapter-storage-plan-mode' }),
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-plan-mode',
+      storage: new InMemoryStore({ id: 'runtime-storage-plan-mode' }),
       modes: [
-        { id: 'execute', name: 'Execute', default: true, agent: new AdapterFakeAgent() },
-        { id: 'plan', name: 'Plan', agent: new AdapterFakeAgent() },
+        { id: 'execute', name: 'Execute', default: true, agent: new RuntimeFakeAgent() },
+        { id: 'plan', name: 'Plan', agent: new RuntimeFakeAgent() },
       ],
       initialState: { currentModelId: 'openai/gpt-4o-mini' },
     } as any);
@@ -491,10 +491,10 @@ describe('MastraCodeHarnessV1', () => {
 
   it('creates constrained v1 modes for legacy subagent definitions', () => {
     const { harness } = createHarness();
-    const subagentHarness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-subagents',
-      storage: new InMemoryStore({ id: 'adapter-storage-subagents' }),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: new AdapterFakeAgent() }],
+    const subagentHarness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-subagents',
+      storage: new InMemoryStore({ id: 'runtime-storage-subagents' }),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: new RuntimeFakeAgent() }],
       initialState: { currentModelId: 'openai/gpt-4o-mini' },
       subagents: [
         {
@@ -524,10 +524,10 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('registers legacy subagents against the synthetic v1 agent id for dynamic parent agents', () => {
-    const dynamicAgent = new AdapterFakeAgent('dynamic-parent-agent');
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-dynamic-subagent',
-      storage: new InMemoryStore({ id: 'adapter-storage-dynamic-subagent' }),
+    const dynamicAgent = new RuntimeFakeAgent('dynamic-parent-agent');
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-dynamic-subagent',
+      storage: new InMemoryStore({ id: 'runtime-storage-dynamic-subagent' }),
       modes: [
         {
           id: 'default',
@@ -554,11 +554,11 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('preserves legacy forked subagent cloning through the subagent alias', async () => {
-    const agent = new AdapterFakeAgent();
+    const agent = new RuntimeFakeAgent();
     agent.enqueueRun({ text: 'forked result' });
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-forked-subagent',
-      storage: new InMemoryStore({ id: 'adapter-storage-forked-subagent' }),
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-forked-subagent',
+      storage: new InMemoryStore({ id: 'runtime-storage-forked-subagent' }),
       modes: [{ id: 'default', name: 'Default', default: true, agent, defaultModelId: 'openai/gpt-4o-mini' }],
       initialState: { currentModelId: 'openai/gpt-4o-mini' },
       subagents: [
@@ -608,10 +608,10 @@ describe('MastraCodeHarnessV1', () => {
   });
 
   it('normalizes WorkspaceConfig before propagating workspace to agents', async () => {
-    const agent = new AdapterFakeAgent();
-    const harness = new MastraCodeHarnessV1({
-      id: 'adapter-harness-workspace-config',
-      storage: new InMemoryStore({ id: 'adapter-storage-workspace-config' }),
+    const agent = new RuntimeFakeAgent();
+    const harness = new MastraCodeHarnessRuntime({
+      id: 'runtime-harness-workspace-config',
+      storage: new InMemoryStore({ id: 'runtime-storage-workspace-config' }),
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
       initialState: { currentModelId: 'openai/gpt-4o-mini' },
       workspace: { name: 'workspace-config', skills: ['/tmp/test-skills'] },

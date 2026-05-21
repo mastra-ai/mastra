@@ -75,7 +75,7 @@ import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
-import { MastraCodeHarnessV1 as Harness } from './harness-v1-adapter.js';
+import { MastraCodeHarnessRuntime as Harness } from './harness/index.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',

@@ -18,6 +18,9 @@ vi.mock('@mastra/core/harness', () => ({
   Harness: class {
     subscribe() {}
   },
+  HarnessLegacy: class {
+    subscribe() {}
+  },
   taskWriteTool: {},
   taskCheckTool: {},
 }));

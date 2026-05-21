@@ -1864,7 +1864,8 @@ export class HarnessLegacy<TState = {}> {
       await this.waitForCurrentThreadStreamIdle();
       unsubscribeAgentEnd?.();
       if (!emittedAgentEnd && !this.pendingSuspensionRunId) {
-        this.emit({ type: 'agent_end', reason: 'complete' });
+        this.emit({ type: 'agent_end', reason: this.abortRequested ? 'aborted' : 'complete' });
+        this.abortRequested = false;
       }
     }
     return;
@@ -2818,6 +2819,8 @@ export class HarnessLegacy<TState = {}> {
    * Abort the current operation.
    */
   abort(): void {
+    const hadActiveRun =
+      this.abortController !== null || this.currentRunId !== null || this.isCurrentThreadStreamActive();
     this.abortRequested = true;
     try {
       this.agentThreadSubscription?.abort();
@@ -2827,6 +2830,10 @@ export class HarnessLegacy<TState = {}> {
         this.abortController.abort();
       } catch {}
       this.abortController = null;
+    }
+    if (hadActiveRun) {
+      this.currentRunId = null;
+      this.currentTraceId = null;
     }
   }
 

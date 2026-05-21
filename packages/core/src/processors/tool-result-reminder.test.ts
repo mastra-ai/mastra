@@ -27,9 +27,25 @@ type TestToolInvocationPart = {
   toolInvocation: TestToolInvocation;
 };
 
+type TestToolCallPart = {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  input?: Record<string, unknown>;
+};
+
+type TestToolResultPart = {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  result?: unknown;
+  output?: unknown;
+};
+
 type TestMessageContent = {
   format: 2;
-  parts: Array<TestTextPart | TestToolInvocationPart>;
+  parts: Array<TestTextPart | TestToolInvocationPart | TestToolCallPart | TestToolResultPart>;
   toolInvocations?: TestToolInvocation[];
   metadata?: Record<string, unknown>;
 };
@@ -112,6 +128,28 @@ function createToolInvocationPart(
   };
 }
 
+function createModernToolCallPart(
+  toolCallId: string,
+  args: Record<string, unknown>,
+  field: 'args' | 'input' = 'args',
+): TestToolCallPart {
+  return {
+    type: 'tool-call',
+    toolName: 'view',
+    toolCallId,
+    [field]: args,
+  };
+}
+
+function createModernToolResultPart(toolCallId: string, result?: unknown): TestToolResultPart {
+  return {
+    type: 'tool-result',
+    toolName: 'view',
+    toolCallId,
+    result,
+  };
+}
+
 function createToolCall(args: Record<string, unknown>, toolName = 'view', toolCallId?: string): ToolCallInfo {
   return {
     toolName,
@@ -125,6 +163,7 @@ function createProcessInputStepArgs(
   toolCalls: ToolCallInfo[],
   writer?: ProcessorStreamWriter,
   rotateResponseMessageId?: () => string,
+  steps: Array<Record<string, unknown>> = [],
 ): ProcessInputStepArgs {
   const requestContext = {
     get: () => undefined,
@@ -139,7 +178,7 @@ function createProcessInputStepArgs(
 
   return {
     stepNumber: 0,
-    steps: [],
+    steps: steps as ProcessInputStepArgs['steps'],
     messageId: 'response-1',
     rotateResponseMessageId,
     finishReason: 'tool-calls',
@@ -288,6 +327,86 @@ describe('AgentsMDInjector', () => {
     ]);
   });
 
+  it('injects reminder from modern tool-call and tool-result response parts', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-modern';
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createModernToolCallPart(toolCallId, { path: '/repo/src/agents/nested/file.ts' }),
+          createModernToolResultPart(toolCallId, { ok: true }),
+        ],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: path => String(path) !== '/repo/src/agents/nested/file.ts',
+      readFile: () => FILE_CONTENT,
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
+    ]);
+  });
+
+  it('injects reminder from v5 tool input once the matching result is present', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-modern-input';
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createModernToolCallPart(toolCallId, { filePath: '/repo/CLAUDE.md' }, 'input'),
+          createModernToolResultPart(toolCallId, { ok: true }),
+        ],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/CLAUDE.md',
+      isDirectory: () => false,
+      readFile: () => 'Project guidance from CLAUDE',
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/CLAUDE.md">Project guidance from CLAUDE</system-reminder>`,
+    ]);
+  });
+
+  it('injects reminder from the latest completed step before response rows are persisted', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-step';
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: path => String(path) !== '/repo/src/agents/nested/file.ts',
+      readFile: () => FILE_CONTENT,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [], undefined, undefined, [
+        {
+          text: '',
+          toolCalls: [{ toolName: 'view', toolCallId, args: { path: '/repo/src/agents/nested/file.ts' } }],
+          toolResults: [{ toolCallId, toolName: 'view', result: { ok: true } }],
+        },
+      ]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
+    ]);
+  });
+
   it('rotates the active response id before persisting an injected reminder', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-result';
@@ -318,6 +437,37 @@ describe('AgentsMDInjector', () => {
     );
 
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a signal directly when the processor runner does not provide sendSignal', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-no-send-signal';
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
+    const rotateResponseMessageId = vi.fn(() => 'response-2');
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+    });
+
+    const args = createProcessInputStepArgs(messageList, [], undefined, rotateResponseMessageId);
+    delete (args as Partial<ProcessInputStepArgs>).sendSignal;
+
+    await testProcessor.processInputStep(args);
+
+    expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
+    ]);
   });
 
   it('does not detect a reminder from tool args while the tool invocation is still missing a result', async () => {

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { HarnessLegacy } from '@mastra/core/harness';
 import type {
   AvailableModel,
   HarnessConfig,
@@ -46,11 +45,12 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { z } from 'zod';
 
-import { MC_TOOLS } from './tool-names.js';
-
-type MastraCodeSignalContent =
-  | string
-  | Array<{ type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string; filename?: string }>;
+import { MC_TOOLS } from '../tool-names.js';
+import { projectSubagentEvent } from './events.js';
+import { MastraCodeHarnessCompat } from './legacy-compat.js';
+import { contentWithFiles, textFromContent } from './message-content.js';
+import { modelNameFromModelId, providerFromModelId } from './model-ids.js';
+import { toLegacyThread } from './thread-conversion.js';
 
 type AgentLike = {
   id?: string;
@@ -72,97 +72,9 @@ type SignalLike = {
 
 type ThreadLock = NonNullable<HarnessConfig['threadLock']>;
 
-function providerFromModelId(modelId: string): string {
-  return modelId.split('/')[0] ?? '';
-}
-
-function modelNameFromModelId(modelId: string): string {
-  return modelId.split('/').slice(1).join('/') || modelId;
-}
-
-function toLegacyThread(thread: {
-  id: string;
-  resourceId: string;
-  title?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  metadata?: Record<string, unknown>;
-}): HarnessThread {
-  return {
-    id: thread.id,
-    resourceId: thread.resourceId,
-    title: thread.title ?? '',
-    createdAt: thread.createdAt,
-    updatedAt: thread.updatedAt,
-    metadata: thread.metadata,
-  };
-}
-
-function textFromContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return String(content ?? '');
-  return content
-    .map(part => {
-      if (typeof part === 'string') return part;
-      if (part && typeof part === 'object') {
-        const rec = part as Record<string, unknown>;
-        if (rec.type === 'text' && typeof rec.text === 'string') return rec.text;
-        if (rec.type === 'file' && typeof rec.filename === 'string') return `[File: ${rec.filename}]`;
-      }
-      return '';
-    })
-    .filter(Boolean)
-    .join('\n');
-}
-
-function contentWithFiles(
-  content: string,
-  files?: Array<{ data: string; mediaType: string; filename?: string }>,
-): MastraCodeSignalContent {
-  if (!files?.length) return content;
-  return [
-    { type: 'text', text: content },
-    ...files.map(file => {
-      const isText = file.mediaType.startsWith('text/') || file.mediaType === 'application/json';
-      if (isText) {
-        let textContent = file.data;
-        const base64Match = file.data.match(/^data:[^;]*;base64,(.*)$/);
-        if (base64Match) {
-          try {
-            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-          } catch {
-            // Fall through with raw data.
-          }
-        }
-        const label = file.filename ? `[File: ${file.filename}]` : '[Attached file]';
-        return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
-      }
-      return {
-        type: 'file' as const,
-        data: file.data,
-        mediaType: file.mediaType,
-        ...(file.filename ? { filename: file.filename } : {}),
-      };
-    }),
-  ];
-}
-
-function addUsage(a: TokenUsage, b: Partial<TokenUsage>): TokenUsage {
-  return {
-    promptTokens: a.promptTokens + (b.promptTokens ?? 0),
-    completionTokens: a.completionTokens + (b.completionTokens ?? 0),
-    totalTokens: a.totalTokens + (b.totalTokens ?? 0),
-    cachedInputTokens: (a.cachedInputTokens ?? 0) + (b.cachedInputTokens ?? 0),
-    cacheCreationInputTokens: (a.cacheCreationInputTokens ?? 0) + (b.cacheCreationInputTokens ?? 0),
-    ...(a.reasoningTokens || b.reasoningTokens
-      ? { reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0) }
-      : {}),
-  };
-}
-
-export class MastraCodeHarnessV1<
+export class MastraCodeHarnessRuntime<
   TState extends Record<string, unknown> = Record<string, unknown>,
-> extends HarnessLegacy<TState> {
+> extends MastraCodeHarnessCompat<TState> {
   readonly v1: HarnessV1;
 
   private readonly configCompat: HarnessConfig<TState>;
@@ -195,7 +107,7 @@ export class MastraCodeHarnessV1<
     this.compatState = super.getState() as TState;
     this.compatStateSchema = config.stateSchema as z.ZodType<TState> | undefined;
     const defaultMode = config.modes.find(mode => mode.default) ?? config.modes[0];
-    if (!defaultMode) throw new Error('MastraCodeHarnessV1 requires at least one mode');
+    if (!defaultMode) throw new Error('MastraCodeHarnessRuntime requires at least one mode');
     if (typeof this.compatState.currentModelId !== 'string' && defaultMode.defaultModelId) {
       this.compatState = { ...this.compatState, currentModelId: defaultMode.defaultModelId } as TState;
     }
@@ -1392,52 +1304,11 @@ export class MastraCodeHarnessV1<
         this.forwardCompatibleEvent(event);
         break;
       case 'subagent_start':
-        this.compatEmit({
-          type: 'subagent_start',
-          toolCallId: event.toolCallId,
-          agentType: event.agentType,
-          task: event.task,
-          modelId: event.modelId,
-          forked: false,
-        } as HarnessEvent);
-        break;
       case 'subagent_text_delta':
-        this.compatEmit({
-          type: 'subagent_text_delta',
-          toolCallId: event.toolCallId,
-          agentType: event.agentType,
-          textDelta: event.delta,
-        } as HarnessEvent);
-        break;
       case 'subagent_tool_start':
-        this.compatEmit({
-          type: 'subagent_tool_start',
-          toolCallId: event.toolCallId,
-          agentType: event.agentType,
-          subToolName: event.toolName,
-          subToolArgs: (event as { args?: unknown }).args,
-        } as HarnessEvent);
-        break;
       case 'subagent_tool_end':
-        this.compatEmit({
-          type: 'subagent_tool_end',
-          toolCallId: event.toolCallId,
-          agentType: event.agentType,
-          subToolName: event.toolName,
-          subToolArgs: (event as { args?: unknown }).args,
-          subToolResult: event.output,
-          isError: event.isError,
-        } as HarnessEvent);
-        break;
       case 'subagent_end':
-        this.compatEmit({
-          type: 'subagent_end',
-          toolCallId: event.toolCallId,
-          agentType: event.agentType,
-          result: typeof event.output === 'string' ? event.output : JSON.stringify(event.output),
-          isError: event.isError,
-          durationMs: event.durationMs,
-        } as HarnessEvent);
+        this.compatEmit(projectSubagentEvent(event)!);
         break;
       case 'suspension_required':
         await this.handleSuspensionRequired(event);

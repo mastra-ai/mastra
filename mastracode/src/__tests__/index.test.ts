@@ -107,12 +107,17 @@ vi.mock('@mastra/core/harness', () => ({
       return harnessSetThreadSettingMock(setting);
     }
   },
+  HarnessLegacy: class {
+    constructor(config: unknown) {
+      harnessConstructorMock(config);
+    }
+  },
   taskWriteTool: {},
   taskCheckTool: {},
 }));
 
-vi.mock('../harness-v1-adapter.js', () => ({
-  MastraCodeHarnessV1: class {
+vi.mock('../harness/index.js', () => ({
+  MastraCodeHarnessRuntime: class {
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }

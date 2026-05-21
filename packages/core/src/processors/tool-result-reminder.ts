@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import { signalToXmlMarkup } from '../agent/signals';
+import { createSignal, signalToXmlMarkup } from '../agent/signals';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
@@ -32,6 +32,20 @@ type ToolInvocationLike = {
     toolCallId?: string;
     args?: unknown;
   };
+};
+
+type ToolCallPartLike = {
+  type: 'tool-call';
+  toolCallId?: string;
+  args?: unknown;
+  input?: unknown;
+};
+
+type ToolResultPartLike = {
+  type: 'tool-result';
+  toolCallId?: string;
+  args?: unknown;
+  input?: unknown;
 };
 
 export interface ToolResultReminderOptions {
@@ -175,8 +189,13 @@ function truncateToTokenLimit(content: string, maxTokens: number): string {
 
 type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
 
+function getPartArgs(part: Record<string, unknown>): unknown {
+  return 'args' in part ? part.args : part.input;
+}
+
 function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[] {
   const completed: CompletedToolCall[] = [];
+  const toolCallArgsById = new Map<string, unknown>();
 
   for (const message of messages) {
     const parts = isRecord(message.content) ? message.content.parts : undefined;
@@ -185,23 +204,97 @@ function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[]
     }
 
     for (const part of parts) {
-      if (!isRecord(part) || part.type !== 'tool-invocation') {
+      if (!isRecord(part)) {
         continue;
       }
 
-      const invocation = (part as ToolInvocationLike).toolInvocation;
-      if (!invocation || invocation.state !== 'result' || typeof invocation.toolCallId !== 'string') {
-        continue;
+      const partRecord = part as Record<string, unknown>;
+      const partType = typeof partRecord.type === 'string' ? partRecord.type : undefined;
+
+      if (partType === 'tool-invocation') {
+        const invocation = (partRecord as ToolInvocationLike).toolInvocation;
+        if (!invocation || invocation.state !== 'result' || typeof invocation.toolCallId !== 'string') {
+          continue;
+        }
+
+        completed.push({
+          toolCallId: invocation.toolCallId,
+          args: invocation.args,
+        });
       }
 
-      completed.push({
-        toolCallId: invocation.toolCallId,
-        args: invocation.args,
-      });
+      if (partType === 'tool-call') {
+        const toolCall = partRecord as ToolCallPartLike;
+        if (typeof toolCall.toolCallId === 'string') {
+          toolCallArgsById.set(toolCall.toolCallId, getPartArgs(partRecord));
+        }
+      }
+
+      if (partType === 'tool-result') {
+        const toolResult = partRecord as ToolResultPartLike;
+        if (typeof toolResult.toolCallId !== 'string') {
+          continue;
+        }
+
+        completed.push({
+          toolCallId: toolResult.toolCallId,
+          args: getPartArgs(partRecord) ?? toolCallArgsById.get(toolResult.toolCallId),
+        });
+      }
     }
   }
 
   return completed;
+}
+
+function getStringField(record: Record<string, unknown>, field: string): string | undefined {
+  const value = record[field];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getCompletedToolCallsFromLatestStep(steps: Array<unknown>): CompletedToolCall[] {
+  const latestStep = steps.at(-1);
+  if (!isRecord(latestStep)) {
+    return [];
+  }
+
+  const toolResults = Array.isArray(latestStep.toolResults) ? latestStep.toolResults : [];
+  if (toolResults.length === 0) {
+    return [];
+  }
+
+  const completedFromResults = toolResults
+    .filter(isRecord)
+    .map(result => {
+      const toolCallId = getStringField(result, 'toolCallId');
+      if (!toolCallId) {
+        return undefined;
+      }
+
+      return { toolCallId, args: getPartArgs(result) };
+    })
+    .filter((toolCall): toolCall is CompletedToolCall => toolCall !== undefined && toolCall.args !== undefined);
+
+  const resultIds = new Set(
+    toolResults
+      .filter(isRecord)
+      .map(result => getStringField(result, 'toolCallId'))
+      .filter((toolCallId): toolCallId is string => typeof toolCallId === 'string'),
+  );
+  const toolCalls = Array.isArray(latestStep.toolCalls) ? latestStep.toolCalls : [];
+  const completedFromCalls = toolCalls
+    .filter(isRecord)
+    .map(toolCall => {
+      const toolCallId = getStringField(toolCall, 'toolCallId');
+      if (!toolCallId || (resultIds.size > 0 && !resultIds.has(toolCallId))) {
+        return undefined;
+      }
+
+      return { toolCallId, args: getPartArgs(toolCall) };
+    })
+    .filter((toolCall): toolCall is CompletedToolCall => toolCall !== undefined);
+
+  return [...completedFromResults, ...completedFromCalls];
 }
 
 function getCurrentStepResponseMessages(messageList: MessageList): MastraDBMessage[] {
@@ -263,7 +356,10 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     const { messageList } = args;
     const messages = messageList.get.all.db();
     const currentStepResponseMessages = getCurrentStepResponseMessages(messageList);
-    const completedToolCalls = getCompletedToolCalls(currentStepResponseMessages);
+    const completedToolCalls = [
+      ...getCompletedToolCalls(currentStepResponseMessages),
+      ...getCompletedToolCallsFromLatestStep(args.steps),
+    ];
     const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
@@ -280,12 +376,21 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       return messageList;
     }
 
-    await args.sendSignal?.({
+    const signalInput = {
       type: 'system-reminder',
       contents: reminderText,
       attributes: { type: REMINDER_TYPE, path: instructionPath },
       metadata: getReminderMetadata(instructionPath).systemReminder,
-    });
+    };
+
+    if (args.sendSignal) {
+      await args.sendSignal(signalInput);
+    } else {
+      const signal = createSignal(signalInput);
+      args.rotateResponseMessageId?.();
+      messageList.add(signal.toDBMessage(), 'input');
+      await args.writer?.custom(signal.toDataPart());
+    }
 
     return messageList;
   }
