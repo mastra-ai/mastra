@@ -53,7 +53,6 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import { AdaptiveModelRouter } from '../processors/adaptive-model-router';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -334,7 +333,6 @@ export class Agent<
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
-  #adaptiveModelRouterConfig?: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>['adaptiveModelRouter'];
   #browser?: MastraBrowser;
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
@@ -390,7 +388,6 @@ export class Agent<
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
-    this.#adaptiveModelRouterConfig = config.adaptiveModelRouter;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1973,17 +1970,10 @@ export class Agent<
             : modelSelection;
 
           llm = this.prepareModels(requestContext, enabledSelection).then(models => {
-            const adaptiveModelRouter =
-              Array.isArray(enabledSelection) && models.length > 1
-                ? new AdaptiveModelRouter({ ...this.#adaptiveModelRouterConfig, models })
-                : undefined;
-
             return new MastraLLMVNext({
-              models: adaptiveModelRouter ? [models[0]!] : models,
+              models,
               mastra: this.#mastra,
               options: { tracingPolicy: this.#options?.tracingPolicy },
-              internalInputProcessors: adaptiveModelRouter ? [adaptiveModelRouter] : [],
-              internalErrorProcessors: adaptiveModelRouter ? [adaptiveModelRouter] : [],
             });
           });
         } else {

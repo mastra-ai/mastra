@@ -2,6 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import type * as LoopModule from '../../loop';
+import { AdaptiveModelRouter } from '../../processors';
 
 const loopModelCounts: number[] = [];
 
@@ -57,19 +58,24 @@ function createStreamModel(modelId: string, responseText: string, statusCode?: n
 }
 
 describe('AdaptiveModelRouter fallback integration', () => {
-  it('passes one model to the LLM loop per attempt for legacy fallback arrays', async () => {
+  it('passes one model to the LLM loop per attempt when explicitly configured as a processor', async () => {
     loopModelCounts.length = 0;
     const primary = createStreamModel('primary-router-loop', '', 429);
     const secondary = createStreamModel('secondary-router-loop', 'secondary response');
+    const router = new AdaptiveModelRouter({
+      models: [
+        { id: 'primary', model: primary, maxRetries: 0 },
+        { id: 'secondary', model: secondary, maxRetries: 0 },
+      ],
+    });
 
     const agent = new Agent({
       id: 'adaptive-router-loop-model-count',
       name: 'Adaptive Router Loop Model Count Test',
       instructions: 'You are a test agent',
-      model: [
-        { id: 'primary', model: primary, maxRetries: 0 },
-        { id: 'secondary', model: secondary, maxRetries: 0 },
-      ],
+      model: primary,
+      inputProcessors: [router],
+      errorProcessors: [router],
     });
 
     await (
