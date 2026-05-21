@@ -1,8 +1,8 @@
 import type { MastraDBMessage, MastraMessagePart, MessageSource } from '../state/types';
 
-export function stampPart<T extends MastraMessagePart>(part: T): T {
+export function stampPart<T extends MastraMessagePart>(part: T, createdAt = Date.now()): T {
   if (part.createdAt == null) {
-    part.createdAt = Date.now();
+    part.createdAt = createdAt;
   }
 
   return part;
@@ -13,6 +13,6 @@ export function stampMessageParts<T extends MastraDBMessage>(message: T, source:
     return message;
   }
 
-  message.content.parts = message.content.parts.map(part => stampPart(part));
+  message.content.parts = message.content.parts.map(part => stampPart(part, message.createdAt.getTime()));
   return message;
 }

@@ -606,7 +606,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const messageList = new MessageList();
         messageList.add(userMessage, 'user');
-        messageList.add(assistantMessages, 'response');
+        messageList.add(assistantMessages, 'memory');
 
         const messages = messageList.get.all.db();
 

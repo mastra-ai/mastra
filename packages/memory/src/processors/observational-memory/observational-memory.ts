@@ -1356,7 +1356,7 @@ export class ObservationalMemory {
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
-          if (msgDate > lastObservedAt) {
+          if (msgDate >= lastObservedAt) {
             result.push(msg);
           } else {
           }
