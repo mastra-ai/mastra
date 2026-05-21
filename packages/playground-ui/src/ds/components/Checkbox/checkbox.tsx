@@ -20,7 +20,7 @@ type CheckboxProps = Omit<CheckboxPrimitive.Root.Props, 'className' | 'checked' 
   defaultChecked?: CheckedState;
 };
 
-const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
+const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
   ({ className, checked, defaultChecked, indeterminate, ...props }, ref) => {
     // Translate the Radix `'indeterminate'` sentinel into Base UI's dedicated
     // `indeterminate` prop while leaving `checked`/`defaultChecked` as booleans.
@@ -40,7 +40,8 @@ const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
           transitions.all,
           'hover:border-neutral5 hover:shadow-md',
           formElementFocus,
-          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-neutral3 disabled:hover:shadow-sm',
+          // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches — target `data-disabled`.
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:border-neutral3 data-[disabled]:hover:shadow-sm',
           'data-[checked]:bg-accent1 data-[checked]:border-accent1 data-[checked]:text-surface1',
           'data-[indeterminate]:bg-accent1 data-[indeterminate]:border-accent1 data-[indeterminate]:text-surface1',
           'data-[checked]:shadow-glow-accent1 data-[indeterminate]:shadow-glow-accent1',
