@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { forwardRef, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
+import { forwardRef, useState } from 'react';
 import { DataList } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -277,7 +277,7 @@ export const WithDateAndTimeCells: Story = {
         <DataList.TopCell>Time</DataList.TopCell>
       </DataList.Top>
       {[
-        { event: 'workflow.started', timestamp: new Date().toISOString() },
+        { event: 'workflow.started', timestamp: '2026-01-01T00:00:00.000Z' },
         { event: 'tool.call', timestamp: '2026-05-19T14:08:42.317Z' },
         { event: 'workflow.completed', timestamp: '2025-12-03T09:00:00.000Z' },
       ].map(row => (
