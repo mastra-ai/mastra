@@ -376,6 +376,114 @@ describe('MastraModelOutput', () => {
       expect(toolCalls.length).toBeGreaterThan(0);
       expect(toolCalls[0].payload.args).toEqual({ query: 'SELECT 1' });
     });
+
+    // Regression: see fix on the consolidated tool-call path in
+    // aisdk/v5/transform.ts (PR #13400). The streaming-end synthesis
+    // path used the same JSON.parse-then-fall-through-to-{} shape but
+    // never adopted the sanitize + repair flow. Providers that emit
+    // args as multiple deltas plus an LLM token tail (e.g.
+    // `…}<|call|>`) silently lost args before this fix.
+    it('recovers args via sanitize when streamed deltas end with an LLM token tail', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const toolCallId = 'tool-sanitize';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        // Two deltas whose join is valid JSON followed by an LLM token.
+        // Bare JSON.parse on the joined string throws; sanitize strips
+        // the `<|call|>` tail and the parse succeeds.
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, argsTextDelta: '{"query":"SELECT 1"}' },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, argsTextDelta: '\t<|call|>' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const toolCalls = await output.toolCalls;
+
+      expect(toolCalls.length).toBeGreaterThan(0);
+      expect(toolCalls[0].payload.args).toEqual({ query: 'SELECT 1' });
+    });
+
+    // Regression: when the joined delta string is malformed JSON the
+    // repair path (tryRepairJson) recovers it rather than silently
+    // dropping args. Mirrors the behaviour added by PR #13400 on the
+    // consolidated tool-call path.
+    it('recovers args via JSON repair when streamed deltas form malformed JSON', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const toolCallId = 'tool-repair';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        // Trailing comma — invalid JSON, but tryRepairJson recovers it.
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, argsTextDelta: '{"path":"a.md","mode":"edit",}' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const toolCalls = await output.toolCalls;
+
+      expect(toolCalls.length).toBeGreaterThan(0);
+      expect(toolCalls[0].payload.args).toEqual({ path: 'a.md', mode: 'edit' });
+    });
   });
 
   describe('usage raw passthrough', () => {
