@@ -155,12 +155,40 @@ export function isNewerVersion(current: string, latest: string): boolean {
 /** Max entries to show in the changelog summary. */
 const MAX_CHANGELOG_ENTRIES = 10;
 
+/** Default per-entry character cap when the caller doesn't know the dialog width. */
+const DEFAULT_MAX_ENTRY_WIDTH = 117;
+
+export type ChangelogOptions = {
+  /**
+   * Max characters per entry's text (excluding the bullet prefix). Entries
+   * longer than this plus a small grace margin are truncated with "…".
+   * Callers that know the dialog width should pass it so trimming aligns
+   * with the available space instead of a fixed length.
+   */
+  maxEntryWidth?: number;
+};
+
+/**
+ * Compute the per-entry character cap that fits inside the update prompt's
+ * modal dialog. Mirrors `modalOverlayOptions()` in `tui/overlay.ts`: 90% of
+ * the terminal width, capped at 160 cols (the shared modal width). Then
+ * subtracts the dialog's box padding (2 cols each side) and the "  • "
+ * bullet prefix (4 cols).
+ */
+export function computeChangelogEntryWidth(terminalColumns: number | undefined): number {
+  const cols = terminalColumns && terminalColumns > 0 ? terminalColumns : 120;
+  // Match modalOverlayOptions: width = min(floor(cols * 0.9), 160).
+  const dialogWidth = Math.min(Math.floor(cols * 0.9), 160);
+  // 4 cols box padding + 4 cols "  • " bullet prefix.
+  return Math.max(40, dialogWidth - 8);
+}
+
 /**
  * Fetch the CHANGELOG.md for a specific published version from the npm CDN
  * and extract a human-readable summary of changes.
  * Returns null if the fetch fails or the changelog can't be parsed.
  */
-export async function fetchChangelog(version: string): Promise<string | null> {
+export async function fetchChangelog(version: string, options?: ChangelogOptions): Promise<string | null> {
   try {
     const url = `https://unpkg.com/${PACKAGE_NAME}@${version}/CHANGELOG.md`;
     const controller = new AbortController();
@@ -169,7 +197,7 @@ export async function fetchChangelog(version: string): Promise<string | null> {
     clearTimeout(timeout);
     if (!res.ok) return null;
     const text = await res.text();
-    return parseChangelog(text, version);
+    return parseChangelog(text, version, options);
   } catch {
     return null;
   }
@@ -179,7 +207,8 @@ export async function fetchChangelog(version: string): Promise<string | null> {
  * Extract the changelog section for a specific version and format it
  * as a concise bullet list suitable for terminal display.
  */
-export function parseChangelog(markdown: string, version: string): string | null {
+export function parseChangelog(markdown: string, version: string, options?: ChangelogOptions): string | null {
+  const maxEntryWidth = Math.max(20, options?.maxEntryWidth ?? DEFAULT_MAX_ENTRY_WIDTH);
   const versionHeader = `## ${version}`;
   const startIdx = markdown.indexOf(versionHeader);
   if (startIdx === -1) return null;
@@ -223,8 +252,14 @@ export function parseChangelog(markdown: string, version: string): string | null
     const sentenceEnd = entry.search(/\.\s/);
     if (sentenceEnd !== -1 && sentenceEnd < 100) {
       entry = entry.slice(0, sentenceEnd + 1);
-    } else if (entry.length > 120) {
-      entry = entry.slice(0, 117).trimEnd() + '…';
+    }
+    // The first-sentence slice can still exceed the dialog width on narrow
+    // terminals (e.g. a 95-char sentence on an 80-col terminal where the cap
+    // is 64). Apply the width cap unconditionally so the entry never overflows.
+    if (entry.length > maxEntryWidth + 3) {
+      // +3 grace margin avoids replacing a handful of characters with a
+      // single "…" (e.g. 121 → 117 chars).
+      entry = entry.slice(0, maxEntryWidth).trimEnd() + '…';
     }
     entry = entry.trim();
     if (entry) entries.push(entry);
