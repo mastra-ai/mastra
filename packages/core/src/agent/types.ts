@@ -128,36 +128,51 @@ export interface SendAgentSignalResult {
 }
 
 /**
- * @experimental Agent signals are experimental and may change in a future release.
+ * @experimental Agent data parts are experimental and may change in a future release.
  *
- * A data-part signal that is streamed to subscribers but never seen by the LLM.
+ * A data part that is streamed to subscribers but never seen by the LLM.
  * Useful for sending status/progress updates from background agents (e.g. OM)
  * to the UI without waking the main agent.
  */
-export type DataPartSignalInput = {
+export type DataPartInput = {
   type: `data-${string}`;
   data: unknown;
 };
 
 /**
- * @experimental Agent signals are experimental and may change in a future release.
- *
- * Options for sending a data-part signal to a thread.
- * Data-part signals always persist and never wake the agent.
+ * @deprecated Use {@link DataPartInput} instead.
  */
-export type SendDataPartSignalOptions = {
+export type DataPartSignalInput = DataPartInput;
+
+/**
+ * @experimental Agent data parts are experimental and may change in a future release.
+ *
+ * Options for sending a data part to a thread.
+ * Data parts always persist and never wake the agent.
+ */
+export type SendDataPartOptions = {
   resourceId: string;
   threadId: string;
 };
 
 /**
- * @experimental Agent signals are experimental and may change in a future release.
+ * @deprecated Use {@link SendDataPartOptions} instead.
  */
-export interface SendDataPartSignalResult {
+export type SendDataPartSignalOptions = SendDataPartOptions;
+
+/**
+ * @experimental Agent data parts are experimental and may change in a future release.
+ */
+export interface SendDataPartResult {
   accepted: true;
   /** Resolves when the data part has been persisted to storage. */
   persisted: Promise<void>;
 }
+
+/**
+ * @deprecated Use {@link SendDataPartResult} instead.
+ */
+export type SendDataPartSignalResult = SendDataPartResult;
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;

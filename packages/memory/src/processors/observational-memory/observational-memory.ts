@@ -2890,7 +2890,7 @@ ${formattedMessages}
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
     /** Reliable data-part emitter that works even when the stream is idle. */
-    sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+    sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     /** Called with the final candidate messages after cursor filtering, before the observer runs.
@@ -3025,12 +3025,12 @@ ${formattedMessages}
       });
       await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
 
-      // Emit buffering start marker: prefer sendDataPartSignal (reliable even when idle),
+      // Emit buffering start marker: prefer sendDataPart (reliable even when idle),
       // fall back to writer.custom() for inline delivery.
       const writer = opts.writer;
-      const sendDataPartSignal = opts.sendDataPartSignal;
-      if (sendDataPartSignal) {
-        void sendDataPartSignal(startMarker).catch(() => {});
+      const sendDataPart = opts.sendDataPart;
+      if (sendDataPart) {
+        void sendDataPart(startMarker).catch(() => {});
       } else if (writer) {
         void writer.custom({ ...startMarker, transient: true }).catch(() => {});
       }
@@ -3044,7 +3044,7 @@ ${formattedMessages}
         cycleId,
         startedAt,
         writer,
-        sendDataPartSignal,
+        sendDataPart,
         requestContext,
         observabilityContext,
       }).run();

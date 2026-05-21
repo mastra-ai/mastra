@@ -8,17 +8,17 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal, dataPartSignalToDBMessage } from './signals';
+import { createSignal, dataPartToDBMessage } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
-  DataPartSignalInput,
+  DataPartInput,
   SendAgentSignalOptions,
   SendAgentSignalResult,
-  SendDataPartSignalOptions,
-  SendDataPartSignalResult,
+  SendDataPartOptions,
+  SendDataPartResult,
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -76,7 +76,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-completed'; runId: string }
   | { type: 'run-aborted'; runId: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string }
-  | { type: 'data-part-signal'; part: DataPartSignalInput; sourceId: string };
+  | { type: 'data-part'; part: DataPartInput; sourceId: string };
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -494,7 +494,7 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     const seenRunIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
-    const pendingDataParts: DataPartSignalInput[] = [];
+    const pendingDataParts: DataPartInput[] = [];
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
       string,
@@ -604,7 +604,7 @@ export class AgentThreadStreamRuntime {
         state.pendingSignalsByThread.set(key, queue);
         return;
       }
-      if (data.type === 'data-part-signal') {
+      if (data.type === 'data-part') {
         if (data.sourceId === this.#id) return;
         pendingDataParts.push(data.part);
         wake();
@@ -871,43 +871,55 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Send a data-part signal to a thread. Data-part signals are:
+   * Send a data part to a thread. Data parts are:
    * - Always persisted to storage
    * - Always streamed to any subscriber
    * - Never seen by the LLM
    * - Never wake the agent (never start a new run)
    */
-  sendDataPartSignal(
+  sendDataPart(
     agent: Agent<any, any, any, any>,
-    dataPart: DataPartSignalInput,
-    target: SendDataPartSignalOptions,
+    dataPart: DataPartInput,
+    target: SendDataPartOptions,
     pubsub?: PubSub,
-  ): SendDataPartSignalResult {
+  ): SendDataPartResult {
     const key = this.#threadKey(target.resourceId, target.threadId);
 
     // Broadcast to subscribers so active UIs see the data part in real-time
     this.#publish(pubsub, key, {
-      type: 'data-part-signal',
+      type: 'data-part',
       part: dataPart,
       sourceId: this.#getSourceId(),
     });
 
     // Persist to storage
-    const persisted = this.#persistDataPartSignal(agent, dataPart, target.resourceId, target.threadId);
+    const persisted = this.#persistDataPart(agent, dataPart, target.resourceId, target.threadId);
     void persisted.catch(() => {});
 
     return { accepted: true, persisted };
   }
 
-  async #persistDataPartSignal(
+  /**
+   * @deprecated Use {@link sendDataPart} instead.
+   */
+  sendDataPartSignal(
     agent: Agent<any, any, any, any>,
-    dataPart: DataPartSignalInput,
+    dataPart: DataPartInput,
+    target: SendDataPartOptions,
+    pubsub?: PubSub,
+  ): SendDataPartResult {
+    return this.sendDataPart(agent, dataPart, target, pubsub);
+  }
+
+  async #persistDataPart(
+    agent: Agent<any, any, any, any>,
+    dataPart: DataPartInput,
     resourceId: string,
     threadId: string,
   ) {
     const memory = await agent.getMemory();
     if (!memory) return;
-    const dbMessage = dataPartSignalToDBMessage(dataPart, { threadId, resourceId });
+    const dbMessage = dataPartToDBMessage(dataPart, { threadId, resourceId });
     await memory.saveMessages({ messages: [dbMessage] });
   }
 }

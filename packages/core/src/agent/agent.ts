@@ -121,12 +121,12 @@ import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
-  DataPartSignalInput,
+  DataPartInput,
   PublicStructuredOutputOptions,
   SendAgentSignalOptions,
   SendAgentSignalResult,
-  SendDataPartSignalOptions,
-  SendDataPartSignalResult,
+  SendDataPartOptions,
+  SendDataPartResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -955,14 +955,14 @@ export class Agent<
     outputProcessorOverrides,
     errorProcessorOverrides,
     processorStates,
-    sendDataPartSignal,
+    sendDataPart,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
     errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
-    sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+    sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
@@ -982,7 +982,7 @@ export class Agent<
       logger: this.logger,
       agentName: this.name,
       processorStates,
-      sendDataPartSignal,
+      sendDataPart,
     });
   }
 
@@ -3261,7 +3261,7 @@ export class Agent<
         requestContext,
         inputProcessorOverrides,
         processorStates,
-        sendDataPartSignal: this.#createBoundSendDataPartSignal(requestContext),
+        sendDataPart: this.#createBoundSendDataPart(requestContext),
       });
       try {
         messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
@@ -3357,7 +3357,7 @@ export class Agent<
         requestContext,
         inputProcessorOverrides,
         processorStates,
-        sendDataPartSignal: this.#createBoundSendDataPartSignal(requestContext),
+        sendDataPart: this.#createBoundSendDataPart(requestContext),
       });
       try {
         const llm = await this.getLLM({ requestContext });
@@ -3484,7 +3484,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
-        sendDataPartSignal: this.#createBoundSendDataPartSignal(requestContext),
+        sendDataPart: this.#createBoundSendDataPart(requestContext),
       });
 
       try {
@@ -5809,7 +5809,7 @@ export class Agent<
           }),
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
-      sendDataPartSignal: this.#createBoundSendDataPartSignal(requestContext),
+      sendDataPart: this.#createBoundSendDataPart(requestContext),
     });
 
     const run = await executionWorkflow.createRun();
@@ -6369,36 +6369,34 @@ export class Agent<
   }
 
   /**
-   * @experimental Agent signals are experimental and may change in a future release.
+   * @experimental Agent data parts are experimental and may change in a future release.
    *
-   * Send a data-part signal to a thread. Data-part signals are streamed to any
-   * subscriber but never included in the LLM prompt and never wake the agent.
+   * Send a data part to a thread. Data parts are streamed to any subscriber
+   * but never included in the LLM prompt and never wake the agent.
    * They are always persisted to storage.
    *
    * Useful for sending status/progress updates from background processes (e.g. OM
    * observer, reflector) to the UI without triggering a new agent run.
    */
-  sendDataPartSignal(dataPart: DataPartSignalInput, target: SendDataPartSignalOptions): SendDataPartSignalResult {
-    return agentThreadStreamRuntime.sendDataPartSignal(
-      this as Agent<any, any, any, any>,
-      dataPart,
-      target,
-      this.getPubSub(),
-    );
+  sendDataPart(dataPart: DataPartInput, target: SendDataPartOptions): SendDataPartResult {
+    return agentThreadStreamRuntime.sendDataPart(this as Agent<any, any, any, any>, dataPart, target, this.getPubSub());
   }
 
   /**
-   * Create a sendDataPartSignal callback pre-bound to the thread from the given request context.
-   * Returns undefined when thread/resource info is not available.
+   * @deprecated Use {@link sendDataPart} instead.
    */
-  #createBoundSendDataPartSignal(
+  sendDataPartSignal(dataPart: DataPartInput, target: SendDataPartOptions): SendDataPartResult {
+    return this.sendDataPart(dataPart, target);
+  }
+
+  #createBoundSendDataPart(
     requestContext: RequestContext,
   ): ((dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>) | undefined {
     const threadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
     const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     if (!threadId || !resourceId) return undefined;
     return async (dataPart: { type: `data-${string}`; data: unknown }) => {
-      const result = this.sendDataPartSignal(dataPart, { resourceId, threadId });
+      const result = this.sendDataPart(dataPart, { resourceId, threadId });
       await result.persisted;
     };
   }

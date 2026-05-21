@@ -55,7 +55,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
-  sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+  sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -84,7 +84,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
-  sendDataPartSignal,
+  sendDataPart,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -135,7 +135,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
-    sendDataPartSignal,
+    sendDataPart,
   });
 
   const mapResultsStep = createMapResultsStep({

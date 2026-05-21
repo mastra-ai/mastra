@@ -506,18 +506,39 @@ export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal 
 }
 
 /**
- * Returns true when a signal type represents a data-part signal (prefixed with `data-`).
- * Data-part signals are streamed to subscribers but never included in the LLM prompt.
+ * Returns true when a signal type represents a data part (prefixed with `data-`).
+ * Data parts are streamed to subscribers but never included in the LLM prompt.
  */
-export function isDataPartSignalType(type: string): boolean {
+export function isDataPartType(type: string): boolean {
   return type.startsWith('data-');
 }
 
 /**
- * Create a DB message for a data-part signal.
- * These are persisted to storage but excluded from LLM prompts.
+ * @deprecated Use {@link isDataPartType} instead.
  */
-export function dataPartSignalToDBMessage(
+export const isDataPartSignalType = isDataPartType;
+
+/**
+ * Returns true when a DB message is a persisted data part (as opposed to an agent signal).
+ * Data parts use `metadata.dataPart` rather than `metadata.signal`.
+ */
+export function isDataPartDBMessage(message: MastraDBMessage): boolean {
+  const metadata = message.content?.metadata;
+  return (
+    message.role === 'signal' &&
+    !!metadata &&
+    typeof metadata === 'object' &&
+    'dataPart' in metadata &&
+    !!metadata.dataPart
+  );
+}
+
+/**
+ * Create a DB message for a data part.
+ * Persisted with `metadata.dataPart` so the adapter can round-trip them
+ * back to the exact `{ type, data }` shape without signal wrapping.
+ */
+export function dataPartToDBMessage(
   dataPart: { type: `data-${string}`; data: unknown },
   options: { threadId: string; resourceId: string },
 ): MastraDBMessage {
@@ -532,13 +553,16 @@ export function dataPartSignalToDBMessage(
       format: 2,
       parts: [{ type: 'text', text: '' }],
       metadata: {
-        signal: {
-          id: crypto.randomUUID(),
+        dataPart: {
           type: dataPart.type,
-          createdAt: new Date().toISOString(),
-          metadata: { dataPartPayload: dataPart.data },
+          data: dataPart.data,
         },
       },
     },
   };
 }
+
+/**
+ * @deprecated Use {@link dataPartToDBMessage} instead.
+ */
+export const dataPartSignalToDBMessage = dataPartToDBMessage;

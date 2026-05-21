@@ -168,8 +168,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       threadId,
       observations: processed.observations,
     });
-    if (this.opts.sendDataPartSignal) {
-      void this.opts.sendDataPartSignal(endMarker).catch(() => {});
+    if (this.opts.sendDataPart) {
+      void this.opts.sendDataPart(endMarker).catch(() => {});
     } else if (this.opts.writer) {
       void this.opts.writer.custom({ ...endMarker, transient: true }).catch(() => {});
     }
@@ -188,8 +188,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       recordId: record.id,
       threadId,
     });
-    if (this.opts.sendDataPartSignal) {
-      void this.opts.sendDataPartSignal(failedMarker).catch(() => {});
+    if (this.opts.sendDataPart) {
+      void this.opts.sendDataPart(failedMarker).catch(() => {});
     } else if (this.opts.writer) {
       void this.opts.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
     }

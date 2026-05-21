@@ -283,7 +283,7 @@ export class ProcessorRunner {
    */
   private readonly processorStates: Map<string, ProcessorState>;
   /** Optional callback for sending data-part signals (never seen by LLM, always persisted). */
-  private readonly sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+  private readonly sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
 
   constructor({
     inputProcessors,
@@ -292,7 +292,7 @@ export class ProcessorRunner {
     logger,
     agentName,
     processorStates,
-    sendDataPartSignal,
+    sendDataPart,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
@@ -300,7 +300,7 @@ export class ProcessorRunner {
     logger: IMastraLogger;
     agentName: string;
     processorStates?: Map<string, ProcessorState>;
-    sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+    sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
@@ -308,7 +308,7 @@ export class ProcessorRunner {
     this.logger = logger;
     this.agentName = agentName;
     this.processorStates = processorStates ?? new Map();
-    this.sendDataPartSignal = sendDataPartSignal;
+    this.sendDataPart = sendDataPart;
   }
 
   /**
@@ -506,7 +506,7 @@ export class ProcessorRunner {
           retryCount,
           writer,
           sendSignal: createProcessorSendSignal({ messageList, writer }),
-          sendDataPartSignal: this.sendDataPartSignal,
+          sendDataPart: this.sendDataPart,
         });
 
         // Stop recording and get mutations for this processor
@@ -902,7 +902,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           sendSignal: createProcessorSendSignal({ messageList }),
-          sendDataPartSignal: this.sendDataPartSignal,
+          sendDataPart: this.sendDataPart,
         });
 
         // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -1211,7 +1211,7 @@ export class ProcessorRunner {
           writer,
           abortSignal: args.abortSignal,
           sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
-          sendDataPartSignal: this.sendDataPartSignal,
+          sendDataPart: this.sendDataPart,
         };
 
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
@@ -1583,7 +1583,7 @@ export class ProcessorRunner {
           retryCount,
           writer,
           sendSignal: createProcessorSendSignal({ messageList, writer }),
-          sendDataPartSignal: this.sendDataPartSignal,
+          sendDataPart: this.sendDataPart,
         });
 
         // Stop recording and get mutations for this processor
@@ -1766,7 +1766,7 @@ export class ProcessorRunner {
           messageId: args.messageId,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
-          sendDataPartSignal: this.sendDataPartSignal,
+          sendDataPart: this.sendDataPart,
         });
 
         // Stop recording and get mutations for this processor

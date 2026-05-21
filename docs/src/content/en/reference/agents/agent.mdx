@@ -215,9 +215,40 @@ Sends a signal to an active run or memory thread.
 
 Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory.
 
+### `sendDataPart(dataPart, target)`
+
+Sends a data part to a thread. Data parts are streamed to any subscriber but never included in the LLM prompt and never wake the agent. They are always persisted to storage.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'dataPart.type',
+    type: '`data-${string}`',
+    description: 'The data part type. Must start with `data-`.',
+  },
+  {
+    name: 'dataPart.data',
+    type: 'unknown',
+    description: 'The payload. This is the exact value subscribers and reloaded UI messages receive.',
+  },
+  {
+    name: 'target.resourceId',
+    type: 'string',
+    description: 'Resource ID for the memory thread.',
+  },
+  {
+    name: 'target.threadId',
+    type: 'string',
+    description: 'Thread ID to target.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, persisted: Promise<void> }`. Await `persisted` to confirm the data part has been written to storage.
+
 ### `subscribeToThread(options)`
 
-Subscribes to raw stream chunks for a memory thread. Use this before calling `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
+Subscribes to raw stream chunks for a memory thread. Use this before calling `sendSignal()` or `sendDataPart()` when you need to render stream output, observe signal echoes, or abort the active run.
 
 <PropertiesTable
   content={[

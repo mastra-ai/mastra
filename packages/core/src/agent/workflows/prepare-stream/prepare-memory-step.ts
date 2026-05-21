@@ -10,7 +10,7 @@ import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
-import { isDataPartSignalType, mastraDBMessageToSignal } from '../../signals';
+import { isDataPartType, mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
@@ -39,8 +39,7 @@ function getInitialSignalEchoes(messageList: MessageList) {
   return messageList.get.all
     .db()
     .filter(
-      message =>
-        message.role === 'signal' && inputMessageIds.has(message.id) && !isDataPartSignalType(message.type || ''),
+      message => message.role === 'signal' && inputMessageIds.has(message.id) && !isDataPartType(message.type || ''),
     )
     .map(mastraDBMessageToSignal);
 }

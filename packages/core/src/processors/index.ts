@@ -64,13 +64,13 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
    */
   sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
   /**
-   * Send a data-part signal to the thread. Data-part signals are streamed to any
-   * subscriber but never included in the LLM prompt and never wake the agent.
+   * Send a data part to the thread. Data parts are streamed to any subscriber
+   * but never included in the LLM prompt and never wake the agent.
    * Works reliably whether the stream is active or idle.
    *
-   * @experimental Agent signals are experimental and may change in a future release.
+   * @experimental Agent data parts are experimental and may change in a future release.
    */
-  sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+  sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.

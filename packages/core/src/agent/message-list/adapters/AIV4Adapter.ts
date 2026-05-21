@@ -6,6 +6,7 @@ import type {
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
+import { isDataPartDBMessage } from '../../signals';
 import { TypeDetector } from '../detection/TypeDetector';
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri, imageContentToString } from '../prompt/image-utils';
@@ -88,6 +89,11 @@ function getSignalType(message: MastraDBMessage): string | undefined {
   }
 
   return message.type;
+}
+
+function toDataPartMastraPart(message: MastraDBMessage): MastraMessagePart {
+  const dp = (message.content.metadata as Record<string, unknown>).dataPart as { type: string; data: unknown };
+  return { type: dp.type, data: dp.data } as MastraMessagePart;
 }
 
 function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
@@ -251,7 +257,9 @@ export class AIV4Adapter {
     const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
     const isUserMessageSignal = signalType === 'user-message';
     const v4Parts = preserveExtendedParts(
-      m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
+      m.role === 'signal' && !isUserMessageSignal
+        ? [isDataPartDBMessage(m) ? toDataPartMastraPart(m) : toSignalDataPart(m, m.content.content || contentString)]
+        : parts,
     );
 
     if (m.role === `user`) {

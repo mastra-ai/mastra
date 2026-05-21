@@ -190,16 +190,16 @@ export class ReflectorRunner {
   }
 
   /**
-   * Emit a marker via the best available channel: prefer sendDataPartSignal (reliable
+   * Emit a marker via the best available channel: prefer sendDataPart (reliable
    * even when the stream is idle), fall back to writer.custom() for inline delivery.
    */
   private emitMarker(
     marker: { type: string; data: unknown },
     writer?: ProcessorStreamWriter,
-    sendDataPartSignal?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>,
+    sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>,
   ): void {
-    if (sendDataPartSignal) {
-      void sendDataPartSignal(marker as { type: `data-${string}`; data: unknown }).catch(() => {});
+    if (sendDataPart) {
+      void sendDataPart(marker as { type: `data-${string}`; data: unknown }).catch(() => {});
     } else if (writer) {
       void writer.custom({ ...marker, transient: true }).catch(() => {});
     }
