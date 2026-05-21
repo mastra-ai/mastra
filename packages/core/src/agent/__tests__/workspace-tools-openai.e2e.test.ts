@@ -20,8 +20,47 @@ import { Agent } from '../agent';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
+function removeRequestNoise(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(removeRequestNoise);
+  }
+
+  if (value && typeof value === 'object') {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (key === 'x-optional' || (key === 'strict' && nestedValue === false)) {
+        continue;
+      }
+
+      normalized[key] = removeRequestNoise(nestedValue);
+    }
+
+    return normalized;
+  }
+
+  return value;
+}
+
+function normalizeWorkspaceOpenAIRequest({ url, body }: { url: string; body: unknown }): {
+  url: string;
+  body: unknown;
+} {
+  let serialized = JSON.stringify(removeRequestNoise(body));
+
+  serialized = serialized.replaceAll(
+    /Local filesystem at \\\"[^\\"]*ws-openai-test-\\\"/g,
+    'Local filesystem at \\\"NORMALIZED_WORKSPACE\\\"',
+  );
+  serialized = serialized.replaceAll(/call_[A-Za-z0-9]+/g, 'NORMALIZED_CALL_ID');
+  serialized = serialized.replaceAll(/fc_[A-Za-z0-9]+/g, 'NORMALIZED_FUNCTION_CALL_ID');
+  serialized = serialized.replaceAll(/msg_[A-Za-z0-9]+/g, 'NORMALIZED_MESSAGE_ID');
+
+  return { url, body: JSON.parse(serialized) };
+}
+
 const mock = createGatewayMock({
   exactMatch: true,
+  transformRequest: normalizeWorkspaceOpenAIRequest,
 });
 
 let tempDir: string;
@@ -29,12 +68,11 @@ let tempDir: string;
 beforeAll(async () => {
   vi.clearAllMocks();
   mock.start();
-  tempDir = await path.join(os.tmpdir(), 'ws-openai-test-');
+  tempDir = path.join(os.tmpdir(), 'ws-openai-test-');
   await fs.mkdir(tempDir, { recursive: true });
   await fs.writeFile(path.join(tempDir, 'hello.txt'), 'Hello, world!\nThis is a test file.\n');
   await fs.mkdir(path.join(tempDir, 'subdir'), { recursive: true });
   await fs.writeFile(path.join(tempDir, 'subdir', 'nested.ts'), 'export const x = 1;\n');
-  // Mock the file_stat tool to always return example data
 });
 
 afterAll(async () => {
@@ -135,10 +173,10 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
 
       it('structured output + workspace tools: file_stat (control)', { timeout: 60_000 }, async () => {
         vi.spyOn(LocalFilesystem.prototype, 'stat').mockImplementation(async (filepath: string) => {
-          // You can customize this mock data as needed for your tests
           if (filepath.endsWith('hello.txt')) {
             return {
               name: 'hello.txt',
+              path: filepath,
               type: 'file',
               size: 35,
               createdAt: new Date('2026-05-05T23:44:37.565Z'),
