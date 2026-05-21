@@ -625,6 +625,62 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       expect(new Date(createdAt2!).getTime()).toEqual(time2.getTime());
     });
 
+    it('should preserve historical response timestamps when part timestamps advance the watermark', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+
+        const list = new MessageList();
+        list.add(
+          {
+            id: 'user-1',
+            role: 'user',
+            content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2023-01-01T00:00:00.000Z'),
+          },
+          'input',
+        );
+        list.add(
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: { format: 2, content: 'Hi', parts: [{ type: 'text', text: 'Hi' }] },
+            createdAt: new Date('2023-01-01T00:01:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'user-2',
+            role: 'user',
+            content: { format: 2, content: 'Next', parts: [{ type: 'text', text: 'Next' }] },
+            createdAt: new Date('2023-01-01T00:02:00.000Z'),
+          },
+          'input',
+        );
+        list.add(
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: { format: 2, content: 'Answer', parts: [{ type: 'text', text: 'Answer' }] },
+            createdAt: new Date('2023-01-01T00:03:00.000Z'),
+          },
+          'memory',
+        );
+
+        const messages = list.get.all.db();
+        expect(messages.map(message => message.id)).toEqual(['user-1', 'assistant-1', 'user-2', 'assistant-2']);
+        expect(messages.map(message => message.createdAt.toISOString())).toEqual([
+          '2023-01-01T00:00:00.000Z',
+          '2023-01-01T00:01:00.000Z',
+          '2023-01-01T00:02:00.000Z',
+          '2023-01-01T00:03:00.000Z',
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should preserve order for V5 Core messages without timestamps', () => {
       // Even without any createdAt, order should be preserved
       const messages = [

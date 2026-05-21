@@ -1393,21 +1393,8 @@ export class MessageList {
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
 
-    // Response messages must sort after the input messages that prompted them. If
-    // the input messageList inflated timestamps past wall-clock time (see
-    // generateCreatedAt), a freshly-stamped response createdAt can land *before*
-    // the latest input message, causing addOne's sort-by-createdAt to misplace
-    // the response in the middle of the history. Bump it past lastCreatedAt so
-    // it always lands at the end of the transcript. (#16893)
-    //
-    // Only bump when the response createdAt is "fresh" (within ~1 minute of
-    // wall-clock now). Explicit historical timestamps (e.g. replaying or
-    // restoring an old transcript) are preserved as-is.
-    if (messageSource === 'response' && this.lastCreatedAt && messageV2.createdAt.getTime() <= this.lastCreatedAt) {
-      const isFresh = Math.abs(Date.now() - messageV2.createdAt.getTime()) < 60_000;
-      if (isFresh) {
-        messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
-      }
+    if (messageSource === 'response') {
+      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
     }
 
     const signalMetadata =
