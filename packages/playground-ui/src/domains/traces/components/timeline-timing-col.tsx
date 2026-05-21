@@ -1,7 +1,7 @@
-import { PreviewCard } from '@base-ui/react/preview-card';
 import { format } from 'date-fns/format';
 import type { UISpan } from '../types';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { cn } from '@/lib/utils';
 
 type TimelineTimingColProps = {
@@ -32,9 +32,8 @@ export function TimelineTimingCol({
   const percentageSpanStartTime = overallLatency && Math.floor((spanStartTimeShift / overallLatency) * 100);
 
   return (
-    <PreviewCard.Root>
-      <PreviewCard.Trigger
-        delay={250}
+    <HoverCard>
+      <HoverCardTrigger
         className={cn(
           'h-8 p-1 grid grid-cols-[1fr_auto] gap-2 items-center cursor-help pr-2 rounded-r-md',
           chartWidth === 'wide' ? 'min-w-72' : 'min-w-32',
@@ -59,29 +58,24 @@ export function TimelineTimingCol({
         </div>
 
         <div className={cn('flex justify-end text-neutral3 text-ui-xs')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
-      </PreviewCard.Trigger>
-      <PreviewCard.Portal>
-        <PreviewCard.Positioner sideOffset={5} side="top" className="z-50">
-          <PreviewCard.Popup className="w-auto max-w-100 rounded-md bg-surface4 p-2 px-4 pr-6 text-ui-sm text-neutral5 border border-border1">
-            <div className={cn('text-ui-sm flex items-center gap-2 mb-2 mt-1')}>Span Timing</div>
-            <DataKeysAndValues>
-              <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{span.latency} ms</DataKeysAndValues.Value>
-              <DataKeysAndValues.Key>Started at</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>
-                {span.startTime ? format(new Date(span.startTime), 'hh:mm:ss:SSS a') : '-'}
-              </DataKeysAndValues.Value>
-              <DataKeysAndValues.Key>Ended at</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>
-                {span.endTime ? format(new Date(span.endTime), 'hh:mm:ss:SSS a') : '-'}
-              </DataKeysAndValues.Value>
-              <DataKeysAndValues.Key>Start Shift</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{spanStartTimeShift}ms</DataKeysAndValues.Value>
-            </DataKeysAndValues>
-            <PreviewCard.Arrow className="fill-surface5" />
-          </PreviewCard.Popup>
-        </PreviewCard.Positioner>
-      </PreviewCard.Portal>
-    </PreviewCard.Root>
+      </HoverCardTrigger>
+      <HoverCardContent className="bg-surface4 pr-6">
+        <div className={cn('text-ui-sm flex items-center gap-2 mb-2 mt-1')}>Span Timing</div>
+        <DataKeysAndValues>
+          <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>{span.latency} ms</DataKeysAndValues.Value>
+          <DataKeysAndValues.Key>Started at</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>
+            {span.startTime ? format(new Date(span.startTime), 'hh:mm:ss:SSS a') : '-'}
+          </DataKeysAndValues.Value>
+          <DataKeysAndValues.Key>Ended at</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>
+            {span.endTime ? format(new Date(span.endTime), 'hh:mm:ss:SSS a') : '-'}
+          </DataKeysAndValues.Value>
+          <DataKeysAndValues.Key>Start Shift</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>{spanStartTimeShift}ms</DataKeysAndValues.Value>
+        </DataKeysAndValues>
+      </HoverCardContent>
+    </HoverCard>
   );
 }

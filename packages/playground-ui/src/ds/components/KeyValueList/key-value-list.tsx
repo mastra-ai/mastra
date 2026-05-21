@@ -1,7 +1,7 @@
-import { PreviewCard } from '@base-ui/react/preview-card';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -118,20 +118,10 @@ type RelationWrapperProps = {
 
 function RelationWrapper({ description, children }: RelationWrapperProps) {
   return description ? (
-    <PreviewCard.Root>
-      <PreviewCard.Trigger
-        delay={250}
-        render={React.isValidElement(children) ? (children as React.ReactElement) : undefined}
-      />
-      <PreviewCard.Portal>
-        <PreviewCard.Positioner sideOffset={5} side="top" className="z-50">
-          <PreviewCard.Popup className="w-auto max-w-60 rounded-md bg-surface5 p-2 px-4 text-ui-sm text-neutral5 text-center">
-            {description}
-            <PreviewCard.Arrow className="fill-surface5" />
-          </PreviewCard.Popup>
-        </PreviewCard.Positioner>
-      </PreviewCard.Portal>
-    </PreviewCard.Root>
+    <HoverCard>
+      <HoverCardTrigger render={React.isValidElement(children) ? (children as React.ReactElement) : undefined} />
+      <HoverCardContent className="max-w-60 text-center">{description}</HoverCardContent>
+    </HoverCard>
   ) : (
     children
   );
