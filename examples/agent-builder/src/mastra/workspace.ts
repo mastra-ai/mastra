@@ -1,9 +1,9 @@
 import { Workspace } from '@mastra/core/workspace';
-import { DaytonaSandbox } from '@mastra/daytona';
+import { E2BSandbox } from '@mastra/e2b';
 
 export const workspace = new Workspace({
   id: 'github-workspace',
-  sandbox: new DaytonaSandbox({
+  sandbox: new E2BSandbox({
     timeout: 60 * 60 * 1000,
     env: {
       GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',

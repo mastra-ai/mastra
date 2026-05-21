@@ -30,15 +30,14 @@ import {
 } from '@/domains/agent-builder/services/tool-constants';
 import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
 
-export const MessageRow = ({
-  message,
-  agentId,
-  isStreaming = false,
-}: {
+interface MessageRowProps {
   message: MastraUIMessage;
   agentId?: string;
   isStreaming?: boolean;
-}) => {
+  mode?: 'edit' | 'view';
+}
+
+export const MessageRow = ({ message, agentId, isStreaming = false, mode }: MessageRowProps) => {
   return (
     <>
       {message.parts.map((part, index) => {
@@ -47,12 +46,23 @@ export const MessageRow = ({
           case 'text':
             return <Txtmessage key={key} txt={part.text} role={message.role} />;
 
-          case 'reasoning':
+          case 'reasoning': {
+            if (!part.state) return null;
+
+            if (mode === 'view') {
+              return part.state === 'streaming' ? (
+                <ReasoningMessage key={key} text="Anayzing the user's requirements..." streaming />
+              ) : (
+                <ReasoningMessage key={key} text="Requirements analyzed." />
+              );
+            }
+
             return part.state === 'streaming' ? (
               <ReasoningMessage key={key} text="Anayzing the agent requirements..." streaming />
             ) : (
               <ReasoningMessage key={key} text="Requirements analyzed, preparing the agent." />
             );
+          }
 
           case 'dynamic-tool': {
             switch (part.toolName) {
@@ -64,8 +74,10 @@ export const MessageRow = ({
                   </ToolCard>
                 );
               }
-              case SET_AGENT_NAME_TOOL_NAME:
+              case SET_AGENT_NAME_TOOL_NAME: {
                 return <MessageSetAgentName key={key} disabled={isStreaming} />;
+              }
+
               case SET_AGENT_DESCRIPTION_TOOL_NAME:
                 return <MessageSetAgentDescription key={key} disabled={isStreaming} />;
               case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
@@ -112,21 +124,38 @@ export const MessageRow = ({
             );
           }
 
-          case `tool-${SET_AGENT_NAME_TOOL_NAME}`:
+          case `tool-${SET_AGENT_NAME_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             return <MessageSetAgentName key={key} disabled={isStreaming} />;
-          case `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`:
+          }
+
+          case `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             return <MessageSetAgentDescription key={key} disabled={isStreaming} />;
-          case `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`:
+          }
+
+          case `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             return <MessageSetAgentInstructions key={key} disabled={isStreaming} />;
+          }
           case `tool-${SET_AGENT_TOOLS_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             const input = (part.input as { tools?: { id: string; name: string }[] } | undefined) ?? {};
             return <MessageSetAgentTools key={key} tools={input.tools ?? []} />;
           }
           case `tool-${SET_AGENT_SKILLS_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             const input = (part.input as { skills?: { id: string; name: string }[] } | undefined) ?? {};
             return <MessageSetAgentSkills key={key} skills={input.skills ?? []} />;
           }
           case `tool-${SET_AGENT_MODEL_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
             return (
               <MessageSetAgentModel
@@ -137,10 +166,14 @@ export const MessageRow = ({
             );
           }
           case `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             const input = (part.input as { browserEnabled?: boolean } | undefined) ?? {};
             return <MessageSetAgentBrowserEnabled key={key} browserEnabled={input.browserEnabled ?? false} />;
           }
           case `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`: {
+            if (part?.state !== 'output-available') return null;
+
             const input = (part.input as { workspaceId?: string } | undefined) ?? {};
             return <MessageSetAgentWorkspaceId key={key} workspaceId={input.workspaceId ?? ''} />;
           }

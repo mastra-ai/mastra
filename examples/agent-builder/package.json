@@ -32,7 +32,7 @@
     "@mastra/auth-workos": "beta",
     "@mastra/stagehand": "beta",
     "@mastra/slack": "beta",
-    "@mastra/daytona": "beta",
+    "@mastra/e2b": "beta",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -56,7 +56,7 @@
       "@mastra/editor": "link:../../packages/editor",
       "@mastra/stagehand": "link:../../browser/stagehand",
       "@mastra/slack": "link:../../channels/slack",
-      "@mastra/daytona": "link:../../workspaces/daytona"
+      "@mastra/e2b": "link:../../workspaces/e2b"
     }
   },
   "keywords": [],

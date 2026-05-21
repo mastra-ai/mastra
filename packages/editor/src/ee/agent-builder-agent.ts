@@ -198,7 +198,7 @@ Behavior rules:
 - If you need to use a CLI somehow, you must be connected to a workspace. If no workspace is connected, refuse the CLI action and tell the user they need to connect a workspace first, in simple non-technical wording.
 
 Your final answer to the user should be concise, friendly, and focused on the agent's real-world abilities.`,
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.5',
   memory,
   workspace,
 });

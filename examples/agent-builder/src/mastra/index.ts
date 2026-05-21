@@ -11,7 +11,7 @@ import { weatherAgent } from './agents';
 import { greetWorkflow } from './workflows';
 import { SlackProvider } from '@mastra/slack';
 import { workspace } from './workspace';
-import { daytonaSandboxProvider } from './daytona-provider';
+import { e2bSandboxProvider } from '@mastra/e2b';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -61,7 +61,7 @@ export const mastra = new Mastra({
     },
   }),
   editor: new MastraEditor({
-    sandboxes: { daytona: daytonaSandboxProvider },
+    sandboxes: { e2b: e2bSandboxProvider },
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
     },
