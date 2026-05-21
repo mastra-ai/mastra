@@ -711,6 +711,77 @@ describe('ConnectionPicker', () => {
     });
   });
 
+  it('renders a Delete button on inactive existing-connection rows', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-providers/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              connectionId: 'ca_failed',
+              status: 'failed',
+              label: null,
+              scope: 'per-author',
+            },
+          ],
+        }),
+      ),
+    );
+    renderPicker({ initial: [], scope: 'per-author' });
+
+    const deleteBtn = await screen.findByTestId(`connection-existing-delete-${TOOL_SERVICE}-ca_failed`);
+    expect(deleteBtn).toBeTruthy();
+    expect((deleteBtn as HTMLButtonElement).disabled).toBe(false);
+
+    const pinBtn = screen.getByTestId(`connection-existing-pin-${TOOL_SERVICE}-ca_failed`);
+    expect((pinBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('opens the disconnect confirm dialog when Delete is clicked on a failed existing row', async () => {
+    const deleteRequests: Array<{ connectionId: string; url: string }> = [];
+    server.use(
+      http.get(`${BASE_URL}/api/tool-providers/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              connectionId: 'ca_failed',
+              status: 'failed',
+              label: null,
+              scope: 'per-author',
+            },
+          ],
+        }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/${INTEGRATION_ID}/connections/:connectionId/usage`, () =>
+        HttpResponse.json({ agents: [] }),
+      ),
+      http.delete(
+        `${BASE_URL}/api/tool-providers/${INTEGRATION_ID}/connections/:connectionId`,
+        ({ params, request }) => {
+          deleteRequests.push({ connectionId: String(params.connectionId), url: request.url });
+          return HttpResponse.json({ connectionId: params.connectionId });
+        },
+      ),
+    );
+    renderPicker({ initial: [], scope: 'per-author' });
+
+    const deleteBtn = await screen.findByTestId(`connection-existing-delete-${TOOL_SERVICE}-ca_failed`);
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+    });
+
+    await screen.findByTestId(`connection-disconnect-confirm-${TOOL_SERVICE}`);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId(`connection-disconnect-confirm-${TOOL_SERVICE}`));
+    });
+
+    await waitFor(() => {
+      expect(deleteRequests).toHaveLength(1);
+    });
+    expect(deleteRequests[0].connectionId).toBe('ca_failed');
+    expect(deleteRequests[0].url).toContain('force=true');
+  });
+
   it('creates a sentinel caller-supplied pin without invoking authorize', async () => {
     const changes: PickerConnection[][] = [];
     renderPicker({

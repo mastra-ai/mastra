@@ -131,3 +131,10 @@ existing rows — pinning inherits the persisted label as before, and rows
 without a persisted label fall back to a truncated-id display name. The
 `validateLabels` `>= 2` uniqueness rule still protects legacy rows that
 lack a persisted label.
+
+Add a Delete action to existing-connection rows in the inline
+`ConnectionPicker`. Inactive connections (status `failed`, `expired`,
+`initiated`, etc.) can now be removed from the picker via the same
+"Disconnect everywhere" confirm dialog used by pinned rows. Previously the
+Pin button was disabled on inactive rows with no way to clean them up
+without leaving the picker.

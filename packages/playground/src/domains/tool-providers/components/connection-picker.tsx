@@ -414,11 +414,7 @@ export const ConnectionPicker = ({
                   )}
                 </div>
                 {error && <p className="text-error text-ui-xs mt-1 block">{error}</p>}
-                {inactive && (
-                  <p className="text-text-muted text-ui-xs mt-1 block">
-                    Status: {item.status} — reconnect before pinning.
-                  </p>
-                )}
+                {inactive && <p className="text-text-muted text-ui-xs mt-1 block">Status: {item.status}</p>}
               </div>
               <Button
                 size="sm"
@@ -428,6 +424,17 @@ export const ConnectionPicker = ({
                 data-testid={`connection-existing-pin-${toolkit}-${item.connectionId}`}
               >
                 Pin
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-error"
+                onClick={() => setDisconnectTargetId(item.connectionId)}
+                disabled={disabled}
+                aria-label="Delete connection"
+                data-testid={`connection-existing-delete-${toolkit}-${item.connectionId}`}
+              >
+                <Trash2 className="size-3" />
               </Button>
             </div>
           );
