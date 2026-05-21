@@ -36,6 +36,7 @@ import { dispatchSlashCommand } from './command-dispatch.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
+import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -1436,7 +1437,7 @@ export class MastraTUI {
   }
 
   /**
-   * Show a Y/N prompt offering to auto-update.
+   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
    */
   private async showUpdatePrompt(
     currentVersion: string,
@@ -1450,12 +1451,31 @@ export class MastraTUI {
     }
     question += `\n\nWould you like to update now?`;
 
-    const answer = await askModalQuestion(this.state.ui, {
-      question,
-      options: [
-        { label: 'Yes', description: 'Update and restart' },
-        { label: 'No', description: 'Skip this version' },
-      ],
+    const answer = await new Promise<string | null>(resolve => {
+      const component = new AskQuestionInlineComponent(
+        {
+          question,
+          options: [
+            { label: 'Yes', description: 'Update and restart' },
+            { label: 'No', description: 'Skip this version' },
+          ],
+          allowCustomResponse: false,
+          onSubmit: answer => {
+            this.state.activeInlineQuestion = undefined;
+            resolve(answer);
+          },
+          onCancel: () => {
+            this.state.activeInlineQuestion = undefined;
+            resolve(null);
+          },
+        },
+        this.state.ui,
+      );
+
+      this.state.chatContainer.addChild(component);
+      this.state.activeInlineQuestion = component;
+      component.focused = true;
+      this.state.ui.requestRender();
     });
 
     if (answer === 'Yes') {

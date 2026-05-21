@@ -645,9 +645,41 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            for await (const part of run.output.fullStream) {
-              yield part as any;
-              if (done) break;
+            const reader = run.output.fullStream.getReader();
+            let readerReleased = false;
+            try {
+              while (true) {
+                const { value: part, done: streamDone } = await reader.read();
+                if (streamDone) break;
+                yield part as any;
+                if (done) break;
+                if (
+                  part.type === 'finish' ||
+                  part.type === 'error' ||
+                  part.type === 'abort' ||
+                  part.type === 'tool-call-suspended'
+                ) {
+                  // After a terminal chunk, drain remaining stream data in the
+                  // background to prevent backpressure from blocking upstream
+                  // processing (e.g. OM), while allowing the generator to
+                  // immediately serve subsequent runs.
+                  readerReleased = true;
+                  void (async () => {
+                    try {
+                      while (true) {
+                        const { done: d } = await reader.read();
+                        if (d) break;
+                      }
+                    } catch {}
+                    reader.releaseLock();
+                  })();
+                  break;
+                }
+              }
+            } finally {
+              if (!readerReleased) {
+                reader.releaseLock();
+              }
             }
           }
         } finally {
