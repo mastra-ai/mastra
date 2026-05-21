@@ -7,8 +7,6 @@ on:
         required: true
         type: string
     secrets:
-      OPENAI_API_KEY:
-        required: false
       TURBO_TOKEN:
         required: false
       TURBO_TEAM:
@@ -20,9 +18,6 @@ jobs:
   e2e-monorepo:
     name: E2E monorepo
     runs-on: starsling-ubuntu-24.04
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -51,15 +46,11 @@ jobs:
         working-directory: ./e2e-tests/monorepo
         run: pnpm test
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
 
   e2e-no-bundling:
     name: E2E no-bundling
     runs-on: starsling-ubuntu-24.04
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -88,7 +79,6 @@ jobs:
         working-directory: ./e2e-tests/no-bundling
         run: pnpm test
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
 
   e2e-create-mastra:
@@ -280,10 +270,6 @@ jobs:
 
       - name: Test client-js zod-v3
         run: pnpm --filter "client-js-e2e-tests-zod-v3" test
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Test client-js zod-v4
         run: pnpm --filter "client-js-e2e-tests-zod-v4" test
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
