@@ -132,6 +132,17 @@ export interface ExtractorConfig<T = string> {
    * fail the observation or reflection cycle.
    */
   onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => T | void | Promise<T | void>;
+
+  /**
+   * Invoke `onExtracted` with `emptyValue` even when the extractor emitted no
+   * value. Empty invocations are lifecycle-only unless the hook returns a value.
+   *
+   * @internal
+   */
+  invokeOnEmpty?: boolean;
+
+  /** Value passed to `onExtracted` when `invokeOnEmpty` is enabled. */
+  emptyValue?: T;
 }
 
 /**
@@ -261,6 +272,10 @@ export class Extractor<T = string> {
   readonly injectionBehaviour: ExtractorInjectionBehaviour;
   /** Optional lifecycle hook invoked after each successful extraction. */
   readonly onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => T | void | Promise<T | void>;
+  /** Whether to invoke the lifecycle hook when this extractor emitted no value. */
+  readonly invokeOnEmpty: boolean;
+  /** Value passed to the lifecycle hook for empty invocations. */
+  readonly emptyValue?: T;
 
   constructor(config: ExtractorConfig<T>) {
     if (!config.name || !config.name.trim()) {
@@ -284,6 +299,8 @@ export class Extractor<T = string> {
     this.schema = config.schema ?? (z.string() as unknown as z.ZodType<T>);
     this.injectionBehaviour = config.injectionBehaviour ?? 'none';
     this.onExtracted = config.onExtracted;
+    this.invokeOnEmpty = config.invokeOnEmpty ?? false;
+    this.emptyValue = config.emptyValue;
   }
 
   /**
@@ -589,21 +606,24 @@ export async function invokeExtractorHooks(
   await Promise.all(
     extractors.map(async extractor => {
       const current = getExtractedValueForExtractor(extractor, values);
-      if (current === undefined || current === null || current === '') {
+      const hasCurrent = !(current === undefined || current === null || current === '');
+      if (!hasCurrent && !extractor.invokeOnEmpty) {
         // Don't fire the hook for empty values — the observer didn't emit
         // a value for this extractor in the current cycle.
         return;
       }
 
       const previous = ctx.previousValues ? getExtractedValueForExtractor(extractor, ctx.previousValues) : undefined;
-      let valueToPersist = current;
+      const currentForHook = hasCurrent ? current : extractor.emptyValue;
+      let valueToPersist = currentForHook;
+      let shouldPersist = hasCurrent;
 
       if (extractor.onExtracted) {
         try {
           const returned = await extractor.onExtracted({
             source: ctx.source,
             observations: ctx.observations,
-            extracted: { previous, current },
+            extracted: { previous, current: currentForHook },
             extractor: extractor as Extractor<any>,
             threadId: ctx.threadId,
             mainAgent: ctx.mainAgent,
@@ -613,13 +633,14 @@ export async function invokeExtractorHooks(
           } as ExtractorOnExtractedContext<any>);
           if (returned !== undefined && !isBuiltInExtractorSlug(extractor.slug)) {
             valueToPersist = extractor.schema.parse(returned);
+            shouldPersist = true;
           }
         } catch (err) {
           onError?.(extractor, err);
         }
       }
 
-      if (!isBuiltInExtractorSlug(extractor.slug)) {
+      if (!isBuiltInExtractorSlug(extractor.slug) && shouldPersist) {
         normalizedValues[extractor.slug] = valueToPersist;
       }
     }),

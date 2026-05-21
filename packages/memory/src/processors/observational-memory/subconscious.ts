@@ -222,28 +222,6 @@ function primitiveAttributes(attributes: Record<string, unknown>) {
   return filtered;
 }
 
-function shouldInheritMainAgentModel(model: AgentModel | undefined): boolean {
-  return !model || model === DEFAULT_MODEL || model === 'default';
-}
-
-function modelFromContext(context: { currentModel?: { provider?: string; modelId?: string } }): string | undefined {
-  const { provider, modelId } = context.currentModel ?? {};
-  if (provider && modelId) return `${provider}/${modelId}`;
-  return modelId;
-}
-
-async function getMainAgentModel(context: {
-  mainAgent?: Agent<any, any, any, any>;
-  requestContext: RequestContext;
-}): Promise<AgentModel | undefined> {
-  if (!context.mainAgent) return undefined;
-  try {
-    return await context.mainAgent.getModel({ requestContext: context.requestContext });
-  } catch {
-    return undefined;
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -659,12 +637,13 @@ export class Subconscious {
         model: options.models?.[name] ?? options.psyches?.[name]?.model,
       }),
     );
-    const shape = Object.fromEntries(handles.map(handle => [handle.name, handle.schema.optional()]));
 
     return new Extractor<Record<string, unknown>>({
       name: 'subconscious',
-      schema: z.object(shape).passthrough() as z.ZodType<Record<string, unknown>>,
+      schema: z.record(z.string(), z.unknown()),
       instructions: this.buildExtractionInstructions(handles, options.phase),
+      invokeOnEmpty: true,
+      emptyValue: {},
       onExtracted: async ctx => {
         const current = ctx.extracted.current ?? {};
         const runtime = this.createRuntime(current, { ...ctx, phase: options.phase, active });
@@ -875,14 +854,6 @@ export class Subconscious {
     const threadId = `subconscious:${scopeId}:${handle.name}`;
     const resourceId = context.resourceId ?? context.mainAgent?.id ?? 'global';
     const signalType = `om.subconscious.${handle.name}.extracted`;
-    const inheritedModel =
-      handle.managedAgent && shouldInheritMainAgentModel(handle.model)
-        ? ((await getMainAgentModel(context)) ?? modelFromContext(context))
-        : undefined;
-
-    if (inheritedModel) {
-      handle.agent.__updateModel({ model: inheritedModel as any });
-    }
 
     const signal = {
       type: signalType,
@@ -915,7 +886,6 @@ export class Subconscious {
       ...streamOptions,
       runId: randomUUID(),
       requestContext: context.requestContext,
-      ...(inheritedModel ? { model: inheritedModel } : {}),
       memory: {
         ...streamOptions?.memory,
         resource: resourceId,

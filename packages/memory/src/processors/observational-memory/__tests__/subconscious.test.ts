@@ -124,8 +124,23 @@ describe('Subconscious', () => {
     expect(extractor.slug).toBe('subconscious');
     expect(extractor.instructions).toContain('Property "critic"');
     expect(extractor.instructions).toContain('Property "learner"');
+    expect(extractor.invokeOnEmpty).toBe(true);
+    expect(extractor.emptyValue).toEqual({});
     expect(extractor.schema.parse({ critic: { risks: ['risk'], needsReview: true } })).toMatchObject({
       critic: { risks: ['risk'], needsReview: true },
+    });
+    expect(
+      extractor.schema.parse({
+        learner: {
+          skillCandidates: [{ title: 'debug Subconscious', examples: ['validation failure blocked logging'] }],
+          skillUpdates: [{ procedure: 'inspect activity log before workspace artifacts' }],
+        },
+      }),
+    ).toMatchObject({
+      learner: {
+        skillCandidates: [{ title: 'debug Subconscious', examples: ['validation failure blocked logging'] }],
+        skillUpdates: [{ procedure: 'inspect activity log before workspace artifacts' }],
+      },
     });
   });
 
@@ -140,12 +155,14 @@ describe('Subconscious', () => {
     expect(extractor.schema.parse({ critic: { verdict: 'review' } })).toEqual({ critic: { verdict: 'review' } });
   });
 
-  it('inherits the resolved main-agent model before falling back to provider strings', async () => {
+  it('uses the configured psyche model instead of inheriting the main-agent model', async () => {
+    const configuredModel = createModel();
     const inheritedModel = createModel();
     const mainAgent = createAgent('main-agent');
-    vi.spyOn(mainAgent, 'getModel').mockResolvedValue(inheritedModel as any);
-    const subconscious = new Subconscious();
+    const getModel = vi.spyOn(mainAgent, 'getModel').mockResolvedValue(inheritedModel as any);
+    const subconscious = new Subconscious({ model: configuredModel });
     const handle = subconscious.get('critic');
+    const updateModel = vi.spyOn(handle.agent, '__updateModel');
     const stream = vi.spyOn(handle.agent, 'stream').mockResolvedValue(streamWithParts([]));
 
     await subconscious.run(
@@ -157,9 +174,11 @@ describe('Subconscious', () => {
       },
     );
 
+    expect(getModel).not.toHaveBeenCalled();
+    expect(updateModel).not.toHaveBeenCalled();
     expect(stream).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({
+      expect.not.objectContaining({
         model: inheritedModel,
       }),
     );

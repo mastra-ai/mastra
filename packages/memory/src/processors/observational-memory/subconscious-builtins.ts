@@ -29,22 +29,34 @@ const evidenceSchema = z.union([
 
 const textItemSchema = z.union([z.string(), z.record(z.string(), z.unknown()).transform(stringFromUnknown)]);
 
-const skillSignalSchema = z.union([
-  z.string().transform(value => ({ name: value, reason: value, evidence: [] })),
-  z
-    .object({
-      name: z.string().optional(),
-      reason: z.string().optional(),
-      summary: z.string().optional(),
-      evidence: z.array(evidenceSchema).default([]),
-    })
-    .passthrough()
-    .transform(value => ({
-      name: value.name ?? value.summary ?? value.reason ?? 'Untitled skill signal',
-      reason: value.reason ?? value.summary ?? value.name ?? 'No reason provided',
-      evidence: value.evidence,
-    })),
-]);
+const firstText = (value: Record<string, unknown>, keys: string[]): string | undefined => {
+  for (const key of keys) {
+    const entry = value[key];
+    if (typeof entry === 'string' && entry.trim().length > 0) return entry;
+    if (Array.isArray(entry)) {
+      const text = entry.find(item => typeof item === 'string' && item.trim().length > 0);
+      if (text) return text;
+    }
+  }
+  return undefined;
+};
+
+const normalizeEvidence = (value: unknown) => {
+  const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  return entries.map(entry => evidenceSchema.parse(entry));
+};
+
+const skillSignalSchema = z.unknown().transform(value => {
+  if (typeof value === 'string') return { name: value, reason: value, evidence: [] };
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const name = firstText(record, ['name', 'skill', 'title', 'summary', 'reason']) ?? 'Untitled skill signal';
+    const reason = firstText(record, ['reason', 'summary', 'description', 'rationale', 'name']) ?? 'No reason provided';
+    return { name, reason, evidence: normalizeEvidence(record.evidence ?? record.examples ?? record.sources) };
+  }
+  const text = stringFromUnknown(value);
+  return { name: text, reason: text, evidence: [] };
+});
 
 const relationshipSchema = z.union([
   z.string().transform(value => ({ subject: value, relation: 'related_to', object: value, evidence: [] })),

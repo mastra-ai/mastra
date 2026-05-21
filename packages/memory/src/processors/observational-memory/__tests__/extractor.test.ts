@@ -532,6 +532,37 @@ describe('Extractor public API', () => {
       expect(profileHook).not.toHaveBeenCalled();
     });
 
+    it('can invoke lifecycle hooks for empty values without persisting unless the hook returns a value', async () => {
+      const lifecycleOnlyHook = vi.fn();
+      const returningHook = vi.fn(() => ({ status: 'created' }));
+      const lifecycleOnly = new Extractor({
+        name: 'lifecycle-only',
+        instructions: 'x',
+        schema: z.object({ status: z.string() }).passthrough(),
+        invokeOnEmpty: true,
+        emptyValue: {} as any,
+        onExtracted: lifecycleOnlyHook,
+      });
+      const returning = new Extractor({
+        name: 'returning',
+        instructions: 'x',
+        schema: z.object({ status: z.string() }).passthrough(),
+        invokeOnEmpty: true,
+        emptyValue: {} as any,
+        onExtracted: returningHook,
+      });
+
+      const result = await invokeExtractorHooks(
+        [lifecycleOnly, returning],
+        { extractedValues: {} },
+        { ...observerHookContext, threadId: 't1', mainAgent, requestContext },
+      );
+
+      expect(result).toEqual({ returning: { status: 'created' } });
+      expect(lifecycleOnlyHook).toHaveBeenCalledWith(expect.objectContaining({ extracted: { current: {} } }));
+      expect(returningHook).toHaveBeenCalledWith(expect.objectContaining({ extracted: { current: {} } }));
+    });
+
     it('uses a returned value as the normalized custom extracted value', async () => {
       const ext = new Extractor({
         name: 'user-profile',
