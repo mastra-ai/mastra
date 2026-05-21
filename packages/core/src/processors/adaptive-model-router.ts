@@ -232,17 +232,36 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       });
     }
 
+    const [resolvedModelSettings, resolvedProviderOptions, resolvedHeaders] = await Promise.all([
+      this.#resolveDynamic(selectedModel.modelSettings, args.requestContext),
+      this.#resolveDynamic(selectedModel.providerOptions, args.requestContext),
+      this.#resolveDynamic(selectedModel.headers, args.requestContext),
+    ]);
+
     const modelSettings = {
-      ...((selectedModel.modelSettings as object | undefined) ?? {}),
-      ...(selectedModel.headers ? { headers: selectedModel.headers } : {}),
+      ...((resolvedModelSettings as object | undefined) ?? {}),
+      ...(resolvedHeaders ? { headers: resolvedHeaders } : {}),
       ...(selectedModel.maxRetries !== undefined ? { maxRetries: selectedModel.maxRetries } : {}),
     } as any;
 
     return {
       model: selectedModel.model as MastraLanguageModel,
       modelSettings,
-      providerOptions: selectedModel.providerOptions as SharedProviderOptions | undefined,
+      providerOptions: resolvedProviderOptions as SharedProviderOptions | undefined,
     };
+  }
+
+  async #resolveDynamic<T>(
+    value: DynamicArgument<T> | T | undefined,
+    requestContext: ProcessInputStepArgs['requestContext'],
+  ): Promise<T | undefined> {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'function') return value as T;
+    const result = (value as (args: { requestContext: any; mastra?: Mastra }) => Promise<T> | T)({
+      requestContext: requestContext ?? ({} as any),
+      mastra: this.mastra,
+    });
+    return await result;
   }
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {

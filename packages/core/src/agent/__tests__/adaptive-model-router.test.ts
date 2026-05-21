@@ -191,6 +191,37 @@ describe('AdaptiveModelRouter', () => {
     expect(cache.ttls.some(entry => entry.key.includes('primary') && entry.ttl === 120_000)).toBe(true);
   });
 
+  it('resolves DynamicArgument modelSettings/providerOptions/headers with requestContext at request time', async () => {
+    const modelSettings = vi.fn().mockImplementation(({ requestContext }) => ({
+      temperature: requestContext?.tier === 'gold' ? 0.1 : 0.9,
+    }));
+    const providerOptions = vi.fn().mockResolvedValue({ openai: { reasoning: 'high' } });
+    const headers = vi.fn().mockResolvedValue({ 'x-tier': 'gold' });
+
+    const { router } = createRouter({
+      models: [
+        { id: 'primary', model: primary, modelSettings, providerOptions, headers },
+        { id: 'secondary', model: secondary },
+      ],
+    });
+
+    const result = await router.processInputStep(
+      inputArgs({ requestContext: { resourceId: 'agent-1', tier: 'gold' } }),
+    );
+
+    expect(modelSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ requestContext: expect.objectContaining({ tier: 'gold' }) }),
+    );
+    expect(providerOptions).toHaveBeenCalledOnce();
+    expect(headers).toHaveBeenCalledOnce();
+    expect(result).toEqual(
+      expect.objectContaining({
+        modelSettings: expect.objectContaining({ temperature: 0.1, headers: { 'x-tier': 'gold' } }),
+        providerOptions: { openai: { reasoning: 'high' } },
+      }),
+    );
+  });
+
   it('routes plain stream errors to the next fallback model like legacy model fallbacks', async () => {
     const { router, cache } = createRouter({
       models: [
