@@ -147,6 +147,38 @@ export const builderModelPolicySchema = z.object({
 });
 
 /**
+ * Canonical surface-agnostic model policy schema. `builderModelPolicySchema`
+ * is preserved as an alias for backward compatibility but new call sites
+ * should consume this.
+ */
+export const modelPolicySchema = builderModelPolicySchema;
+
+/**
+ * UI surface that consumes a model policy. Mirrors `ModelPolicySurface`
+ * from `@mastra/core/agent-builder/ee`. Used as the `?surface=` query
+ * parameter on `GET /editor/settings/model-policy`.
+ */
+export const modelPolicySurfaceSchema = z.enum(['builder', 'editor']);
+
+/**
+ * Query schema for `GET /editor/settings/model-policy`.
+ *
+ * `surface` is required so the response is unambiguous; the server returns a
+ * different policy slice per surface (today only `'builder'` has a real
+ * source; `'editor'` resolves to `{ active: false }`).
+ */
+export const modelPolicyQuerySchema = z.object({
+  surface: modelPolicySurfaceSchema,
+});
+
+/**
+ * Response schema for `GET /editor/settings/model-policy`. Always returns a
+ * fully-resolved `ModelPolicy` (never undefined) so clients can render
+ * deterministically.
+ */
+export const modelPolicyResponseSchema = modelPolicySchema;
+
+/**
  * Response schema for GET /editor/builder/settings
  */
 export const builderSettingsResponseSchema = z.object({
@@ -229,5 +261,8 @@ export type ProviderModelEntrySchema = z.infer<typeof providerModelEntrySchema>;
 export type DefaultModelEntrySchema = z.infer<typeof defaultModelEntrySchema>;
 export type AgentModelsSchema = z.infer<typeof agentModelsSchema>;
 export type BuilderModelPolicySchema = z.infer<typeof builderModelPolicySchema>;
+export type ModelPolicySchema = z.infer<typeof modelPolicySchema>;
+export type ModelPolicySurfaceSchema = z.infer<typeof modelPolicySurfaceSchema>;
+export type ModelPolicyQuerySchema = z.infer<typeof modelPolicyQuerySchema>;
 export type PickerAllowlistSchema = z.infer<typeof pickerAllowlistSchema>;
 export type BuilderPickerSchema = z.infer<typeof builderPickerSchema>;

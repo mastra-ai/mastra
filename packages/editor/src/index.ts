@@ -12,6 +12,7 @@ import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import type { BlobStore, StorageWorkspaceSnapshotType } from '@mastra/core/storage';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
@@ -316,6 +317,18 @@ export class MastraEditor implements IMastraEditor {
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined {
     return this.__toolProviders[id];
+  }
+
+  /**
+   * Like {@link getToolProvider}, but throws {@link UnknownToolProviderError}
+   * when the id is unknown.
+   */
+  getToolProviderOrThrow(id: string): ToolProvider {
+    const provider = this.__toolProviders[id];
+    if (!provider) {
+      throw new UnknownToolProviderError(id, Object.keys(this.__toolProviders));
+    }
+    return provider;
   }
 
   /** List all registered tool providers */

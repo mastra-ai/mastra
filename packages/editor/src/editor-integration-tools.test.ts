@@ -9,6 +9,7 @@ import type {
   ToolProviderToolInfo,
   ListToolProviderToolsOptions,
   ResolveToolProviderToolsOptions,
+  ResolveToolsOpts,
 } from '@mastra/core/tool-provider';
 import type { StorageToolConfig } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
@@ -402,6 +403,101 @@ describe('Integration Tools (tool providers)', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('Stored toolProviders (v1) hydration', () => {
+    it('should hydrate a stored agent with Composio toolProviders', async () => {
+      const freshStorage = createTestStorage();
+
+      // Stub provider exposing resolveToolsV2 (the v1 toolProviders runtime path)
+      const stubProvider: ToolProvider = {
+        info: { id: 'composio', name: 'Composio', description: 'stub' },
+        listToolkits: vi.fn(async () => ({ data: TOOLKITS })),
+        listTools: vi.fn(async () => ({
+          data: [
+            {
+              slug: 'GITHUB_LIST_REPOSITORY_ISSUES',
+              name: 'List Issues',
+              description: 'Lists issues',
+              toolkit: 'github',
+            },
+          ],
+        })),
+        getToolSchema: vi.fn(async () => ({ type: 'object', properties: {} })),
+        resolveTools: vi.fn(async () => ({})),
+        resolveToolsV2: vi.fn(
+          async (opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> => {
+            const result: Record<string, ToolAction<any, any, any>> = {};
+            for (const slug of opts.toolSlugs) {
+              const descOverride = opts.toolMeta?.[slug]?.description;
+              result[slug] = {
+                id: slug,
+                description: descOverride ?? 'default desc',
+                execute: vi.fn(async () => ({ ok: true, connectionId: opts.connectionId })),
+              } as any;
+            }
+            return result;
+          },
+        ),
+      };
+
+      const composioEditor = new MastraEditor({ toolProviders: { composio: stubProvider } });
+      const _mastra = new Mastra({ storage: freshStorage, editor: composioEditor });
+      await freshStorage.init();
+
+      const agentsStore = await freshStorage.getStore('agents');
+      await agentsStore?.create({
+        agent: {
+          id: 'composio-toolproviders-agent',
+          name: 'Composio toolProviders Agent',
+          authorId: 'author-1',
+          instructions: 'You list GitHub issues',
+          model: { provider: 'openai', name: 'gpt-4' },
+          toolProviders: {
+            composio: {
+              tools: {
+                GITHUB_LIST_REPOSITORY_ISSUES: {
+                  toolkit: 'github',
+                  description: 'Lists issues (toolProviders e2e override)',
+                },
+              },
+              connections: {
+                github: [
+                  {
+                    kind: 'author',
+                    toolkit: 'github',
+                    connectionId: 'stub-connection-id',
+                    scope: 'per-author',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      });
+
+      const agent = await composioEditor.agent.getById('composio-toolproviders-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      expect(tools['GITHUB_LIST_REPOSITORY_ISSUES']).toBeDefined();
+      expect(tools['GITHUB_LIST_REPOSITORY_ISSUES'].description).toBe(
+        'Lists issues (toolProviders e2e override)',
+      );
+      expect(typeof tools['GITHUB_LIST_REPOSITORY_ISSUES'].execute).toBe('function');
+
+      // Confirm the runtime resolver was called with the stored connection id
+      // and the agent's authorId (per-author scope).
+      expect(stubProvider.resolveToolsV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolSlugs: ['GITHUB_LIST_REPOSITORY_ISSUES'],
+          connectionId: 'stub-connection-id',
+          authorId: 'author-1',
+        }),
+      );
+
+      await agentsStore?.dangerouslyClearAll();
     });
   });
 

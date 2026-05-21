@@ -146,6 +146,7 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
+  BuilderModelPolicy,
   InfrastructureStatusResponse,
   ListBuilderRegistriesResponse,
   BuilderRegistrySearchResponse,
@@ -1568,6 +1569,17 @@ export class MastraClient extends BaseResource {
    */
   public getBuilderSettings(): Promise<BuilderSettingsResponse> {
     return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves the surface-scoped model policy. Returns `{ active: false }`
+   * for surfaces that have no admin-configured source yet (e.g. `'editor'`).
+   * @param params - Surface to resolve the policy for.
+   * @returns Promise containing the resolved {@link BuilderModelPolicy}.
+   */
+  public getModelPolicy(params: { surface: 'builder' | 'editor' }): Promise<BuilderModelPolicy> {
+    const query = new URLSearchParams({ surface: params.surface }).toString();
+    return this.request(`/editor/settings/model-policy?${query}`);
   }
 
   /**
