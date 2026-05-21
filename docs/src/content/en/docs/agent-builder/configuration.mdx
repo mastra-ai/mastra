@@ -1,0 +1,133 @@
+---
+title: "Configuration | Agent Builder"
+description: Configure the Agent Builder by toggling UI sections, pinning admin defaults, and constraining tool, agent, and workflow pickers.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Configuration
+
+:::note
+The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+:::
+
+The Agent Builder is configured through `MastraEditor.builder`. Two top-level keys control its behavior: `features` toggles UI visibility and `configuration` pins admin-controlled defaults onto every new agent.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    features: {
+      agent: { browser: false },
+    },
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+      },
+    },
+  },
+})
+```
+
+This hides the browser tab in the Builder UI and pins observational memory as the default for every Builder-created agent.
+
+## How configuration works
+
+The `builder` object has two independent trees:
+
+- **`features`** — UI toggles. Controls which sections of the Builder are visible to end users (tools, agents, workflows, model picker, browser, and so on). Keys default to `true` when omitted.
+- **`configuration`** — admin-pinned defaults. Controls what gets prefilled when a user creates a new agent (default model, allowed tools, memory settings, workspace, browser provider). End users can't override these values.
+
+You can hide the model picker (`features.agent.model: false`) while still pinning a default model in `configuration.agent.models.default`. Hidden UI plus pinned default means end users get the admin's choice with no override.
+
+## Feature toggles
+
+`builder.features.agent` controls which sections appear in the Agent Builder UI. Set a key to `false` to hide the corresponding surface.
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    features: {
+      agent: {
+        tools: true,
+        agents: true,
+        workflows: true,
+        skills: true,
+        memory: true,
+        model: true,
+        browser: true,
+        avatarUpload: true,
+        favorites: true,
+      },
+    },
+  },
+})
+```
+
+The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `skills`, `memory`, `model`, `browser`, `avatarUpload`, and `favorites`.
+
+:::note
+
+See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full feature schema.
+
+:::
+
+## Admin defaults
+
+`builder.configuration.agent` pins admin-controlled defaults onto every agent the Builder produces.
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
+          default: { provider: 'openai', modelId: 'gpt-5.4' },
+        },
+      },
+    },
+  },
+})
+```
+
+`configuration.agent` accepts `models`, `memory`, `workspace`, `browser`, `tools`, `agents`, and `workflows`. See the [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) for the full shape.
+
+## Tool, agent, and workflow allowlists
+
+`configuration.agent.tools`, `configuration.agent.agents`, and `configuration.agent.workflows` constrain which registered entries appear in the Builder's pickers. Allowlist semantics are the same for all three:
+
+- **Omitted**: unrestricted. The picker shows every registered entry.
+- **`allowed: []`**: explicit lockdown. The picker is empty.
+- **`allowed: [...ids]`**: the picker shows only the listed IDs.
+
+Entries match on `tool.id`, `Agent.id`, or `workflow.id`. Unknown IDs are dropped and surfaced as warnings through `getModelPolicyWarnings()` and the server logs.
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        tools: { allowed: ['weather-info', 'web-search'] },
+        agents: { allowed: ['weather-agent'] },
+        workflows: { allowed: ['greet-workflow'] },
+      },
+    },
+  },
+})
+```
+
+## Related
+
+- [Model policy](/docs/agent-builder/model-policy) — pin the allowed models and default model.
+- [Memory](/docs/agent-builder/memory) — set the default memory shape for new agents.
+- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) — full property list.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent`.

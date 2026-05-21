@@ -172,6 +172,16 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
+        {
+          type: 'category',
+          label: 'Agent Builder',
+          collapsed: true,
+          items: [
+            { type: 'doc', id: 'editor/agent-builder/agent-builder-options', label: 'AgentBuilderOptions' },
+            { type: 'doc', id: 'editor/agent-builder/builder-agent-defaults', label: 'BuilderAgentDefaults' },
+            { type: 'doc', id: 'editor/agent-builder/builder-model-policy', label: 'BuilderModelPolicy' },
+          ],
+        },
       ],
     },
     {

@@ -1,0 +1,101 @@
+---
+title: "Deploying | Agent Builder"
+description: Swap local Agent Builder primitives for cloud-backed storage, filesystems, sandboxes, and an EE license for production.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/libsql"
+  - "@mastra/s3"
+  - "@mastra/e2b"
+---
+
+# Deploying
+
+:::note
+The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+:::
+
+Production deployments swap the local primitives in the Quickstart for cloud-backed equivalents. The shape of the `Mastra` and `MastraEditor` config doesn't change — only the providers behind it.
+
+## Quickstart
+
+A production deployment needs four things:
+
+1. A hosted storage backend.
+1. A filesystem that survives multi-instance deployments.
+1. A sandbox that can run untrusted commands safely.
+1. A valid `MASTRA_EE_LICENSE`.
+
+The sections below cover each.
+
+## Storage
+
+Replace the file-backed LibSQL store with a hosted backend. LibSQL Cloud, PostgreSQL, and any other Mastra storage adapter all work.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+
+new Mastra({
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL!,
+    authToken: process.env.DATABASE_AUTH_TOKEN,
+  }),
+})
+```
+
+## Workspace filesystem and sandbox
+
+`LocalFilesystem` works only on the node that owns the directory. For multi-instance deployments, swap to a cloud filesystem and attach a cloud sandbox.
+
+```bash npm2yarn
+npm install @mastra/s3 @mastra/e2b
+```
+
+```typescript title="src/mastra/index.ts"
+import { Workspace } from '@mastra/core/workspace'
+import { MastraEditor } from '@mastra/editor'
+import { S3Filesystem, s3FilesystemProvider } from '@mastra/s3'
+import { E2BSandbox, e2bSandboxProvider } from '@mastra/e2b'
+
+const builderWorkspace = new Workspace({
+  id: 'builder-workspace',
+  name: 'Builder Workspace',
+  filesystem: new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: process.env.S3_REGION!,
+  }),
+  sandbox: new E2BSandbox({ apiKey: process.env.E2B_API_KEY! }),
+})
+
+new MastraEditor({
+  filesystems: { [s3FilesystemProvider.id]: s3FilesystemProvider },
+  sandboxes: { [e2bSandboxProvider.id]: e2bSandboxProvider },
+  builder: {
+    /* ... */
+  },
+})
+```
+
+`S3Filesystem` uses the default AWS credential chain (environment variables, `~/.aws` config, IAM roles, EC2 instance profile). For long-running deployments, use a credential provider function so credentials refresh automatically.
+
+`DockerSandbox` and `VercelSandbox` are alternative cloud sandbox providers — pick whichever matches your runtime.
+
+:::warning
+
+A local sandbox can't run commands safely in a shared environment. Always attach a cloud sandbox to the workspace before deploying.
+
+:::
+
+## License, channels, and auth
+
+A production deployment needs three more environment-level pieces in place:
+
+- **EE license**: Set `MASTRA_EE_LICENSE` in the deployment environment. Without it, the server refuses to start when `builder.enabled` is truthy. Treat the license key as a secret.
+- **Public URL for channels**: Slack needs to reach your server through a public URL. Pass `baseUrl` to `SlackProvider` with the deployed URL (no trailing slash). See [Channels](/docs/agent-builder/channels).
+- **Auth and RBAC**: A production deployment without authentication exposes the Builder to the public internet. Register a `Mastra.server.auth` provider (for example, WorkOS or your own provider) and a `Mastra.server.rbac` provider to gate access. See [Access control](/docs/agent-builder/access-control).
+
+## Related
+
+- [Access control](/docs/agent-builder/access-control) — auth and RBAC setup.
+- [Channels](/docs/agent-builder/channels) — Slack `baseUrl` and channel-specific setup.

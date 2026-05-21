@@ -1,0 +1,59 @@
+---
+title: "Memory | Agent Builder"
+description: Configure the default memory shape for Agent Builder agents, including observational memory, message history, and semantic recall.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Memory
+
+:::note
+The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+:::
+
+The Agent Builder pins a default memory shape onto every new stored agent through `builder.configuration.agent.memory`. The default applies when an end user creates a new agent and doesn't override it.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+      },
+    },
+  },
+})
+```
+
+Observational memory lets the agent learn long-lived facts from past conversations. Storage on the `Mastra` instance is required — see the [Memory overview](/docs/memory/overview) for the prerequisites.
+
+## Configuring memory
+
+`configuration.agent.memory` accepts a `SerializedMemoryConfig`. Every field is optional, and end users can still override the memory shape per agent through the Builder UI.
+
+For the full list of fields, defaults, and worked examples (semantic recall, working memory, message history), see:
+
+- [Memory overview](/docs/memory/overview) — the underlying memory model.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent.memory`.
+
+## Storage and vector requirements
+
+Memory features layer on top of `Mastra.storage`:
+
+- **Message history** (`options.lastMessages`) requires storage.
+- **Observational memory** (`observationalMemory: true`) requires storage.
+- **Semantic recall** (`options.semanticRecall`) requires storage plus a registered vector adapter (`vector`) and an embedder (`embedder`).
+
+If a required adapter is missing, Mastra throws a descriptive error at agent run time. See [Semantic recall](/docs/memory/semantic-recall) for the full list of supported vector stores and embedders.
+
+## Related
+
+- [Memory overview](/docs/memory/overview) — concepts and core configuration.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — the full `memory` field schema.
+- [Configuration](/docs/agent-builder/configuration) — wire `memory` alongside the rest of the Builder config.

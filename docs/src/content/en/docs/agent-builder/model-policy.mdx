@@ -1,0 +1,90 @@
+---
+title: "Model policy | Agent Builder"
+description: Restrict which providers and models the Agent Builder exposes, pin a default model, and lock the picker.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Model policy
+
+:::note
+The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+:::
+
+The model policy controls which providers and models Builder-created agents can use, which model is selected by default, and whether end users can change it. The policy lives at `builder.configuration.agent.models`.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
+          default: { provider: 'openai', modelId: 'gpt-5.4' },
+        },
+      },
+    },
+  },
+})
+```
+
+This restricts the picker to OpenAI and a specific Anthropic model, and pins `gpt-5.4` as the default for every new agent.
+
+## Invariants
+
+Mastra applies three invariants to every model policy:
+
+- When `active: false`, the policy is ignored and all registered models are available.
+- When the picker is locked (`pickerVisible: false`), `default` is required.
+- When `allowed` is non-empty, `default` must satisfy the allowlist.
+
+Violations are surfaced as boot-time warnings through `getModelPolicyWarnings()`.
+
+:::warning
+
+If you lock the picker without setting `default`, the Builder can't resolve a model for new agents. Always pair `pickerVisible: false` with a concrete `default` entry.
+
+:::
+
+## Custom providers
+
+Use `kind: 'custom'` for gateway or self-hosted providers that aren't in the generated provider registry:
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [
+            { provider: 'openai' },
+            { kind: 'custom', provider: 'my-gateway', modelId: 'router-v1' },
+          ],
+          default: { kind: 'custom', provider: 'my-gateway', modelId: 'router-v1' },
+        },
+      },
+    },
+  },
+})
+```
+
+Custom entries always require an explicit `modelId`. Registered providers (`provider: 'openai'`, `provider: 'anthropic'`, and so on) can omit `modelId` to allow every model from that provider.
+
+:::note
+
+See the [BuilderModelPolicy reference](/reference/editor/agent-builder/builder-model-policy) for every field on the policy and the full list of invariants.
+
+:::
+
+## Related
+
+- [Configuration](/docs/agent-builder/configuration) — wire the model policy into the broader Builder config.
+- [BuilderModelPolicy reference](/reference/editor/agent-builder/builder-model-policy) — full property list.
+- [Provider registry](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/llm/model/provider-registry.json) — every model ID Mastra recognizes out of the box.
