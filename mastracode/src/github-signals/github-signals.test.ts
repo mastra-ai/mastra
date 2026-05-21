@@ -2177,6 +2177,55 @@ describe('GithubSignals', () => {
     vi.useRealTimers();
   });
 
+  it('drops queued merge-conflict notifications when the PR becomes mergeable before delivery', async () => {
+    vi.useFakeTimers();
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: 'CONFLICTING',
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: true,
+        mergeableState: 'clean',
+        headSha: 'sha-fixed',
+      }),
+    ]);
+    const harness = createHarness();
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastMergeConflictFingerprint: undefined,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await processSignals(github, harness, []);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect((sendSignal.mock.calls as any[])[0]?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+
+    await processOutputResult(github, harness, []);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: expect.objectContaining({ type: 'github-pr-conflict' }) }),
+      expect.anything(),
+    );
+    github.destroy();
+    vi.useRealTimers();
+  });
+
   it('polls active threads on the interval and queues full notifications behind a pending reminder', async () => {
     vi.useFakeTimers();
     const commandRunner = createSnapshotCommandRunner(
