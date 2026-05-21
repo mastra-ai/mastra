@@ -1,5 +1,221 @@
 # @mastra/server
 
+## 1.36.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cfa2e3a`](https://github.com/mastra-ai/mastra/commit/cfa2e3a5292322f48bb28b4d257d631da7f9d3cc)]:
+  - @mastra/core@1.36.1-alpha.0
+
+## 1.36.0
+
+### Minor Changes
+
+- Added delta polling support for observability list endpoints. ([#16632](https://github.com/mastra-ai/mastra/pull/16632))
+
+  ```ts
+  const page = await client.observability.listTraces({
+    mode: 'page',
+    filters: { entityName: 'agent-1' },
+  });
+
+  const delta = await client.observability.listTraces({
+    mode: 'delta',
+    filters: { entityName: 'agent-1' },
+    after: page.deltaCursor,
+  });
+  ```
+
+  Use `mode: 'delta'` to fetch only new items after the last cursor.
+
+  Page-mode responses include `pagination` and `deltaCursor` when delta polling is supported. Delta-mode responses include `delta` and do not include `pagination`.
+
+  If you read these responses directly in typed code, note that `pagination` is only included in page mode.
+
+- Added automatic FGA metadata for stored resource routes plus optional request scope isolation for stored resource APIs. Enable protected-route coverage with provider options: ([#16651](https://github.com/mastra-ai/mastra/pull/16651))
+
+  ```ts
+  const fga = new MastraFGAWorkos({
+    resourceMapping,
+    permissionMapping,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+  });
+  ```
+
+- Added an HTTP surface for stored agents/skills/workspaces, plus introspection endpoints for the agent-builder and an external skill-registry proxy. Studio and the client SDK use these endpoints to back the new "stored entity" management UI. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+  ```http
+  # Browse + manage stored entities (responses include favoriteCount + isFavorited)
+  GET    /stored/agents?visibility=public&page=1&perPage=20
+  GET    /stored/agents/:id
+  POST   /stored/agents
+  PATCH  /stored/agents/:id
+  DELETE /stored/agents/:id
+
+  # Versioning
+  POST   /stored/skills/:id/publish
+  POST   /stored/skills/:id/activate
+  POST   /stored/skills/:id/restore
+
+  # Favorites
+  PUT    /stored/agents/:id/favorite
+  DELETE /stored/agents/:id/favorite
+
+  # Builder introspection
+  GET    /editor/builder/settings
+  GET    /editor/builder/infrastructure
+
+  # External skill registry proxy (skills.sh)
+  GET    /editor/builder/registries
+  GET    /editor/builder/registries/:registryId/search
+  GET    /editor/builder/registries/:registryId/popular
+  GET    /editor/builder/registries/:registryId/skills/:owner/:repo/preview
+  POST   /editor/builder/registries/:registryId/skills/:owner/:repo/install
+  ```
+
+  Highlights:
+  - **Visibility + authorship gating.** Stored agents/skills now resolve a caller's author identity from the request context. Non-admin users only see their own + public entities. Admins see everything.
+  - **Favorites.** List/get responses include `favoriteCount` and the caller's `isFavorited` flag. `PUT`/`DELETE /stored/{agents|skills}/:id/favorite` toggle the favorite for the caller.
+  - **Avatar validation.** Stored-agent/skill metadata avatars are validated through a new `validateMetadataAvatarUrl` helper (rejects payloads over the size limit or with malformed base64).
+  - **Model-policy enforcement.** Stored-agent create/update routes invoke `assertModelAllowed` via the new `resolveBuilderModelPolicy` helper. Disallowed models map to HTTP 422 with a structured body — `{ code, attempted, offendingLabel, allowed }` — via `handleError`'s new `ModelNotAllowedError` mapping.
+  - **Builder introspection.** `GET /editor/builder/settings` returns feature flags, configuration, picker visibility, and model policy. `GET /editor/builder/infrastructure` reports browser-provider and sandbox status. Both default to `{ enabled: false }` when no `MastraEditor` is configured.
+  - **External skill registry.** `/editor/builder/registries/*` proxies the public skills.sh catalog so the builder UI can browse and install registered skills.
+
+  This also bumps the `@mastra/core` peer dependency floor to `>=1.34.0-0` (see the separate changeset) because the new handlers and error mapping import runtime values from `@mastra/core/agent-builder/ee`.
+
+- Narrowed `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+  Fixed two signal-content bugs:
+  - `user-message` signal attributes now reach the LLM
+  - multimodal non-`user-message` signals no longer lose file parts
+
+  Callers that previously passed wrapped message shapes to `agent.sendSignal` should now pass a bare string or a bare parts array.
+
+  Before:
+  `{ type: 'user-message', contents: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }`
+
+  After:
+  `{ type: 'user-message', contents: [{ type: 'text', text: 'hi' }] }`
+
+  Added an optional `providerOptions` field to `agent.sendSignal` that flows through to the resulting prompt turn (as `providerOptions` on the LLM message) and is persisted on the stored signal message (as `content.providerMetadata`).
+
+- Routes can now require **any one of multiple permissions** by passing an array to `requiresPermission`. When an array is provided, the request is allowed if the caller holds any of the listed permissions. Existing single-string usage continues to work. ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  ```ts
+  // Before — single permission only
+  {
+    path: '/v1/things',
+    method: 'GET',
+    requiresPermission: 'things:read',
+    handler,
+  }
+
+  // After — single permission or ANY-of array
+  {
+    path: '/v1/things/:id/stream',
+    method: 'GET',
+    requiresPermission: ['things:read', 'things:execute'],
+    handler,
+  }
+  ```
+
+  Denial messages now read `Missing required permission: a or b or c` when an array is used.
+
+  **New endpoint**
+
+  `GET /api/auth/roles/:roleId/permissions` returns the resolved permission list for a role. Useful for client-side gating and admin tooling.
+
+  ```ts
+  const res = await fetch('/api/auth/roles/admin/permissions', { credentials: 'include' });
+  // { "roleId": "admin", "permissions": ["*"] }
+  ```
+
+  **Namespaced request-context keys (non-breaking)**
+
+  `coreAuthMiddleware` now writes user state under namespaced keys (`mastra__user`, `mastra__userPermissions`, `mastra__userRoles`) in addition to the existing bare keys (`user`, `userPermissions`, `userRoles`). The bare keys are still written for backward compatibility, so existing middleware, integrations, and built-in handlers that read `requestContext.get('user')` continue to work unchanged.
+
+  New code should prefer the namespaced constants to avoid collisions with caller-supplied request-context entries:
+
+  ```ts
+  import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '@mastra/server/auth';
+
+  const user = requestContext.get(MASTRA_USER_KEY);
+  const permissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
+  const roles = requestContext.get(MASTRA_USER_ROLES_KEY) as string[] | undefined;
+  ```
+
+  The bare keys (`user`, `userPermissions`, `userRoles`) remain populated and are considered the documented public surface for this release; a future major release may deprecate them.
+
+  **Route permission derivation**
+
+  `getEffectivePermission()` now recognizes stored resource families (`stored-agents`, `stored-skills`, `stored-prompt-blocks`, `stored-mcp-clients`, `stored-scorers`, `stored-workspaces`) and `publish` / `activate` / `restore` action suffixes on stored-resource routes. Return type widened to `string | string[] | null` to support routes that map to multiple permissions.
+
+### Patch Changes
+
+- Fixed stored resource updates to preserve existing metadata keys. ([#16651](https://github.com/mastra-ai/mastra/pull/16651))
+
+- Hardened the stored-agent and stored-skill favorite toggle endpoints (`PUT`/`DELETE /stored/{agents,skills}/:id/favorite`) so callers can no longer favorite or unfavorite entities outside their tenant scope. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  Deployments that configure `storedResources.scope` now get the same 404-on-mismatch protection on favorite toggles that already applied to read/update/delete. Single-tenant deployments are unaffected.
+
+  Also corrected JSDoc on stored-agent and stored-skill handlers to reference the canonical resource/action names (`stored-agents:read`, `stored-skills:write`).
+
+- Fix DELETE custom routes forwarding JSON request bodies. ([#16857](https://github.com/mastra-ai/mastra/pull/16857))
+
+- Fixed CompositeAuth incorrectly advertising SSO, session, and user provider capabilities when no inner provider supports them. Studio would show an SSO login button even when no provider had SSO configured, leading to 401 errors on login attempts. The duck-typing check now verifies that interface methods are actual functions rather than just present on the prototype chain. ([#16664](https://github.com/mastra-ai/mastra/pull/16664))
+
+- Fixed provider and dataset item history response types to include fields returned by the API. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Widened `BrowserStreamConfig.getToolset` to support async lookup. Existing synchronous implementations continue to work — the type now accepts `MastraBrowser | undefined` or `Promise<MastraBrowser | undefined>`. ([#16778](https://github.com/mastra-ai/mastra/pull/16778))
+
+  This unblocks server-adapter implementations that need to resolve agents asynchronously (for example, hydrating stored agents from storage on first browser-stream connection).
+
+  ```ts
+  import { setupBrowserStream } from '@mastra/server';
+
+  await setupBrowserStream(app, {
+    getToolset: async agentId => {
+      const agent = await resolveAgent(agentId);
+      return agent?.browser;
+    },
+    apiPrefix,
+  });
+  ```
+
+- Align stored-entity authorship checks with their RBAC resource names. Stored-agent and stored-skill handlers were calling `hasAdminBypass` / `assertReadAccess` / `assertWriteAccess` / `resolveAuthorFilter` with `resource: 'agents'` and `resource: 'skills'`, but the routes are gated by `stored-agents:*` / `stored-skills:*` permissions. An admin granted `stored-agents:*` (or `stored-skills:*`) without the global `*` wildcard would pass route authorization but be treated as a non-admin inside the handler, so they could not list, read, or update private records owned by other users. Handlers now use `stored-agents` and `stored-skills` as the authorship resource string, matching the permission strings emitted by the route layer. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+- Restore backwards compatibility for the legacy `GET /api/memory/threads?orderBy=<field>&sortDirection=<dir>` query shape emitted by `@mastra/client-js` < 1.18 (and any hand-rolled HTTP clients written against pre-1.0 docs). Server 1.31.0 turned that shape into a hard 400 (`Invalid input: expected object, received undefined`); the legacy bare-string + `sortDirection` pair is now transparently fused into the current `{ orderBy: { field, direction } }` object shape before validation, so pinned clients keep working. ([#16745](https://github.com/mastra-ai/mastra/pull/16745))
+
+  Current callers using bracket notation (`orderBy[field]=...&orderBy[direction]=...`) or a JSON-stringified `orderBy` are unaffected.
+
+- Bumped the `@mastra/core` peer dependency floor from `>=1.32.0-0` to `>=1.34.0-0`. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+- Fixed the playground memory configuration display for agents using observationalMemory: true. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021), [`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337), [`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/core@1.36.0
+
+## 1.36.0-alpha.10
+
+### Patch Changes
+
+- Fix DELETE custom routes forwarding JSON request bodies. ([#16857](https://github.com/mastra-ai/mastra/pull/16857))
+
+- Updated dependencies [[`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb)]:
+  - @mastra/core@1.36.0-alpha.10
+
+## 1.36.0-alpha.9
+
+### Patch Changes
+
+- Fixed provider and dataset item history response types to include fields returned by the API. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Fixed the playground memory configuration display for agents using observationalMemory: true. ([#16213](https://github.com/mastra-ai/mastra/pull/16213))
+
+- Updated dependencies [[`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/core@1.36.0-alpha.9
+
 ## 1.36.0-alpha.8
 
 ### Patch Changes

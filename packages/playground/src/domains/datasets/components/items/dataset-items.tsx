@@ -158,10 +158,10 @@ export function DatasetItems({
   const isSelectionActive = selectionMode !== 'idle';
 
   const itemsListColumns = [
-    { name: 'id', label: 'ID', size: '5rem' },
-    { name: 'input', label: 'Input', size: '1fr' },
-    ...(!featuredItem ? [{ name: 'groundTruth', label: 'Ground Truth', size: '1fr' }] : []),
-    ...(!featuredItem ? [{ name: 'trajectory', label: 'Trajectory', size: '6rem' }] : []),
+    { name: 'id', label: 'ID', size: '7rem' },
+    { name: 'input', label: 'Input', size: 'minmax(10rem,1fr)' },
+    { name: 'groundTruth', label: 'Ground Truth', size: 'minmax(10rem,1fr)' },
+    { name: 'trajectory', label: 'Trajectory', size: '8rem' },
     { name: 'date', label: 'Created', size: '10rem' },
   ];
 

@@ -151,7 +151,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
         ) {
           threadObject = await memory.saveThread({
-            thread: { ...existingThread, metadata: thread.metadata },
+            thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
             memoryConfig,
           });
         } else {

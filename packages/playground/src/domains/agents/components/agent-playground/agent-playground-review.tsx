@@ -21,7 +21,6 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import {
   CheckCircle,
   ChevronDown,
@@ -33,7 +32,6 @@ import {
   Trash2,
   XIcon,
 } from 'lucide-react';
-import type { ComponentPropsWithoutRef } from 'react';
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { usePlaygroundModel } from '../../context/playground-model-context';
 import { useReviewQueue } from '../../context/review-queue-context';
@@ -54,23 +52,6 @@ function truncateInput(value: unknown, max: number): string {
   } catch {
     return String(value);
   }
-}
-
-const subContentClass = cn(
-  'bg-surface5 backdrop-blur-xl z-50 min-w-32 overflow-auto rounded-lg p-2 shadow-md',
-  'data-[state=open]:animate-in data-[state=closed]:animate-out',
-  'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
-  'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-);
-
-function PortalSubContent({ className, children, ...props }: ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
-  return (
-    <DropdownMenuPortal>
-      <DropdownMenuSubContent className={cn(subContentClass, className)} {...props}>
-        {children}
-      </DropdownMenuSubContent>
-    </DropdownMenuPortal>
-  );
 }
 
 interface AgentPlaygroundReviewProps {
@@ -565,7 +546,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                       Status
                       {showCompleted && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
+                    <DropdownMenu.SubContent>
                       <DropdownMenu.CheckboxItem
                         checked={!showCompleted}
                         onCheckedChange={() => {
@@ -586,7 +567,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                       >
                         Completed
                       </DropdownMenu.CheckboxItem>
-                    </PortalSubContent>
+                    </DropdownMenu.SubContent>
                   </DropdownMenu.Sub>
 
                   {/* Tags */}
@@ -595,7 +576,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                       Tags
                       {activeTagFilter && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
+                    <DropdownMenu.SubContent>
                       <DropdownMenu.CheckboxItem
                         checked={!activeTagFilter}
                         onCheckedChange={() => setActiveTagFilter(null)}
@@ -624,7 +605,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                           {tag}
                         </DropdownMenu.CheckboxItem>
                       ))}
-                    </PortalSubContent>
+                    </DropdownMenu.SubContent>
                   </DropdownMenu.Sub>
 
                   {activeFilterCount > 0 && (
