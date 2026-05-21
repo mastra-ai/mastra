@@ -568,6 +568,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/stepfun-ai',
+          label: 'StepFun',
+        },
+        {
+          type: 'doc',
           id: 'providers/submodel',
           label: 'submodel',
         },
