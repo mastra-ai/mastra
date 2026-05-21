@@ -112,11 +112,9 @@ function AccessDeniedScreen() {
           descriptionSlot="You don't have permission to access the Agent Builder."
         />
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href="/agents">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to Studio
-            </a>
+          <Button as="a" href="/agents" variant="outline" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Studio
           </Button>
           {isImpersonating && (
             <Button variant="default" size="sm" onClick={stopImpersonation}>

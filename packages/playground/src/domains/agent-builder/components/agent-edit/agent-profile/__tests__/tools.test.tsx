@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -89,5 +89,136 @@ describe('Tools', () => {
     expect(container.className).toContain('border-border1');
     expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-visible:ring');
+  });
+
+  it('renders the "Show only selected" filter checkbox unchecked by default with both tool cards visible', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
+    expect(getByTestId('tool-card-tool-checked-tool')).toBeTruthy();
+    expect(getByTestId('tool-card-tool-unchecked-tool')).toBeTruthy();
+  });
+
+  it('checking the filter hides unselected tools and keeps selected ones', () => {
+    const { getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
+
+    expect(queryByTestId('tool-card-tool-checked-tool')).toBeTruthy();
+    expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeNull();
+  });
+
+  it('unchecking the filter restores hidden tools', () => {
+    const { getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
+    fireEvent.click(checkbox);
+    expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeNull();
+
+    fireEvent.click(checkbox);
+    expect(queryByTestId('tool-card-tool-checked-tool')).toBeTruthy();
+    expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeTruthy();
+  });
+
+  it('shows the empty-state copy when the filter is on and nothing is selected', () => {
+    const noneSelected = [
+      { id: 'a', name: 'a', isChecked: false, type: 'tool' as const },
+      { id: 'b', name: 'b', isChecked: false, type: 'tool' as const },
+    ];
+    const { getByTestId, getByText } = render(
+      <FormHarness>
+        <Tools availableAgentTools={noneSelected} />
+      </FormHarness>,
+    );
+
+    fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
+
+    expect(getByText('No tools selected yet')).toBeTruthy();
+  });
+
+  it('combines the filter with search to show the dedicated empty-state copy', async () => {
+    const { getByTestId, findByText } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const searchInput = getByTestId('tools-card-picker-search').querySelector('input');
+    expect(searchInput).toBeTruthy();
+    fireEvent.change(searchInput!, { target: { value: 'unchecked' } });
+
+    fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
+
+    await findByText('No selected tools match "unchecked"');
+  });
+
+  it('uses the small-size classes matching the provider-filter checkbox in models.tsx', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
+    expect(checkbox.className).toContain('h-3');
+    expect(checkbox.className).toContain('w-3');
+    expect(checkbox.className).toContain('[&_svg]:h-2.5');
+  });
+
+  it('paints the filter checkbox with the agent color when checked and a name is set', () => {
+    const { getByTestId } = render(
+      <FormHarness agentName="Support agent">
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox') as HTMLButtonElement;
+    expect(checkbox.getAttribute('style')).toBeNull();
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
+    expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
+  });
+
+  it('does not apply an inline style to the filter checkbox when no agent name is set', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox') as HTMLButtonElement;
+    fireEvent.click(checkbox);
+
+    expect(checkbox.getAttribute('style')).toBeNull();
+  });
+
+  it('renders the search input and the filter checkbox in the same flex row', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const searchWrapper = getByTestId('tools-card-picker-search');
+    const filterLabel = getByTestId('tools-only-selected-filter');
+
+    expect(searchWrapper.parentElement).toBe(filterLabel.parentElement);
+    expect(filterLabel.parentElement?.className).toContain('flex');
+    expect(filterLabel.parentElement?.className).toContain('justify-between');
   });
 });

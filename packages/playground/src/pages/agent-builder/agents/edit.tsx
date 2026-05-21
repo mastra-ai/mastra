@@ -7,6 +7,11 @@ import {
   AgentProfile,
   AgentProfileInitialStep,
   AgentProfileModelStep,
+  AgentProfileToolsStep,
+  AgentProfileInstructionsStep,
+  AgentProfileSkillsStep,
+  AgentProfileBrowserStep,
+  AgentProfileIntegrationsStep,
   AgentProfileAvatar,
   AgentProfileDetails,
   AgentProfileHero,
@@ -171,6 +176,26 @@ const ProfileSlot = () => {
 
   if (step === 'model') {
     return <AgentProfileModelStep />;
+  }
+
+  if (step === 'tools') {
+    return <AgentProfileToolsStep />;
+  }
+
+  if (step === 'instructions') {
+    return <AgentProfileInstructionsStep />;
+  }
+
+  if (step === 'skills') {
+    return <AgentProfileSkillsStep />;
+  }
+
+  if (step === 'browser') {
+    return <AgentProfileBrowserStep />;
+  }
+
+  if (step === 'integrations') {
+    return <AgentProfileIntegrationsStep />;
   }
 
   return (

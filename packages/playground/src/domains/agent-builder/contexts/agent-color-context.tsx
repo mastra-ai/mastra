@@ -8,6 +8,7 @@ import type { AgentBuilderEditFormValues } from '../schemas';
 export type AgentColors = {
   background: string;
   foreground: string;
+  tint: string;
 } | null;
 
 export const AgentColorContext = createContext<AgentColors>(null);
@@ -27,6 +28,7 @@ export const AgentColorProvider = ({ children }: AgentColorProviderProps) => {
     return {
       background: stringToColor(trimmed),
       foreground: stringToColor(trimmed, 20),
+      tint: stringToColor(trimmed, 50),
     };
   }, [trimmed]);
 

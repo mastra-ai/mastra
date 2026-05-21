@@ -17,7 +17,14 @@ interface HarnessProps {
 const Consumer = ({ observed }: { observed: AgentColors[] }) => {
   const color = useAgentColor();
   observed.push(color);
-  return <div data-testid="consumer" data-bg={color?.background ?? ''} data-fg={color?.foreground ?? ''} />;
+  return (
+    <div
+      data-testid="consumer"
+      data-bg={color?.background ?? ''}
+      data-fg={color?.foreground ?? ''}
+      data-tint={color?.tint ?? ''}
+    />
+  );
 };
 
 const Harness = ({ initialName, observed }: HarnessProps) => {
@@ -69,15 +76,17 @@ describe('AgentColorProvider', () => {
     expect(getByTestId('consumer').getAttribute('data-bg')).toBe('');
   });
 
-  it('derives an hsl background and a darker hsl foreground from the trimmed name', () => {
+  it('derives an hsl background, a darker hsl foreground, and a mid-lightness tint from the trimmed name', () => {
     const observed: AgentColors[] = [];
     const { getByTestId } = render(<Harness initialName="  Support agent  " observed={observed} />);
     const consumer = getByTestId('consumer');
     expect(consumer.getAttribute('data-bg')).toBe(stringToColor('Support agent'));
     expect(consumer.getAttribute('data-fg')).toBe(stringToColor('Support agent', 20));
-    // Background uses lightness 90%, foreground uses lightness 20%.
+    expect(consumer.getAttribute('data-tint')).toBe(stringToColor('Support agent', 50));
+    // Background uses lightness 90%, foreground uses lightness 20%, tint uses lightness 50%.
     expect(consumer.getAttribute('data-bg')).toMatch(/hsl\(-?\d+, 100%, 90%\)/);
     expect(consumer.getAttribute('data-fg')).toMatch(/hsl\(-?\d+, 100%, 20%\)/);
+    expect(consumer.getAttribute('data-tint')).toMatch(/hsl\(-?\d+, 100%, 50%\)/);
   });
 
   it('updates the consumer when the form name changes', () => {

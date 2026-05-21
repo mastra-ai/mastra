@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
+import { useAgentPrimitives } from './agent-primitives-context';
 import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 
 export type WizardStep = 'initial' | 'end' | 'tools' | 'model' | 'instructions' | 'browser' | 'integrations' | 'skills';
@@ -28,10 +29,16 @@ const STEP_ORDER: WizardStep[] = [
 interface BuildStepsInput {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   hasConfiguredIntegration: boolean;
+  hasSkills: boolean;
   includeInitial: boolean;
 }
 
-const buildWizardSteps = ({ features, hasConfiguredIntegration, includeInitial }: BuildStepsInput): WizardStep[] => {
+const buildWizardSteps = ({
+  features,
+  hasConfiguredIntegration,
+  hasSkills,
+  includeInitial,
+}: BuildStepsInput): WizardStep[] => {
   const result: WizardStep[] = [];
   for (const step of STEP_ORDER) {
     switch (step) {
@@ -48,7 +55,10 @@ const buildWizardSteps = ({ features, hasConfiguredIntegration, includeInitial }
         result.push(step);
         break;
       case 'skills':
-        if (features.skills) result.push(step);
+        // Mirrors `skillsTabEnabled` in `agent-profile-tabs.tsx`: only surface
+        // the step when the feature is on *and* there is at least one skill
+        // for the user to pick from.
+        if (features.skills && hasSkills) result.push(step);
         break;
       case 'browser':
         if (features.browser) result.push(step);
@@ -89,17 +99,20 @@ interface WizardProviderProps {
  */
 export const WizardProvider = ({ initialStep = 'end', children }: WizardProviderProps) => {
   const features = useBuilderAgentFeatures();
+  const { availableSkills } = useAgentPrimitives();
   const platformsQuery = useChannelPlatforms();
   const hasConfiguredIntegration = (platformsQuery.data ?? []).some(p => p.isConfigured);
+  const hasSkills = availableSkills.length > 0;
 
   const steps = useMemo(
     () =>
       buildWizardSteps({
         features,
         hasConfiguredIntegration,
+        hasSkills,
         includeInitial: initialStep === 'initial',
       }),
-    [features, hasConfiguredIntegration, initialStep],
+    [features, hasConfiguredIntegration, hasSkills, initialStep],
   );
 
   const [step, setStep] = useState<WizardStep>(() => {
