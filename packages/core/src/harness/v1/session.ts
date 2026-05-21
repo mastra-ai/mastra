@@ -8,9 +8,11 @@ import { RequestContext } from '../../request-context';
 import type {
   HarnessStorage,
   OperationAdmissionTombstone,
+  PermissionRules,
   PersistedAttachment,
   QueueAdmissionReceipt,
   QueuedItem,
+  SessionGrants,
   SessionRecord,
 } from '../../storage/domains/harness';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
@@ -27,7 +29,7 @@ import {
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe, EmitInput } from './events';
 import type { Harness } from './harness';
-import type { HarnessMessage, HarnessMode } from './shared';
+import type { HarnessMessage, HarnessMode, ToolCategory } from './shared';
 import type {
   AgentResult,
   AgentStream,
@@ -38,6 +40,7 @@ import type {
   MessageOptionsStream,
   MessageOptionsStructured,
   ModelAuthStatus,
+  PermissionPolicy,
   QueueAdmissionResult,
   QueueOptions,
   SessionInjectSystemReminderOptions,
@@ -75,6 +78,8 @@ type QueueAdmissionInternalResult = QueueAdmissionResult & {
 
 const QUEUE_DUPLICATE_WAIT_TIMEOUT_MS = 30_000;
 const QUEUE_DUPLICATE_WAIT_INTERVAL_MS = 100;
+const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
+const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'];
 
 export class Session {
   private readonly harness: Harness;
@@ -198,6 +203,20 @@ export class Session {
     switch: (opts: { model: string }): Promise<void> => this.modelsSwitch(opts),
     setSubagent: (opts: { agentType: string; model: string }): Promise<void> => this.modelsSetSubagent(opts),
     getSubagent: (opts: { agentType: string }): string | null => this.modelsGetSubagent(opts),
+  });
+
+  readonly permissions = Object.freeze({
+    grantCategory: (opts: { category: ToolCategory }): Promise<void> => this.permissionsGrantCategory(opts),
+    grantTool: (opts: { toolName: string }): Promise<void> => this.permissionsGrantTool(opts),
+    revokeCategory: (opts: { category: ToolCategory }): Promise<void> => this.permissionsRevokeCategory(opts),
+    revokeTool: (opts: { toolName: string }): Promise<void> => this.permissionsRevokeTool(opts),
+    getGrants: (): Readonly<SessionGrants> => this.permissionsGetGrants(),
+    getRules: (): Readonly<PermissionRules> => this.permissionsGetRules(),
+    setPolicy: (
+      opts:
+        | { category: ToolCategory; toolName?: never; policy: PermissionPolicy }
+        | { toolName: string; category?: never; policy: PermissionPolicy },
+    ): Promise<void> => this.permissionsSetPolicy(opts),
   });
 
   async getState<TState = unknown>(): Promise<TState> {
@@ -634,6 +653,125 @@ export class Session {
     this.assertLive('models.getSubagent()');
     assertAgentType('models.getSubagent', opts.agentType);
     return this.record.subagentModelOverrides?.[opts.agentType] ?? null;
+  }
+
+  private async permissionsGrantCategory(opts: { category: ToolCategory }): Promise<void> {
+    this.assertLive('permissions.grantCategory()');
+    assertToolCategory('permissions.grantCategory', opts.category);
+    if (this.record.sessionGrants.categories.includes(opts.category)) return;
+    await this.flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        categories: [...prev.sessionGrants.categories, opts.category],
+      },
+    }));
+    this.emitter.emit({ type: 'permission_granted', category: opts.category });
+  }
+
+  private async permissionsGrantTool(opts: { toolName: string }): Promise<void> {
+    this.assertLive('permissions.grantTool()');
+    assertToolName('permissions.grantTool', opts.toolName);
+    if (this.record.sessionGrants.tools.includes(opts.toolName)) return;
+    await this.flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        tools: [...prev.sessionGrants.tools, opts.toolName],
+      },
+    }));
+    this.emitter.emit({ type: 'permission_granted', toolName: opts.toolName });
+  }
+
+  private async permissionsRevokeCategory(opts: { category: ToolCategory }): Promise<void> {
+    this.assertLive('permissions.revokeCategory()');
+    assertToolCategory('permissions.revokeCategory', opts.category);
+    if (!this.record.sessionGrants.categories.includes(opts.category)) return;
+    await this.flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        categories: prev.sessionGrants.categories.filter(category => category !== opts.category),
+      },
+    }));
+    this.emitter.emit({ type: 'permission_revoked', category: opts.category });
+  }
+
+  private async permissionsRevokeTool(opts: { toolName: string }): Promise<void> {
+    this.assertLive('permissions.revokeTool()');
+    assertToolName('permissions.revokeTool', opts.toolName);
+    if (!this.record.sessionGrants.tools.includes(opts.toolName)) return;
+    await this.flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        tools: prev.sessionGrants.tools.filter(toolName => toolName !== opts.toolName),
+      },
+    }));
+    this.emitter.emit({ type: 'permission_revoked', toolName: opts.toolName });
+  }
+
+  private permissionsGetGrants(): Readonly<SessionGrants> {
+    this.assertLive('permissions.getGrants()');
+    return Object.freeze({
+      categories: [...this.record.sessionGrants.categories],
+      tools: [...this.record.sessionGrants.tools],
+    });
+  }
+
+  private permissionsGetRules(): Readonly<PermissionRules> {
+    this.assertLive('permissions.getRules()');
+    return Object.freeze({
+      categories: { ...this.record.permissionRules.categories },
+      tools: { ...this.record.permissionRules.tools },
+    });
+  }
+
+  private async permissionsSetPolicy(
+    opts:
+      | { category: ToolCategory; toolName?: never; policy: PermissionPolicy }
+      | { toolName: string; category?: never; policy: PermissionPolicy },
+  ): Promise<void> {
+    this.assertLive('permissions.setPolicy()');
+    if ((opts.category === undefined) === (opts.toolName === undefined)) {
+      throw new HarnessValidationError('permissions.setPolicy', 'must set exactly one of "category" or "toolName"');
+    }
+    assertPolicy('permissions.setPolicy', opts.policy);
+    if (opts.category !== undefined) {
+      assertToolCategory('permissions.setPolicy', opts.category);
+      const oldPolicy = this.record.permissionRules.categories[opts.category] ?? null;
+      if (oldPolicy === opts.policy) return;
+      await this.flushUpdate(prev => ({
+        ...prev,
+        permissionRules: {
+          ...prev.permissionRules,
+          categories: { ...prev.permissionRules.categories, [opts.category!]: opts.policy },
+        },
+      }));
+      this.emitter.emit({
+        type: 'permission_policy_changed',
+        category: opts.category,
+        oldPolicy,
+        newPolicy: opts.policy,
+      });
+      return;
+    }
+    assertToolName('permissions.setPolicy', opts.toolName);
+    const oldPolicy = this.record.permissionRules.tools[opts.toolName] ?? null;
+    if (oldPolicy === opts.policy) return;
+    await this.flushUpdate(prev => ({
+      ...prev,
+      permissionRules: {
+        ...prev.permissionRules,
+        tools: { ...prev.permissionRules.tools, [opts.toolName!]: opts.policy },
+      },
+    }));
+    this.emitter.emit({
+      type: 'permission_policy_changed',
+      toolName: opts.toolName,
+      oldPolicy,
+      newPolicy: opts.policy,
+    });
   }
 
   private flushUpdate(update: (prev: SessionRecord) => SessionRecord): Promise<void> {
@@ -1262,6 +1400,24 @@ export class Session {
 function assertAgentType(method: string, value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new HarnessValidationError(method, 'agentType must be a non-empty string');
+  }
+}
+
+function assertToolCategory(method: string, value: unknown): asserts value is ToolCategory {
+  if (typeof value !== 'string' || !TOOL_CATEGORIES.includes(value as ToolCategory)) {
+    throw new HarnessValidationError(method, `unknown ToolCategory ${JSON.stringify(value)}`);
+  }
+}
+
+function assertToolName(method: string, value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError(method, 'toolName must be a non-empty string');
+  }
+}
+
+function assertPolicy(method: string, value: unknown): asserts value is PermissionPolicy {
+  if (typeof value !== 'string' || !PERMISSION_POLICIES.includes(value as PermissionPolicy)) {
+    throw new HarnessValidationError(method, `policy must be one of ${PERMISSION_POLICIES.join(' | ')}`);
   }
 }
 
