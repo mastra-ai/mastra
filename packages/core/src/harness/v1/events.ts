@@ -1,12 +1,52 @@
+/**
+ * Harness v1 — event surface (§10).
+ *
+ * `HarnessEvent` is a discriminated union of every event the harness can
+ * emit. Every event flows through `EventEmitter.emit()`; subscribers see
+ * a fully-stamped event with `id`, `timestamp`, and (where relevant)
+ * `sessionId`.
+ *
+ * IDs are scoped to an emitter: `harness-v1:<epoch>:<seq>`. The epoch is regenerated
+ * whenever the emitter is constructed (i.e. process start, eviction +
+ * rehydration), so SSE clients can detect a regenerated emitter and reset
+ * their replay cursor (§10.5).
+ *
+ * Subscribers see only events emitted after `subscribe()` returns. Remote
+ * callers that need history replay query the durable session event ledger.
+ */
+
 import { randomUUID } from 'node:crypto';
 
-import type { TaskItem } from '../tools';
+import type {
+  GoalJudgeDecision,
+  GoalState,
+  JsonValue,
+  PendingResume,
+  SessionRecord,
+} from '../../storage/domains/harness';
+import type { TaskItem } from '../../tools/builtin/shared';
+
 import { HarnessEventSerializationError, HarnessValidationError } from './errors';
 import type { EventSerializationReason } from './errors';
-import type { ToolCategory } from './shared';
-import type { GoalJudgeDecision, GoalState, PendingResume, PermissionPolicy, SessionRecord } from './types';
+import type { SessionLifecycleState } from './session';
+import type { PermissionPolicy, ToolCategory } from './types';
 
+// ---------------------------------------------------------------------------
+// Event base.
+// ---------------------------------------------------------------------------
+
+/**
+ * Common fields stamped on every event. `sessionId` is set when the event
+ * originated on a Session emitter; harness-level events (registry, lifecycle
+ * across all sessions, intervals) leave it unset.
+ *
+ * `signalId` correlates an event back to the `message()` call that produced
+ * it. `queuedItemId` correlates events back to a `queue()` item. Subagent
+ * events also carry `subagentSessionId` so a parent subscriber can route by
+ * origin (§10.6).
+ */
 export interface HarnessEventBase {
+  /** Monotonic-within-emitter id formatted as `harness-v1:<epoch>:<seq>`. */
   id: string;
   timestamp: number;
   sessionId?: string;
@@ -15,6 +55,10 @@ export interface HarnessEventBase {
   signalId?: string;
   queuedItemId?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Lifecycle / state events (§10.2).
+// ---------------------------------------------------------------------------
 
 export interface SessionCreatedEvent extends HarnessEventBase {
   type: 'session_created';
@@ -25,6 +69,13 @@ export interface SessionCreatedEvent extends HarnessEventBase {
   modelId: string;
 }
 
+export interface SessionClosingEvent extends HarnessEventBase {
+  type: 'session_closing';
+  reason: 'requested' | 'shutdown';
+  closingAt: number;
+  closeDeadlineAt: number;
+}
+
 export interface SessionClosedEvent extends HarnessEventBase {
   type: 'session_closed';
   reason: 'requested' | 'shutdown';
@@ -32,7 +83,7 @@ export interface SessionClosedEvent extends HarnessEventBase {
 
 export interface SessionEvictedEvent extends HarnessEventBase {
   type: 'session_evicted';
-  reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown' | 'lease_lost';
+  reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown';
 }
 
 export interface ModeChangedEvent extends HarnessEventBase {
@@ -59,6 +110,15 @@ export interface StateChangedEvent extends HarnessEventBase {
   changedKeys: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Permission events (§4.2e).
+//
+// Emitted whenever the session's permission rules or session-scoped grants
+// change. Exactly one of `category` / `toolName` is set on each event so
+// subscribers can route to per-category vs per-tool views without
+// inspecting payload shape.
+// ---------------------------------------------------------------------------
+
 export interface PermissionGrantedEvent extends HarnessEventBase {
   type: 'permission_granted';
   category?: ToolCategory;
@@ -75,14 +135,27 @@ export interface PermissionPolicyChangedEvent extends HarnessEventBase {
   type: 'permission_policy_changed';
   category?: ToolCategory;
   toolName?: string;
-  oldPolicy: PermissionPolicy | null;
+  oldPolicy: PermissionPolicy | undefined;
   newPolicy: PermissionPolicy;
 }
+
+// ---------------------------------------------------------------------------
+// Turn events (§10.2).
+// ---------------------------------------------------------------------------
 
 export interface AgentStartEvent extends HarnessEventBase {
   type: 'agent_start';
 }
 
+/**
+ * Assistant message lifecycle (§10.2).
+ *
+ * Each assistant message produced inside a turn gets exactly one
+ * `message_start`, zero or more `message_update` (text deltas), and one
+ * `message_end`. `messageId` is stable across the trio and matches the
+ * ai-sdk text-stream id, so a UI can address an in-flight message slot
+ * directly.
+ */
 export interface MessageStartEvent extends HarnessEventBase {
   type: 'message_start';
   messageId: string;
@@ -99,6 +172,13 @@ export interface MessageEndEvent extends HarnessEventBase {
   messageId: string;
 }
 
+/**
+ * Tool-input streaming (§10.2). Models that build arguments incrementally
+ * surface a `tool_input_start` → N × `tool_input_delta` → `tool_input_end`
+ * sequence before the actual `tool_start`. Models that emit a complete
+ * `tool-call` chunk in one shot skip the triplet entirely; clients must
+ * tolerate either shape.
+ */
 export interface ToolInputStartEvent extends HarnessEventBase {
   type: 'tool_input_start';
   toolCallId: string;
@@ -124,12 +204,32 @@ export interface ToolStartEvent extends HarnessEventBase {
   args: unknown;
 }
 
+/**
+ * Tool progress (§10.2). Long-running tools (shell, downloads, codegen)
+ * publish incremental `partialResult`s between `tool_start` and `tool_end`.
+ *
+ * Source of truth is the `data-tool-update` chunk that tools write via
+ * `ctx.writer?.custom({ type: 'data-tool-update', data: { toolCallId, partialResult } })` —
+ * the same call works outside a Harness, where consumers read the chunk
+ * directly from `agent.stream().fullStream`. Inside a Harness,
+ * `_drainStreamToEvents` recognizes the whitelisted `data-tool-update`
+ * chunk type and bridges it into this typed event so subscribers can
+ * switch on `event.type === 'tool_update'`.
+ */
 export interface ToolUpdateEvent extends HarnessEventBase {
   type: 'tool_update';
   toolCallId: string;
   partialResult: unknown;
 }
 
+/**
+ * Streaming shell output (§10.2). Tools that wrap a child process publish
+ * stdout/stderr chunks via
+ * `ctx.writer?.custom({ type: 'data-shell-output', data: { toolCallId, output, stream } })`.
+ * Inside a Harness, `_drainStreamToEvents` bridges the whitelisted
+ * `data-shell-output` chunk into this typed event. Outside a Harness, the
+ * chunk surfaces directly on `agent.stream().fullStream`.
+ */
 export interface ShellOutputEvent extends HarnessEventBase {
   type: 'shell_output';
   toolCallId: string;
@@ -137,6 +237,21 @@ export interface ShellOutputEvent extends HarnessEventBase {
   stream: 'stdout' | 'stderr';
 }
 
+/**
+ * Task list update (§10.2). Surfaces a new task list to subscribers
+ * (TUI progress widget, sidebar, observers).
+ *
+ * Source of truth is the `data-task-updated` chunk that tools write via
+ * `ctx.writer?.custom({ type: 'data-task-updated', data: { tasks } })` —
+ * the same call works outside a Harness, where consumers read the chunk
+ * directly from `agent.stream().fullStream`. Inside a Harness,
+ * `_drainStreamToEvents` recognizes the whitelisted `data-task-updated`
+ * chunk type and bridges it into this typed event so subscribers can
+ * switch on `event.type === 'task_updated'`.
+ *
+ * The harness owns this event type — tools must not synthesize it through
+ * `ctx.emitEvent`. Use `writer.custom` instead.
+ */
 export interface TaskUpdatedEvent extends HarnessEventBase {
   type: 'task_updated';
   tasks: TaskItem[];
@@ -154,6 +269,12 @@ export interface AgentEndEvent extends HarnessEventBase {
   reason: 'complete' | 'aborted' | 'error' | 'suspended';
 }
 
+// ---------------------------------------------------------------------------
+// Suspension events (§10.2). Emitted after the durable-parking barrier so
+// any subscriber observing the event can reconstruct the pending state from
+// storage (§5.4).
+// ---------------------------------------------------------------------------
+
 export interface SuspensionRequiredEvent extends HarnessEventBase {
   type: 'suspension_required';
   kind: PendingResume['kind'];
@@ -167,6 +288,22 @@ export interface SuspensionResolvedEvent extends HarnessEventBase {
   toolCallId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Queue events (§10.2). The queue's lifecycle is: `enqueued → started →
+// removed`. Outcome is observable through the turn's own `agent_end`
+// (correlated by `queuedItemId`) and the resolved/rejected `queue()` promise,
+// so we don't emit `queue_item_completed` / `queue_item_failed` — that would
+// be a redundant restatement of `agent_end`.
+//
+//   - `queue_item_started`  — drain pulled the head item; turn is about to
+//                             begin under a fresh `runId`.
+//   - `queue_item_replayed` — same, but emitted instead of `started` when
+//                             the source is crash-recovery rather than a
+//                             live `queue()` call. The original caller's
+//                             promise is gone; events flow but no resolver
+//                             settles.
+// ---------------------------------------------------------------------------
+
 export interface QueueItemStartedEvent extends HarnessEventBase {
   type: 'queue_item_started';
   queuedItemId: string;
@@ -176,6 +313,28 @@ export interface QueueItemReplayedEvent extends HarnessEventBase {
   type: 'queue_item_replayed';
   queuedItemId: string;
 }
+
+// ---------------------------------------------------------------------------
+// Custom events (§10.3) — escape hatch for callers that want to attach their
+// own typed events to the same subscription channel. Type must be dotted
+// and not start with the reserved harness prefix; payload must be JSON-
+// serializable.
+// ---------------------------------------------------------------------------
+
+export interface CustomEvent extends HarnessEventBase {
+  type: `${string}.${string}`;
+  payload?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Thread lifecycle events (§10.2 — sidebar surface).
+//
+// Threads are the durable artifact (message log + title), distinct from
+// the runtime Session. These events fire on the harness emitter so a
+// sidebar can be reactive without polling. `thread_deleted` fires AFTER
+// any cascade-close of the active session, so subscribers see the
+// session_closed event first.
+// ---------------------------------------------------------------------------
 
 export interface ThreadCreatedEvent extends HarnessEventBase {
   type: 'thread_created';
@@ -196,6 +355,7 @@ export interface ThreadDeletedEvent extends HarnessEventBase {
   type: 'thread_deleted';
   threadId: string;
   resourceId: string;
+  /** True when a live session was cascaded-closed as part of the delete. */
   cascadedSessionClose: boolean;
 }
 
@@ -207,13 +367,38 @@ export interface ThreadClonedEvent extends HarnessEventBase {
   title?: string;
 }
 
+/**
+ * Emitted after `harness.threads.setSettings()` commits a patch to a thread's
+ * metadata. `patch` includes only the keys that actually changed (no-op
+ * writes do not emit). `removedKeys` lists keys that were present before and
+ * absent after — drives reactive UI invalidation without subscribers having
+ * to diff metadata themselves.
+ */
 export interface ThreadSettingsChangedEvent extends HarnessEventBase {
   type: 'thread_settings_changed';
   threadId: string;
   resourceId: string;
+  /** Keys whose values changed (does not include removed keys). */
   patch: Record<string, unknown>;
+  /** Keys that were deleted by this patch (had `value: undefined`). */
   removedKeys: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Subagent events (§10.2 / §10.6 — parent-session attribution).
+//
+// Emitted on the *parent* session's subscriber when a subagent session
+// makes progress. `toolCallId` is the parent's `spawn_subagent` tool-call
+// handle (stable for the subagent's lifetime). `subagentSessionId` is the
+// child session id, addressable for response routing. `agentType` is the
+// child's registered subagent type from `HarnessConfig.subagents.types`.
+// `depth` is the child's depth in the subagent tree (`>= 1` for any
+// subagent event; parent session itself is depth 0).
+//
+// `parentId` is the parent's session id, repeated on every subagent event
+// to make routing trivial in flat consumers that see events from many
+// sessions.
+// ---------------------------------------------------------------------------
 
 export interface SubagentStartEvent extends HarnessEventBase {
   type: 'subagent_start';
@@ -272,6 +457,15 @@ export interface SubagentEndEvent extends HarnessEventBase {
   depth: number;
 }
 
+// ---------------------------------------------------------------------------
+// Goal events (§4.7 / §10.2).
+//
+// Goals are a standing objective attached to a session that survives across
+// turns. While a goal is `active`, the harness invokes a separate judge
+// model after every assistant turn and dispatches its verdict
+// (`done` / `continue` / `waiting`). See §4.7 for the full lifecycle.
+// ---------------------------------------------------------------------------
+
 export interface GoalSetEvent extends HarnessEventBase {
   type: 'goal_set';
   goal: GoalState;
@@ -308,6 +502,16 @@ export interface GoalClearedEvent extends HarnessEventBase {
   goalId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Workspace events (§2.7 / §10.2).
+//
+// Emitted when a workspace transitions through lifecycle states (initial
+// resolve, ready, destroying, destroyed) and when the provider's
+// create/resume hook throws. `sessionId` and `resourceId` are populated
+// for `per-session` / `per-resource` ownership; `shared` workspaces emit
+// at the harness level with both fields absent.
+// ---------------------------------------------------------------------------
+
 export interface WorkspaceStatusChangedEvent extends HarnessEventBase {
   type: 'workspace_status_changed';
   sessionId?: string;
@@ -324,13 +528,9 @@ export interface WorkspaceErrorEvent extends HarnessEventBase {
   error: { name: string; message: string };
 }
 
-export interface CustomEvent extends HarnessEventBase {
-  type: `${string}.${string}`;
-  payload?: unknown;
-}
-
 export type HarnessEvent =
   | SessionCreatedEvent
+  | SessionClosingEvent
   | SessionClosedEvent
   | SessionEvictedEvent
   | ModeChangedEvent
@@ -380,22 +580,121 @@ export type HarnessEvent =
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 export type HarnessEventUnsubscribe = () => void;
 
+export const HARNESS_EVENT_ID_PREFIX = 'harness-v1';
+
+export interface ParsedHarnessEventId {
+  epoch: string;
+  sequence: number;
+}
+
+export function formatHarnessEventId(epoch: string, sequence: number): string {
+  if (epoch.length === 0 || epoch.includes(':')) {
+    throw new HarnessValidationError('eventId.epoch', 'epoch must be non-empty and must not contain ":"');
+  }
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw new HarnessValidationError('eventId.sequence', 'sequence must be a non-negative safe integer');
+  }
+  return `${HARNESS_EVENT_ID_PREFIX}:${epoch}:${sequence}`;
+}
+
+export function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
+  const parts = eventId.split(':');
+  if (parts.length !== 3 || parts[0] !== HARNESS_EVENT_ID_PREFIX || parts[1] === '' || parts[2] === '') {
+    throw new HarnessValidationError('lastEventId', 'expected event id grammar harness-v1:<epoch>:<seq>');
+  }
+  const sequenceText = parts[2]!;
+  if (!/^(0|[1-9][0-9]*)$/.test(sequenceText)) {
+    throw new HarnessValidationError('lastEventId', 'event id sequence must be an unsigned decimal integer');
+  }
+  const sequence = Number(sequenceText);
+  if (!Number.isSafeInteger(sequence)) {
+    throw new HarnessValidationError('lastEventId', 'event id sequence must be within JavaScript safe integer range');
+  }
+  return { epoch: parts[1]!, sequence };
+}
+
+export function snapshotHarnessEventForJson(value: unknown, path = 'event'): JsonValue {
+  try {
+    const encoded = JSON.stringify(value, harnessEventJsonReplacer);
+    if (encoded === undefined) {
+      throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+    }
+    return JSON.parse(encoded) as JsonValue;
+  } catch (err) {
+    if (err instanceof HarnessValidationError) throw err;
+    throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  }
+}
+
+export function projectHarnessPublicError(err: unknown): { code: string; message: string } {
+  if (err instanceof Error) {
+    return { code: (err as { code?: string }).code ?? err.name ?? 'harness.message_failed', message: err.message };
+  }
+  return { code: 'harness.message_failed', message: String(err) };
+}
+
+function harnessEventJsonReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      ...projectHarnessPublicError(value),
+    };
+  }
+  return value;
+}
+
+// ---------------------------------------------------------------------------
+// Emitter.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape of an event before `emit()` stamps the framework fields. Callers
+ * provide the type-discriminated payload; the emitter fills in `id`,
+ * `timestamp`, `sessionId` (when configured), and (optionally)
+ * `subagentSessionId` / `runId` / `signalId` / `queuedItemId`.
+ *
+ * Distributes Omit over the union so the discriminator is preserved.
+ */
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
 
 export type EmitInput = DistributiveOmit<HarnessEvent, 'id' | 'timestamp' | 'sessionId'>;
 
+/**
+ * Per-emitter scope applied to every event the emitter publishes. Used so
+ * the Session emitter automatically stamps `sessionId`; harness-level
+ * emitters leave it unset.
+ */
 export interface EmitterScope {
   sessionId?: string;
 }
 
+/**
+ * Tiny pub/sub primitive used by `Session` and `Harness`. Listeners are
+ * dispatched in registration order. A throwing or rejecting listener is
+ * isolated (logged to console) so a buggy subscriber cannot disrupt the
+ * producer or other listeners.
+ *
+ * Event IDs are formatted `harness-v1:<epoch>:<seq>`; the epoch is a
+ * per-emitter UUID regenerated on every construction. Clients that have
+ * buffered an `id` from a previous epoch and rejoin can detect mismatch and
+ * reset.
+ */
 export class EventEmitter {
   private readonly listeners: HarnessEventListener[] = [];
-  private readonly epoch: string = randomUUID();
-  private seq = 0;
+  private readonly epoch: string;
+  private seq: number;
   private readonly scope: EmitterScope;
+  private readonly onEvent?: HarnessEventListener;
 
-  constructor(scope: EmitterScope = {}) {
+  constructor(
+    scope: EmitterScope = {},
+    opts: { onEvent?: HarnessEventListener; epoch?: string; nextSequence?: number } = {},
+  ) {
     this.scope = scope;
+    this.onEvent = opts.onEvent;
+    this.epoch = opts.epoch ?? randomUUID();
+    this.seq = opts.nextSequence ?? 0;
+    formatHarnessEventId(this.epoch, this.seq);
   }
 
   subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
@@ -410,7 +709,7 @@ export class EventEmitter {
     const sessionId = overrides?.sessionId ?? this.scope.sessionId;
     const stamped = {
       ...event,
-      id: `${this.epoch}-${this.seq++}`,
+      id: formatHarnessEventId(this.epoch, this.seq++),
       timestamp: Date.now(),
       ...(sessionId !== undefined && { sessionId }),
     } as HarnessEvent;
@@ -418,19 +717,36 @@ export class EventEmitter {
     return stamped;
   }
 
+  /**
+   * Re-emit an already-stamped event (e.g. when a Harness bridges a Session
+   * event into its own subscriber pool). The original `id` / `timestamp` /
+   * `sessionId` are preserved; the bridging emitter does NOT re-stamp.
+   */
   forward(event: HarnessEvent): void {
     this.dispatch(event);
   }
 
+  /** Number of currently registered listeners — for tests. */
   get listenerCount(): number {
     return this.listeners.length;
   }
 
+  /** Current epoch id — for tests and for diagnostics on rehydrate. */
   get epochId(): string {
     return this.epoch;
   }
 
   private dispatch(event: HarnessEvent): void {
+    if (this.onEvent) {
+      try {
+        const result = this.onEvent(event);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(err => console.error('[harness/v1] event persistence rejected:', err));
+        }
+      } catch (err) {
+        console.error('[harness/v1] event persistence threw:', err);
+      }
+    }
     for (const listener of [...this.listeners]) {
       try {
         const result = listener(event);
@@ -444,29 +760,55 @@ export class EventEmitter {
   }
 }
 
-export function suspensionRequiredFor(pending: PendingResume): Omit<SuspensionRequiredEvent, keyof HarnessEventBase> {
+// ---------------------------------------------------------------------------
+// Helpers consumed by Session/Harness.
+// ---------------------------------------------------------------------------
+
+/**
+ * Map `pendingResume.kind` to the suspension event kind. Emitted by
+ * `Session` after the pending record commits.
+ */
+export function suspensionRequiredFor(pending: PendingResume): SuspensionRequiredEvent {
   return {
     type: 'suspension_required',
+    id: '',
+    timestamp: 0,
     kind: pending.kind,
     toolCallId: pending.toolCallId,
     toolName: pending.toolName,
-  };
+  } as SuspensionRequiredEvent;
 }
 
+/**
+ * Map a `SessionRecord` to the payload of `session_created`. Centralized so
+ * the Session and Harness emit identical fields.
+ */
 export function sessionCreatedPayload(
   record: SessionRecord,
 ): Omit<SessionCreatedEvent, keyof HarnessEventBase | 'type'> {
   return {
     resourceId: record.resourceId,
     threadId: record.threadId,
-    ...(record.parentSessionId !== undefined && { parentSessionId: record.parentSessionId }),
+    parentSessionId: record.parentSessionId,
     modeId: record.modeId,
     modelId: record.modelId,
   };
 }
 
+// ---------------------------------------------------------------------------
+// Reserved-event metadata (§6.2, §10.3).
+//
+// Tools emit data via `ctx.writer?.custom({ type: 'data-*', data })` and
+// the harness whitelists known `data-*` chunk types in `_drainStreamToEvents`
+// to bridge them into typed events. These reserved sets capture the names
+// the harness owns so future custom-event surfaces can validate against
+// them as a single source of truth.
+// ---------------------------------------------------------------------------
+
+/** Harness-owned event types — exhaustive list per spec §6.2 / §10.2. */
 const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_created',
+  'session_closing',
   'session_closed',
   'session_evicted',
   'session_pin_overflow',
@@ -511,6 +853,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'permission_policy_changed',
 ]);
 
+/** Prefixes reserved for built-in event families (subagent_*, goal_*, etc.). */
 const RESERVED_EVENT_PREFIXES: readonly string[] = [
   'subagent_',
   'goal_',
@@ -521,6 +864,11 @@ const RESERVED_EVENT_PREFIXES: readonly string[] = [
   'permission_',
 ];
 
+/**
+ * Throws `HarnessValidationError` if `type` collides with a harness-owned
+ * event type or omits the required dotted prefix. Custom events must follow
+ * `<namespace>.<rest>` per spec §10.3.
+ */
 export function assertCustomEventType(type: string): void {
   if (RESERVED_EVENT_TYPES.has(type)) {
     throw new HarnessValidationError('event.type', `"${type}" is a reserved harness event type`);
@@ -529,7 +877,7 @@ export function assertCustomEventType(type: string): void {
     if (type.startsWith(prefix)) {
       throw new HarnessValidationError(
         'event.type',
-        `"${type}" uses reserved prefix "${prefix}*" - custom events need a different namespace`,
+        `"${type}" uses reserved prefix "${prefix}*" — custom events need a different namespace`,
       );
     }
   }
@@ -541,6 +889,14 @@ export function assertCustomEventType(type: string): void {
   }
 }
 
+/**
+ * Walks an event payload and throws `HarnessEventSerializationError` on the
+ * first non-JSON-serializable value. Catches functions, Symbols, BigInts,
+ * Dates, Map/Set, typed arrays, class instances with a non-plain prototype,
+ * `undefined`, and cyclic refs.
+ *
+ * `sessionId` is threaded through purely for the error payload.
+ */
 export function assertJsonSerializable(eventType: string, sessionId: string | undefined, value: unknown): void {
   const seen = new WeakSet<object>();
   walk(value, 'event');
@@ -566,7 +922,6 @@ export function assertJsonSerializable(eventType: string, sessionId: string | un
       if (seen.has(node)) return fail(path, 'cyclic');
       seen.add(node);
       for (let i = 0; i < node.length; i++) walk(node[i], `${path}[${i}]`);
-      seen.delete(node);
       return;
     }
 
@@ -577,16 +932,20 @@ export function assertJsonSerializable(eventType: string, sessionId: string | un
 
     if (t === 'object') {
       const proto = Object.getPrototypeOf(node);
-      if (proto !== null && proto !== Object.prototype) return fail(path, 'class-instance');
+      if (proto !== null && proto !== Object.prototype) {
+        return fail(path, 'class-instance');
+      }
       if (seen.has(node as object)) return fail(path, 'cyclic');
       seen.add(node as object);
       for (const key of Object.keys(node as object)) {
         walk((node as Record<string, unknown>)[key], `${path}.${key}`);
       }
-      seen.delete(node as object);
       return;
     }
 
     fail(path, 'unknown');
   }
 }
+
+// Re-export so consumers that import HarnessEvent get the lifecycle import for free.
+export type { SessionLifecycleState };

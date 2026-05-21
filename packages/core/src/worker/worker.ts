@@ -8,7 +8,7 @@ import type { MastraCompositeStore } from '../storage';
  */
 export interface WorkerDeps {
   pubsub: PubSub;
-  storage: MastraCompositeStore;
+  storage?: MastraCompositeStore;
   logger: IMastraLogger;
   mastra?: Mastra;
 }
@@ -21,6 +21,7 @@ export interface WorkerDeps {
  * - OrchestrationWorker: processes workflow events
  * - SchedulerWorker: fires cron-based workflow schedules
  * - BackgroundTaskWorker: manages background tool execution
+ * - HarnessWakeupWorker: admits durable Harness wakeups into sessions
  *
  * Workers are registered on a Mastra instance and run inline by default.
  * They can also be launched standalone via the CLI for separate deployment.

@@ -1,10 +1,29 @@
+/**
+ * Harness v1 — workspace registry.
+ *
+ * Internal book-keeping for the three ownership models from §2.7. Owns the
+ * lifecycle (create / resume / destroy), the refcounts for shared workspaces
+ * (`per-resource`, and the `inherit` subagent flow under `per-session`), and
+ * the `pushState` plumbing that persists provider state into the session
+ * record.
+ *
+ * Not exported — `Harness` and `Session` reach in directly. Consumers go
+ * through `harness.getWorkspace()`, `harness.destroyResourceWorkspace()`,
+ * and `session.getWorkspace()`.
+ */
+
 import { RequestContext } from '../../request-context';
 import type { Workspace } from '../../workspace';
-import type { HarnessWorkspaceConfig } from './config';
+
 import { HarnessConfigError, HarnessWorkspaceInUseError, HarnessWorkspaceProvisioningError } from './errors';
 import type { EventEmitter } from './events';
+import type { HarnessWorkspaceConfig } from './types';
 import { nonDurableProvider } from './workspace-provider';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
+
+// ---------------------------------------------------------------------------
+// Internal entry shapes.
+// ---------------------------------------------------------------------------
 
 interface SharedEntry {
   workspace?: Workspace;
@@ -27,6 +46,10 @@ interface PerSessionEntry {
   resourceId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Acquire / release inputs.
+// ---------------------------------------------------------------------------
+
 export interface AcquirePerResourceOpts {
   resourceId: string;
 }
@@ -46,6 +69,10 @@ export interface InheritPerSessionOpts {
   resourceId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Registry.
+// ---------------------------------------------------------------------------
+
 export class WorkspaceRegistry {
   private readonly _config?: HarnessWorkspaceConfig;
   private readonly _emit: EventEmitter;
@@ -60,19 +87,23 @@ export class WorkspaceRegistry {
     this._config = opts.config;
     this._emit = opts.emitter;
 
-    if (!this._config) return;
+    if (!this._config) {
+      return;
+    }
 
     if (this._config.kind === 'shared') {
       this._shared = { initialized: false };
       return;
     }
 
+    // per-resource / per-session: resolve the provider once.
     if (this._config.kind === 'per-resource') {
       const raw = this._config.provider;
       this._resolvedProvider = typeof raw === 'function' ? nonDurableProvider(raw) : raw;
       return;
     }
 
+    // per-session: require full provider with resumable: true.
     const provider = this._config.provider;
     if (typeof (provider as WorkspaceProvider)?.providerId !== 'string') {
       throw new HarnessConfigError(
@@ -95,6 +126,10 @@ export class WorkspaceRegistry {
     this._resolvedProvider = provider;
   }
 
+  // -------------------------------------------------------------------------
+  // Introspection.
+  // -------------------------------------------------------------------------
+
   get kind(): HarnessWorkspaceConfig['kind'] | undefined {
     return this._config?.kind;
   }
@@ -103,43 +138,60 @@ export class WorkspaceRegistry {
     return this._resolvedProvider?.providerId;
   }
 
+  /** `true` when the configured provider declares `resumable: true`. */
   get resumable(): boolean {
     return !!this._resolvedProvider?.resumable;
   }
+
+  // -------------------------------------------------------------------------
+  // Shared.
+  // -------------------------------------------------------------------------
 
   async acquireShared(): Promise<Workspace> {
     if (!this._shared || !this._config || this._config.kind !== 'shared') {
       throw new HarnessConfigError('workspace', 'no shared workspace configured');
     }
-    if (this._shared.workspace) return this._shared.workspace;
-    if (this._shared.resolving) return this._shared.resolving;
+    if (this._shared.workspace) {
+      return this._shared.workspace;
+    }
+    if (this._shared.resolving) {
+      return this._shared.resolving;
+    }
 
     const cfg = this._config;
     const resolve = async (): Promise<Workspace> => {
       const raw = cfg.workspace;
-      let workspace: Workspace;
+      let ws: Workspace;
       if (typeof raw === 'function') {
         const requestContext = new RequestContext();
         this._emitStatus({ status: 'initializing' });
-        workspace = await Promise.resolve(raw({ requestContext }));
+        ws = await Promise.resolve(raw({ requestContext }));
       } else if (raw && typeof raw === 'object') {
-        workspace = raw as Workspace;
+        ws = raw as Workspace;
       } else {
         throw new HarnessConfigError('workspace.workspace', 'unsupported shape (expected Workspace or factory)');
       }
-      if (!this._shared!.initialized) {
-        this._emitStatus({ status: 'initializing' });
-        try {
-          await this._initIfFresh(workspace);
-        } catch (err) {
-          await this._destroyWorkspace(workspace, undefined, undefined, { err });
-          throw err;
+      try {
+        if (!this._shared!.initialized) {
+          this._emitStatus({ status: 'initializing' });
+          await this._initIfFresh(ws);
+          this._shared!.initialized = true;
         }
-        this._shared!.initialized = true;
+        this._shared!.workspace = ws;
+        this._emitStatus({ status: 'ready' });
+        return ws;
+      } catch (err) {
+        this._shared!.workspace = undefined;
+        this._shared!.initialized = false;
+        if (typeof raw === 'function') {
+          try {
+            await ws.destroy();
+          } catch (destroyErr) {
+            this._emitError({ err: destroyErr });
+          }
+        }
+        throw err;
       }
-      this._shared!.workspace = workspace;
-      this._emitStatus({ status: 'ready' });
-      return workspace;
     };
 
     this._shared.resolving = resolve();
@@ -151,22 +203,14 @@ export class WorkspaceRegistry {
   }
 
   async destroyShared(): Promise<void> {
-    if (!this._shared) return;
-    if (this._shared.resolving) {
-      try {
-        await this._shared.resolving;
-      } catch (err) {
-        this._emitError({ err });
-      }
+    if (this._shared?.resolving) {
+      await this._shared.resolving.catch(() => undefined);
     }
-    if (!this._shared.workspace) {
-      this._shared.initialized = false;
-      return;
-    }
-    const workspace = this._shared.workspace;
+    if (!this._shared || !this._shared.workspace) return;
+    const ws = this._shared.workspace;
     this._emitStatus({ status: 'destroying' });
     try {
-      await workspace.destroy();
+      await ws.destroy();
     } catch (err) {
       this._emitError({ err });
     }
@@ -175,6 +219,10 @@ export class WorkspaceRegistry {
     this._emitStatus({ status: 'destroyed' });
   }
 
+  // -------------------------------------------------------------------------
+  // Per-resource.
+  // -------------------------------------------------------------------------
+
   async acquirePerResource(opts: AcquirePerResourceOpts): Promise<Workspace> {
     this._assertKind('per-resource');
     const existing = this._perResource.get(opts.resourceId);
@@ -182,7 +230,6 @@ export class WorkspaceRegistry {
       existing.refCount += 1;
       return existing.workspace;
     }
-
     const resolving = this._perResourceResolving.get(opts.resourceId);
     if (resolving) {
       const entry = await resolving;
@@ -193,29 +240,27 @@ export class WorkspaceRegistry {
     const provider = this._resolvedProvider!;
     const ctx: WorkspaceProviderContext = {
       resourceId: opts.resourceId,
-      pushState: async () => undefined,
+      pushState: async () => {
+        /* per-resource workspaces are not persisted per session */
+      },
     };
 
     const createEntry = async (): Promise<PerResourceEntry> => {
       this._emitStatus({ resourceId: opts.resourceId, providerId: provider.providerId, status: 'initializing' });
-      let workspace: Workspace;
+      let ws: Workspace;
       try {
-        workspace = await provider.create(ctx);
+        ws = await provider.create(ctx);
       } catch (cause) {
         this._emitError({ resourceId: opts.resourceId, providerId: provider.providerId, err: cause });
         throw new HarnessWorkspaceProvisioningError(provider.providerId, cause, undefined, opts.resourceId);
       }
       try {
-        await this._initIfFresh(workspace);
+        await this._initIfFresh(ws);
       } catch (cause) {
-        await this._destroyWorkspace(workspace, provider, ctx, {
-          resourceId: opts.resourceId,
-          providerId: provider.providerId,
-          err: cause,
-        });
+        await this._destroyCreatedWorkspaceBestEffort(provider, ws, ctx, { resourceId: opts.resourceId });
         throw new HarnessWorkspaceProvisioningError(provider.providerId, cause, undefined, opts.resourceId);
       }
-      const entry = { workspace, refCount: 1, provider, ctx };
+      const entry = { workspace: ws, refCount: 1, provider, ctx };
       this._perResource.set(opts.resourceId, entry);
       this._emitStatus({ resourceId: opts.resourceId, providerId: provider.providerId, status: 'ready' });
       return entry;
@@ -264,15 +309,21 @@ export class WorkspaceRegistry {
     this._emitStatus({ resourceId, providerId: entry.provider.providerId, status: 'destroyed' });
   }
 
+  // -------------------------------------------------------------------------
+  // Per-session.
+  // -------------------------------------------------------------------------
+
   async acquirePerSession(opts: AcquirePerSessionOpts): Promise<Workspace> {
     this._assertKind('per-session');
     const existing = this._perSession.get(opts.sessionId);
     if (existing) {
+      existing.refCount += 1;
       return existing.workspace;
     }
     const resolving = this._perSessionResolving.get(opts.sessionId);
     if (resolving) {
       const entry = await resolving;
+      entry.refCount += 1;
       return entry.workspace;
     }
     const provider = this._resolvedProvider!;
@@ -291,12 +342,12 @@ export class WorkspaceRegistry {
     });
 
     const createEntry = async (): Promise<PerSessionEntry> => {
-      let workspace: Workspace;
+      let ws: Workspace;
       try {
         if (opts.storedProviderId === provider.providerId && opts.storedState !== undefined && provider.resume) {
-          workspace = await provider.resume({ ...ctx, state: opts.storedState });
+          ws = await provider.resume({ ...ctx, state: opts.storedState });
         } else {
-          workspace = await provider.create(ctx);
+          ws = await provider.create(ctx);
         }
       } catch (cause) {
         this._emitError({
@@ -308,18 +359,16 @@ export class WorkspaceRegistry {
         throw new HarnessWorkspaceProvisioningError(provider.providerId, cause, opts.sessionId, opts.resourceId);
       }
       try {
-        await this._initIfFresh(workspace);
+        await this._initIfFresh(ws);
       } catch (cause) {
-        await this._destroyWorkspace(workspace, provider, ctx, {
+        await this._destroyCreatedWorkspaceBestEffort(provider, ws, ctx, {
           sessionId: opts.sessionId,
           resourceId: opts.resourceId,
-          providerId: provider.providerId,
-          err: cause,
         });
         throw new HarnessWorkspaceProvisioningError(provider.providerId, cause, opts.sessionId, opts.resourceId);
       }
       const entry = {
-        workspace,
+        workspace: ws,
         provider,
         ctx,
         refCount: 1,
@@ -355,6 +404,8 @@ export class WorkspaceRegistry {
       );
     }
     parent.refCount += 1;
+    // Map child id to the same entry so `releasePerSession(childId)` decrements
+    // the parent's refcount.
     this._perSession.set(opts.childSessionId, parent);
     return parent.workspace;
   }
@@ -365,7 +416,7 @@ export class WorkspaceRegistry {
     this._perSession.delete(opts.sessionId);
     entry.refCount = Math.max(0, entry.refCount - 1);
     if (entry.refCount > 0) return;
-
+    // No more references to this physical workspace — tear down.
     this._emitStatus({
       sessionId: opts.sessionId,
       resourceId: entry.resourceId,
@@ -394,17 +445,20 @@ export class WorkspaceRegistry {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Shutdown.
+  // -------------------------------------------------------------------------
+
   async shutdown(): Promise<void> {
-    const pendingResources = Array.from(this._perResourceResolving.entries());
-    for (const [, pending] of pendingResources) {
+    for (const pending of this._perResourceResolving.values()) {
+      await pending.catch(() => undefined);
+    }
+    for (const pending of this._perSessionResolving.values()) {
       await pending.catch(() => undefined);
     }
 
-    const pendingSessions = Array.from(this._perSessionResolving.entries());
-    for (const [, pending] of pendingSessions) {
-      await pending.catch(() => undefined);
-    }
-
+    // Iterate over unique per-session entries (multiple ids can point to the
+    // same physical entry under `inherit`). De-dup via Set on object identity.
     const seenSessionEntries = new Set<PerSessionEntry>();
     for (const [sessionId, entry] of this._perSession.entries()) {
       if (seenSessionEntries.has(entry)) continue;
@@ -442,6 +496,10 @@ export class WorkspaceRegistry {
     await this.destroyShared();
   }
 
+  // -------------------------------------------------------------------------
+  // Helpers.
+  // -------------------------------------------------------------------------
+
   private _assertKind(expected: HarnessWorkspaceConfig['kind']): void {
     if (this._config?.kind !== expected) {
       throw new HarnessConfigError(
@@ -451,38 +509,33 @@ export class WorkspaceRegistry {
     }
   }
 
-  private async _initIfFresh(workspace: Workspace): Promise<void> {
-    if (workspace.status === 'ready' || workspace.status === 'initializing') return;
+  private async _initIfFresh(ws: Workspace): Promise<void> {
+    // Providers may or may not have called init() themselves. Guard against
+    // double-init by checking the workspace's status — only `not-initialized`
+    // (default) and `error` should trigger a fresh init pass.
+    if (ws.status === 'ready' || ws.status === 'initializing') return;
     try {
-      await workspace.init();
+      await ws.init();
     } catch (err) {
       this._emitError({ err });
       throw err;
     }
   }
 
-  private async _destroyWorkspace(
+  private async _destroyCreatedWorkspaceBestEffort(
+    provider: WorkspaceProvider,
     workspace: Workspace,
-    provider: WorkspaceProvider | undefined,
-    ctx: WorkspaceProviderContext | undefined,
-    opts: { sessionId?: string; resourceId?: string; providerId?: string; err?: unknown } = {},
+    ctx: WorkspaceProviderContext,
+    opts: { sessionId?: string; resourceId?: string },
   ): Promise<void> {
     try {
-      if (provider?.destroy && ctx) {
+      if (provider.destroy) {
         await provider.destroy(workspace, ctx);
       } else {
         await workspace.destroy();
       }
     } catch (err) {
-      this._emitError({
-        sessionId: opts.sessionId,
-        resourceId: opts.resourceId,
-        providerId: opts.providerId ?? provider?.providerId,
-        err,
-      });
-    }
-    if (opts.err !== undefined) {
-      this._emitError({ ...opts, err: opts.err });
+      this._emitError({ ...opts, providerId: provider.providerId, err });
     }
   }
 
@@ -504,13 +557,13 @@ export class WorkspaceRegistry {
   }
 
   private _emitError(opts: { sessionId?: string; resourceId?: string; providerId?: string; err: unknown }): void {
-    const err = opts.err instanceof Error ? opts.err : new Error(String(opts.err));
+    const e = opts.err instanceof Error ? opts.err : new Error(String(opts.err));
     this._emit.emit(
       {
         type: 'workspace_error',
         resourceId: opts.resourceId,
         providerId: opts.providerId,
-        error: { name: err.name, message: err.message },
+        error: { name: e.name, message: e.message },
       },
       opts.sessionId !== undefined ? { sessionId: opts.sessionId } : undefined,
     );

@@ -1,8 +1,17 @@
+/**
+ * Harness v1 — Session.models.* namespace (§4.2a).
+ *
+ * Covers the resolved-model accessor, the auth-status delegation through
+ * `harness.models.getAuthStatus`, the subagent-pinning setters, and event
+ * emission on mutation.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
+
 import { HarnessValidationError } from './errors';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
@@ -28,49 +37,62 @@ function setup(opts?: { models?: { id: string; providerId: string }[] }) {
   return { harness, storage };
 }
 
-describe('Session.models accessors', () => {
-  it('returns the current model from the record', async () => {
+describe('Session.models — accessors', () => {
+  it('current() returns the resolved modelId from the record', async () => {
     const { harness } = setup();
     const session = await harness.session({
       resourceId: 'u1',
       threadId: { fresh: true },
       modelId: 'gpt-5',
     });
-
     expect(session.models.current()).toBe('gpt-5');
   });
 
-  it('tracks whether any top-level or subagent model was selected', async () => {
+  it('hasSelected() is false on a fresh session with no modelId or overrides', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     expect(session.models.hasSelected()).toBe(false);
+  });
 
-    await session.models.setSubagent({ agentType: 'researcher', model: 'gpt-5-mini' });
+  it('hasSelected() is true after switch()', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.models.switch({ model: 'gpt-5' });
     expect(session.models.hasSelected()).toBe(true);
   });
 
-  it("returns unknown auth status when no model is selected or the model isn't cataloged", async () => {
-    const { harness } = setup({ models: [{ id: 'authed/model', providerId: 'authed' }] });
-    const empty = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    expect(await empty.models.currentAuthStatus()).toBe('unknown');
+  it('hasSelected() is true after setSubagent() even with no top-level model', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.models.setSubagent({ agentType: 'researcher', model: 'gpt-5-mini' });
+    expect(session.models.hasSelected()).toBe(true);
+  });
+});
 
-    const uncataloged = await harness.session({
-      resourceId: 'u2',
+describe('Session.models.currentAuthStatus', () => {
+  it("returns 'unknown' when no model is selected", async () => {
+    const { harness } = setup({ models: [{ id: 'authed/model', providerId: 'authed' }] });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    expect(await session.models.currentAuthStatus()).toBe('unknown');
+  });
+
+  it("returns 'unknown' when the resolved model isn't in the harness catalog", async () => {
+    const { harness } = setup({ models: [{ id: 'authed/model', providerId: 'authed' }] });
+    const session = await harness.session({
+      resourceId: 'u1',
       threadId: { fresh: true },
       modelId: 'not-in-catalog',
     });
-    expect(await uncataloged.models.currentAuthStatus()).toBe('unknown');
+    expect(await session.models.currentAuthStatus()).toBe('unknown');
   });
 
-  it('delegates currentAuthStatus to the harness catalog', async () => {
+  it('delegates to harness.models.getAuthStatus when the model is in the catalog', async () => {
     const { harness } = setup({
       models: [
         { id: 'authed/model', providerId: 'authed' },
         { id: 'unauthed/model', providerId: 'unauthed' },
       ],
     });
-
     const authed = await harness.session({
       resourceId: 'u1',
       threadId: { fresh: true },
@@ -88,27 +110,20 @@ describe('Session.models accessors', () => {
 });
 
 describe('Session.models.switch', () => {
-  it('persists the new model id and emits model_changed', async () => {
-    const { harness, storage } = setup();
+  it('emits model_changed with the previous model id', async () => {
+    const { harness } = setup();
     const session = await harness.session({
       resourceId: 'u1',
       threadId: { fresh: true },
       modelId: 'old',
     });
     const events: HarnessEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
+    session.subscribe(e => {
+      events.push(e);
     });
-
     await session.models.switch({ model: 'new' });
-
-    expect(session.models.current()).toBe('new');
-    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({ modelId: 'new' });
-    expect(events.find(event => event.type === 'model_changed')).toMatchObject({
-      type: 'model_changed',
-      modelId: 'new',
-      previousModelId: 'old',
-    });
+    const evt = events.find(e => e.type === 'model_changed');
+    expect(evt).toMatchObject({ type: 'model_changed', modelId: 'new', previousModelId: 'old' });
   });
 
   it('is a no-op when switching to the same model id', async () => {
@@ -118,43 +133,37 @@ describe('Session.models.switch', () => {
       threadId: { fresh: true },
       modelId: 'same',
     });
-    const version = session._internalRecordVersion;
+    const v = session._internalRecordVersion;
     const events: HarnessEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
+    session.subscribe(e => {
+      events.push(e);
     });
-
     await session.models.switch({ model: 'same' });
-
-    expect(session._internalRecordVersion).toBe(version);
-    expect(events.some(event => event.type === 'model_changed')).toBe(false);
+    expect(session._internalRecordVersion).toBe(v);
+    expect(events.some(e => e.type === 'model_changed')).toBe(false);
   });
 
   it('rejects empty model strings', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     await expect(session.models.switch({ model: '' })).rejects.toBeInstanceOf(HarnessValidationError);
   });
 });
 
-describe('Session.models subagent overrides', () => {
+describe('Session.models.setSubagent / getSubagent', () => {
   it('persists the override and reads it back', async () => {
     const { harness, storage } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     await session.models.setSubagent({ agentType: 'researcher', model: 'gpt-5-mini' });
-
     expect(session.models.getSubagent({ agentType: 'researcher' })).toBe('gpt-5-mini');
-    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({
-      subagentModelOverrides: { researcher: 'gpt-5-mini' },
-    });
+
+    const stored = await storage.loadSession({ sessionId: session.id });
+    expect(stored?.subagentModelOverrides).toEqual({ researcher: 'gpt-5-mini' });
   });
 
   it('returns null for an unset agentType', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     expect(session.models.getSubagent({ agentType: 'unset' })).toBeNull();
   });
 
@@ -162,14 +171,12 @@ describe('Session.models subagent overrides', () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const events: HarnessEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
+    session.subscribe(e => {
+      events.push(e);
     });
-
     await session.models.setSubagent({ agentType: 'researcher', model: 'v1' });
     await session.models.setSubagent({ agentType: 'researcher', model: 'v2' });
-
-    const overrideEvents = events.filter(event => event.type === 'model_override_set');
+    const overrideEvents = events.filter(e => e.type === 'model_override_set');
     expect(overrideEvents).toHaveLength(2);
     expect(overrideEvents[0]).toMatchObject({ agentType: 'researcher', modelId: 'v1', previousModelId: null });
     expect(overrideEvents[1]).toMatchObject({ agentType: 'researcher', modelId: 'v2', previousModelId: 'v1' });
@@ -179,17 +186,14 @@ describe('Session.models subagent overrides', () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     await session.models.setSubagent({ agentType: 'researcher', model: 'gpt-5' });
-    const version = session._internalRecordVersion;
-
+    const v = session._internalRecordVersion;
     await session.models.setSubagent({ agentType: 'researcher', model: 'gpt-5' });
-
-    expect(session._internalRecordVersion).toBe(version);
+    expect(session._internalRecordVersion).toBe(v);
   });
 
   it('rejects empty agentType or model strings', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     await expect(session.models.setSubagent({ agentType: '', model: 'm' })).rejects.toBeInstanceOf(
       HarnessValidationError,
     );

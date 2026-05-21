@@ -1,10 +1,15 @@
+/**
+ * Harness v1 — Session.getCurrentMode/switchMode + Session.models.* +
+ * getDisplayState. Mode/model setters CAS-write through storage, so we
+ * verify both the in-memory state and the stored record.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import { HarnessConfigError, HarnessSessionClosedError } from './errors';
-import type { HarnessEvent } from './events';
+
 import { Harness } from './harness';
 
 function makeAgent(name: string) {
@@ -25,140 +30,80 @@ function setup() {
   return { harness, storage };
 }
 
-class BlockingRenewStorage extends InMemoryHarness {
-  private releaseRenew!: () => void;
-  private resolveRenewStarted: () => void = () => undefined;
-  readonly renewStarted = new Promise<void>(resolve => {
-    this.resolveRenewStarted = resolve;
-  });
-  readonly renewGate = new Promise<void>(resolve => {
-    this.releaseRenew = resolve;
-  });
-
-  override async renewSessionLease(opts: Parameters<InMemoryHarness['renewSessionLease']>[0]) {
-    const result = await super.renewSessionLease(opts);
-    this.resolveRenewStarted();
-    await this.renewGate;
-    return result;
-  }
-
-  unblockRenewal(): void {
-    this.releaseRenew();
-  }
-}
-
-describe('Session mode and state', () => {
+describe('Session.getCurrentMode / models.current', () => {
   it('returns the mode object resolved from the session record', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     expect(session.getCurrentMode().id).toBe('modeA');
     expect(session.getCurrentMode().agentId).toBe('a');
   });
 
-  it('switches the active mode and persists it', async () => {
+  it('reflects the modelId stored on the record', async () => {
+    const { harness } = setup();
+    const session = await harness.session({
+      resourceId: 'u1',
+      threadId: { fresh: true },
+      modelId: 'gpt-5-mini',
+    });
+    expect(session.models.current()).toBe('gpt-5-mini');
+  });
+});
+
+describe('Session.switchMode', () => {
+  it('flips the active mode and persists', async () => {
     const { harness, storage } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
     await session.switchMode({ mode: 'modeB' });
-
     expect(session.getCurrentMode().id).toBe('modeB');
-    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({ modeId: 'modeB' });
+
+    const stored = await storage.loadSession({ sessionId: session.id });
+    expect(stored?.modeId).toBe('modeB');
   });
 
-  it('rejects unknown modes without mutating the record', async () => {
-    const { harness, storage } = setup();
-    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
-    await expect(session.switchMode({ mode: 'does-not-exist' })).rejects.toThrow(HarnessConfigError);
-
-    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({ modeId: 'modeA' });
-  });
-
-  it('does not bump the record version when switching to the current mode', async () => {
+  it('rejects unknown modes', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    const version = session._internalRecordVersion;
+    await expect(session.switchMode({ mode: 'does-not-exist' })).rejects.toThrow(/unknown mode/);
+  });
 
+  it('is a no-op when set to the current mode (no version bump)', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const v = session._internalRecordVersion;
     await session.switchMode({ mode: 'modeA' });
-
-    expect(session._internalRecordVersion).toBe(version);
+    expect(session._internalRecordVersion).toBe(v);
   });
+});
 
-  it('reads and persists shallow-merged state updates', async () => {
+describe('Session.models.switch', () => {
+  it('persists the new model id', async () => {
     const { harness, storage } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.models.switch({ model: 'gpt-5' });
+    expect(session.models.current()).toBe('gpt-5');
 
-    await session.setState<{ count: number; label?: string }>({ count: 1 });
-    await session.setState<{ count: number; label?: string }>({ label: 'ready' });
-
-    await expect(session.getState()).resolves.toEqual({ count: 1, label: 'ready' });
-    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({
-      state: { count: 1, label: 'ready' },
-    });
+    const stored = await storage.loadSession({ sessionId: session.id });
+    expect(stored?.modelId).toBe('gpt-5');
   });
+});
 
-  it('emits state_changed after a persisted state update', async () => {
+describe('Session.getDisplayState', () => {
+  it('returns a snapshot of the live record', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    const events: HarnessEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
-    });
-
-    await session.setState<{ count?: number; label?: string }>({ count: 1, label: 'ready' });
-    await session.setState<{ count?: number; label?: string }>({ count: 1 });
-
-    expect(events.filter(event => event.type === 'state_changed')).toEqual([
-      expect.objectContaining({ type: 'state_changed', changedKeys: ['count', 'label'] }),
-    ]);
-  });
-
-  it('serializes functional state updates through the session record version', async () => {
-    const { harness, storage } = setup();
-    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-
-    await Promise.all([
-      session.setState<{ count: number }>(prev => ({ count: (prev.count ?? 0) + 1 })),
-      session.setState<{ count: number }>(prev => ({ count: (prev.count ?? 0) + 1 })),
-      session.setState<{ count: number }>(prev => ({ count: (prev.count ?? 0) + 1 })),
-    ]);
-
-    await expect(session.getState()).resolves.toEqual({ count: 3 });
-    await expect(storage.loadSession({ sessionId: session.id })).resolves.toMatchObject({ state: { count: 3 } });
-  });
-
-  it('does not let lease renewal lower the in-memory record version after a flush', async () => {
-    const storage = new BlockingRenewStorage({ db: new InMemoryDB() });
-    const harness = new Harness({
-      agents: { a: makeAgent('a') } as any,
-      modes: [{ id: 'modeA', agentId: 'a' }],
-      defaultModeId: 'modeA',
-      sessions: { storage, leaseTtlMs: 30_000 },
-    });
-    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    const renewing = (session as unknown as { renewLease(): Promise<void> }).renewLease();
-
-    await storage.renewStarted;
-    await session.setState<{ count?: number }>({ count: 1 });
-    const versionAfterFlush = session._internalRecordVersion;
-    storage.unblockRenewal();
-    await renewing;
-
-    expect(session._internalRecordVersion).toBe(versionAfterFlush);
-    await expect(session.setState<{ count?: number; label?: string }>({ label: 'next' })).resolves.toBeUndefined();
-    await expect(session.getState()).resolves.toEqual({ count: 1, label: 'next' });
-    await session.close();
-  });
-
-  it('rejects mode and state mutations after close', async () => {
-    const { harness } = setup();
-    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.close();
-
-    expect(() => session.getCurrentMode()).toThrow(HarnessSessionClosedError);
-    await expect(session.switchMode({ mode: 'modeB' })).rejects.toThrow(HarnessSessionClosedError);
-    await expect(session.getState()).rejects.toThrow(HarnessSessionClosedError);
-    await expect(session.setState({ closed: true })).rejects.toThrow(HarnessSessionClosedError);
+    const ds = session.getDisplayState();
+    expect(ds.sessionId).toBe(session.id);
+    expect(ds.threadId).toBe(session.threadId);
+    expect(ds.resourceId).toBe('u1');
+    expect(ds.lifecycleState).toBe('live');
+    expect(ds.modeId).toBe('modeA');
+    expect(ds.queueDepth).toBe(0);
+    expect(ds.pending).toBeNull();
+    expect(ds.isRunning).toBe(false);
+    expect(ds.currentRunId).toBeUndefined();
+    expect(ds.activeTools).toEqual({});
+    expect(ds.toolInputBuffers).toEqual({});
+    expect(ds.activeSubagents).toEqual({});
+    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
   });
 });

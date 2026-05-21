@@ -1,4 +1,10 @@
-import type { BackgroundTask, TaskFilter, TaskListResult, UpdateBackgroundTask } from '../../../background-tasks/types';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '../../../background-tasks/types';
 import { StorageDomain } from '../base';
 
 /**
@@ -25,6 +31,21 @@ export abstract class BackgroundTasksStorage extends StorageDomain {
    * Only the provided fields are updated; others are left unchanged.
    */
   abstract updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void>;
+
+  /**
+   * Update a task only when its current status still matches the expected state.
+   * Implementations should use the strongest conditional write primitive the
+   * backend supports and return false when the expected status no longer
+   * matches. The default fails loudly so legacy adapters do not silently
+   * acknowledge dispatch work that they could not claim.
+   */
+  async updateTaskIfStatus(
+    _taskId: string,
+    _expectedStatus: BackgroundTaskStatus,
+    _update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    throw new Error('BackgroundTasksStorage.updateTaskIfStatus must be implemented by this storage adapter');
+  }
 
   /** Get a single task by ID. Returns null if not found. */
   abstract getTask(taskId: string): Promise<BackgroundTask | null>;

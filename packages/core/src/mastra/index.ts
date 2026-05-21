@@ -18,6 +18,7 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { Harness as HarnessV1 } from '../harness/v1';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -49,8 +50,8 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
-import type { MastraWorker, WorkerDeps } from '../worker';
+import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker, HarnessWakeupWorker } from '../worker';
+import type { HarnessWakeupWorkerConfig, MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
@@ -58,6 +59,28 @@ import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflo
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
+
+const PENDING_WORKER_START_SHUTDOWN_TIMEOUT_MS = 30_000;
+
+type PendingWorkerStart = {
+  worker: MastraWorker;
+  promise: Promise<void>;
+  phase: 'init' | 'start' | 'settled';
+  token: number;
+  ignoreShutdownError?: boolean;
+};
+
+function hasHarnessSessionStorage(storage: MastraCompositeStore | undefined): boolean {
+  return storage?.stores?.harness !== undefined;
+}
+
+function harnessHasSessionStorage(harness: HarnessV1 | undefined): boolean {
+  try {
+    return harness?._internalGetSessionStorage() !== undefined;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -425,6 +448,13 @@ export interface Config<
   scheduler?: WorkflowSchedulerConfig;
 
   /**
+   * Worker configuration for durable Harness scheduled/proactive wakeups.
+   * The worker claims `HarnessWakeupItem` rows and admits them through the
+   * Harness queue boundary; it is not the workflow cron scheduler.
+   */
+  harnessWakeups?: HarnessWakeupWorkerConfig;
+
+  /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
@@ -464,6 +494,38 @@ export interface Config<
    * ```
    */
   environment?: string;
+
+  /**
+   * Harness v1 instance registered on this Mastra. The harness is bound
+   * to this Mastra during construction so its modes can resolve agents and
+   * its sessions persist via the harness-storage domain.
+   *
+   * Use `harness` for the common single-harness case. It is registered under
+   * the `default` key and can be retrieved with `mastra.getHarness()`.
+   */
+  harness?: HarnessV1;
+
+  /**
+   * Harness v1 instances registered on this Mastra. Each harness is bound
+   * to this Mastra during construction so its modes can resolve agents and
+   * its sessions persist via the harness-storage domain.
+   *
+   * Look up a registered harness with `mastra.getHarness('name')`.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   agents: { code: codeAgent },
+   *   harnesses: {
+   *     code: new Harness({
+   *       modes: [{ id: 'build', agentId: 'code' }],
+   *       defaultModeId: 'build',
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  harnesses?: Record<string, HarnessV1>;
   /**
    * Optional central transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.
@@ -569,9 +631,22 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
+  #harnesses: Record<string, HarnessV1> = {};
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
+  #autoCreateWorkers = true;
+  #workersStarted = false;
+  #workerLifecycleGeneration = 0;
+  #workerShutdownGeneration = 0;
+  #workerStartSequence = 0;
+  #allWorkersStartPromise?: Promise<void>;
+  #workersStopPromise?: Promise<void>;
+  #pendingWorkerStarts = new Set<PendingWorkerStart>();
+  #workerStartPromises = new WeakMap<MastraWorker, Promise<void>>();
+  #latestWorkerStartTokens = new WeakMap<MastraWorker, number>();
+  #latestWorkerStartLifecycleGenerations = new WeakMap<MastraWorker, number>();
+  #harnessWakeupConfig?: HarnessWakeupWorkerConfig;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -903,6 +978,24 @@ export class Mastra<
       TChannels
     >,
   ) {
+    const configuredHarnesses = config?.harnesses ? { ...config.harnesses } : {};
+    if (config?.harness != null) {
+      if (configuredHarnesses.default != null) {
+        const error = new MastraError({
+          id: 'MASTRA_HARNESS_DEFAULT_DUPLICATE',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: 'Cannot register config.harness when config.harnesses.default is also set',
+          details: { status: 400, name: 'default' },
+        });
+        if (config.logger !== false && config.logger != null) {
+          config.logger.trackException(error);
+        }
+        throw error;
+      }
+      configuredHarnesses.default = config.harness;
+    }
+
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
     // can correlate logs to the active span. Must happen before any agent runs.
     initContextStorage();
@@ -946,10 +1039,12 @@ export class Mastra<
     //   - "false": disables all event processing in this instance
     //   - comma-separated names (e.g. "scheduler,orchestration"): only those
     //     workers will be started by `startWorkers()` when called without an
-    //     explicit `name` argument. Construction still creates all workers so
-    //     a later explicit `startWorkers('foo')` still works.
+    //     explicit `name` argument. Construction creates storage-independent
+    //     workers immediately; storage-gated workers can be added when storage
+    //     becomes available.
     const rawWorkersEnv = process.env.MASTRA_WORKERS;
     let workersOption: MastraWorker[] | false | undefined;
+    this.#harnessWakeupConfig = config?.harnessWakeups;
     if (rawWorkersEnv === 'false') {
       workersOption = false;
     } else {
@@ -966,9 +1061,11 @@ export class Mastra<
     }
 
     if (workersOption === false) {
+      this.#autoCreateWorkers = false;
       // Explicitly disabled — no event processing in this instance.
       // PubSub still exists for publishing events.
     } else if (Array.isArray(workersOption)) {
+      this.#autoCreateWorkers = false;
       this.#workers = workersOption;
       for (const w of this.#workers) {
         w.__registerMastra(this);
@@ -993,6 +1090,11 @@ export class Mastra<
       }
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
+      }
+      const hasHarnessWakeupStorage =
+        hasHarnessSessionStorage(config?.storage) || Object.values(configuredHarnesses).some(harnessHasSessionStorage);
+      if (hasHarnessWakeupStorage && Object.keys(configuredHarnesses).length > 0) {
+        defaultWorkers.push(new HarnessWakeupWorker(this.#harnessWakeupConfig));
       }
       this.#workers = defaultWorkers;
       for (const w of this.#workers) {
@@ -1213,6 +1315,17 @@ export class Mastra<
       });
     }
 
+    // Harnesses bind to this Mastra after agents are registered so that
+    // mode->agent validation succeeds. Each harness is single-bound; calling
+    // __registerMastra a second time with a different parent throws.
+    if (Object.keys(configuredHarnesses).length > 0) {
+      for (const [key, harness] of Object.entries(configuredHarnesses)) {
+        if (harness == null) continue;
+        harness.__registerMastra(this, key);
+        this.#harnesses[key] = harness;
+      }
+    }
+
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
@@ -1265,6 +1378,37 @@ export class Mastra<
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
     });
+  }
+
+  #ensureHarnessWakeupWorker(): void {
+    if (!this.#autoCreateWorkers || this.#workers.some(worker => worker.name === 'harnessWakeups')) {
+      return;
+    }
+    if (Object.keys(this.#harnesses).length === 0) {
+      return;
+    }
+    const hasHarnessWakeupStorage =
+      hasHarnessSessionStorage(this.#storage) || Object.values(this.#harnesses).some(harnessHasSessionStorage);
+    if (!hasHarnessWakeupStorage) {
+      return;
+    }
+
+    const worker = new HarnessWakeupWorker(this.#harnessWakeupConfig);
+    worker.__registerMastra(this);
+    this.#workers.push(worker);
+
+    if (this.#workersStarted && (!this.#workerFilter || this.#workerFilter.has(worker.name))) {
+      void this.#trackWorkerStart(worker, {
+        onlyIfWorkersStarted: true,
+        onlyIfLifecycleGeneration: this.#workerLifecycleGeneration,
+        startLifecycleGeneration: this.#workerLifecycleGeneration,
+        stopIfWorkersStopped: true,
+        stopIfLifecycleGenerationChangesFrom: this.#workerLifecycleGeneration,
+        onError: error => {
+          this.#logger?.error?.('Failed to start worker "harnessWakeups"', error);
+        },
+      });
+    }
   }
 
   /**
@@ -2296,6 +2440,49 @@ export class Mastra<
     }
 
     return workflow;
+  }
+
+  /**
+   * Look up a Harness v1 instance registered on this Mastra.
+   *
+   * @param name - The key the harness was registered under in the
+   *   `harnesses` config map. Defaults to `default` for `config.harness`
+   *   single-harness sugar.
+   * @returns The harness instance.
+   * @throws If no harness is registered under the given name.
+   *
+   * @example
+   * ```typescript
+   * const code = mastra.getHarness('code');
+   * const session = await code.session({ threadId, resourceId });
+   * ```
+   */
+  public getHarness(name = 'default'): HarnessV1 {
+    const harness = this.#harnesses[name];
+    if (!harness) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_HARNESS_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Harness with name "${name}" not found`,
+        details: {
+          status: 404,
+          name,
+          harnesses: Object.keys(this.#harnesses).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return harness;
+  }
+
+  /**
+   * Returns every Harness registered on this Mastra, keyed by name.
+   * Mutating the returned record does not affect the registry.
+   */
+  public getHarnesses(): Record<string, HarnessV1> {
+    return { ...this.#harnesses };
   }
 
   __registerInternalWorkflow(workflow: Workflow) {
@@ -3371,6 +3558,7 @@ export class Mastra<
     // would have bailed out early in __init(). Retry it now that storage
     // is available so declarative schedules still get registered + fired.
     this.#ensureScheduler();
+    this.#ensureHarnessWakeupWorker();
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
@@ -3975,13 +4163,31 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
-    const deps: WorkerDeps = {
-      pubsub: this.#pubsub,
-      storage: this.#storage!,
-      logger: this.#logger as unknown as IMastraLogger,
-      mastra: this,
-    };
+    if (this.#workersStopPromise) {
+      await this.#workersStopPromise;
+    }
 
+    if (!name) {
+      if (this.#allWorkersStartPromise) {
+        return this.#allWorkersStartPromise;
+      }
+
+      const start = this.#startWorkers(name);
+      this.#allWorkersStartPromise = start;
+      try {
+        await start;
+      } finally {
+        if (this.#allWorkersStartPromise === start) {
+          this.#allWorkersStartPromise = undefined;
+        }
+      }
+      return;
+    }
+
+    return this.#startWorkers(name);
+  }
+
+  async #startWorkers(name?: string): Promise<void> {
     let targets: MastraWorker[];
     if (name) {
       targets = this.#workers.filter(w => w.name === name);
@@ -3996,87 +4202,549 @@ export class Mastra<
         );
       }
     } else {
-      targets = this.#workers;
+      targets = [...this.#workers];
     }
 
-    for (const worker of targets) {
-      await worker.init(deps);
-      await worker.start();
+    let startupLifecycleGeneration: number | undefined;
+    let startupShutdownGeneration: number | undefined;
+    let workersRunningBeforeStartup: WeakSet<MastraWorker> | undefined;
+    let workersStartingBeforeStartup: WeakSet<MastraWorker> | undefined;
+    let workersStartedBeforeStartup = false;
+    let startupPushSubscription:
+      | {
+          topic: string;
+          cb: EventCallback;
+          subscribed: boolean;
+        }
+      | undefined;
+    const startupUserEventSubscriptions: Array<{
+      topic: string;
+      cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+      subscribed: boolean;
+    }> = [];
+    if (name) {
+      startupShutdownGeneration = this.#workerShutdownGeneration;
+    } else {
+      workersStartedBeforeStartup = this.#workersStarted;
+      workersRunningBeforeStartup = new WeakSet(this.#workers.filter(worker => worker.isRunning));
+      workersStartingBeforeStartup = new WeakSet([...this.#pendingWorkerStarts].map(start => start.worker));
+      this.#workerLifecycleGeneration += 1;
+      startupLifecycleGeneration = this.#workerLifecycleGeneration;
+      this.#workersStarted = true;
     }
 
-    // For push-mode pubsubs (e.g. EventEmitterPubSub) there is no
-    // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
-    // to the pubsub so workflow events still get processed in-process.
-    if (!name) {
-      const modes = this.#pubsub.supportedModes ?? ['pull'];
-      const pushOnly = modes.includes('push') && !modes.includes('pull');
-      if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack) => {
-          void this.handleWorkflowEvent(event)
-            .then(result => {
-              if (result.ok && ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+    let startupComplete = false;
+    try {
+      for (const worker of targets) {
+        await this.#trackWorkerStart(worker, {
+          onlyIfWorkersStarted: !name,
+          onlyIfLifecycleGeneration: name ? undefined : startupLifecycleGeneration,
+          onlyIfShutdownGeneration: name ? startupShutdownGeneration : undefined,
+          startLifecycleGeneration: name ? undefined : startupLifecycleGeneration,
+          stopIfWorkersStopped: !name,
+          stopIfLifecycleGenerationChangesFrom: startupLifecycleGeneration,
+        });
+        if (
+          startupLifecycleGeneration !== undefined &&
+          ((!name && !this.#workersStarted) || this.#workerLifecycleGeneration !== startupLifecycleGeneration)
+        ) {
+          return;
+        }
+        if (startupShutdownGeneration !== undefined && this.#workerShutdownGeneration !== startupShutdownGeneration) {
+          return;
+        }
+      }
+
+      // For push-mode pubsubs (e.g. EventEmitterPubSub) there is no
+      // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
+      // to the pubsub so workflow events still get processed in-process.
+      if (!name) {
+        const modes = this.#pubsub.supportedModes ?? ['pull'];
+        const pushOnly = modes.includes('push') && !modes.includes('pull');
+        if (pushOnly && !this.#pushSubscription) {
+          const cb: EventCallback = (event, ack) => {
+            void this.handleWorkflowEvent(event)
+              .then(result => {
+                if (result.ok && ack) {
+                  return ack().catch(err =>
+                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  );
+                }
+                // Push transports without nack semantics (EventEmitter) treat
+                // a non-ack as a failure signal; we already logged inside handle().
+              })
+              .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+          };
+          startupPushSubscription = { topic: 'workflows', cb, subscribed: false };
+          this.#pushSubscription = startupPushSubscription;
+          await this.#pubsub.subscribe('workflows', cb);
+          startupPushSubscription.subscribed = true;
+          if (
+            !this.#workersStarted ||
+            (startupLifecycleGeneration !== undefined && this.#workerLifecycleGeneration !== startupLifecycleGeneration)
+          ) {
+            const ownsPushSubscription = this.#pushSubscription === startupPushSubscription;
+            try {
+              await this.#pubsub.unsubscribe('workflows', cb);
+            } catch (error) {
+              if (ownsPushSubscription || !this.#pushSubscription) {
+                this.#pushSubscription = startupPushSubscription;
+                throw error;
+              }
+              this.#logger?.error('Failed to cleanup stale workflow push subscription after shutdown', error);
+            }
+            if (ownsPushSubscription && this.#pushSubscription === startupPushSubscription) {
+              this.#pushSubscription = undefined;
+            }
+            startupPushSubscription = undefined;
+            return;
+          }
+        }
+      }
+
+      // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
+      // Only when starting all workers (not when targeting a specific one).
+      // Idempotent: skip pairs we've already subscribed.
+      if (!name) {
+        for (const topic in this.#events) {
+          if (!this.#events[topic]) {
+            continue;
+          }
+
+          const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+          for (const listener of listeners) {
+            const alreadySubscribed = this.#userEventSubscriptions.some(
+              sub => sub.topic === topic && sub.cb === listener,
+            );
+            if (alreadySubscribed) continue;
+            const subscription = { topic, cb: listener, subscribed: false };
+            this.#userEventSubscriptions.push(subscription);
+            startupUserEventSubscriptions.push(subscription);
+            await this.#pubsub.subscribe(topic, listener);
+            subscription.subscribed = true;
+            if (
+              !this.#workersStarted ||
+              (startupLifecycleGeneration !== undefined &&
+                this.#workerLifecycleGeneration !== startupLifecycleGeneration)
+            ) {
+              const ownsUserEventSubscription = this.#userEventSubscriptions.some(
+                sub => sub === subscription || (sub.topic === topic && sub.cb === listener),
+              );
+              try {
+                await this.#pubsub.unsubscribe(topic, listener);
+              } catch (error) {
+                if (ownsUserEventSubscription) {
+                  throw error;
+                }
+                if (!this.#userEventSubscriptions.includes(subscription)) {
+                  this.#userEventSubscriptions.push(subscription);
+                  throw error;
+                }
+                this.#logger?.error(
+                  `Failed to cleanup stale event listener for topic "${topic}" after shutdown`,
+                  error,
                 );
               }
-              // Push transports without nack semantics (EventEmitter) treat
-              // a non-ack as a failure signal; we already logged inside handle().
-            })
-            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        };
-        await this.#pubsub.subscribe('workflows', cb);
-        this.#pushSubscription = { topic: 'workflows', cb };
-      }
-    }
-
-    // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
-    // Only when starting all workers (not when targeting a specific one).
-    // Idempotent: skip pairs we've already subscribed.
-    if (!name) {
-      for (const topic in this.#events) {
-        if (!this.#events[topic]) {
-          continue;
-        }
-
-        const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
-        for (const listener of listeners) {
-          const alreadySubscribed = this.#userEventSubscriptions.some(
-            sub => sub.topic === topic && sub.cb === listener,
-          );
-          if (alreadySubscribed) continue;
-          await this.#pubsub.subscribe(topic, listener);
-          this.#userEventSubscriptions.push({ topic, cb: listener });
+              this.#userEventSubscriptions = this.#userEventSubscriptions.filter(
+                sub => sub !== subscription && (sub.topic !== topic || sub.cb !== listener),
+              );
+              const startupIndex = startupUserEventSubscriptions.indexOf(subscription);
+              if (startupIndex >= 0) {
+                startupUserEventSubscriptions.splice(startupIndex, 1);
+              }
+              if (this.#pushSubscription !== startupPushSubscription) {
+                startupPushSubscription = undefined;
+              }
+              return;
+            }
+          }
         }
       }
+
+      startupComplete = true;
+    } finally {
+      if (
+        !name &&
+        !startupComplete &&
+        (this.#workerLifecycleGeneration === startupLifecycleGeneration || !this.#workersStarted)
+      ) {
+        this.#workersStarted =
+          this.#workerLifecycleGeneration === startupLifecycleGeneration ? workersStartedBeforeStartup : false;
+        this.#workerLifecycleGeneration += 1;
+        for (const worker of [...this.#workers].reverse()) {
+          if (
+            worker.isRunning &&
+            !workersRunningBeforeStartup?.has(worker) &&
+            !workersStartingBeforeStartup?.has(worker) &&
+            this.#latestWorkerStartLifecycleGenerations.get(worker) === startupLifecycleGeneration
+          ) {
+            try {
+              await worker.stop();
+              this.#latestWorkerStartTokens.delete(worker);
+              this.#latestWorkerStartLifecycleGenerations.delete(worker);
+            } catch (error) {
+              this.#logger?.error(`Failed to stop worker "${worker.name}" after failed startup`, error);
+            }
+          }
+        }
+        if (startupPushSubscription) {
+          try {
+            await this.#pubsub.unsubscribe(startupPushSubscription.topic, startupPushSubscription.cb);
+            if (this.#pushSubscription === startupPushSubscription) {
+              this.#pushSubscription = undefined;
+            }
+          } catch (error) {
+            this.#logger?.error('Failed to unsubscribe workflow push subscription after failed startup', error);
+            if (!startupPushSubscription.subscribed && this.#pushSubscription === startupPushSubscription) {
+              this.#pushSubscription = undefined;
+            }
+          }
+        }
+        for (const subscription of startupUserEventSubscriptions) {
+          const { topic, cb } = subscription;
+          try {
+            await this.#pubsub.unsubscribe(topic, cb);
+            this.#userEventSubscriptions = this.#userEventSubscriptions.filter(
+              sub => sub !== subscription && (sub.topic !== topic || sub.cb !== cb),
+            );
+          } catch (error) {
+            this.#logger?.error(
+              `Failed to unsubscribe event listener for topic "${topic}" after failed startup`,
+              error,
+            );
+            if (!subscription.subscribed) {
+              this.#userEventSubscriptions = this.#userEventSubscriptions.filter(sub => sub !== subscription);
+            }
+          }
+        }
+      }
     }
+  }
+
+  #trackWorkerStart(
+    worker: MastraWorker,
+    opts: {
+      onlyIfWorkersStarted?: boolean;
+      onlyIfLifecycleGeneration?: number;
+      onlyIfShutdownGeneration?: number;
+      onError?: (error: unknown) => void;
+      startLifecycleGeneration?: number;
+      stopIfWorkersStopped?: boolean;
+      stopIfLifecycleGenerationChangesFrom?: number;
+    } = {},
+  ): Promise<void> {
+    const existingStart = this.#workerStartPromises.get(worker);
+    if (existingStart) {
+      const queuedStart = existingStart.then(() => {
+        if (worker.isRunning) {
+          return;
+        }
+        return this.#trackWorkerStart(worker, opts);
+      });
+      if (opts.onError) {
+        return queuedStart.catch(error => {
+          opts.onError?.(error);
+        });
+      }
+      return queuedStart;
+    }
+
+    const startToken = ++this.#workerStartSequence;
+    let didStart = false;
+    const wasRunningBeforeStart = worker.isRunning;
+    const previousStartToken = this.#latestWorkerStartTokens.get(worker);
+    const hadPreviousStartLifecycleGeneration = this.#latestWorkerStartLifecycleGenerations.has(worker);
+    const previousStartLifecycleGeneration = this.#latestWorkerStartLifecycleGenerations.get(worker);
+    const removeCurrentStartToken = () => {
+      if (previousStartToken !== undefined) {
+        this.#latestWorkerStartTokens.set(worker, previousStartToken);
+        if (hadPreviousStartLifecycleGeneration) {
+          this.#latestWorkerStartLifecycleGenerations.set(worker, previousStartLifecycleGeneration!);
+        } else {
+          this.#latestWorkerStartLifecycleGenerations.delete(worker);
+        }
+      } else {
+        this.#latestWorkerStartTokens.delete(worker);
+        this.#latestWorkerStartLifecycleGenerations.delete(worker);
+      }
+    };
+    const recordLatestStartToken = () => {
+      const latestStartToken = this.#latestWorkerStartTokens.get(worker);
+      if (latestStartToken === undefined || latestStartToken < startToken) {
+        this.#latestWorkerStartTokens.set(worker, startToken);
+        if (opts.startLifecycleGeneration !== undefined) {
+          this.#latestWorkerStartLifecycleGenerations.set(worker, opts.startLifecycleGeneration);
+        } else {
+          this.#latestWorkerStartLifecycleGenerations.delete(worker);
+        }
+      }
+    };
+    const pending: PendingWorkerStart = {
+      worker,
+      phase: 'init',
+      token: startToken,
+      ignoreShutdownError: Boolean(opts.onError),
+      promise: Promise.resolve(),
+    };
+    const start = this.#startWorker(worker, {
+      ...opts,
+      onBeforeStart: () => {
+        pending.phase = 'start';
+        recordLatestStartToken();
+      },
+      onAfterStart: () => {
+        didStart = true;
+        recordLatestStartToken();
+      },
+    });
+    const promise = start.finally(async () => {
+      pending.phase = 'settled';
+      if (this.#workerStartPromises.get(worker) === promise) {
+        this.#workerStartPromises.delete(worker);
+      }
+      this.#pendingWorkerStarts.delete(pending);
+      if (!didStart && this.#latestWorkerStartTokens.get(worker) === startToken) {
+        if (!wasRunningBeforeStart && worker.isRunning) {
+          try {
+            await worker.stop();
+            if (this.#latestWorkerStartTokens.get(worker) === startToken) {
+              removeCurrentStartToken();
+            }
+          } catch (error) {
+            this.#logger?.error(`Failed to stop worker "${worker.name}" after failed startup`, error);
+          }
+        } else {
+          removeCurrentStartToken();
+        }
+      }
+      const lifecycleChanged =
+        opts.stopIfLifecycleGenerationChangesFrom !== undefined &&
+        this.#workerLifecycleGeneration !== opts.stopIfLifecycleGenerationChangesFrom;
+      const isLatestStart = this.#latestWorkerStartTokens.get(worker) === startToken;
+      if (
+        opts.stopIfWorkersStopped &&
+        isLatestStart &&
+        (!this.#workersStarted || lifecycleChanged) &&
+        worker.isRunning
+      ) {
+        try {
+          await worker.stop();
+          if (this.#latestWorkerStartTokens.get(worker) === startToken) {
+            removeCurrentStartToken();
+          }
+        } catch (error) {
+          this.#logger?.error(`Failed to stop worker "${worker.name}" after late startup completion`, error);
+        }
+      }
+    });
+    pending.promise = promise;
+    this.#pendingWorkerStarts.add(pending);
+    this.#workerStartPromises.set(worker, promise);
+    if (opts.onError) {
+      return promise.catch(error => {
+        opts.onError?.(error);
+      });
+    }
+    return promise;
+  }
+
+  async #startWorker(
+    worker: MastraWorker,
+    opts: {
+      onlyIfWorkersStarted?: boolean;
+      onlyIfLifecycleGeneration?: number;
+      onlyIfShutdownGeneration?: number;
+      onBeforeStart?: () => void;
+      onAfterStart?: () => void;
+    } = {},
+  ): Promise<void> {
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+    await worker.init(deps);
+    if (opts.onlyIfWorkersStarted && !this.#workersStarted) {
+      return;
+    }
+    if (
+      opts.onlyIfLifecycleGeneration !== undefined &&
+      this.#workerLifecycleGeneration !== opts.onlyIfLifecycleGeneration
+    ) {
+      return;
+    }
+    if (
+      opts.onlyIfShutdownGeneration !== undefined &&
+      this.#workerShutdownGeneration !== opts.onlyIfShutdownGeneration
+    ) {
+      return;
+    }
+    opts.onBeforeStart?.();
+    await worker.start();
+    opts.onAfterStart?.();
   }
 
   /**
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
-    // Stop registered workers in reverse order
-    for (const worker of [...this.#workers].reverse()) {
-      if (worker.isRunning) {
-        await worker.stop();
+    if (this.#workersStopPromise) {
+      return this.#workersStopPromise;
+    }
+
+    const stop = this.#stopWorkers();
+    this.#workersStopPromise = stop;
+    try {
+      await stop;
+    } finally {
+      if (this.#workersStopPromise === stop) {
+        this.#workersStopPromise = undefined;
       }
     }
+  }
+
+  async #stopWorkers(): Promise<void> {
+    this.#workersStarted = false;
+    this.#workerLifecycleGeneration += 1;
+    this.#workerShutdownGeneration += 1;
+    let stopError: unknown;
+    let hasStopError = false;
+    const recordStopError = (message: string, error: unknown) => {
+      if (!hasStopError) {
+        stopError = error;
+        hasStopError = true;
+      }
+      this.#logger?.error(message, error);
+    };
+    const pendingWorkerStartsAtShutdown = [...this.#pendingWorkerStarts];
+    const timedOutWorkerStarts = new Set<PendingWorkerStart>();
+    const stopAttemptedWorkers = new WeakSet<MastraWorker>();
+    const waitForPendingWorkerStart = async (start: PendingWorkerStart) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          start.promise.then(
+            () => ({ status: 'fulfilled' as const, start }),
+            reason => ({ status: 'rejected' as const, reason, start }),
+          ),
+          new Promise<{ status: 'timed-out'; reason: Error; start: PendingWorkerStart }>(resolve => {
+            timeout = setTimeout(() => {
+              resolve({
+                status: 'timed-out',
+                reason: new Error(
+                  `Timed out waiting for worker "${start.worker.name}" startup during shutdown after ${PENDING_WORKER_START_SHUTDOWN_TIMEOUT_MS}ms`,
+                ),
+                start,
+              });
+            }, PENDING_WORKER_START_SHUTDOWN_TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+      }
+    };
+    const cleanupTimedOutWorkerStart = (start: PendingWorkerStart) => {
+      void start.promise.then(
+        async () => {
+          if (this.#latestWorkerStartTokens.get(start.worker) === start.token && start.worker.isRunning) {
+            try {
+              await start.worker.stop();
+              if (this.#latestWorkerStartTokens.get(start.worker) === start.token) {
+                this.#latestWorkerStartTokens.delete(start.worker);
+                this.#latestWorkerStartLifecycleGenerations.delete(start.worker);
+              }
+            } catch (error) {
+              this.#logger?.error(`Failed to stop worker "${start.worker.name}" after late startup completion`, error);
+            }
+          }
+        },
+        () => {},
+      );
+    };
+    const settlePendingWorkerStarts = async (starts: PendingWorkerStart[] = [...this.#pendingWorkerStarts]) => {
+      const unsettledStarts = starts.filter(start => !timedOutWorkerStarts.has(start));
+      const pendingWorkerStartResults = await Promise.all(unsettledStarts.map(waitForPendingWorkerStart));
+      for (const result of pendingWorkerStartResults) {
+        if (result.status === 'rejected') {
+          if (!result.start.ignoreShutdownError) {
+            recordStopError('Failed to finish pending worker startup during shutdown', result.reason);
+          }
+        } else if (result.status === 'timed-out') {
+          timedOutWorkerStarts.add(result.start);
+          if (result.start.phase !== 'start') {
+            this.#pendingWorkerStarts.delete(result.start);
+            if (this.#workerStartPromises.get(result.start.worker) === result.start.promise) {
+              this.#workerStartPromises.delete(result.start.worker);
+            }
+          }
+          cleanupTimedOutWorkerStart(result.start);
+          if (!result.start.ignoreShutdownError) {
+            recordStopError('Timed out waiting for pending worker startup during shutdown', result.reason);
+          }
+        }
+      }
+    };
+    const stopRunningWorkers = async () => {
+      for (const worker of [...this.#workers].reverse()) {
+        if (worker.isRunning && !stopAttemptedWorkers.has(worker)) {
+          stopAttemptedWorkers.add(worker);
+          try {
+            await worker.stop();
+            this.#latestWorkerStartTokens.delete(worker);
+            this.#latestWorkerStartLifecycleGenerations.delete(worker);
+          } catch (error) {
+            recordStopError(`Failed to stop worker "${worker.name}"`, error);
+          }
+        }
+      }
+    };
+
+    await stopRunningWorkers();
+    await settlePendingWorkerStarts(pendingWorkerStartsAtShutdown);
+    await settlePendingWorkerStarts();
+    if (timedOutWorkerStarts.size > 0 && ![...timedOutWorkerStarts].some(start => start.phase === 'start')) {
+      this.#allWorkersStartPromise = undefined;
+    }
+    await stopRunningWorkers();
 
     // Tear down the in-process push subscription wired during startWorkers().
     if (this.#pushSubscription) {
-      await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
-      this.#pushSubscription = undefined;
+      try {
+        await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
+        this.#pushSubscription = undefined;
+      } catch (error) {
+        recordStopError('Failed to unsubscribe workflow push subscription', error);
+      }
     }
 
     // Unsubscribe only the (topic, listener) pairs we actually registered in
     // startWorkers() — keeps stopWorkers() symmetric with startWorkers() and
     // avoids unsubscribing listeners that startWorkers never owned.
+    const remainingUserEventSubscriptions: Array<{
+      topic: string;
+      cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+    }> = [];
     for (const { topic, cb } of this.#userEventSubscriptions) {
-      await this.#pubsub.unsubscribe(topic, cb);
+      try {
+        await this.#pubsub.unsubscribe(topic, cb);
+      } catch (error) {
+        remainingUserEventSubscriptions.push({ topic, cb });
+        recordStopError(`Failed to unsubscribe event listener for topic "${topic}"`, error);
+      }
     }
-    this.#userEventSubscriptions = [];
+    this.#userEventSubscriptions = remainingUserEventSubscriptions;
 
-    await this.#pubsub.flush();
+    try {
+      await this.#pubsub.flush();
+    } catch (error) {
+      recordStopError('Failed to flush pubsub during worker shutdown', error);
+    }
+    if (hasStopError) {
+      throw stopError;
+    }
   }
 
   /**
@@ -4344,16 +5012,76 @@ export class Mastra<
         // init errors are already logged
       }
     }
+    let schedulerShutdownError: unknown;
+    let hasSchedulerShutdownError = false;
     if (this.#scheduler) {
       try {
         await this.#scheduler.stop();
       } catch (error) {
+        schedulerShutdownError = error;
+        hasSchedulerShutdownError = true;
         this.#logger?.error('Failed to stop workflow scheduler', error);
       }
     }
-    await this.stopWorkers();
+    let stopWorkersError: unknown;
+    let hasStopWorkersError = false;
+    try {
+      await this.stopWorkers();
+    } catch (error) {
+      stopWorkersError = error;
+      hasStopWorkersError = true;
+      this.#logger?.error('Failed to stop workers', error);
+    }
+    let backgroundTaskShutdownError: unknown;
+    let hasBackgroundTaskShutdownError = false;
+    if (this.#backgroundTaskManager) {
+      try {
+        await this.#backgroundTaskManager.shutdown();
+      } catch (error) {
+        backgroundTaskShutdownError = error;
+        hasBackgroundTaskShutdownError = true;
+        this.#logger?.error('Failed to shutdown background task manager', error);
+      }
+    }
+    let harnessShutdownError: unknown;
+    let hasHarnessShutdownError = false;
+    const harnessShutdowns = Object.entries(this.#harnesses).map(async ([key, harness]) => {
+      try {
+        await harness.shutdown();
+      } catch (error) {
+        if (!hasHarnessShutdownError) {
+          harnessShutdownError = error;
+          hasHarnessShutdownError = true;
+        }
+        this.#logger?.error(`Failed to shutdown harness "${key}"`, error);
+      }
+    });
+    await Promise.all(harnessShutdowns);
     // Shutdown observability registry, exporters, etc...
-    await this.#observability.shutdown();
+    let observabilityShutdownError: unknown;
+    let hasObservabilityShutdownError = false;
+    try {
+      await this.#observability.shutdown();
+    } catch (error) {
+      observabilityShutdownError = error;
+      hasObservabilityShutdownError = true;
+      this.#logger?.error('Failed to shutdown observability', error);
+    }
+    if (hasStopWorkersError) {
+      throw stopWorkersError;
+    }
+    if (hasBackgroundTaskShutdownError) {
+      throw backgroundTaskShutdownError;
+    }
+    if (hasHarnessShutdownError) {
+      throw harnessShutdownError;
+    }
+    if (hasObservabilityShutdownError) {
+      throw observabilityShutdownError;
+    }
+    if (hasSchedulerShutdownError) {
+      throw schedulerShutdownError;
+    }
 
     this.#logger?.info('Mastra shutdown completed');
   }

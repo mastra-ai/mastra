@@ -24,6 +24,17 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     this.db.backgroundTasks.set(taskId, { ...existing, ...update });
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTask['status'],
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const existing = this.db.backgroundTasks.get(taskId);
+    if (!existing || existing.status !== expectedStatus) return false;
+    this.db.backgroundTasks.set(taskId, { ...existing, ...update });
+    return true;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const task = this.db.backgroundTasks.get(taskId);
     return task ? { ...task } : null;
