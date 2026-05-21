@@ -1,17 +1,26 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import { createSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import { RequestContext } from '../../request-context';
-import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import type {
+  HarnessStorage,
+  OperationAdmissionTombstone,
+  PersistedAttachment,
+  QueueAdmissionReceipt,
+  QueuedItem,
+  SessionRecord,
+} from '../../storage/domains/harness';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import {
   HarnessConfigError,
+  HarnessAdmissionConflictError,
   HarnessOverrideConflictError,
+  HarnessQueueFullError,
   HarnessSessionClosedError,
   HarnessValidationError,
 } from './errors';
@@ -29,6 +38,8 @@ import type {
   MessageOptionsStream,
   MessageOptionsStructured,
   ModelAuthStatus,
+  QueueAdmissionResult,
+  QueueOptions,
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionLifecycleState,
@@ -52,6 +63,19 @@ interface IdleWaiter {
   cleanup: () => void;
 }
 
+interface QueueWaiter {
+  promise: Promise<AgentResult>;
+  resolve: (result: AgentResult) => void;
+  reject: (reason: unknown) => void;
+}
+
+type QueueAdmissionInternalResult = QueueAdmissionResult & {
+  terminalResult?: AgentResult;
+};
+
+const QUEUE_DUPLICATE_WAIT_TIMEOUT_MS = 30_000;
+const QUEUE_DUPLICATE_WAIT_INTERVAL_MS = 100;
+
 export class Session {
   private readonly harness: Harness;
   private readonly storage: HarnessStorage;
@@ -69,6 +93,7 @@ export class Session {
   private draining = false;
   private readonly idleWaiters = new Set<IdleWaiter>();
   private readonly activeToolNames = new Map<string, string>();
+  private readonly queueWaiters = new Map<string, QueueWaiter>();
 
   constructor(opts: SessionConstructorOptions) {
     this.harness = opts.harness;
@@ -141,6 +166,13 @@ export class Session {
   }
 
   _emit(event: EmitInput): HarnessEvent {
+    return this.emitter.emit(event);
+  }
+
+  private emitTurnEvent(event: EmitInput): HarnessEvent {
+    if (this.currentQueuedItemId !== undefined && (event as { queuedItemId?: string }).queuedItemId === undefined) {
+      return this.emitter.emit({ ...event, queuedItemId: this.currentQueuedItemId } as EmitInput);
+    }
     return this.emitter.emit(event);
   }
 
@@ -260,19 +292,19 @@ export class Session {
       };
 
       if (opts.output !== undefined && opts.sync === true) {
-        this._emit({ type: 'agent_start' });
+        this.emitTurnEvent({ type: 'agent_start' });
         const full = (await agent.generate(opts.content, {
           ...execOptions,
           structuredOutput: { schema: opts.output as never },
         } as never)) as FullOutput<unknown>;
         await this.recordTurnCompletion(full);
-        this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+        this.emitTurnEvent({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
         return full.object;
       }
 
       const signalContents = await this.buildSignalContents(opts.content, opts.attachments ?? []);
       const signal = createSignal({ type: 'user-message', contents: signalContents });
-      this._emit({ type: 'agent_start' });
+      this.emitTurnEvent({ type: 'agent_start' });
       const output = (await agent.stream(signal, execOptions as never)) as MastraModelOutput<unknown>;
       this.currentRunId = output.runId;
 
@@ -287,7 +319,7 @@ export class Session {
         const full = (await output.getFullOutput()) as FullOutput<unknown>;
         await streamDrain;
         await this.recordTurnCompletion(full);
-        this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+        this.emitTurnEvent({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
         return full as AgentResult;
       } finally {
         this.endTurn(turnAbortController);
@@ -319,7 +351,7 @@ export class Session {
         additionalTools: opts.additionalTools,
       });
       const signal = createSignal({ type: 'user-message', contents: opts.content });
-      this._emit({ type: 'agent_start' });
+      this.emitTurnEvent({ type: 'agent_start' });
       const output = (await agent.stream(signal, execOptions as never)) as MastraModelOutput<unknown>;
       this.currentRunId = output.runId;
       const result = this.finishSignalResultTurn(output, turnAbortController);
@@ -365,7 +397,7 @@ export class Session {
         ...(opts?.attributes ? { attributes: opts.attributes } : {}),
         ...(opts?.metadata ? { metadata: opts.metadata } : {}),
       });
-      this._emit({ type: 'agent_start' });
+      this.emitTurnEvent({ type: 'agent_start' });
       const output = (await agent.stream(signal, execOptions as never)) as MastraModelOutput<unknown>;
       this.currentRunId = output.runId;
       const result = this.finishSignalResultTurn(output, turnAbortController);
@@ -381,6 +413,32 @@ export class Session {
       this.endTurn(turnAbortController);
       throw err;
     }
+  }
+
+  async queue(opts: QueueOptions): Promise<AgentResult> {
+    this.assertLive('queue()');
+    const admission = await this.admitQueueInternal(opts, 'queue()');
+    if (admission.terminalResult !== undefined) return admission.terminalResult;
+    if (
+      admission.duplicate &&
+      !this.queueWaiters.has(admission.queuedItemId) &&
+      !(this.record.pendingQueue ?? []).some(item => item.id === admission.queuedItemId)
+    ) {
+      return this.waitForDuplicateQueueResult(admission.queuedItemId);
+    }
+    const waiter = this.getOrCreateQueueWaiter(admission.queuedItemId);
+    void this._kickQueueDrain();
+    return waiter.promise;
+  }
+
+  async admitQueue(opts: QueueOptions): Promise<QueueAdmissionResult> {
+    this.assertLive('admitQueue()');
+    if (typeof opts.admissionId !== 'string' || opts.admissionId.length === 0) {
+      throw new HarnessValidationError('admitQueue().admissionId', 'admissionId must be a non-empty string');
+    }
+    const admission = await this.admitQueueInternal(opts, 'admitQueue()');
+    void this._kickQueueDrain();
+    return admission;
   }
 
   waitForIdle(opts?: { timeoutMs?: number }): Promise<void> {
@@ -464,8 +522,7 @@ export class Session {
   }
 
   async _kickQueueDrain(): Promise<void> {
-    // Queue draining lands with the Session operations slice. Keeping this
-    // no-op preserves the fork's hydration hook without starting work early.
+    await this.maybeDrainQueue();
   }
 
   /** @internal retained for future lease renewal/flush slices. */
@@ -658,6 +715,9 @@ export class Session {
       this.currentQueuedItemId = undefined;
       this.activeToolNames.clear();
       this.notifyMaybeIdle();
+      if ((this.record.pendingQueue?.length ?? 0) > 0) {
+        void this._kickQueueDrain();
+      }
     }
   }
 
@@ -789,18 +849,18 @@ export class Session {
     switch (record.type) {
       case 'text-start': {
         const messageId = stringField(payload, 'id') ?? stringField(payload, 'messageId');
-        if (messageId) this._emit({ type: 'message_start', messageId });
+        if (messageId) this.emitTurnEvent({ type: 'message_start', messageId });
         break;
       }
       case 'text-delta': {
         const messageId = stringField(payload, 'id') ?? stringField(payload, 'messageId');
         const delta = stringField(payload, 'text') ?? stringField(payload, 'delta');
-        if (messageId && delta !== undefined) this._emit({ type: 'message_update', messageId, delta });
+        if (messageId && delta !== undefined) this.emitTurnEvent({ type: 'message_update', messageId, delta });
         break;
       }
       case 'text-end': {
         const messageId = stringField(payload, 'id') ?? stringField(payload, 'messageId');
-        if (messageId) this._emit({ type: 'message_end', messageId });
+        if (messageId) this.emitTurnEvent({ type: 'message_end', messageId });
         break;
       }
       case 'tool-call': {
@@ -808,7 +868,7 @@ export class Session {
         const toolName = stringField(payload, 'toolName');
         if (toolCallId && toolName) {
           this.activeToolNames.set(toolCallId, toolName);
-          this._emit({ type: 'tool_start', toolCallId, toolName, args: payload.args });
+          this.emitTurnEvent({ type: 'tool_start', toolCallId, toolName, args: payload.args });
         }
         break;
       }
@@ -817,7 +877,7 @@ export class Session {
         const toolCallId = stringField(payload, 'toolCallId');
         if (toolCallId) {
           const isError = record.type === 'tool-error';
-          this._emit({
+          this.emitTurnEvent({
             type: 'tool_end',
             toolCallId,
             result: isError ? projectErrorLike(payload.error) : payload.result,
@@ -830,7 +890,7 @@ export class Session {
         const data = (record.data && typeof record.data === 'object' ? record.data : undefined) as
           | { tasks?: unknown }
           | undefined;
-        if (Array.isArray(data?.tasks)) this._emit({ type: 'task_updated', tasks: data.tasks as never });
+        if (Array.isArray(data?.tasks)) this.emitTurnEvent({ type: 'task_updated', tasks: data.tasks as never });
         break;
       }
     }
@@ -840,9 +900,9 @@ export class Session {
     try {
       const full = (await output.getFullOutput()) as FullOutput<unknown>;
       await this.recordTurnCompletion(full);
-      this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+      this.emitTurnEvent({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
     } catch {
-      this._emit({ type: 'agent_end', reason: 'error', runId: output.runId });
+      this.emitTurnEvent({ type: 'agent_end', reason: 'error', runId: output.runId });
     }
   }
 
@@ -856,10 +916,10 @@ export class Session {
       const full = (await output.getFullOutput()) as FullOutput<unknown>;
       await streamDrain;
       await this.recordTurnCompletion(full);
-      this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+      this.emitTurnEvent({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
       return full as AgentResult;
     } catch (err) {
-      this._emit({ type: 'agent_end', reason: 'error', runId: output.runId });
+      this.emitTurnEvent({ type: 'agent_end', reason: 'error', runId: output.runId });
       throw err;
     } finally {
       this.endTurn(controller);
@@ -880,6 +940,322 @@ export class Session {
         totalTokens: prev.tokenUsage.totalTokens + usage.totalTokens,
       },
     }));
+  }
+
+  private async admitQueueInternal(
+    opts: QueueOptions,
+    methodName: 'queue()' | 'admitQueue()',
+  ): Promise<QueueAdmissionInternalResult> {
+    if (typeof opts.content !== 'string' || opts.content.length === 0) {
+      throw new HarnessValidationError(`${methodName}.content`, 'content must be a non-empty string');
+    }
+    const effectiveModeId = opts.mode ?? this.record.modeId;
+    this.harness._getMode(effectiveModeId);
+    const attachments = await this.resolveQueueAttachments(`${methodName}.attachments`, opts.attachments ?? []);
+    const admissionId = opts.admissionId ?? `queue-${randomUUID()}`;
+    const admissionHash = computeQueueAdmissionHash({
+      content: opts.content,
+      mode: opts.mode,
+      model: opts.model,
+      yolo: opts.yolo,
+      attachments,
+    });
+
+    if (opts.admissionId !== undefined) {
+      const duplicate = await this.resolveQueueAdmissionDuplicate({
+        admissionId,
+        admissionHash,
+      });
+      if (duplicate) {
+        const queuedItemId = duplicate.queuedItemId;
+        if (!queuedItemId) {
+          throw new HarnessValidationError(`${methodName}.admissionId`, 'duplicate queue evidence is missing item id');
+        }
+        if (methodName === 'queue()') {
+          const terminal = this.queueTerminalResultFromEvidence(duplicate);
+          if (terminal.status === 'completed') {
+            return { accepted: true, queuedItemId, duplicate: true, terminalResult: terminal.result };
+          }
+          if (terminal.status === 'failed') throw terminal.error;
+        }
+        return { accepted: true, queuedItemId, duplicate: true };
+      }
+    }
+
+    const now = Date.now();
+    const queuedItem: QueuedItem = {
+      id: `q-${randomUUID()}`,
+      admissionId,
+      admissionHash,
+      enqueuedAt: now,
+      content: opts.content,
+      attachments,
+      ...(opts.model !== undefined ? { model: opts.model } : {}),
+      ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+      ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
+      source: 'user',
+    };
+    const receipt: QueueAdmissionReceipt = {
+      admissionId,
+      admissionHash,
+      queuedItemId: queuedItem.id,
+      modeId: effectiveModeId,
+      runtimeDependencies: {
+        modeId: effectiveModeId,
+        modelId: opts.model ?? this.record.modelId,
+      },
+      status: 'queued',
+      attempts: 0,
+      enqueuedAt: now,
+      updatedAt: now,
+    };
+
+    let duplicateDuringFlush: QueueAdmissionReceipt | undefined;
+    await this.flushUpdate(prev => {
+      for (const existing of Object.values(prev.queueAdmissionReceipts ?? {})) {
+        if (existing.admissionId !== admissionId) continue;
+        if (existing.admissionHash !== admissionHash) {
+          throw new HarnessAdmissionConflictError(this.id, admissionId, existing.admissionHash, admissionHash);
+        }
+        duplicateDuringFlush = existing;
+        return prev;
+      }
+      const pendingQueue = prev.pendingQueue ?? [];
+      if (pendingQueue.length >= this.harness._internalMaxQueueDepth) {
+        throw new HarnessQueueFullError(this.id, this.harness._internalMaxQueueDepth);
+      }
+      return {
+        ...prev,
+        pendingQueue: [...pendingQueue, queuedItem],
+        queueAdmissionReceipts: {
+          ...(prev.queueAdmissionReceipts ?? {}),
+          [queuedItem.id]: receipt,
+        },
+      };
+    });
+    if (duplicateDuringFlush) {
+      return { accepted: true, queuedItemId: duplicateDuringFlush.queuedItemId, duplicate: true };
+    }
+
+    return { accepted: true, queuedItemId: queuedItem.id, duplicate: false };
+  }
+
+  private async resolveQueueAdmissionDuplicate(opts: {
+    admissionId: string;
+    admissionHash: string;
+  }): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | undefined> {
+    const resolved = await this.storage.resolveOperationAdmissionEvidence({
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      threadId: this.threadId,
+      kind: 'queue',
+      admissionId: opts.admissionId,
+      attemptedAdmissionHash: opts.admissionHash,
+    });
+    if (resolved.status === 'none') return undefined;
+    if (resolved.status === 'conflict') {
+      throw new HarnessAdmissionConflictError(
+        this.id,
+        opts.admissionId,
+        resolved.storedAdmissionHash ?? 'unknown',
+        opts.admissionHash,
+      );
+    }
+    return resolved.evidence as QueueAdmissionReceipt | OperationAdmissionTombstone | undefined;
+  }
+
+  private queueTerminalResultFromEvidence(
+    evidence: QueueAdmissionReceipt | OperationAdmissionTombstone,
+  ): { status: 'completed'; result: AgentResult } | { status: 'failed'; error: Error } | { status: 'pending' } {
+    if ('kind' in evidence)
+      return { status: 'failed', error: new HarnessValidationError('queue()', 'queue result expired') };
+    if (evidence.status === 'completed' && evidence.result !== undefined) {
+      return { status: 'completed', result: evidence.result as AgentResult };
+    }
+    if (evidence.status === 'failed' || evidence.status === 'admission_failed' || evidence.status === 'dead') {
+      return {
+        status: 'failed',
+        error: new HarnessValidationError('queue()', evidence.error?.message ?? 'queued turn failed'),
+      };
+    }
+    return { status: 'pending' };
+  }
+
+  private getOrCreateQueueWaiter(queuedItemId: string): QueueWaiter {
+    const existing = this.queueWaiters.get(queuedItemId);
+    if (existing) return existing;
+    let resolve!: (result: AgentResult) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<AgentResult>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    const waiter = { promise, resolve, reject };
+    this.queueWaiters.set(queuedItemId, waiter);
+    return waiter;
+  }
+
+  private async waitForDuplicateQueueResult(queuedItemId: string): Promise<AgentResult> {
+    const deadline = Date.now() + QUEUE_DUPLICATE_WAIT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const evidence = await this.storage.loadQueueResultEvidence({
+        sessionId: this.id,
+        resourceId: this.resourceId,
+        queuedItemId,
+      });
+      if (evidence) {
+        const terminal = this.queueTerminalResultFromEvidence(evidence);
+        if (terminal.status === 'completed') return terminal.result;
+        if (terminal.status === 'failed') throw terminal.error;
+      }
+      await delay(Math.min(QUEUE_DUPLICATE_WAIT_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+    }
+    throw new HarnessValidationError('queue().admissionId', 'duplicate queue result was not available before timeout');
+  }
+
+  private async maybeDrainQueue(): Promise<void> {
+    if (this.draining || this.currentTurnAbortController !== undefined) return;
+    if (this.lifecycle !== 'live') return;
+    this.draining = true;
+    try {
+      while (this.lifecycle === 'live' && this.currentTurnAbortController === undefined) {
+        const item = this.record.pendingQueue?.[0];
+        if (!item) break;
+        this.currentQueuedItemId = item.id;
+        await this.updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
+          ...receipt,
+          status: receipt.status === 'queued' ? 'admitting' : receipt.status,
+          attempts: receipt.attempts + 1,
+          admittingAt: receipt.admittingAt ?? now,
+          updatedAt: now,
+        }));
+        this.emitter.emit({ type: 'queue_item_started', queuedItemId: item.id });
+
+        try {
+          const result = (await this.message({
+            content: item.content,
+            ...(item.mode !== undefined ? { mode: item.mode } : {}),
+            ...(item.model !== undefined ? { model: item.model } : {}),
+            attachments: item.attachments.map(queuedAttachmentToRef),
+          })) as AgentResult;
+          await this.completeQueuedItem(item, result);
+        } catch (err) {
+          await this.failQueuedItem(item, err);
+        } finally {
+          if (this.currentQueuedItemId === item.id) this.currentQueuedItemId = undefined;
+        }
+      }
+    } finally {
+      this.draining = false;
+      this.notifyMaybeIdle();
+    }
+  }
+
+  private async completeQueuedItem(item: QueuedItem, result: AgentResult): Promise<void> {
+    await this.flushUpdate(prev => {
+      const receipt = prev.queueAdmissionReceipts?.[item.id];
+      const now = Date.now();
+      const nextReceipts = { ...(prev.queueAdmissionReceipts ?? {}) };
+      if (receipt) {
+        nextReceipts[item.id] = {
+          ...receipt,
+          status: 'completed',
+          runId: result.runId,
+          result,
+          postRunFinalizedAt: now,
+          completedAt: now,
+          updatedAt: now,
+        };
+      }
+      return {
+        ...prev,
+        pendingQueue: (prev.pendingQueue ?? []).filter(queued => queued.id !== item.id),
+        queueAdmissionReceipts: nextReceipts,
+      };
+    });
+    const waiter = this.queueWaiters.get(item.id);
+    if (waiter) {
+      this.queueWaiters.delete(item.id);
+      waiter.resolve(result);
+    }
+  }
+
+  private async failQueuedItem(item: QueuedItem, reason: unknown): Promise<void> {
+    const error = toPublicQueueError(reason);
+    await this.flushUpdate(prev => {
+      const receipt = prev.queueAdmissionReceipts?.[item.id];
+      const now = Date.now();
+      const nextReceipts = { ...(prev.queueAdmissionReceipts ?? {}) };
+      if (receipt) {
+        nextReceipts[item.id] = {
+          ...receipt,
+          status: 'failed',
+          error,
+          failedAt: now,
+          updatedAt: now,
+        };
+      }
+      return {
+        ...prev,
+        pendingQueue: (prev.pendingQueue ?? []).filter(queued => queued.id !== item.id),
+        queueAdmissionReceipts: nextReceipts,
+      };
+    });
+    const waiter = this.queueWaiters.get(item.id);
+    if (waiter) {
+      this.queueWaiters.delete(item.id);
+      waiter.reject(reason);
+    }
+  }
+
+  private async updateQueueAdmissionReceipt(
+    queuedItemId: string,
+    update: (receipt: QueueAdmissionReceipt, now: number) => QueueAdmissionReceipt,
+  ): Promise<void> {
+    await this.flushUpdate(prev => {
+      const receipt = prev.queueAdmissionReceipts?.[queuedItemId];
+      if (!receipt) return prev;
+      return {
+        ...prev,
+        queueAdmissionReceipts: {
+          ...(prev.queueAdmissionReceipts ?? {}),
+          [queuedItemId]: update(receipt, Date.now()),
+        },
+      };
+    });
+  }
+
+  private async resolveQueueAttachments(field: string, attachments: AttachmentRef[]): Promise<PersistedAttachment[]> {
+    const persisted: PersistedAttachment[] = [];
+    for (let i = 0; i < attachments.length; i += 1) {
+      const attachment = attachments[i]!;
+      if (!attachment.attachmentId) {
+        throw new HarnessValidationError(`${field}[${i}].attachmentId`, 'attachmentId is required');
+      }
+      if (attachment.ownerSessionId !== undefined && attachment.ownerSessionId !== this.id) {
+        throw new HarnessValidationError(`${field}[${i}].ownerSessionId`, 'attachment must belong to this session');
+      }
+      const record = await this.storage.getAttachmentRecord({
+        sessionId: attachment.ownerSessionId ?? this.id,
+        attachmentId: attachment.attachmentId,
+      });
+      if (!record) {
+        throw new HarnessValidationError(`${field}[${i}].attachmentId`, 'attachment was not found');
+      }
+      if (attachment.bytes !== undefined && attachment.bytes !== record.bytes) {
+        throw new HarnessValidationError(`${field}[${i}].bytes`, 'attachment byte count does not match storage');
+      }
+      if (attachment.sha256 !== undefined && attachment.sha256 !== record.sha256) {
+        throw new HarnessValidationError(`${field}[${i}].sha256`, 'attachment digest does not match storage');
+      }
+      persisted.push({
+        kind: 'ref',
+        attachmentId: record.attachmentId,
+        name: record.name,
+        mimeType: record.mimeType,
+      });
+    }
+    return persisted;
   }
 }
 
@@ -925,6 +1301,42 @@ function numberField(record: Record<string, unknown>, key: string): number | und
 function projectErrorLike(value: unknown): { name: string; message: string } | unknown {
   if (value instanceof Error) return { name: value.name, message: value.message };
   return value;
+}
+
+function queuedAttachmentToRef(attachment: PersistedAttachment): AttachmentRef {
+  if (attachment.kind === 'url') {
+    throw new HarnessValidationError('queue().attachments', 'queued URL attachments are not supported yet');
+  }
+  return {
+    attachmentId: attachment.attachmentId,
+    resourceId: '',
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+  };
+}
+
+function computeQueueAdmissionHash(value: unknown): string {
+  return createHash('sha256').update(stableStringify(value)).digest('hex');
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter(key => record[key] !== undefined)
+    .sort()
+    .map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
+}
+
+function toPublicQueueError(reason: unknown): { code: string; message: string } {
+  if (reason instanceof Error) return { code: reason.name, message: reason.message };
+  return { code: 'Error', message: String(reason) };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function cloneJsonLike<T>(value: T): T {

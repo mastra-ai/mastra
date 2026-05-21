@@ -406,7 +406,14 @@ export interface QueueOverrides {
 
 export interface QueueOptions extends QueueOverrides {
   content: string;
+  admissionId?: string;
   attachments?: AttachmentRef[];
+}
+
+export interface QueueAdmissionResult {
+  accepted: true;
+  queuedItemId: string;
+  duplicate: boolean;
 }
 
 export interface ListMessagesOptions {
