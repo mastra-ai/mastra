@@ -20,20 +20,10 @@ export interface ProviderConfig {
 }
 
 /**
- * Per-model capability metadata extracted from gateway sources (e.g. models.dev).
- * Used at runtime to decide whether a model supports attachments, images, etc.
+ * Compact capability data collected from gateways during generation.
+ * Each provider maps to a list of model IDs that support attachments.
  */
-export interface ModelCapabilities {
-  /** Input modalities the model accepts (e.g. ['text'], ['text', 'image', 'pdf']). */
-  inputModalities: string[];
-  /** Whether the model's API accepts file/image attachment parts. */
-  attachment: boolean;
-}
-
-/**
- * Provider-level capabilities: maps model IDs to their capabilities.
- */
-export type ProviderCapabilities = Record<string, ModelCapabilities>;
+export type AttachmentCapabilities = Record<string, string[]>;
 
 /**
  * Union type for language models that can be returned by gateways.

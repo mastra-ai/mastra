@@ -82,15 +82,13 @@ export {
   PROVIDER_REGISTRY,
   parseModelString,
   getProviderConfig,
-  getModelCapabilities,
   modelSupportsAttachments,
 } from './model/provider-registry.js';
 export type {
   ModelRouterModelId,
   Provider,
   ModelForProvider,
-  ModelCapabilities,
-  ProviderCapabilities,
+  AttachmentCapabilities,
 } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 

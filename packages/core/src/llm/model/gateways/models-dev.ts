@@ -14,7 +14,7 @@ import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
-import type { GatewayLanguageModel, ProviderCapabilities, ProviderConfig } from './base.js';
+import type { AttachmentCapabilities, GatewayLanguageModel, ProviderConfig } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevModelInfo {
@@ -96,7 +96,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   readonly name = 'models.dev';
 
   private providerConfigs: Record<string, ProviderConfig> = {};
-  private providerCapabilities: Record<string, ProviderCapabilities> = {};
+  private attachmentCapabilities: AttachmentCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -142,13 +142,11 @@ export class ModelsDevGateway extends MastraModelGateway {
         );
         const modelIds = activeModels.map(([modelId]) => modelId).sort();
 
-        // Extract per-model capabilities
-        const capabilities: ProviderCapabilities = {};
-        for (const [modelId, modelInfo] of activeModels) {
-          const inputMods = modelInfo?.modalities?.input ?? ['text'];
-          const attachment = modelInfo?.attachment ?? false;
-          capabilities[modelId] = { inputModalities: inputMods, attachment };
-        }
+        // Collect model IDs that support attachments
+        const attachmentModels = activeModels
+          .filter(([, modelInfo]) => modelInfo?.attachment === true)
+          .map(([modelId]) => modelId)
+          .sort();
 
         // Get the API URL - overrides take priority over models.dev data
         const url = PROVIDER_OVERRIDES[normalizedId]?.url || providerInfo.api;
@@ -189,7 +187,9 @@ export class ModelsDevGateway extends MastraModelGateway {
               ? providerInfo.npm
               : undefined),
         };
-        this.providerCapabilities[normalizedId] = capabilities;
+        if (attachmentModels.length > 0) {
+          this.attachmentCapabilities[normalizedId] = attachmentModels;
+        }
       }
     }
 
@@ -200,11 +200,11 @@ export class ModelsDevGateway extends MastraModelGateway {
   }
 
   /**
-   * Return per-model capabilities collected during the last `fetchProviders()` call.
-   * Keyed by provider ID → model ID → capabilities.
+   * Return attachment capabilities collected during the last `fetchProviders()` call.
+   * Maps provider ID → list of model IDs that support attachments.
    */
-  getCapabilities(): Record<string, ProviderCapabilities> {
-    return this.providerCapabilities;
+  getAttachmentCapabilities(): AttachmentCapabilities {
+    return this.attachmentCapabilities;
   }
 
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {

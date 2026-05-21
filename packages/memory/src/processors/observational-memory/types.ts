@@ -214,7 +214,7 @@ export interface ObservationConfig {
    * endpoints) while the main agent uses a multimodal model. The same
    * filter applies to tool results that contain image or file parts.
    *
-   * @default 'auto'
+   * @default true
    */
   observeAttachments?: 'auto' | boolean | string[];
 }

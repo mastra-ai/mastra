@@ -323,8 +323,7 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'observe-attachments',
         label: 'Observe attachments',
         description:
-          'Forward image and file attachments to the Observer LLM. ' +
-          'Auto checks model capabilities to decide',
+          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
         currentValue: formatAttachmentValue(config.observeAttachments),
         submenu: (_currentValue, done) => {
           const items: SelectItem[] = [

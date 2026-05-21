@@ -4,9 +4,7 @@ export {
   type ModelRouterModelId,
   type Provider,
   type ModelForProvider,
-  type ModelCapabilities,
-  type ProviderCapabilities,
-  getModelCapabilities,
+  type AttachmentCapabilities,
   modelSupportsAttachments,
 } from './provider-registry.js';
 export { resolveModelConfig, isOpenAICompatibleObjectConfig } from './resolve-model';

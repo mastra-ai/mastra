@@ -5,7 +5,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { MastraModelGateway, ProviderCapabilities, ProviderConfig } from './gateways/base.js';
+import type { AttachmentCapabilities, MastraModelGateway, ProviderConfig } from './gateways/base.js';
 
 /**
  * Write a file atomically using the write-to-temp-then-rename pattern.
@@ -53,7 +53,7 @@ export async function atomicWriteFile(
 export async function fetchProvidersFromGateways(gateways: MastraModelGateway[]): Promise<{
   providers: Record<string, ProviderConfig>;
   models: Record<string, string[]>;
-  capabilities: Record<string, ProviderCapabilities>;
+  attachmentCapabilities: AttachmentCapabilities;
 }> {
   const enabledGateways: MastraModelGateway[] = [];
 
@@ -65,7 +65,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
 
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
-  const allCapabilities: Record<string, ProviderCapabilities> = {};
+  const allAttachmentCapabilities: AttachmentCapabilities = {};
 
   const maxRetries = 3;
 
@@ -79,10 +79,10 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
         // models.dev is a provider registry, not a true gateway - don't prefix its providers
         const isProviderRegistry = gateway.id === 'models.dev';
 
-        // Collect capabilities if the gateway exposes them
-        const gatewayCapabilities =
-          'getCapabilities' in gateway && typeof (gateway as any).getCapabilities === 'function'
-            ? ((gateway as any).getCapabilities() as Record<string, ProviderCapabilities>)
+        // Collect attachment capabilities if the gateway exposes them
+        const gatewayAttachmentCaps =
+          'getAttachmentCapabilities' in gateway && typeof (gateway as any).getAttachmentCapabilities === 'function'
+            ? ((gateway as any).getAttachmentCapabilities() as AttachmentCapabilities)
             : undefined;
 
         for (const [providerId, config] of Object.entries(providers)) {
@@ -99,9 +99,9 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
           // Sort models alphabetically for consistent ordering
           allModels[typeProviderId] = config.models.sort();
 
-          // Merge capabilities for this provider if available
-          if (gatewayCapabilities?.[providerId]) {
-            allCapabilities[typeProviderId] = gatewayCapabilities[providerId];
+          // Merge attachment capabilities for this provider if available
+          if (gatewayAttachmentCaps?.[providerId]) {
+            allAttachmentCapabilities[typeProviderId] = gatewayAttachmentCaps[providerId];
           }
         }
 
@@ -124,7 +124,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
     }
   }
 
-  return { providers: allProviders, models: allModels, capabilities: allCapabilities };
+  return { providers: allProviders, models: allModels, attachmentCapabilities: allAttachmentCapabilities };
 }
 
 /**
@@ -213,7 +213,7 @@ export async function writeRegistryFiles(
   typesPath: string,
   providers: Record<string, ProviderConfig>,
   models: Record<string, string[]>,
-  capabilities?: Record<string, ProviderCapabilities>,
+  attachmentCapabilities?: AttachmentCapabilities,
 ): Promise<void> {
   // 0. Ensure directories exist
   const jsonDir = path.dirname(jsonPath);
@@ -234,9 +234,9 @@ export async function writeRegistryFiles(
   const typeContent = generateTypesContent(models);
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
 
-  // 3. Write provider-capabilities.json alongside the registry if capabilities were provided
-  if (capabilities && Object.keys(capabilities).length > 0) {
+  // 3. Write provider-capabilities.json alongside the registry if data was collected
+  if (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) {
     const capabilitiesPath = path.join(jsonDir, 'provider-capabilities.json');
-    await atomicWriteFile(capabilitiesPath, JSON.stringify(capabilities, null, 2), 'utf-8');
+    await atomicWriteFile(capabilitiesPath, JSON.stringify({ attachment: attachmentCapabilities }, null, 2), 'utf-8');
   }
 }

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import type { ModelCapabilities, ProviderCapabilities, ProviderConfig, MastraModelGateway } from './gateways/base.js';
+import type { AttachmentCapabilities, ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -16,7 +16,7 @@ import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } f
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };
-export type { ModelCapabilities, ProviderCapabilities } from './gateways/base.js';
+export type { AttachmentCapabilities } from './gateways/base.js';
 
 interface RegistryData {
   providers: Record<string, ProviderConfig>;
@@ -452,9 +452,13 @@ export function getRegisteredProviders(): string[] {
 // Provider capabilities (per-model attachment / modality metadata)
 // ---------------------------------------------------------------------------
 
-let capabilitiesData: Record<string, ProviderCapabilities> | null = null;
+interface CapabilitiesFile {
+  attachment: AttachmentCapabilities;
+}
 
-function loadCapabilities(useDynamicLoading: boolean): Record<string, ProviderCapabilities> {
+let capabilitiesData: CapabilitiesFile | null = null;
+
+function loadCapabilities(useDynamicLoading: boolean): CapabilitiesFile {
   if (capabilitiesData) return capabilitiesData;
 
   if (useDynamicLoading) {
@@ -467,7 +471,7 @@ function loadCapabilities(useDynamicLoading: boolean): Record<string, ProviderCa
     for (const p of paths) {
       try {
         const content = fs.readFileSync(p, 'utf-8');
-        capabilitiesData = JSON.parse(content) as Record<string, ProviderCapabilities>;
+        capabilitiesData = JSON.parse(content) as CapabilitiesFile;
         return capabilitiesData;
       } catch {
         continue;
@@ -475,49 +479,38 @@ function loadCapabilities(useDynamicLoading: boolean): Record<string, ProviderCa
     }
   }
 
-  // Try static import from src (bundled at build time)
+  // Try static import from dist (bundled at build time)
   try {
     const packageRoot = getPackageRoot();
     const staticPath = path.join(packageRoot, 'dist', 'provider-capabilities.json');
     if (fs.existsSync(staticPath)) {
       const content = fs.readFileSync(staticPath, 'utf-8');
-      capabilitiesData = JSON.parse(content) as Record<string, ProviderCapabilities>;
+      capabilitiesData = JSON.parse(content) as CapabilitiesFile;
       return capabilitiesData;
     }
   } catch {
     // Fall through
   }
 
-  capabilitiesData = {};
+  capabilitiesData = { attachment: {} };
   return capabilitiesData;
 }
 
 /**
- * Look up capabilities for a specific model.
- * @param modelRouterId - Full model router ID (e.g. "openai/gpt-4o", "deepseek/deepseek-v4-flash")
- * @returns The model's capabilities, or undefined if not found in the registry
+ * Check whether a model supports image/file attachments.
+ * Returns `true` if the model is listed in the attachment capabilities,
+ * `false` if the provider is known but the model isn't listed, or
+ * `undefined` when no data exists for the provider (caller should fall
+ * back to their own default).
  */
-export function getModelCapabilities(modelRouterId: string): ModelCapabilities | undefined {
+export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
   const { provider, modelId } = parseModelString(modelRouterId);
   if (!provider) return undefined;
   const registry = GatewayRegistry.getInstance();
   const caps = loadCapabilities(registry['useDynamicLoading']);
-  return caps[provider]?.[modelId];
-}
-
-/**
- * Check whether a model supports image/file attachments.
- * Returns `true` if the model advertises attachment support or has multimodal
- * input modalities (image, pdf, audio, video). Returns `undefined` when no
- * capabilities data is available for the model (caller should fall back to
- * their own default).
- */
-export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
-  const caps = getModelCapabilities(modelRouterId);
-  if (!caps) return undefined;
-  if (caps.attachment) return true;
-  const nonTextInputs = caps.inputModalities.filter(m => m !== 'text');
-  return nonTextInputs.length > 0;
+  const providerModels = caps.attachment[provider];
+  if (!providerModels) return undefined;
+  return providerModels.includes(modelId);
 }
 
 /**
@@ -630,7 +623,7 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models, capabilities } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, attachmentCapabilities } = await fetchProvidersFromGateways(gateways);
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();
@@ -643,7 +636,7 @@ export class GatewayRegistry {
           GLOBAL_PROVIDER_TYPES_DTS(),
           providers,
           models,
-          capabilities,
+          attachmentCapabilities,
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
@@ -654,7 +647,7 @@ export class GatewayRegistry {
       const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
       const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, capabilities);
+      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, attachmentCapabilities);
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
       // Copy to src/ only when explicitly requested (e.g., running the generation script)
