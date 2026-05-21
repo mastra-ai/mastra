@@ -233,9 +233,10 @@ describe('consumeAgentStream', () => {
       expect(await drainStreamingPlan((plans[1] as Extract<Call, { kind: 'post' }>).arg)).toEqual(['second']);
     });
 
-    it('streams tool cards as separate posts in the default cards mode', async () => {
-      // When `toolDisplay` is left at the default `'cards'`, tools render via
-      // running/result cards (one post per tool) regardless of streaming.
+    it("with streaming and undefined toolDisplay, defaults to 'timeline'", async () => {
+      // The streaming driver renders tools as inline `task_update` chunks; it
+      // cannot post discrete cards, so when streaming is enabled the resolved
+      // default for `toolDisplay` is `'timeline'` rather than `'cards'`.
       const { channels, calls, sdkThread } = makeChannels({ streaming: true });
       await drive(
         channels,
@@ -253,11 +254,15 @@ describe('consumeAgentStream', () => {
         ],
         sdkThread,
       );
-      // Running card posts as its own message; the result edits that card.
+      // Tool renders as a task_update inside the streaming plan — no editMessage.
+      expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
       const posts = calls.filter(c => c.kind === 'post');
-      // One StreamingPlan post for the text segment + one card post for the running tool.
-      expect(posts.length).toBeGreaterThanOrEqual(2);
-      expect(calls.find(c => c.kind === 'editMessage')).toBeDefined();
+      const drained = (
+        await Promise.all(posts.map(p => drainStreamingPlan((p as Extract<Call, { kind: 'post' }>).arg)))
+      ).flat();
+      const taskUpdates = drained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
+      // in_progress + complete for the single tool.
+      expect(taskUpdates.length).toBeGreaterThanOrEqual(2);
     });
   });
 

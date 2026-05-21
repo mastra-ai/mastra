@@ -20,6 +20,7 @@ Improved agent channels UX:
 - **Tool error rendering** — failing tools now emit a closing task update in `'timeline'`/`'grouped'` modes (previously the row stayed `in_progress` and rendered as ⚠ at session close) and edit their card in `'cards'`/`'hidden'` modes. The error text is inlined into the task `details` (with a ⚠ glyph) while the task itself stays `status: 'complete'` so a single tool failure doesn't flip the overall plan header to an error state.
 - **Observational-memory lifecycle in streaming widgets** — `data-om-buffering-*` and `data-om-activation` chunks are routed into the active streaming session in `'timeline'`/`'grouped'` modes as their own task rows (e.g. `Saved to memory (10x)` with `12.4k → 1.2k tokens`), so memory work is visible alongside tool calls.
 - **Logger propagation** — the Mastra logger is now propagated into `AgentChannels` on register so channel-level logs flow through the configured logger.
+- **Internal refactor (no public API change)** — `consumeAgentStream` now dispatches to one of two focused drivers (streaming vs static) instead of switching on `toolDisplay` inside a single 700-line loop. Tool-call correlation moved into a `ToolTracker` helper and observational-memory rendering into a dedicated `renderOmTaskUpdate` helper, both shared between drivers. Invalid combinations now warn and downgrade: `streaming: true` + `toolDisplay: 'cards'` falls back to `'timeline'`; `streaming: false` + `'timeline'`/`'grouped'` falls back to `'cards'`.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
