@@ -28,26 +28,84 @@ type SubscribeWaiter = {
 
 function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      socket.off('drain', onDrain);
-      reject(error);
-    };
-    const onDrain = () => {
+    let settled = false;
+    const cleanup = () => {
       socket.off('error', onError);
+    };
+    const settle = (error?: Error | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) {
+        reject(error);
+        return;
+      }
       resolve();
     };
+    const onError = (error: Error) => {
+      settle(error);
+    };
+
+    if (socket.destroyed || !socket.writable) {
+      reject(new Error('UnixSocketPubSub socket is not writable'));
+      return;
+    }
 
     socket.once('error', onError);
-    const drained = socket.write(`${JSON.stringify(frame)}\n`, () => {
-      if (drained) {
-        socket.off('error', onError);
-        resolve();
-      }
-    });
-    if (!drained) {
-      socket.once('drain', onDrain);
+    try {
+      socket.write(`${JSON.stringify(frame)}\n`, error => {
+        if (error) {
+          settle(error);
+          return;
+        }
+        settle();
+      });
+    } catch (error) {
+      settle(error as Error);
     }
   });
+}
+
+function isBrokerWriteFailure(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'EPIPE' || code === 'ECONNRESET' || code === 'ERR_STREAM_DESTROYED';
+}
+
+async function closeSocket(socket: net.Socket): Promise<void> {
+  if (socket.destroyed) return;
+  await new Promise<void>(resolve => {
+    socket.once('close', () => resolve());
+    socket.destroy();
+  });
+}
+
+function getWritableSocket(socket: net.Socket | undefined): net.Socket | undefined {
+  if (!socket || socket.destroyed || !socket.writable) {
+    return undefined;
+  }
+  return socket;
+}
+
+async function writeFrameToBroker(socket: net.Socket, frame: ClientFrame): Promise<void> {
+  try {
+    await writeFrame(socket, frame);
+  } catch (error) {
+    if (isBrokerWriteFailure(error)) {
+      await closeSocket(socket);
+    }
+    throw error;
+  }
+}
+
+async function writeFrameToClient(socket: net.Socket, frame: ServerFrame): Promise<void> {
+  try {
+    await writeFrame(socket, frame);
+  } catch (error) {
+    if (isBrokerWriteFailure(error)) {
+      await closeSocket(socket);
+    }
+    throw error;
+  }
 }
 
 function nextTick(): Promise<void> {
@@ -392,7 +450,7 @@ export class UnixSocketPubSub extends PubSub {
     const frame: ServerFrame = { type: 'event', topic, event: brokerEvent };
     for (const client of this.#brokerClients.values()) {
       if (!client.subscriptions.has(topic) || client.socket.destroyed) continue;
-      const write = writeFrame(client.socket, frame).catch(() => {});
+      const write = writeFrameToClient(client.socket, frame).catch(() => {});
       this.#pendingWrites.push(write);
     }
     await this.flush();
@@ -418,14 +476,29 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #sendToBroker(frame: ClientFrame) {
-    const socket = this.#clientSocket;
-    if (!socket || socket.destroyed) {
+    const socket = getWritableSocket(this.#clientSocket);
+    if (!socket) {
       await this.#ensureStarted(true);
     }
-    const activeSocket = this.#clientSocket;
-    if (!activeSocket || activeSocket.destroyed) {
+    const activeSocket = getWritableSocket(this.#clientSocket);
+    if (!activeSocket) {
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
-    await writeFrame(activeSocket, frame);
+    try {
+      await writeFrameToBroker(activeSocket, frame);
+    } catch (error) {
+      if (!isBrokerWriteFailure(error) || this.#closed) {
+        throw error;
+      }
+      if (this.#clientSocket === activeSocket) {
+        this.#clientSocket = undefined;
+      }
+      await this.#ensureStarted(true);
+      const reconnectedSocket = getWritableSocket(this.#clientSocket);
+      if (!reconnectedSocket) {
+        throw new Error('UnixSocketPubSub is not connected to a broker');
+      }
+      await writeFrameToBroker(reconnectedSocket, frame);
+    }
   }
 }
