@@ -323,6 +323,145 @@ describe('Session skill discovery (§4.6)', () => {
     ).toThrow(HarnessConfigError);
   });
 
+  it('lists code-registered skill action metadata for desktop action catalogs', async () => {
+    const harness = new Harness({
+      agents: { default: new MockAgent({ id: 'default' }) } as any,
+      modes: [{ id: 'm', agentId: 'default' }],
+      defaultModeId: 'm',
+      skills: [
+        {
+          name: 'open-ticket',
+          description: 'Open a ticket',
+          instructions: 'Open the ticket.',
+          action: {
+            displayName: 'Open ticket',
+            icon: 'ticket',
+            shortcuts: [{ id: 'ticket.open', label: 'Open ticket', keys: ['mod+o'] }],
+            inputSchema: {
+              type: 'object',
+              properties: { ticketId: { type: 'string' } },
+              required: ['ticketId'],
+            },
+            outputSchema: { type: 'object', properties: { status: { type: 'string' } } },
+            artifactTypes: ['application/vnd.mastra.ticket'],
+            permissions: {
+              tools: ['tickets.open'],
+              fileScopes: ['workspace'],
+              networkScopes: ['api.example.test'],
+              mcpScopes: ['tickets'],
+            },
+          },
+        },
+      ],
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.list()).resolves.toMatchObject([
+      {
+        name: 'open-ticket',
+        action: {
+          displayName: 'Open ticket',
+          shortcuts: [{ id: 'ticket.open', keys: ['mod+o'] }],
+          artifactTypes: ['application/vnd.mastra.ticket'],
+          permissions: {
+            tools: ['tickets.open'],
+            networkScopes: ['api.example.test'],
+            mcpScopes: ['tickets'],
+          },
+        },
+      },
+    ]);
+  });
+
+  it('rejects malformed code-registered skill action metadata at construction', () => {
+    const makeHarness = (action: HarnessSkill['action']) =>
+      new Harness({
+        agents: { default: new MockAgent({ id: 'default' }) } as any,
+        modes: [{ id: 'm', agentId: 'default' }],
+        defaultModeId: 'm',
+        skills: [{ name: 'bad-action', description: 'Bad action', instructions: 'Body', action }],
+      });
+
+    expect(() => makeHarness('bad' as unknown as HarnessSkill['action'])).toThrow(HarnessConfigError);
+    expect(() => makeHarness({ shortcuts: [{ id: '' }] as unknown as HarnessSkill['action']['shortcuts'] })).toThrow(
+      HarnessConfigError,
+    );
+    expect(() =>
+      makeHarness({
+        shortcuts: [
+          { id: 'dupe', label: 'First' },
+          { id: 'dupe', label: 'Second' },
+        ],
+      }),
+    ).toThrow(HarnessConfigError);
+    expect(() => makeHarness({ inputSchema: new Date() as unknown as Record<string, unknown> })).toThrow(
+      HarnessConfigError,
+    );
+    expect(() =>
+      makeHarness({
+        permissions: { mcpScopes: ['ok', ''] },
+      }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('does not let returned action metadata mutation affect code-registered skills', async () => {
+    const harness = new Harness({
+      agents: { default: new MockAgent({ id: 'default' }) } as any,
+      modes: [{ id: 'm', agentId: 'default' }],
+      defaultModeId: 'm',
+      skills: [
+        {
+          name: 'immutable-action',
+          description: 'Immutable action',
+          instructions: 'Body',
+          action: {
+            inputSchema: { properties: { path: { type: 'string' } } },
+            permissions: { tools: ['files.read'] },
+            shortcuts: [{ id: 'files.read', keys: ['mod+r'] }],
+          },
+        },
+      ],
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const first = await session.skills.get('immutable-action');
+
+    (first!.action!.permissions!.tools as string[]).push('files.write');
+    ((first!.action!.inputSchema!.properties as Record<string, unknown>).path as Record<string, unknown>).type =
+      'number';
+    (first!.action!.shortcuts![0]!.keys as string[]).push('mod+w');
+
+    const second = await session.skills.get('immutable-action');
+    expect(second!.action!.permissions!.tools).toEqual(['files.read']);
+    expect((second!.action!.inputSchema!.properties as Record<string, { type?: unknown }>).path.type).toBe('string');
+    expect(second!.action!.shortcuts![0]!.keys).toEqual(['mod+r']);
+  });
+
+  it('passes workspace action metadata through the workspace skill descriptor metadata', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'workspace-action',
+        description: 'Workspace action',
+        metadata: {
+          action: {
+            displayName: 'Workspace action',
+            permissions: { mcpScopes: ['workspace-mcp'] },
+          },
+        },
+      },
+    ]);
+    const harness = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.get('workspace-action')).resolves.toMatchObject({
+      metadata: {
+        action: {
+          displayName: 'Workspace action',
+          permissions: { mcpScopes: ['workspace-mcp'] },
+        },
+      },
+    });
+  });
+
   it('rejects malformed code-registered skill categories at construction', () => {
     expect(
       () =>

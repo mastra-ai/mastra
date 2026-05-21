@@ -529,6 +529,13 @@ export interface HarnessSkill {
   category?: string;
 
   /**
+   * Optional desktop action-catalog metadata for UIs that expose skills as
+   * user-invoked actions. Harness does not execute or enforce these hints;
+   * permission gates still run at tool execution time.
+   */
+  action?: HarnessSkillActionMetadata;
+
+  /**
    * Optional path-like locator (e.g. `skills/my-skill/SKILL.md`). Present when
    * the workspace skill source exposes one; otherwise omitted.
    */
@@ -543,6 +550,50 @@ export interface HarnessSkill {
    * the original config.
    */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Desktop action-catalog metadata attached to a Harness skill.
+ *
+ * These fields are intentionally descriptive. They let desktop hosts render
+ * forms, shortcut palettes, permission summaries, and expected artifact
+ * outputs without loading every skill body into model context.
+ */
+export interface HarnessSkillActionMetadata {
+  /** Optional user-facing label when different from the skill name. */
+  displayName?: string;
+  /** Optional icon token owned by the host UI. */
+  icon?: string;
+  /** Keyboard or command palette shortcuts that invoke this skill. */
+  shortcuts?: readonly HarnessSkillActionShortcut[];
+  /** JSON-schema-like input descriptor for action forms. */
+  inputSchema?: Readonly<Record<string, unknown>>;
+  /** JSON-schema-like output descriptor for result previews. */
+  outputSchema?: Readonly<Record<string, unknown>>;
+  /** Artifact MIME types or host-owned artifact ids this action may produce. */
+  artifactTypes?: readonly string[];
+  /** Permission hints for preflight UI. Enforcement remains separate. */
+  permissions?: HarnessSkillActionPermissionHints;
+}
+
+export interface HarnessSkillActionShortcut {
+  /** Stable shortcut id within the skill descriptor. */
+  id: string;
+  /** User-facing shortcut label. Defaults to `id` when absent. */
+  label?: string;
+  /** Command palette aliases or key chords such as `mod+k`. */
+  keys?: readonly string[];
+}
+
+export interface HarnessSkillActionPermissionHints {
+  /** Tool ids/names likely needed by this action. */
+  tools?: readonly string[];
+  /** File scope labels or root ids likely needed by this action. */
+  fileScopes?: readonly string[];
+  /** Network hosts, protocols, or policy labels likely needed by this action. */
+  networkScopes?: readonly string[];
+  /** MCP server or scope labels likely needed by this action. */
+  mcpScopes?: readonly string[];
 }
 
 /**

@@ -96,6 +96,9 @@ import type {
   HarnessFileConfig,
   HarnessMode,
   HarnessSkill,
+  HarnessSkillActionMetadata,
+  HarnessSkillActionPermissionHints,
+  HarnessSkillActionShortcut,
   ModelAuthStatus,
   ModelInfo,
   PermissionPolicy,
@@ -145,7 +148,37 @@ type CloseTreeNode = {
 function cloneHarnessSkill(skill: HarnessSkill): HarnessSkill {
   return {
     ...skill,
+    ...(skill.action ? { action: cloneHarnessSkillActionMetadata(skill.action) } : {}),
     ...(skill.metadata ? { metadata: cloneSkillMetadata(skill.metadata, new WeakMap()) } : {}),
+  };
+}
+
+function cloneHarnessSkillActionMetadata(action: HarnessSkillActionMetadata): HarnessSkillActionMetadata {
+  return {
+    ...action,
+    ...(action.shortcuts ? { shortcuts: action.shortcuts.map(cloneHarnessSkillActionShortcut) } : {}),
+    ...(action.inputSchema ? { inputSchema: cloneSkillMetadata(action.inputSchema, new WeakMap()) } : {}),
+    ...(action.outputSchema ? { outputSchema: cloneSkillMetadata(action.outputSchema, new WeakMap()) } : {}),
+    ...(action.artifactTypes ? { artifactTypes: [...action.artifactTypes] } : {}),
+    ...(action.permissions ? { permissions: cloneHarnessSkillActionPermissionHints(action.permissions) } : {}),
+  };
+}
+
+function cloneHarnessSkillActionShortcut(shortcut: HarnessSkillActionShortcut): HarnessSkillActionShortcut {
+  return {
+    ...shortcut,
+    ...(shortcut.keys ? { keys: [...shortcut.keys] } : {}),
+  };
+}
+
+function cloneHarnessSkillActionPermissionHints(
+  permissions: HarnessSkillActionPermissionHints,
+): HarnessSkillActionPermissionHints {
+  return {
+    ...(permissions.tools ? { tools: [...permissions.tools] } : {}),
+    ...(permissions.fileScopes ? { fileScopes: [...permissions.fileScopes] } : {}),
+    ...(permissions.networkScopes ? { networkScopes: [...permissions.networkScopes] } : {}),
+    ...(permissions.mcpScopes ? { mcpScopes: [...permissions.mcpScopes] } : {}),
   };
 }
 
@@ -209,6 +242,97 @@ function hasOnlyCloneableSkillMetadataValues(value: unknown, seen: WeakSet<objec
     return supported;
   }
   return true;
+}
+
+function assertHarnessSkillActionMetadata(
+  action: unknown,
+  skillName: string,
+): asserts action is HarnessSkillActionMetadata {
+  if (!isPlainSkillMetadata(action)) {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action must be an object`);
+  }
+  const metadata = action as HarnessSkillActionMetadata;
+  if (metadata.displayName !== undefined && typeof metadata.displayName !== 'string') {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action.displayName must be a string`);
+  }
+  if (metadata.icon !== undefined && typeof metadata.icon !== 'string') {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action.icon must be a string`);
+  }
+  if (metadata.shortcuts !== undefined) {
+    if (!Array.isArray(metadata.shortcuts)) {
+      throw new HarnessConfigError('skills', `entry "${skillName}" action.shortcuts must be an array`);
+    }
+    const ids = new Set<string>();
+    for (const shortcut of metadata.shortcuts) {
+      assertHarnessSkillActionShortcut(shortcut, skillName);
+      if (ids.has(shortcut.id)) {
+        throw new HarnessConfigError(
+          'skills',
+          `entry "${skillName}" action.shortcuts has duplicate id "${shortcut.id}"`,
+        );
+      }
+      ids.add(shortcut.id);
+    }
+  }
+  assertOptionalPlainActionSchema(metadata.inputSchema, skillName, 'inputSchema');
+  assertOptionalPlainActionSchema(metadata.outputSchema, skillName, 'outputSchema');
+  assertOptionalStringArray(metadata.artifactTypes, skillName, 'action.artifactTypes');
+  if (metadata.permissions !== undefined) {
+    assertHarnessSkillActionPermissionHints(metadata.permissions, skillName);
+  }
+}
+
+function assertHarnessSkillActionShortcut(
+  shortcut: unknown,
+  skillName: string,
+): asserts shortcut is HarnessSkillActionShortcut {
+  if (!isPlainSkillMetadata(shortcut)) {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action.shortcuts entries must be objects`);
+  }
+  if (typeof shortcut.id !== 'string' || shortcut.id.length === 0) {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action.shortcuts entries must have a non-empty id`);
+  }
+  if (shortcut.label !== undefined && typeof shortcut.label !== 'string') {
+    throw new HarnessConfigError(
+      'skills',
+      `entry "${skillName}" action.shortcuts["${shortcut.id}"].label must be a string`,
+    );
+  }
+  assertOptionalStringArray(shortcut.keys, skillName, `action.shortcuts["${shortcut.id}"].keys`);
+}
+
+function assertOptionalPlainActionSchema(
+  value: unknown,
+  skillName: string,
+  field: 'inputSchema' | 'outputSchema',
+): void {
+  if (value === undefined) return;
+  if (!isPlainSkillMetadata(value)) {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action.${field} must be an object`);
+  }
+  if (!hasOnlyCloneableSkillMetadataValues(value, new WeakSet<object>())) {
+    throw new HarnessConfigError(
+      'skills',
+      `entry "${skillName}" action.${field} must contain only primitives, arrays, and plain objects`,
+    );
+  }
+}
+
+function assertHarnessSkillActionPermissionHints(permissions: unknown, skillName: string): void {
+  if (!isPlainSkillMetadata(permissions)) {
+    throw new HarnessConfigError('skills', `entry "${skillName}" action.permissions must be an object`);
+  }
+  assertOptionalStringArray(permissions.tools, skillName, 'action.permissions.tools');
+  assertOptionalStringArray(permissions.fileScopes, skillName, 'action.permissions.fileScopes');
+  assertOptionalStringArray(permissions.networkScopes, skillName, 'action.permissions.networkScopes');
+  assertOptionalStringArray(permissions.mcpScopes, skillName, 'action.permissions.mcpScopes');
+}
+
+function assertOptionalStringArray(value: unknown, skillName: string, field: string): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string' && item.length > 0)) {
+    throw new HarnessConfigError('skills', `entry "${skillName}" ${field} must be an array of non-empty strings`);
+  }
 }
 
 function assertAttachmentJsonValue(value: unknown, field: string, seen: WeakSet<object> = new WeakSet()): JsonValue {
@@ -738,6 +862,9 @@ export class Harness {
         }
         if (entry.filePath !== undefined && (typeof entry.filePath !== 'string' || entry.filePath.length === 0)) {
           throw new HarnessConfigError('skills', `entry "${entry.name}" must have a non-empty string \`filePath\``);
+        }
+        if (entry.action !== undefined) {
+          assertHarnessSkillActionMetadata(entry.action, entry.name);
         }
         if (entry.metadata !== undefined && !isPlainSkillMetadata(entry.metadata)) {
           throw new HarnessConfigError('skills', `entry "${entry.name}" must have object \`metadata\``);
