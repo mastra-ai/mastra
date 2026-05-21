@@ -170,10 +170,10 @@ describe('AgentBuilderAgentView', () => {
     expect(queryByTestId('agent-builder-mode-toggle')).toBeNull();
   });
 
-  it('shows the Remove from library button when the agent is public', () => {
-    const { getByTestId } = renderAt();
-    const button = getByTestId('agent-builder-visibility-remove');
-    expect(button.textContent).toContain('Remove from library');
+  it('never renders the library visibility button on the view page, even when the public agent is owned', () => {
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-visibility-add')).toBeNull();
+    expect(queryByTestId('agent-builder-visibility-remove')).toBeNull();
   });
 
   it('navigates to the edit page when the mode-toggle is clicked', () => {

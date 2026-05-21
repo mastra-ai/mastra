@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui';
-import { ArrowLeftIcon, RefreshCwIcon } from 'lucide-react';
+import { Breadcrumb, Button, Crumb } from '@mastra/playground-ui';
+import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import type { WorkspaceMode } from '../../layouts/types';
 import { AgentBuilderTitle } from './agent-builder-title';
 
@@ -21,10 +21,6 @@ export interface EditTopBarProps {
   primaryAction?: ReactNode;
   /** Optional slot rendered AFTER primaryAction (e.g. mobile-only 3-dot menu). */
   mobileExtra?: ReactNode;
-  /** Where the back button navigates. Defaults to the agents list. */
-  backHref?: string;
-  /** Tooltip for the back button. Defaults to "Agents list". */
-  backTooltip?: string;
 }
 
 export const EditTopBar = ({
@@ -35,25 +31,19 @@ export const EditTopBar = ({
   rightAside,
   primaryAction,
   mobileExtra,
-  backHref = '/agent-builder/agents',
-  backTooltip = 'Agents list',
 }: EditTopBarProps) => {
-  const navigate = useNavigate();
   const toggleLabel = mode === 'test' ? 'Switch to Edit' : 'Switch to View';
 
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
-      <div className="justify-self-start">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          tooltip={backTooltip}
-          onClick={() => navigate(backHref, { viewTransition: true })}
-        >
-          <ArrowLeftIcon />
-        </Button>
-      </div>
-      <AgentBuilderTitle className="min-w-0 justify-self-start" isLoading={isLoading} />
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
+      <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
+        <Crumb as={Link} to="/agent-builder/agents">
+          Agent list
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          <AgentBuilderTitle isLoading={isLoading} />
+        </Crumb>
+      </Breadcrumb>
       <div className="justify-self-end flex items-center gap-2 shrink-0">
         {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
         {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}

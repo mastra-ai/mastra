@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui';
-import { ArrowLeftIcon, RefreshCwIcon } from 'lucide-react';
+import { Breadcrumb, Button, Crumb } from '@mastra/playground-ui';
+import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import type { WorkspaceMode } from '../../layouts/types';
 import { AgentBuilderTitle } from '../agent-edit/agent-builder-title';
 
@@ -28,25 +28,21 @@ export const ViewTopBar = ({
   ownerActions,
   mobileMenu,
 }: ViewTopBarProps) => {
-  const navigate = useNavigate();
   const toggleLabel = mode === 'test' ? 'Switch to Edit' : 'Switch to View';
 
   return (
     <div
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10"
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10"
       data-testid="agent-builder-view-top-bar"
     >
-      <div className="justify-self-start">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          tooltip="Agents list"
-          onClick={() => navigate('/agent-builder/agents', { viewTransition: true })}
-        >
-          <ArrowLeftIcon />
-        </Button>
-      </div>
-      <AgentBuilderTitle className="min-w-0 justify-self-start" isLoading={false} />
+      <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
+        <Crumb as={Link} to="/agent-builder/agents">
+          Agent list
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          <AgentBuilderTitle isLoading={false} />
+        </Crumb>
+      </Breadcrumb>
       <div className="justify-self-end flex items-center gap-2 shrink-0">
         {ownerActions && <div className="shrink-0 hidden lg:flex items-center gap-2">{ownerActions}</div>}
         {mobileMenu && <div className="shrink-0 lg:hidden">{mobileMenu}</div>}

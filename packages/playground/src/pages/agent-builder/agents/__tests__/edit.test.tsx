@@ -188,12 +188,12 @@ describe('AgentBuilderAgentEdit', () => {
       expect(queryByTestId('agent-builder-edit-save')).toBeNull();
     });
 
-    it('back arrow navigates to the agents list without saving', () => {
-      const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Agents list'));
-
+    it('breadcrumb "Agent list" link points to the agents list without saving', () => {
+      const { getByRole } = renderAt();
+      const link = getByRole('link', { name: /agent list/i }) as HTMLAnchorElement;
+      expect(link.getAttribute('href')).toBe('/agent-builder/agents');
+      fireEvent.click(link);
       expect(saveMock).not.toHaveBeenCalled();
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
 
     it('autosaves edits without navigating away', async () => {
@@ -284,8 +284,8 @@ describe('AgentBuilderAgentEdit', () => {
     });
   });
 
-  describe('back arrow', () => {
-    it('navigates to the agents list in edit mode', () => {
+  describe('breadcrumb', () => {
+    it('renders an "Agent list" link pointing to the agents list in edit mode', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -294,9 +294,9 @@ describe('AgentBuilderAgentEdit', () => {
         agents: [],
         workflows: [],
       };
-      const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
+      const { getByRole } = renderAt();
+      const link = getByRole('link', { name: /agent list/i }) as HTMLAnchorElement;
+      expect(link.getAttribute('href')).toBe('/agent-builder/agents');
     });
   });
 });

@@ -153,7 +153,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
     expect(screen.queryByTestId('agent-builder-visibility-remove')).toBeNull();
   });
 
-  it('shows the Remove from library button for the owner of a public agent', async () => {
+  it('never renders the library visibility button on the view page, even for the owner of a public agent', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
@@ -162,7 +162,9 @@ describe('AgentBuilderAgentView MSW integration', () => {
 
     renderPage();
 
-    expect(await screen.findByTestId('agent-builder-visibility-remove')).toBeTruthy();
+    await screen.findByTestId('agent-builder-agent-chat-empty-state');
+    expect(screen.queryByTestId('agent-builder-visibility-add')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-visibility-remove')).toBeNull();
   });
 
   it('never renders the configure panel or its tab strip in view mode, regardless of ownership', async () => {
