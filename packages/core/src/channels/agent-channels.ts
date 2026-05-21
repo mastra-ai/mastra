@@ -1697,6 +1697,28 @@ export class AgentChannels {
       });
     };
 
+    // TODO(follow-up): replace this Slack-specific branch with a portable
+    // `adapter.stopTyping(threadId)` capability check once `MastraSlackAdapter`
+    // lands (alongside `setHeaderTitle`). Adapters that implement `stopTyping`
+    // would handle this; adapters whose typing indicator auto-expires (Discord,
+    // Telegram) would simply not implement it.
+    //
+    // Quick fix rationale: Slack's `assistant.threads.setStatus` (what
+    // `startTyping` maps to) persists until a non-streaming `chat.postMessage`
+    // clears it. When we use `chatStream`, the status sticks after the run
+    // completes. Slack accepts an empty status string as a clear, so we send
+    // one at run end. Other platforms either auto-expire their typing indicator
+    // or would interpret an empty string as a literal status, so we gate on
+    // platform name here.
+    const clearTypingStatusAtRunEnd = () => {
+      if (platform !== 'slack') return;
+      if (!typingStatusFn) return;
+      if (currentTypingStatus === undefined) return;
+      sdkThread.startTyping('').catch(e => {
+        this.logger?.debug('[CHANNEL] Typing indicator clear failed (best-effort)', { error: e });
+      });
+    };
+
     // Streaming text session: when `streaming` is enabled, text deltas push into
     // an async iterable consumed by `sdkThread.post(...)` so the platform sees
     // text progressively. The session opens on the first text-delta of a run and
@@ -1921,6 +1943,7 @@ export class AgentChannels {
       // so we flush whatever's pending and reset per-run state before the next run starts.
       if (chunk.type === 'finish') {
         await flushText();
+        clearTypingStatusAtRunEnd();
         resetRunState();
         continue;
       }
@@ -1947,12 +1970,14 @@ export class AgentChannels {
         } catch (postErr) {
           this.logger?.debug('[CHANNEL] Failed to post error message', { error: postErr });
         }
+        clearTypingStatusAtRunEnd();
         resetRunState();
         continue;
       }
 
       if (chunk.type === 'abort') {
         await flushText();
+        clearTypingStatusAtRunEnd();
         resetRunState();
         continue;
       }
