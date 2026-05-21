@@ -12,6 +12,22 @@ import { createTool } from '../tools';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
+function normalizeDynamicBackgroundFields({ url, body }: { url: string; body: unknown }): {
+  url: string;
+  body: unknown;
+} {
+  let stringifiedBody = JSON.stringify(body);
+  stringifiedBody = stringifiedBody.replaceAll(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+    'NORMALIZED_UUID',
+  );
+  stringifiedBody = stringifiedBody.replaceAll(/call_[A-Za-z0-9]+/g, 'NORMALIZED_CALL_ID');
+  stringifiedBody = stringifiedBody.replaceAll(/fc_[A-Za-z0-9]+/g, 'NORMALIZED_FUNCTION_CALL_ID');
+  stringifiedBody = stringifiedBody.replaceAll(/msg_[A-Za-z0-9]+/g, 'NORMALIZED_MESSAGE_ID');
+
+  return { url, body: JSON.parse(stringifiedBody) };
+}
+
 let mockGateway: any;
 let testStorage: any;
 beforeEach(async c => {
@@ -23,6 +39,7 @@ beforeEach(async c => {
       createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
     )}`,
     exactMatch: true,
+    transformRequest: normalizeDynamicBackgroundFields,
     recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
   });
   await mockGateway.start();
@@ -266,7 +283,6 @@ describe('Background Tasks E2E', () => {
 
       // Second prompt should NOT have background-task-started (greet is foreground)
       const bgStarted2 = chunks2.find(c => c.type === 'background-task-started');
-      console.log('bgStarted2', JSON.stringify(chunks2, null, 2));
       expect(bgStarted2).toBeUndefined();
 
       // Second prompt should have a tool-result from the greet tool (foreground)
@@ -392,8 +408,6 @@ describe('Background Tasks E2E', () => {
         .map(c => c.payload?.text ?? c.delta ?? '')
         .join('')
         .toLowerCase();
-
-      console.log(assembledText);
 
       expect(assembledText).toContain('quantum computing');
     } finally {

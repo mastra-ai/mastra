@@ -14,6 +14,19 @@ import { getOpenAIModel } from './mock-model';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
+function normalizeDynamicRunIds({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
+  let stringifiedBody = JSON.stringify(body);
+  stringifiedBody = stringifiedBody.replaceAll(/"runId":"[^"]+"/g, '"runId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(/\\"runId\\":\\"[^"]+\\"/g, '\\"runId\\":\\"NORMALIZED\\"');
+  stringifiedBody = stringifiedBody.replaceAll(/"suspendedToolRunId":"[^"]+"/g, '"suspendedToolRunId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(
+    /\\"suspendedToolRunId\\":\\"[^"]+\\"/g,
+    '\\"suspendedToolRunId\\":\\"NORMALIZED\\"',
+  );
+
+  return { url, body: JSON.parse(stringifiedBody) };
+}
+
 let mockGateway: any;
 let mockStorage: any;
 beforeEach(async c => {
@@ -25,6 +38,7 @@ beforeEach(async c => {
       createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
     )}`,
     exactMatch: true,
+    transformRequest: normalizeDynamicRunIds,
     recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
   });
   await mockGateway.start();

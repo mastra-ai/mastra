@@ -44,6 +44,14 @@ beforeEach(async c => {
       // Normalize toolCallId (AI SDK generated, alphanumeric ~16 chars).
       serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9]+"/g, '"toolCallId":"NORMALIZED"');
       serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
+      // Normalize workflow run IDs that depend on UUID counter state.
+      serialized = serialized.replace(/"runId":"[^"]+"/g, '"runId":"NORMALIZED"');
+      serialized = serialized.replace(/\\"runId\\":\\"[^\\"]+\\"/g, '\\"runId\\":\\"NORMALIZED\\"');
+      serialized = serialized.replace(/"suspendedToolRunId":"[^"]+"/g, '"suspendedToolRunId":"NORMALIZED"');
+      serialized = serialized.replace(
+        /\\"suspendedToolRunId\\":\\"[^\\"]+\\"/g,
+        '\\"suspendedToolRunId\\":\\"NORMALIZED\\"',
+      );
       // Normalize workflow timestamps embedded in multi-level stringified results.
       // They can appear at various escape depths (\"startedAt\", \\\"startedAt\\\", etc.)
       serialized = serialized.replace(/(\\*"startedAt\\*":\s*)\d{10,}/g, '$10');
