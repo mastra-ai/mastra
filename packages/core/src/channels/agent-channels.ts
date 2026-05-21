@@ -2389,27 +2389,42 @@ export class AgentChannels {
    * platform. Called the first time `task_write` runs, or after a server
    * restart when the persisted plan is found but no instance exists yet.
    */
+  /**
+   * Lazily create (but do not yet post) the active plan entry for a thread.
+   * Called by `task_write` before mutating the task list so that
+   * `applyPlanMutation` has somewhere to write. The widget itself is posted
+   * afterwards by `ensurePlanInstanceForTool` using the first task as the
+   * title.
+   */
+  private async ensurePlanEntryForTool(mastraThreadId: string): Promise<void> {
+    if (this.activePlans.has(mastraThreadId)) return;
+    const scope = this.planScopes.get(mastraThreadId);
+    if (!scope) return;
+    await this.beginActivePlan({
+      mastraThreadId,
+      sdkThread: scope.sdkThread,
+      platform: scope.platform,
+      initialMessage: scope.initialMessage,
+      completeMessage: scope.completeMessage,
+      toolDisplay: scope.toolDisplay,
+    });
+  }
+
   private async ensurePlanInstanceForTool(mastraThreadId: string): Promise<void> {
-    // Lazily open the plan entry on the first tool call. `consumeAgentStream`
-    // stashes the scope (sdkThread / platform / messages / toolDisplay) when
-    // plan mode is enabled; we use it here to call `beginActivePlan` without
-    // requiring the channel to pre-create empty entries.
-    if (!this.activePlans.has(mastraThreadId)) {
-      const scope = this.planScopes.get(mastraThreadId);
-      if (!scope) return;
-      await this.beginActivePlan({
-        mastraThreadId,
-        sdkThread: scope.sdkThread,
-        platform: scope.platform,
-        initialMessage: scope.initialMessage,
-        completeMessage: scope.completeMessage,
-        toolDisplay: scope.toolDisplay,
-      });
-    }
+    // Lazily open the plan entry on the first tool call if it doesn't exist
+    // yet. `consumeAgentStream` stashes the scope (sdkThread / platform /
+    // messages / toolDisplay) when plan mode is enabled.
+    await this.ensurePlanEntryForTool(mastraThreadId);
     const entry = this.activePlans.get(mastraThreadId);
     if (!entry || entry.instance) return;
     const PlanCtor = chatModule().Plan;
-    const initialMessage = entry.persisted.initialMessage || 'Working…';
+    // Chat SDK's `Plan` uses `initialMessage` as both the widget title and the
+    // first task row. To avoid showing a generic "Working…" placeholder above
+    // the LLM's tasks, use the first persisted task title as `initialMessage`
+    // when available — it becomes the widget title, and we skip emitting it
+    // again as a task.
+    const [firstTask, ...remainingTasks] = entry.persisted.tasks;
+    const initialMessage = firstTask?.title || entry.persisted.initialMessage || 'Working…';
     const instance = new PlanCtor({ initialMessage });
     try {
       await entry.sdkThread.post(instance);
@@ -2417,8 +2432,19 @@ export class AgentChannels {
       this.logger?.debug('[CHANNEL] Failed to post plan widget', { error: e });
     }
     entry.instance = instance;
-    // Replay existing tasks onto the freshly-posted widget.
-    for (const task of entry.persisted.tasks) {
+    // The first task is implicit in the initial title; only update its status
+    // if it's already non-pending (rehydrated mid-flight).
+    if (firstTask && firstTask.status !== 'pending') {
+      try {
+        await instance.updateTask({
+          status: firstTask.status === 'completed' ? 'complete' : 'in_progress',
+        });
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] Failed to set initial plan task status', { error: e });
+      }
+    }
+    // Replay any remaining tasks onto the freshly-posted widget.
+    for (const task of remainingTasks) {
       try {
         await instance.addTask({
           title: task.title,

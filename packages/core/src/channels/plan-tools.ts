@@ -46,6 +46,7 @@ export function createPlanTools(channels: AgentChannels) {
       mastraThreadId: string,
       mutate: (tasks: PersistedPlanTask[]) => PersistedPlanTask[] | void,
     ): Promise<PersistedPlanTask[]>;
+    ensurePlanEntryForTool(mastraThreadId: string): Promise<void>;
     ensurePlanInstanceForTool(mastraThreadId: string): Promise<void>;
     finalizePlanFromTool(mastraThreadId: string, completeMessage?: string): Promise<void>;
     readPlanTasks(mastraThreadId: string): Promise<PersistedPlanTask[]>;
@@ -87,7 +88,11 @@ export function createPlanTools(channels: AgentChannels) {
       }),
       execute: async ({ tasks: input }, context) => {
         const mastraThreadId = await requireThreadId(context);
-        await internals.ensurePlanInstanceForTool(mastraThreadId);
+        // Lazily open the plan entry (without posting the widget yet) so
+        // applyPlanMutation has somewhere to write. The widget is posted
+        // afterwards using the first task title as its header, avoiding a
+        // generic "Working…" placeholder row above the LLM's tasks.
+        await internals.ensurePlanEntryForTool(mastraThreadId);
         const updated = await internals.applyPlanMutation(mastraThreadId, current => {
           const byId = new Map(current.map(t => [t.id, t]));
           const next: PersistedPlanTask[] = [];
@@ -111,6 +116,9 @@ export function createPlanTools(channels: AgentChannels) {
           }
           return next;
         });
+        // Now that the persisted task list is populated, post the live widget
+        // (no-op if already posted) using the first task as the title.
+        await internals.ensurePlanInstanceForTool(mastraThreadId);
         return { tasks: updated.map(toSummary) };
       },
     }),
