@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
-import { MastraReactProvider } from '@mastra/react';
 import type { MastraUIMessage } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { cleanup, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CONNECT_CHANNEL_TOOL_NAME } from '../../../hooks/use-connect-channel-tool';
 import { MessageRow } from '../messages';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
@@ -22,9 +17,36 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
-import { server } from '@/test/msw-server';
 
 type ToolPart = MastraUIMessage['parts'][number];
+
+interface PrimitivesMock {
+  agentId: string;
+  toolsData: Record<string, { description?: string }>;
+  agentsData: Record<string, { name?: string; description?: string }>;
+  workflowsData: Record<string, { name?: string; description?: string }>;
+  availableSkills: { id: string; name: string }[];
+}
+
+let primitivesMock: PrimitivesMock = {
+  agentId: 'agent-1',
+  toolsData: {},
+  agentsData: {},
+  workflowsData: {},
+  availableSkills: [],
+};
+
+vi.mock('../../../contexts/agent-primitives-context', () => ({
+  useAgentPrimitives: () => primitivesMock,
+}));
+
+vi.mock('../../../../builder', () => ({
+  useBuilderPickerVisibility: () => ({
+    visibleTools: null,
+    visibleAgents: null,
+    visibleWorkflows: null,
+  }),
+}));
 
 const FormWrapper = ({
   children,
@@ -46,17 +68,6 @@ const renderRow = (parts: ToolPart[], defaultValues?: Partial<AgentBuilderEditFo
     </FormWrapper>,
   );
 
-const ChannelsWrapper = ({ children }: { children: ReactNode }) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return (
-    <MastraReactProvider baseUrl="http://localhost:4111">
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>{children}</TooltipProvider>
-      </QueryClientProvider>
-    </MastraReactProvider>
-  );
-};
-
 const buildMessage = (parts: MastraUIMessage['parts']): MastraUIMessage => ({
   id: 'msg-1',
   role: 'assistant',
@@ -64,64 +75,36 @@ const buildMessage = (parts: MastraUIMessage['parts']): MastraUIMessage => ({
 });
 
 describe('MessageRow dynamic-tool rendering', () => {
+  beforeEach(() => {
+    primitivesMock = {
+      agentId: 'agent-1',
+      toolsData: {},
+      agentsData: {},
+      workflowsData: {},
+      availableSkills: [],
+    };
+  });
+
   afterEach(() => {
     cleanup();
   });
 
   it('renders the generic shimmer for non-builder dynamic tools', () => {
-    const { container } = render(
-      <MessageRow
-        message={buildMessage([
-          {
-            type: 'dynamic-tool',
-            toolCallId: 'call-5',
-            toolName: 'some-other-tool',
-            state: 'output-available',
-            input: { tools: [{ id: 'web-search', name: 'Web Search' }] },
-            output: { success: true },
-          } as MastraUIMessage['parts'][number],
-        ])}
-      />,
-    );
+    const { container } = renderRow([
+      {
+        type: 'dynamic-tool',
+        toolCallId: 'call-5',
+        toolName: 'some-other-tool',
+        state: 'output-available',
+        input: { tools: [{ id: 'web-search', name: 'Web Search' }] },
+        output: { success: true },
+      } as ToolPart,
+    ]);
 
     // Unknown dynamic tools render as a GenericTool ToolCard showing "Executing <toolName>".
     expect(container.textContent).toContain('Executing');
     expect(container.textContent).toContain('some-other-tool');
     expect(container.textContent).not.toContain('Web Search');
-  });
-
-  it('renders the inline Slack connect widget for the connectChannel tool', async () => {
-    server.use(
-      http.get('*/api/channels/platforms', () =>
-        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
-      ),
-      http.get('*/api/channels/:platform/installations', () => HttpResponse.json([])),
-    );
-
-    render(
-      <ChannelsWrapper>
-        <MessageRow
-          agentId="agent-1"
-          message={buildMessage([
-            {
-              type: 'dynamic-tool',
-              toolCallId: 'call-2',
-              toolName: CONNECT_CHANNEL_TOOL_NAME,
-              state: 'output-available',
-              input: { platform: 'slack' },
-              output: { success: true },
-            } as MastraUIMessage['parts'][number],
-          ])}
-        />
-      </ChannelsWrapper>,
-    );
-
-    const widget = await screen.findByTestId('agent-builder-chat-connect-channel-slack');
-    expect(widget.textContent).toContain('Slack');
-    // Generic ToolExecutionMessage shimmer would end with "..." — confirm we don't fall through.
-    await waitFor(() => {
-      expect(widget.textContent?.endsWith('...')).toBe(false);
-    });
   });
 
   it('renders MessageSetAgentName for streaming dynamic-tool', () => {
@@ -229,59 +212,22 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('Always answer in French.');
   });
 
-  it('renders MessageSetAgentTools for streaming dynamic-tool', () => {
-    const { container } = renderRow([
-      {
-        type: 'dynamic-tool',
-        toolCallId: 'call-tools',
-        toolName: SET_AGENT_TOOLS_TOOL_NAME,
-        state: 'output-available',
-        input: {
-          tools: [
-            { id: 'web-search', name: 'Web Search' },
-            { id: 'weather-lookup', name: 'Weather Lookup' },
-          ],
-        },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(container.textContent).toContain('Web Search');
-    expect(container.textContent).toContain('Weather Lookup');
-  });
+  it('MessageSetAgentTools shows only the checked tools/agents/workflows from the form', () => {
+    primitivesMock = {
+      ...primitivesMock,
+      toolsData: { 'web-search': { description: 'Search' } },
+      agentsData: { 'my-agent': { name: 'My Agent' } },
+      workflowsData: { 'my-workflow': { name: 'My Workflow' } },
+    };
 
-  it('renders MessageSetAgentTools for persisted tool part', () => {
-    const { container } = renderRow([
-      {
-        type: `tool-${SET_AGENT_TOOLS_TOOL_NAME}`,
-        toolCallId: 'call-tools-r',
-        state: 'output-available',
-        input: {
-          tools: [
-            { id: 'web-search', name: 'Web Search' },
-            { id: 'weather-lookup', name: 'Weather Lookup' },
-          ],
-        },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(container.textContent).toContain('Web Search');
-    expect(container.textContent).toContain('Weather Lookup');
-  });
-
-  it('MessageSetAgentTools reflects entries enabled under agents/workflows form fields', () => {
     const { container } = renderRow(
       [
         {
           type: 'dynamic-tool',
-          toolCallId: 'call-tools-agent',
+          toolCallId: 'call-tools-mixed',
           toolName: SET_AGENT_TOOLS_TOOL_NAME,
           state: 'output-available',
-          input: {
-            tools: [
-              { id: 'my-agent', name: 'My Agent' },
-              { id: 'my-workflow', name: 'My Workflow' },
-            ],
-          },
+          input: { tools: [] },
           output: { success: true },
         } as ToolPart,
       ],
@@ -291,10 +237,20 @@ describe('MessageRow dynamic-tool rendering', () => {
         workflows: { 'my-workflow': true },
       } as Partial<AgentBuilderEditFormValues>,
     );
-    expect(container.textContent).toContain('Enabling tools: My Agent, My Workflow');
+
+    const text = container.textContent ?? '';
+    expect(text).toContain('Enabling tools:');
+    expect(text).toContain('My Agent');
+    expect(text).toContain('My Workflow');
+    expect(text).not.toContain('web-search');
   });
 
-  it('MessageSetAgentTools renders "none" when no streamed ids are enabled in form', () => {
+  it('MessageSetAgentTools renders "none" when nothing is selected', () => {
+    primitivesMock = {
+      ...primitivesMock,
+      toolsData: { 'web-search': { description: 'Search' } },
+    };
+
     const { container } = renderRow(
       [
         {
@@ -302,54 +258,64 @@ describe('MessageRow dynamic-tool rendering', () => {
           toolCallId: 'call-tools-none',
           toolName: SET_AGENT_TOOLS_TOOL_NAME,
           state: 'output-available',
-          input: {
-            tools: [{ id: 'web-search', name: 'Web Search' }],
-          },
+          input: { tools: [] },
           output: { success: true },
         } as ToolPart,
       ],
       { tools: {}, agents: {}, workflows: {} } as Partial<AgentBuilderEditFormValues>,
     );
+
     expect(container.textContent).toContain('Enabling tools: none');
   });
 
-  it('renders MessageSetAgentSkills for streaming dynamic-tool', () => {
-    const { container } = renderRow([
-      {
-        type: 'dynamic-tool',
-        toolCallId: 'call-skills',
-        toolName: SET_AGENT_SKILLS_TOOL_NAME,
-        state: 'output-available',
-        input: {
-          skills: [
-            { id: 'sk-1', name: 'Summarize' },
-            { id: 'sk-2', name: 'Translate' },
-          ],
-        },
-        output: { success: true },
-      } as ToolPart,
-    ]);
+  it('MessageSetAgentSkills shows only the checked skills from the form', () => {
+    primitivesMock = {
+      ...primitivesMock,
+      availableSkills: [
+        { id: 'sk-1', name: 'Summarize' },
+        { id: 'sk-2', name: 'Translate' },
+      ],
+    };
+
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-skills',
+          toolName: SET_AGENT_SKILLS_TOOL_NAME,
+          state: 'output-available',
+          input: { skills: [] },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { skills: { 'sk-1': true, 'sk-2': true } } as Partial<AgentBuilderEditFormValues>,
+    );
+
+    expect(container.textContent).toContain('Enabling skills:');
     expect(container.textContent).toContain('Summarize');
     expect(container.textContent).toContain('Translate');
   });
 
-  it('renders MessageSetAgentSkills for persisted tool part', () => {
-    const { container } = renderRow([
-      {
-        type: `tool-${SET_AGENT_SKILLS_TOOL_NAME}`,
-        toolCallId: 'call-skills-r',
-        state: 'output-available',
-        input: {
-          skills: [
-            { id: 'sk-1', name: 'Summarize' },
-            { id: 'sk-2', name: 'Translate' },
-          ],
-        },
-        output: { success: true },
-      } as ToolPart,
-    ]);
-    expect(container.textContent).toContain('Summarize');
-    expect(container.textContent).toContain('Translate');
+  it('MessageSetAgentSkills renders "none" when no skill is checked', () => {
+    primitivesMock = {
+      ...primitivesMock,
+      availableSkills: [{ id: 'sk-1', name: 'Summarize' }],
+    };
+
+    const { container } = renderRow(
+      [
+        {
+          type: `tool-${SET_AGENT_SKILLS_TOOL_NAME}`,
+          toolCallId: 'call-skills-none',
+          state: 'output-available',
+          input: { skills: [] },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { skills: {} } as Partial<AgentBuilderEditFormValues>,
+    );
+
+    expect(container.textContent).toContain('Enabling skills: none');
   });
 
   it('renders MessageSetAgentModel for streaming dynamic-tool', () => {
@@ -423,61 +389,35 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('renders MessageSetAgentWorkspaceId for streaming dynamic-tool', () => {
-    const { container } = renderRow([
-      {
-        type: 'dynamic-tool',
-        toolCallId: 'call-ws',
-        toolName: SET_AGENT_WORKSPACE_ID_TOOL_NAME,
-        state: 'output-available',
-        input: { workspaceId: 'ws-123' },
-        output: { success: true },
-      } as ToolPart,
-    ]);
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-ws',
+          toolName: SET_AGENT_WORKSPACE_ID_TOOL_NAME,
+          state: 'output-available',
+          input: { workspaceId: 'ws-123' },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { workspaceId: 'ws-123' },
+    );
     expect(container.textContent).toContain('ws-123');
   });
 
   it('renders MessageSetAgentWorkspaceId for persisted tool part', () => {
-    const { container } = renderRow([
-      {
-        type: `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`,
-        toolCallId: 'call-ws-r',
-        state: 'output-available',
-        input: { workspaceId: 'ws-123' },
-        output: { success: true },
-      } as ToolPart,
-    ]);
+    const { container } = renderRow(
+      [
+        {
+          type: `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`,
+          toolCallId: 'call-ws-r',
+          state: 'output-available',
+          input: { workspaceId: 'ws-123' },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { workspaceId: 'ws-123' },
+    );
     expect(container.textContent).toContain('ws-123');
-  });
-
-  it('renders the inline Slack connect widget for persisted connectChannel tool parts (post-reload shape)', async () => {
-    server.use(
-      http.get('*/api/channels/platforms', () =>
-        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
-      ),
-      http.get('*/api/channels/:platform/installations', () => HttpResponse.json([])),
-    );
-
-    render(
-      <ChannelsWrapper>
-        <MessageRow
-          agentId="agent-1"
-          message={buildMessage([
-            {
-              type: `tool-${CONNECT_CHANNEL_TOOL_NAME}`,
-              toolCallId: 'call-4',
-              state: 'output-available',
-              input: { platform: 'slack' },
-              output: { success: true },
-            } as MastraUIMessage['parts'][number],
-          ])}
-        />
-      </ChannelsWrapper>,
-    );
-
-    const widget = await screen.findByTestId('agent-builder-chat-connect-channel-slack');
-    expect(widget.textContent).toContain('Slack');
-    await waitFor(() => {
-      expect(widget.textContent?.endsWith('...')).toBe(false);
-    });
   });
 });

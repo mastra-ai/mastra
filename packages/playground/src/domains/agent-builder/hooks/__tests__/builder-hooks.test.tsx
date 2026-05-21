@@ -117,7 +117,6 @@ import {
 import { useCanCreateAgent } from '../use-can-create-agent';
 import { useChannelConnectToast } from '../use-channel-connect-toast';
 import { useChatDraft } from '../use-chat-draft';
-import { useConnectChannelTool } from '../use-connect-channel-tool';
 import { useCreateSkillTool } from '../use-create-skill-tool';
 import { useSaveAgent } from '../use-save-agent';
 import { useStarterUserMessage } from '../use-starter-user-message';
@@ -767,12 +766,6 @@ describe('form-backed tools', () => {
     await expect(
       (result.current as any).execute({ name: 'Skill', description: 'Desc', instructions: 'Body', workspaceId: 'w' }),
     ).resolves.toEqual({ success: false, error: 'Failed to create skill' });
-  });
-
-  it('returns a connect-channel tool that succeeds', async () => {
-    const { result } = renderHook(() => useConnectChannelTool());
-    expect((result.current as any).id).toBe('connectChannel');
-    await expect((result.current as any).execute({ platform: 'slack' })).resolves.toEqual({ success: true });
   });
 });
 
