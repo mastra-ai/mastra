@@ -154,6 +154,7 @@ export interface GithubCommandResult {
 }
 
 export type GithubCommandRunner = (args: string[]) => Promise<GithubCommandResult>;
+type GithubSignalSender = NonNullable<ProcessOutputResultArgs['sendSignal']>;
 
 export interface GithubPRSignalInput {
   prNumber: number;
@@ -1042,6 +1043,11 @@ export class GithubSignals {
     await this.poll(context);
   }
 
+  markIdleAfterOutput(context: ActiveThreadContext) {
+    this.#activeThreads.delete(activeThreadKey(context));
+    setTimeout(() => void this.markIdle(context), 0);
+  }
+
   async poll(context?: ActiveThreadContext) {
     if (this.#polling) return;
     this.#polling = true;
@@ -1836,6 +1842,10 @@ export class GithubSignals {
           options.acknowledgeAfterDelivery.lastPrStateFingerprint ??
           existingAcknowledgement?.lastPrStateFingerprint ??
           subscription.lastPrStateFingerprint,
+        lastMergeConflictFingerprint:
+          options.acknowledgeAfterDelivery.lastMergeConflictFingerprint ??
+          existingAcknowledgement?.lastMergeConflictFingerprint ??
+          subscription.lastMergeConflictFingerprint,
       };
     }
     if (options.unsubscribeAfterDelivery) {
@@ -1905,14 +1915,17 @@ export class GithubSignals {
     );
   }
 
-  async deliverPendingNotifications(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
+  async deliverPendingNotifications(
+    filter: ActiveThreadContext & { repo?: string; prNumber?: number },
+    sendSignal?: GithubSignalSender,
+  ) {
     const buckets = this.#getPendingNotificationBuckets(filter);
     let deliveredCount = 0;
 
     for (const [key, bucket] of buckets) {
       const registeredAgent = this.#agents.get(bucket.subscription.agentId);
       if (!registeredAgent) continue;
-      const delivered = await this.#sendPendingNotifications(registeredAgent, bucket);
+      const delivered = await this.#sendPendingNotifications(registeredAgent, bucket, sendSignal);
       deliveredCount += delivered.length;
       await this.#acknowledgePendingDelivery(bucket, delivered);
       this.#pendingNotifications.delete(key);
@@ -1931,11 +1944,15 @@ export class GithubSignals {
     });
   }
 
-  async #sendPendingNotifications(registeredAgent: RegisteredGithubAgent, bucket: PendingGithubNotificationBucket) {
+  async #sendPendingNotifications(
+    registeredAgent: RegisteredGithubAgent,
+    bucket: PendingGithubNotificationBucket,
+    sendSignal?: GithubSignalSender,
+  ) {
     const delivered: PendingGithubNotification[] = [];
     for (const pending of bucket.notifications) {
       if (await this.#hasNotificationDelivery(pending.deliveryClaim)) continue;
-      await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
+      await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification, sendSignal);
       delivered.push(pending);
     }
     return delivered;
@@ -2042,7 +2059,19 @@ export class GithubSignals {
     registeredAgent: RegisteredGithubAgent,
     subscription: GithubPRSubscriptionMetadata,
     notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
+    sendSignal?: GithubSignalSender,
   ) {
+    const signal = ghSignals.prNotification({
+      ...notification,
+      repo: subscription.repo,
+      prNumber: subscription.prNumber,
+    });
+
+    if (sendSignal) {
+      await sendSignal(signal);
+      return;
+    }
+
     const streamOptions = await (registeredAgent.getStreamOptions ?? this.#options.getStreamOptions)?.({
       agentId: subscription.agentId,
       resourceId: subscription.resourceId,
@@ -2050,19 +2079,12 @@ export class GithubSignals {
       repo: subscription.repo,
       prNumber: subscription.prNumber,
     });
-    const result = registeredAgent.agent.sendSignal(
-      ghSignals.prNotification({
-        ...notification,
-        repo: subscription.repo,
-        prNumber: subscription.prNumber,
-      }),
-      {
-        resourceId: subscription.resourceId,
-        threadId: subscription.threadId,
-        ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions: streamOptions as any } : {}) },
-        ifActive: { behavior: 'deliver' },
-      },
-    );
+    const result = registeredAgent.agent.sendSignal(signal, {
+      resourceId: subscription.resourceId,
+      threadId: subscription.threadId,
+      ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions: streamOptions as any } : {}) },
+      ifActive: { behavior: 'deliver' },
+    });
     await result.persisted;
     await result.started;
   }
@@ -2121,7 +2143,7 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
 
   async processOutputResult(args: ProcessOutputResultArgs) {
     const context = this.#getThreadContext(args);
-    if (context) await this.#owner.markIdle(context);
+    if (context) this.#owner.markIdleAfterOutput(context);
     return args.messages;
   }
 
