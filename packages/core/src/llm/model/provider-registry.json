@@ -964,6 +964,37 @@
       "docUrl": "https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference",
       "gateway": "models.dev"
     },
+    "crof": {
+      "url": "https://crof.ai/v1",
+      "apiKeyEnvVar": "CROF_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "CrofAI",
+      "models": [
+        "deepseek-v3.2",
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-v4-pro-precision",
+        "gemma-4-31b-it",
+        "glm-4.7",
+        "glm-4.7-flash",
+        "glm-5",
+        "glm-5.1",
+        "glm-5.1-precision",
+        "greg",
+        "kimi-k2.5",
+        "kimi-k2.5-lightning",
+        "kimi-k2.6",
+        "kimi-k2.6-precision",
+        "mimo-v2.5-pro",
+        "mimo-v2.5-pro-precision",
+        "minimax-m2.5",
+        "qwen3.5-397b-a17b",
+        "qwen3.5-9b",
+        "qwen3.6-27b"
+      ],
+      "docUrl": "https://crof.ai/docs",
+      "gateway": "models.dev"
+    },
     "ambient": {
       "url": "https://api.ambient.xyz/v1",
       "apiKeyEnvVar": "AMBIENT_API_KEY",
@@ -2321,7 +2352,6 @@
         "arcee-ai/coder-large",
         "arcee-ai/maestro-reasoning",
         "arcee-ai/spotlight",
-        "arcee-ai/trinity-large-preview",
         "arcee-ai/trinity-large-thinking",
         "arcee-ai/trinity-large-thinking:free",
         "arcee-ai/trinity-mini",
@@ -2599,6 +2629,7 @@
         "qwen/qwen3.6-flash",
         "qwen/qwen3.6-max-preview",
         "qwen/qwen3.6-plus",
+        "qwen/qwen3.7-max",
         "rekaai/reka-edge",
         "rekaai/reka-flash-3",
         "relace/relace-apply-3",
@@ -3987,7 +4018,8 @@
         "minimax-m2.7",
         "nemotron-3-super-free",
         "qwen3.5-plus",
-        "qwen3.6-plus"
+        "qwen3.6-plus",
+        "qwen3.6-plus-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -4231,6 +4263,20 @@
         "hf:zai-org/GLM-5.1"
       ],
       "docUrl": "https://synthetic.new/pricing",
+      "gateway": "models.dev"
+    },
+    "inceptron": {
+      "url": "https://api.inceptron.io/v1",
+      "apiKeyEnvVar": "INCEPTRON_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Inceptron",
+      "models": [
+        "MiniMaxAI/MiniMax-M2.5",
+        "moonshotai/Kimi-K2.6",
+        "nvidia/llama-3.3-70b-instruct-fp8",
+        "zai-org/GLM-5.1-FP8"
+      ],
+      "docUrl": "https://docs.inceptron.io",
       "gateway": "models.dev"
     },
     "minimax-coding-plan": {
@@ -6094,6 +6140,29 @@
       "zai-org/GLM-5-FP8",
       "zai-org/GLM-5.1-FP8"
     ],
+    "crof": [
+      "deepseek-v3.2",
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "deepseek-v4-pro-precision",
+      "gemma-4-31b-it",
+      "glm-4.7",
+      "glm-4.7-flash",
+      "glm-5",
+      "glm-5.1",
+      "glm-5.1-precision",
+      "greg",
+      "kimi-k2.5",
+      "kimi-k2.5-lightning",
+      "kimi-k2.6",
+      "kimi-k2.6-precision",
+      "mimo-v2.5-pro",
+      "mimo-v2.5-pro-precision",
+      "minimax-m2.5",
+      "qwen3.5-397b-a17b",
+      "qwen3.5-9b",
+      "qwen3.6-27b"
+    ],
     "ambient": ["moonshotai/kimi-k2.6", "zai-org/GLM-5.1-FP8"],
     "routing-run": [
       "route/deepseek-v3.2",
@@ -7171,7 +7240,6 @@
       "arcee-ai/coder-large",
       "arcee-ai/maestro-reasoning",
       "arcee-ai/spotlight",
-      "arcee-ai/trinity-large-preview",
       "arcee-ai/trinity-large-thinking",
       "arcee-ai/trinity-large-thinking:free",
       "arcee-ai/trinity-mini",
@@ -7449,6 +7517,7 @@
       "qwen/qwen3.6-flash",
       "qwen/qwen3.6-max-preview",
       "qwen/qwen3.6-plus",
+      "qwen/qwen3.7-max",
       "rekaai/reka-edge",
       "rekaai/reka-flash-3",
       "relace/relace-apply-3",
@@ -8626,7 +8695,8 @@
       "minimax-m2.7",
       "nemotron-3-super-free",
       "qwen3.5-plus",
-      "qwen3.6-plus"
+      "qwen3.6-plus",
+      "qwen3.6-plus-free"
     ],
     "mixlayer": [
       "qwen/qwen3.5-122b-a10b",
@@ -8819,6 +8889,12 @@
       "hf:zai-org/GLM-4.7-Flash",
       "hf:zai-org/GLM-5",
       "hf:zai-org/GLM-5.1"
+    ],
+    "inceptron": [
+      "MiniMaxAI/MiniMax-M2.5",
+      "moonshotai/Kimi-K2.6",
+      "nvidia/llama-3.3-70b-instruct-fp8",
+      "zai-org/GLM-5.1-FP8"
     ],
     "minimax-coding-plan": [
       "MiniMax-M2",
