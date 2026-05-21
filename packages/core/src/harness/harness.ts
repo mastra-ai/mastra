@@ -1724,7 +1724,7 @@ export class Harness<TState = {}> {
       const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-      if (this.agentThreadSubscription?.activeRunId()) {
+      if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,

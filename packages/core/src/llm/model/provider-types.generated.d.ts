@@ -845,6 +845,29 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5-FP8',
     'zai-org/GLM-5.1-FP8',
   ];
+  readonly crof: readonly [
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4-pro-precision',
+    'gemma-4-31b-it',
+    'glm-4.7',
+    'glm-4.7-flash',
+    'glm-5',
+    'glm-5.1',
+    'glm-5.1-precision',
+    'greg',
+    'kimi-k2.5',
+    'kimi-k2.5-lightning',
+    'kimi-k2.6',
+    'kimi-k2.6-precision',
+    'mimo-v2.5-pro',
+    'mimo-v2.5-pro-precision',
+    'minimax-m2.5',
+    'qwen3.5-397b-a17b',
+    'qwen3.5-9b',
+    'qwen3.6-27b',
+  ];
   readonly ambient: readonly ['moonshotai/kimi-k2.6', 'zai-org/GLM-5.1-FP8'];
   readonly 'routing-run': readonly [
     'route/deepseek-v3.2',
@@ -1543,13 +1566,32 @@ export type ProviderModelsMap = {
     '~openai/gpt-mini-latest',
   ];
   readonly 'cloudflare-workers-ai': readonly [
+    '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
+    '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+    '@cf/google/gemma-3-12b-it',
     '@cf/google/gemma-4-26b-a4b-it',
+    '@cf/ibm-granite/granite-4.0-h-micro',
+    '@cf/meta/llama-2-7b-chat-fp16',
+    '@cf/meta/llama-3-8b-instruct',
+    '@cf/meta/llama-3-8b-instruct-awq',
+    '@cf/meta/llama-3.1-8b-instruct-awq',
+    '@cf/meta/llama-3.1-8b-instruct-fp8',
+    '@cf/meta/llama-3.2-11b-vision-instruct',
+    '@cf/meta/llama-3.2-1b-instruct',
+    '@cf/meta/llama-3.2-3b-instruct',
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/meta/llama-4-scout-17b-16e-instruct',
+    '@cf/meta/llama-guard-3-8b',
+    '@cf/mistral/mistral-7b-instruct-v0.1',
+    '@cf/mistralai/mistral-small-3.1-24b-instruct',
     '@cf/moonshotai/kimi-k2.5',
     '@cf/moonshotai/kimi-k2.6',
     '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
+    '@cf/qwen/qwen2.5-coder-32b-instruct',
+    '@cf/qwen/qwen3-30b-a3b-fp8',
+    '@cf/qwen/qwq-32b',
     '@cf/zai-org/glm-4.7-flash',
   ];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
@@ -1909,7 +1951,6 @@ export type ProviderModelsMap = {
     'arcee-ai/coder-large',
     'arcee-ai/maestro-reasoning',
     'arcee-ai/spotlight',
-    'arcee-ai/trinity-large-preview',
     'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-large-thinking:free',
     'arcee-ai/trinity-mini',
@@ -2187,6 +2228,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.6-flash',
     'qwen/qwen3.6-max-preview',
     'qwen/qwen3.6-plus',
+    'qwen/qwen3.7-max',
     'rekaai/reka-edge',
     'rekaai/reka-flash-3',
     'relace/relace-apply-3',
@@ -2210,6 +2252,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20',
     'x-ai/grok-4.20-multi-agent',
     'x-ai/grok-4.3',
+    'x-ai/grok-build-0.1',
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
@@ -3312,6 +3355,7 @@ export type ProviderModelsMap = {
     'gpt-oss-120b',
     'llama-3.1-8b-instruct',
     'llama-3.3-70b-instruct',
+    'mistral-medium-3.5-128b',
     'mistral-nemo-instruct-2407',
     'mistral-small-3.2-24b-instruct-2506',
     'pixtral-12b-2409',
@@ -3355,6 +3399,7 @@ export type ProviderModelsMap = {
     'gpt-5.4-pro',
     'gpt-5.5',
     'gpt-5.5-pro',
+    'grok-build-0.1',
     'kimi-k2.5',
     'kimi-k2.6',
     'minimax-m2.5',
@@ -3555,6 +3600,12 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-4.7-Flash',
     'hf:zai-org/GLM-5',
     'hf:zai-org/GLM-5.1',
+  ];
+  readonly inceptron: readonly [
+    'MiniMaxAI/MiniMax-M2.5',
+    'moonshotai/Kimi-K2.6',
+    'nvidia/llama-3.3-70b-instruct-fp8',
+    'zai-org/GLM-5.1-FP8',
   ];
   readonly 'minimax-coding-plan': readonly [
     'MiniMax-M2',
@@ -3776,7 +3827,6 @@ export type ProviderModelsMap = {
     'voyage/voyage-code-3',
     'voyage/voyage-finance-2',
     'voyage/voyage-law-2',
-    'xai/grok-2-vision',
     'xai/grok-4-fast-reasoning',
     'xai/grok-4.1-fast-non-reasoning',
     'xai/grok-4.1-fast-reasoning',
@@ -4027,22 +4077,14 @@ export type ProviderModelsMap = {
   readonly xpersona: readonly ['xpersona-frieren-coder'];
   readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly xai: readonly [
-    'grok-2',
-    'grok-2-1212',
-    'grok-2-latest',
-    'grok-2-vision',
-    'grok-2-vision-1212',
-    'grok-2-vision-latest',
     'grok-4.20-0309-non-reasoning',
     'grok-4.20-0309-reasoning',
     'grok-4.20-multi-agent-0309',
     'grok-4.3',
-    'grok-beta',
     'grok-build-0.1',
     'grok-imagine-image',
     'grok-imagine-image-quality',
     'grok-imagine-video',
-    'grok-vision-beta',
   ];
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly zhipuai: readonly [
@@ -4249,6 +4291,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'zai-org/GLM-5.1',
   ];
+  readonly 'stepfun-ai': readonly ['step-3.5-flash', 'step-3.5-flash-2603'];
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',
