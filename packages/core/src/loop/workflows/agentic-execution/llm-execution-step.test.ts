@@ -461,6 +461,101 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  it('orders response messages after long input history with synthetic timestamps', async () => {
+    const baseTime = new Date('2026-01-01T00:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(baseTime);
+
+    try {
+      messageList = new MessageList();
+      for (let i = 0; i < 80; i++) {
+        messageList.add(
+          {
+            role: i % 2 === 0 ? 'user' : 'assistant',
+            content: `filler conversation message #${i}`,
+          },
+          'input',
+        );
+      }
+      messageList.add({ role: 'user', content: 'Please echo the exact word: hello' }, 'input');
+
+      const doStream = vi.fn(async () => {
+        vi.setSystemTime(new Date(baseTime.getTime() + 10_000));
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'hello' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+          request: {},
+          response: {
+            headers: undefined,
+          },
+          warnings: [],
+        };
+      });
+
+      const llmExecutionStep = createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'response-msg',
+        runId: 'test-run',
+        startTimestamp: baseTime.getTime(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: {
+              specificationVersion: 'v2' as const,
+              provider: 'mock-provider',
+              modelId: 'mock-model-id',
+              supportedUrls: {},
+              doGenerate: vi.fn(),
+              doStream,
+            } as any,
+          },
+        ],
+        tools: {},
+        streamState: {
+          serialize: vi.fn(),
+          deserialize: vi.fn(),
+        },
+        logger: {
+          error: vi.fn(),
+          warn: vi.fn(),
+          debug: vi.fn(),
+        } as any,
+      } as unknown as OuterLLMRun<{}>);
+
+      await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+      const messages = messageList.get.all.db();
+      const triggerIndex = messages.findIndex(message =>
+        message.content.parts.some(part => part.type === 'text' && part.text.includes('hello')),
+      );
+      const responseIndex = messages.findIndex(
+        message =>
+          message.role === 'assistant' &&
+          message.content.parts.some(part => part.type === 'text' && part.text === 'hello'),
+      );
+
+      expect(triggerIndex).toBeGreaterThan(-1);
+      expect(responseIndex).toBe(messages.length - 1);
+      expect(responseIndex).toBeGreaterThan(triggerIndex);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('resolves streamed tool payload transforms without rescanning tools per delta', async () => {
     const onInputDelta = vi.fn();
     const rawTools = {
