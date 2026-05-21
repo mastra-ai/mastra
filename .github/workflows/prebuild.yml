@@ -111,13 +111,14 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           filters: |
             e2e:
-              - '!(**/*.md)packages/**'
-              - '!(**/*.md)e2e-tests/**'
-              - '!(**/*.md)stores/**'
-              - '!(**/*.md)client-sdks/**'
-              - '!(**/*.md)deployers/**'
-              - '!(**/*.md)server-adapters/**'
+              - 'packages/**'
+              - 'e2e-tests/**'
+              - 'stores/**'
+              - 'client-sdks/**'
+              - 'deployers/**'
+              - 'server-adapters/**'
               - '.github/workflows/e2e-tests.yml'
+              - '!**/*.md'
 
   e2e-tests:
     name: E2E Tests
@@ -129,6 +130,7 @@ jobs:
     with:
       head_sha: ${{ github.event.pull_request.head.sha }}
     secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
@@ -195,7 +197,7 @@ jobs:
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
     needs: changes
     runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 10
     outputs:
       changed: ${{ steps.changes.outputs.changed }}
     permissions:
@@ -221,7 +223,7 @@ jobs:
   memory-test:
     name: Memory Tests
     needs: [memory-check-changes, prebuild]
-    if: github.repository == 'mastra-ai/mastra' && needs.memory-check-changes.outputs.changed == 'true'
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.memory-check-changes.outputs.changed == 'true' && needs.prebuild.result == 'success'
     runs-on: starsling-ubuntu-24.04
     permissions:
       contents: read
@@ -242,7 +244,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis
+        image: redis:7
         ports:
           - 6379:6379
 
