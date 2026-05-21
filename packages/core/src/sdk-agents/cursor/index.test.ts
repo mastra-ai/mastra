@@ -4,13 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isAgentCompatible } from '../../agent';
 import { CursorSDKAgent } from './index';
 
-const createCursorAgent = vi.hoisted(() => vi.fn());
-
-vi.mock('@cursor/sdk', () => ({
-  Agent: {
-    create: createCursorAgent,
-  },
-}));
+const createCursorAgent = vi.fn();
 
 function createTurnEndedUpdate({
   inputTokens = 10,
@@ -132,6 +126,7 @@ describe('CursorSDKAgent', () => {
         id: 'cursor-agent',
         name: 'Cursor Agent',
         description: 'Cursor',
+        agent: createCursorAgent,
         model: { id: 'gpt-5.5' },
         local: {
           cwd: '/repo',
@@ -162,6 +157,7 @@ describe('CursorSDKAgent', () => {
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
       description: 'Cursor',
+      agent: createCursorAgent,
       model: { id: 'gpt-5.5' },
     });
 
@@ -174,6 +170,7 @@ describe('CursorSDKAgent', () => {
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
       description: 'Cursor',
+      agent: createCursorAgent,
       model: { id: 'gpt-5.5' },
     });
 

@@ -46,7 +46,8 @@ type CursorUsageTotals = {
   cacheWriteTokens?: number;
 };
 
-export type CursorAgentInput = SDKAgent | Promise<SDKAgent> | (() => SDKAgent | Promise<SDKAgent>);
+export type CursorAgentFactory = (options: CursorCreateOptions) => SDKAgent | Promise<SDKAgent>;
+export type CursorAgentInput = SDKAgent | Promise<SDKAgent> | CursorAgentFactory;
 
 export type CursorAgentOptions = {
   /**
@@ -62,30 +63,31 @@ export type CursorAgentOptions = {
    */
   description: string;
   /**
-   * Pre-created Cursor SDK agent. Pass this when you want full control over
-   * `Agent.create()` or when the SDK agent lifecycle is managed elsewhere.
+   * Cursor SDK agent or factory. Pass a pre-created SDK agent when you manage
+   * its lifecycle elsewhere, or pass `CursorAgent.create` to let this wrapper
+   * call it with the Cursor options on this object.
    *
-   * If omitted, `CursorSDKAgent` calls `@cursor/sdk`'s `Agent.create()` with
-   * the Cursor SDK options provided on this object.
+   * The factory path keeps the vendor SDK import in your app while allowing
+   * Mastra to hydrate defaults such as `apiKey`.
    */
-  agent?: CursorAgentInput;
+  agent: CursorAgentInput;
   /**
-   * Cursor API key used when `agent` is omitted. Defaults to
+   * Cursor API key passed to an agent factory. Defaults to
    * `process.env.CURSOR_API_KEY` when not provided.
    */
   apiKey?: string;
   /**
-   * Cursor model selection used when `agent` is omitted.
+   * Cursor model selection passed to an agent factory.
    *
    * The Cursor SDK requires an explicit model for local agents.
    */
   model?: ModelSelection;
   /**
-   * Cursor local-agent options used when `agent` is omitted.
+   * Cursor local-agent options passed to an agent factory.
    */
   local?: LocalAgentOptions;
   /**
-   * Cursor cloud-agent options used when `agent` is omitted.
+   * Cursor cloud-agent options passed to an agent factory.
    */
   cloud?: CloudAgentOptions;
   /**
@@ -94,19 +96,19 @@ export type CursorAgentOptions = {
    */
   mcpServers?: Record<string, McpServerConfig>;
   /**
-   * Cursor subagent definitions passed to `Agent.create()` when `agent` is omitted.
+   * Cursor subagent definitions passed to an agent factory.
    */
   agents?: Record<string, AgentDefinition>;
   /**
-   * Existing Cursor agent id to resume/create from when `agent` is omitted.
+   * Existing Cursor agent id passed to an agent factory.
    */
   agentId?: string;
   /**
-   * Cursor idempotency key passed to `Agent.create()` when `agent` is omitted.
+   * Cursor idempotency key passed to an agent factory.
    */
   idempotencyKey?: string;
   /**
-   * Cursor platform options passed to `Agent.create()` when `agent` is omitted.
+   * Cursor platform options passed to an agent factory.
    */
   platform?: CursorAgentPlatformOptions;
   /**
@@ -212,11 +214,7 @@ export class CursorSDKAgent extends Agent {
   }
 
   private resolveCursorAgent(): Promise<SDKAgent> {
-    if (this.options.agent) {
-      return resolveCursorAgent(this.options.agent);
-    }
-
-    this.#createdAgent ??= createCursorAgent(this.options).catch(error => {
+    this.#createdAgent ??= resolveCursorAgent(this.options.agent, this.options).catch(error => {
       this.#createdAgent = undefined;
       throw error;
     });
@@ -358,13 +356,8 @@ function runCursorAsMastraStream(
   });
 }
 
-async function resolveCursorAgent(agent: CursorAgentInput): Promise<SDKAgent> {
-  return typeof agent === 'function' ? agent() : agent;
-}
-
-async function createCursorAgent(options: CursorAgentOptions): Promise<SDKAgent> {
-  const { Agent: CursorAgent } = await import('@cursor/sdk');
-  return CursorAgent.create(toCursorCreateOptions(options));
+async function resolveCursorAgent(agent: CursorAgentInput, options: CursorAgentOptions): Promise<SDKAgent> {
+  return typeof agent === 'function' ? agent(toCursorCreateOptions(options)) : agent;
 }
 
 function toCursorCreateOptions(options: CursorAgentOptions): CursorCreateOptions {
