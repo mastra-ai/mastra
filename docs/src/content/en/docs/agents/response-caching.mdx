@@ -35,7 +35,7 @@ const cache = new InMemoryServerCache()
 export const searchAgent = new Agent({
   name: 'Search Agent',
   instructions: 'You answer questions concisely.',
-  model: 'openai/gpt-5',
+  model: '__OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache, ttl: 600 })], // 10 minutes
 })
 ```
@@ -104,7 +104,7 @@ const cache = new RedisCache({ url: process.env.REDIS_URL })
 export const agent = new Agent({
   name: 'Cached Agent',
   instructions: '...',
-  model: 'openai/gpt-5',
+  model: '__OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache })],
 })
 ```

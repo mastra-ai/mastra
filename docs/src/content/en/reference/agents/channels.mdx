@@ -22,7 +22,7 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'You are a helpful support assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),
@@ -118,7 +118,7 @@ import { createSlackAdapter } from '@chat-adapter/slack'
 const agent = new Agent({
   name: 'Example',
   instructions: '...',
-  model: 'openai/gpt-5.4',
+  model: '__OPENAI_MODEL__',
   channels: {
     adapters: {
       discord: {
@@ -200,7 +200,7 @@ import { createSlackAdapter } from '@chat-adapter/slack'
 const agent = new Agent({
   name: 'Custom Handler Agent',
   instructions: '...',
-  model: 'openai/gpt-5.4',
+  model: '__OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),
