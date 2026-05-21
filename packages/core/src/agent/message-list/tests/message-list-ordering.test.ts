@@ -653,7 +653,11 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
           {
             id: 'user-2',
             role: 'user',
-            content: { format: 2, content: 'Next', parts: [{ type: 'text', text: 'Next' }] },
+            content: {
+              format: 2,
+              content: 'Next',
+              parts: [{ type: 'text', text: 'Next', createdAt: new Date('2024-01-01T00:00:00.000Z').getTime() }],
+            },
             createdAt: new Date('2023-01-01T00:02:00.000Z'),
           },
           'input',
