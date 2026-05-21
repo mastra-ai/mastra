@@ -76,8 +76,22 @@ function defaultModelToStored(entry: DefaultModelEntryRuntime): StorageModelConf
 }
 
 /**
+ * Built-in baseline defaults applied when the admin has not pinned a
+ * `configuration.agent.<field>` value AND the user did not provide one on
+ * the creation input. Explicit `null` on input still wins (opt-out).
+ */
+const BUILDER_BASELINE_DEFAULTS: Partial<Record<(typeof BUILDER_DEFAULT_FIELDS)[number], unknown>> = {
+  memory: { observationalMemory: true } satisfies SerializedMemoryConfig,
+};
+
+/**
  * Apply builder defaults to agent creation input.
  * Only applies for fields where input is `undefined` (not `null` — null is explicit disable).
+ *
+ * Resolution order per field:
+ *   1. `input[field]` — user intent always wins
+ *   2. `builderAgentConfig[field]` — admin-pinned default
+ *   3. `BUILDER_BASELINE_DEFAULTS[field]` — built-in default (e.g. observational memory on)
  *
  * `model` is special-cased: it is NOT in `BUILDER_DEFAULT_FIELDS` because the
  * stored shape (`{ provider, name }`) differs from the admin-config shape
@@ -88,20 +102,25 @@ function applyBuilderDefaults(
   input: StorageCreateAgentInput,
   builderAgentConfig: Record<string, unknown> | undefined,
 ): StorageCreateAgentInput {
-  if (!builderAgentConfig) return input;
-
   const defaults: Partial<StorageCreateAgentInput> = {};
 
   for (const field of BUILDER_DEFAULT_FIELDS) {
-    if (input[field] === undefined && builderAgentConfig[field] !== undefined) {
-      (defaults as Record<string, unknown>)[field] = builderAgentConfig[field];
+    if (input[field] !== undefined) continue;
+    const adminValue = builderAgentConfig?.[field];
+    if (adminValue !== undefined) {
+      (defaults as Record<string, unknown>)[field] = adminValue;
+      continue;
+    }
+    const baseline = BUILDER_BASELINE_DEFAULTS[field];
+    if (baseline !== undefined) {
+      (defaults as Record<string, unknown>)[field] = baseline;
     }
   }
 
   // Seed `model` from the admin's `models.default` only when input omits it.
   // Conditional models are preserved verbatim (they are objects but not the
   // admin-config shape, and the user's intent always wins).
-  if (input.model === undefined) {
+  if (input.model === undefined && builderAgentConfig) {
     const models = (builderAgentConfig.models ?? undefined) as { default?: DefaultModelEntryRuntime } | undefined;
     const adminDefault = models?.default;
     if (adminDefault && typeof adminDefault.provider === 'string' && typeof adminDefault.modelId === 'string') {

@@ -1568,7 +1568,7 @@ describe('agent.create with builder defaults', () => {
     expect(rawConfig?.memory).toBeNull();
   });
 
-  it('does nothing when builder has no configuration', async () => {
+  it('applies baseline observational memory when builder has no memory configuration', async () => {
     const storage = new InMemoryStore();
     const editor = new MastraEditor({
       builder: { enabled: true },
@@ -1583,7 +1583,30 @@ describe('agent.create with builder defaults', () => {
     });
 
     const rawConfig = agent.toRawConfig?.();
-    expect(rawConfig?.memory).toBeUndefined();
+    expect(rawConfig?.memory).toEqual({ observationalMemory: true });
+  });
+
+  it('applies baseline observational memory when admin pinned other defaults but not memory', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: { workspace: { type: 'id', workspaceId: 'shared-workspace' } },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-partial-config',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toEqual({ observationalMemory: true });
   });
 
   it('does nothing when builder is disabled', async () => {
