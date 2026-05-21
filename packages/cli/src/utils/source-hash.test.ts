@@ -1,10 +1,7 @@
 import { mkdir, mkdtemp, open, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-vi.mock('node:fs/promises', async importOriginal => importOriginal());
-
-const { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } = await import('./source-hash');
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
+import { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } from './source-hash';
 
 // Use a local .test-tmp dir instead of os.tmpdir() — some CI runners
 // (e.g. starsling-ubuntu) have flaky /tmp behaviour with rapid write/read cycles.
@@ -43,6 +40,10 @@ describe('source-hash', () => {
 
   afterEach(async () => {
     await rm(testDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await rm(TEST_TMP_ROOT, { recursive: true, force: true });
   });
 
   describe('computeSourceHash', () => {
@@ -97,7 +98,6 @@ describe('source-hash', () => {
     });
 
     it('should include workspace root lockfile in hash for monorepos', async () => {
-      await mkdir(TEST_TMP_ROOT, { recursive: true });
       const workspaceRoot = await mkdtemp(join(TEST_TMP_ROOT, 'workspace-root-test-'));
       const projectDir = join(workspaceRoot, 'packages', 'my-app');
       const projectMastraDir = join(projectDir, 'src', 'mastra');
