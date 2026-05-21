@@ -7,6 +7,16 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentBuilderEditFormValues } from '../../../schemas';
+import {
+  SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
+  SET_AGENT_DESCRIPTION_TOOL_NAME,
+  SET_AGENT_INSTRUCTIONS_TOOL_NAME,
+  SET_AGENT_MODEL_TOOL_NAME,
+  SET_AGENT_NAME_TOOL_NAME,
+  SET_AGENT_SKILLS_TOOL_NAME,
+  SET_AGENT_TOOLS_TOOL_NAME,
+  SET_AGENT_WORKSPACE_ID_TOOL_NAME,
+} from '../../../services/tool-constants';
 import type { AgentTool } from '../../../types/agent-tool';
 import { ConversationPanel } from '../conversation-panel';
 
@@ -150,9 +160,13 @@ const renderPanel = (
     </FormWrapper>,
   );
 
-const getAgentBuilderTool = () => {
+const getSentClientTools = () => {
   expect(sentMessages.length).toBeGreaterThan(0);
-  const tool = sentMessages[0].clientTools.agentBuilderTool;
+  return sentMessages[0].clientTools;
+};
+
+const getTool = (toolName: string) => {
+  const tool = getSentClientTools()[toolName];
   expect(tool).toBeDefined();
   return tool;
 };
@@ -220,44 +234,30 @@ describe('ConversationPanel agent-builder client tool', () => {
     });
   });
 
-  it('always exposes name and instructions as required fields when both feature flags are off', () => {
+  it('always registers the per-field name/description/instructions tools and omits gated ones', () => {
     renderPanel(allOff);
-    const tool = getAgentBuilderTool();
-    const shape = tool.inputSchema.shape;
+    const clientTools = getSentClientTools();
 
-    expect(shape.name).toBeDefined();
-    expect(shape.instructions).toBeDefined();
-    expect(shape.tools).toBeUndefined();
-
-    const valid = tool.inputSchema.safeParse({ name: 'Foo', instructions: 'Do X' });
-    expect(valid.success).toBe(true);
-    const missing = tool.inputSchema.safeParse({ name: 'Foo' });
-    expect(missing.success).toBe(false);
+    expect(clientTools[SET_AGENT_NAME_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_DESCRIPTION_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_INSTRUCTIONS_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_WORKSPACE_ID_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_TOOLS_TOOL_NAME]).toBeUndefined();
+    expect(clientTools[SET_AGENT_SKILLS_TOOL_NAME]).toBeUndefined();
+    expect(clientTools[SET_AGENT_MODEL_TOOL_NAME]).toBeUndefined();
+    expect(clientTools[SET_AGENT_BROWSER_ENABLED_TOOL_NAME]).toBeUndefined();
   });
 
-  it('adds tools to the schema when the feature flag is on', () => {
+  it('registers the set-agent-tools tool only when features.tools is true', () => {
     renderPanel(allOn);
-    const tool = getAgentBuilderTool();
-    const shape = tool.inputSchema.shape;
-
-    expect(shape.name).toBeDefined();
-    expect(shape.instructions).toBeDefined();
-    expect(shape.tools).toBeDefined();
-  });
-
-  it('only includes tools when features.tools is true', () => {
-    renderPanel({ ...allOff, tools: true });
-    const tool = getAgentBuilderTool();
-    const shape = tool.inputSchema.shape;
-
-    expect(shape.tools).toBeDefined();
+    expect(getSentClientTools()[SET_AGENT_TOOLS_TOOL_NAME]).toBeDefined();
   });
 
   it('execute writes name and instructions to the form', async () => {
     renderPanel(allOff);
-    const tool = getAgentBuilderTool();
 
-    await tool.execute({ name: 'New name', instructions: 'New instructions' });
+    await getTool(SET_AGENT_NAME_TOOL_NAME).execute({ name: 'New name' });
+    await getTool(SET_AGENT_INSTRUCTIONS_TOOL_NAME).execute({ instructions: 'New instructions' });
 
     expect(formMethodsRef!.getValues('name')).toBe('New name');
     expect(formMethodsRef!.getValues('instructions')).toBe('New instructions');
@@ -265,23 +265,21 @@ describe('ConversationPanel agent-builder client tool', () => {
 
   it('execute writes tools only when the feature flag enables it', async () => {
     renderPanel(allOn, [{ id: 'web-search' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_TOOLS_TOOL_NAME);
 
     await tool.execute({
-      name: 'N',
-      instructions: 'I',
       tools: [{ id: 'web-search', name: 'Web Search' }],
     });
 
     expect(formMethodsRef!.getValues('tools')).toEqual({ 'web-search': true });
   });
 
-  it('lists available tools in the tool description so the LLM can pick ids', () => {
+  it('lists available tools in the set-agent-tools description so the LLM can pick ids', () => {
     renderPanel({ ...allOff, tools: true }, [
       { id: 'web-search', description: 'Search the web' },
       { id: 'http-fetch', description: 'Fetch a URL' },
     ]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_TOOLS_TOOL_NAME);
 
     expect(tool.description).toContain('web-search');
     expect(tool.description).toContain('Search the web');
@@ -291,32 +289,24 @@ describe('ConversationPanel agent-builder client tool', () => {
 
   it('requires both id and name for each entry in the tools field', () => {
     renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_TOOLS_TOOL_NAME);
 
     const valid = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       tools: [{ id: 'web-search', name: 'Web Search' }],
     });
     expect(valid.success).toBe(true);
 
     const missingName = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       tools: [{ id: 'web-search' }],
     });
     expect(missingName.success).toBe(false);
 
     const emptyName = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       tools: [{ id: 'web-search', name: '' }],
     });
     expect(emptyName.success).toBe(false);
 
     const asString = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       tools: ['web-search'],
     });
     expect(asString.success).toBe(false);
@@ -324,43 +314,29 @@ describe('ConversationPanel agent-builder client tool', () => {
 
   it('constrains the tools id field to the provided ids', () => {
     renderPanel({ ...allOff, tools: true }, [{ id: 'web-search' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_TOOLS_TOOL_NAME);
 
     const valid = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       tools: [{ id: 'web-search', name: 'Web Search' }],
     });
     expect(valid.success).toBe(true);
 
     const invalid = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       tools: [{ id: 'unknown-tool', name: 'Unknown' }],
     });
     expect(invalid.success).toBe(false);
   });
 
-  it('execute ignores tools when the feature flag is off', async () => {
+  it('omits the set-agent-tools tool entirely when features.tools is false', () => {
     renderPanel(allOff);
-    const tool = getAgentBuilderTool();
-
-    await tool.execute({
-      name: 'N',
-      instructions: 'I',
-      tools: [{ id: 'web-search', name: 'Web Search' }],
-    });
-
-    expect(formMethodsRef!.getValues('tools')).toEqual({});
+    expect(getSentClientTools()[SET_AGENT_TOOLS_TOOL_NAME]).toBeUndefined();
   });
 
   it('drops agent and workflow ids when those features are gated off but tools is on', async () => {
     renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', type: 'tool' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_TOOLS_TOOL_NAME);
 
     await tool.execute({
-      name: 'N',
-      instructions: 'I',
       tools: [
         { id: 'web-search', name: 'Web Search' },
         { id: 'some-agent', name: 'Some Agent' },
@@ -401,7 +377,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     );
 
     expect(sentMessages).toHaveLength(1);
-    const tool = sentMessages[0].clientTools.agentBuilderTool;
+    const tool = sentMessages[0].clientTools[SET_AGENT_TOOLS_TOOL_NAME];
     expect(tool.description).toContain('web-search');
     expect(tool.description).toContain('Search the web');
   });
@@ -410,22 +386,22 @@ describe('ConversationPanel agent-builder client tool', () => {
     renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
 
     expect(sentMessages).toHaveLength(1);
-    const tool = sentMessages[0].clientTools.agentBuilderTool;
+    const tool = sentMessages[0].clientTools[SET_AGENT_TOOLS_TOOL_NAME];
     expect(tool.description).toContain('web-search');
   });
 
-  it('exposes an optional workspaceId field in the tool input schema', () => {
+  it('exposes a workspaceId field in the set-agent-workspace-id schema', () => {
     renderPanel(allOff);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_WORKSPACE_ID_TOOL_NAME);
     const shape = tool.inputSchema.shape;
 
     expect(shape.workspaceId).toBeDefined();
 
-    const withoutWorkspace = tool.inputSchema.safeParse({ name: 'N', instructions: 'I' });
-    expect(withoutWorkspace.success).toBe(true);
+    const withWorkspace = tool.inputSchema.safeParse({ workspaceId: 'any-id' });
+    expect(withWorkspace.success).toBe(true);
   });
 
-  it('lists available workspaces in the tool description', () => {
+  it('lists available workspaces in the workspace tool description', () => {
     renderPanel(
       allOff,
       [],
@@ -434,7 +410,7 @@ describe('ConversationPanel agent-builder client tool', () => {
         { id: 'ws-2', name: 'Secondary' },
       ],
     );
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_WORKSPACE_ID_TOOL_NAME);
 
     expect(tool.description).toContain('ws-1');
     expect(tool.description).toContain('Primary');
@@ -444,18 +420,14 @@ describe('ConversationPanel agent-builder client tool', () => {
 
   it('constrains workspaceId to the provided ids when workspaces are available', () => {
     renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_WORKSPACE_ID_TOOL_NAME);
 
     const valid = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       workspaceId: 'ws-1',
     });
     expect(valid.success).toBe(true);
 
     const invalid = tool.inputSchema.safeParse({
-      name: 'N',
-      instructions: 'I',
       workspaceId: 'unknown-workspace',
     });
     expect(invalid.success).toBe(false);
@@ -463,21 +435,16 @@ describe('ConversationPanel agent-builder client tool', () => {
 
   it('passes policy-filtered models to the initial client tool schema and description', () => {
     renderPanel({ ...allOff, model: true });
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_MODEL_TOOL_NAME);
 
     expect(tool.description).toContain('Available models');
     expect(tool.description).toContain('provider: openai (OpenAI), name: gpt-4o');
     expect(tool.description).not.toContain('anthropic');
 
     expect(tool.inputSchema.shape.model).toBeDefined();
-    expect(
-      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } })
-        .success,
-    ).toBe(true);
+    expect(tool.inputSchema.safeParse({ model: { provider: 'openai', name: 'gpt-4o' } }).success).toBe(true);
     expect(
       tool.inputSchema.safeParse({
-        name: 'N',
-        instructions: 'I',
         model: { provider: 'anthropic', name: 'claude-opus-4-7' },
       }).success,
     ).toBe(false);
@@ -514,7 +481,7 @@ describe('ConversationPanel agent-builder client tool', () => {
       models.filter(m => m.provider === 'openai' || (m.provider === 'anthropic' && m.model === 'claude-opus-4-7'));
 
     renderPanel({ ...allOff, model: true });
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_MODEL_TOOL_NAME);
 
     // Both OpenAI models survive (provider wildcard).
     expect(tool.description).toContain('provider: openai (OpenAI), name: gpt-4o');
@@ -526,18 +493,10 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(tool.description).not.toContain('mistral');
 
     // Schema accepts every allowed combination.
-    expect(
-      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } })
-        .success,
-    ).toBe(true);
-    expect(
-      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o-mini' } })
-        .success,
-    ).toBe(true);
+    expect(tool.inputSchema.safeParse({ model: { provider: 'openai', name: 'gpt-4o' } }).success).toBe(true);
+    expect(tool.inputSchema.safeParse({ model: { provider: 'openai', name: 'gpt-4o-mini' } }).success).toBe(true);
     expect(
       tool.inputSchema.safeParse({
-        name: 'N',
-        instructions: 'I',
         model: { provider: 'anthropic', name: 'claude-opus-4-7' },
       }).success,
     ).toBe(true);
@@ -545,15 +504,11 @@ describe('ConversationPanel agent-builder client tool', () => {
     // Schema rejects disallowed entries.
     expect(
       tool.inputSchema.safeParse({
-        name: 'N',
-        instructions: 'I',
         model: { provider: 'anthropic', name: 'claude-haiku-4-5' },
       }).success,
     ).toBe(false);
     expect(
       tool.inputSchema.safeParse({
-        name: 'N',
-        instructions: 'I',
         model: { provider: 'mistral', name: 'mistral-large' },
       }).success,
     ).toBe(false);
@@ -561,43 +516,98 @@ describe('ConversationPanel agent-builder client tool', () => {
 
   it('execute writes workspaceId to the form when provided', async () => {
     renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_WORKSPACE_ID_TOOL_NAME);
 
-    await tool.execute({ name: 'N', instructions: 'I', workspaceId: 'ws-1' });
+    await tool.execute({ workspaceId: 'ws-1' });
 
     expect(formMethodsRef!.getValues('workspaceId')).toBe('ws-1');
   });
 
   it('execute does not set workspaceId when omitted', async () => {
     renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
-    const tool = getAgentBuilderTool();
+    const tool = getTool(SET_AGENT_WORKSPACE_ID_TOOL_NAME);
 
-    await tool.execute({ name: 'N', instructions: 'I' });
+    await tool.execute({});
 
     expect(formMethodsRef!.getValues('workspaceId')).toBeUndefined();
   });
 
   it('does not include createSkillTool when features.skills is false', () => {
     renderPanel(allOff);
-    expect(sentMessages.length).toBeGreaterThan(0);
-    const clientTools = sentMessages[0].clientTools;
+    const clientTools = getSentClientTools();
 
-    expect(clientTools.agentBuilderTool).toBeDefined();
+    expect(clientTools[SET_AGENT_NAME_TOOL_NAME]).toBeDefined();
     expect(clientTools.createSkillTool).toBeUndefined();
   });
 
   it('includes createSkillTool when features.skills is true', () => {
     renderPanel({ ...allOff, skills: true }, [], [{ id: 'ws-1', name: 'Primary' }]);
-    expect(sentMessages.length).toBeGreaterThan(0);
-    const clientTools = sentMessages[0].clientTools;
+    const clientTools = getSentClientTools();
 
-    expect(clientTools.agentBuilderTool).toBeDefined();
+    expect(clientTools[SET_AGENT_NAME_TOOL_NAME]).toBeDefined();
     expect(clientTools.createSkillTool).toBeDefined();
     const createSkill = clientTools.createSkillTool;
     expect(createSkill.id).toBe('createSkillTool');
     expect(createSkill.inputSchema.shape.name).toBeDefined();
     expect(createSkill.inputSchema.shape.description).toBeDefined();
     expect(createSkill.inputSchema.shape.instructions).toBeDefined();
+  });
+
+  it('registers every atomic set-agent-* tool on the wire when all features are on with available data', () => {
+    const allFeaturesOn: Features = {
+      tools: true,
+      memory: false,
+      workflows: true,
+      agents: true,
+      avatarUpload: false,
+      skills: true,
+      model: true,
+      favorites: false,
+      browser: true,
+    };
+    renderPanel(allFeaturesOn, [{ id: 'web-search' }], [{ id: 'ws-1', name: 'Primary' }]);
+    const clientTools = getSentClientTools();
+
+    expect(clientTools[SET_AGENT_NAME_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_DESCRIPTION_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_INSTRUCTIONS_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_TOOLS_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_MODEL_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_BROWSER_ENABLED_TOOL_NAME]).toBeDefined();
+    expect(clientTools[SET_AGENT_WORKSPACE_ID_TOOL_NAME]).toBeDefined();
+    // createSkill is registered separately when features.skills is on.
+    expect(clientTools.createSkillTool).toBeDefined();
+  });
+
+  it('omits set-agent-skills when features.skills is on but no skills are available', () => {
+    renderPanel({ ...allOff, skills: true }, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const clientTools = getSentClientTools();
+
+    expect(clientTools[SET_AGENT_SKILLS_TOOL_NAME]).toBeUndefined();
+    expect(clientTools[SET_AGENT_NAME_TOOL_NAME]).toBeDefined();
+  });
+
+  it('omits set-agent-model when features.model is on but no models survive the policy filter', () => {
+    builderFilterRef.fn = () => [];
+    renderPanel({ ...allOff, model: true });
+    const clientTools = getSentClientTools();
+
+    expect(clientTools[SET_AGENT_MODEL_TOOL_NAME]).toBeUndefined();
+    expect(clientTools[SET_AGENT_NAME_TOOL_NAME]).toBeDefined();
+  });
+
+  it('omits set-agent-browser-enabled when features.browser is false', () => {
+    renderPanel(allOff);
+    const clientTools = getSentClientTools();
+
+    expect(clientTools[SET_AGENT_BROWSER_ENABLED_TOOL_NAME]).toBeUndefined();
+  });
+
+  it('registers set-agent-browser-enabled when features.browser is true', () => {
+    renderPanel({ ...allOff, browser: true });
+    const clientTools = getSentClientTools();
+
+    expect(clientTools[SET_AGENT_BROWSER_ENABLED_TOOL_NAME]).toBeDefined();
   });
 
   it('forwards a form-snapshot via modelSettings.instructions on send', () => {

@@ -3,26 +3,22 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { useAgentBuilderTool } from '../use-agent-builder-tool';
+import { SET_AGENT_BROWSER_ENABLED_TOOL_NAME } from '../use-set-agent-browser-enabled-tool';
+import { SET_AGENT_DESCRIPTION_TOOL_NAME } from '../use-set-agent-description-tool';
+import { SET_AGENT_INSTRUCTIONS_TOOL_NAME } from '../use-set-agent-instructions-tool';
+import { SET_AGENT_MODEL_TOOL_NAME } from '../use-set-agent-model-tool';
+import { SET_AGENT_NAME_TOOL_NAME } from '../use-set-agent-name-tool';
+import { SET_AGENT_SKILLS_TOOL_NAME } from '../use-set-agent-skills-tool';
+import { SET_AGENT_TOOLS_TOOL_NAME } from '../use-set-agent-tools-tool';
+import { SET_AGENT_WORKSPACE_ID_TOOL_NAME } from '../use-set-agent-workspace-id-tool';
 import type { ModelInfo } from '@/domains/llm';
 
-vi.mock('../use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => ({
-    tools: true,
-    memory: false,
-    workflows: false,
-    agents: true,
-    avatarUpload: false,
-    skills: true,
-    model: true,
-    favorites: false,
-  }),
-}));
-
-const features = {
+const allOnFeatures = {
   tools: true,
   memory: false,
   workflows: false,
@@ -31,43 +27,19 @@ const features = {
   skills: true,
   model: true,
   favorites: false,
-  browser: false,
+  browser: true,
 };
 
-const renderBuilderTool = (
-  availableAgentTools: AgentTool[],
-  options: {
-    features?: typeof features;
-    availableSkills?: StoredSkillResponse[];
-    availableModels?: ModelInfo[];
-  } = {},
-) => {
-  const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = {
-    current: null,
-  };
-
-  const Wrapper = ({ children }: { children: React.ReactNode }) => {
-    const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: {} },
-    });
-    formRef.current = methods;
-    return React.createElement(FormProvider, methods, children);
-  };
-
-  const { result } = renderHook(
-    () =>
-      useAgentBuilderTool({
-        features: options.features ?? features,
-        availableAgentTools,
-        availableSkills: options.availableSkills,
-        availableModels: options.availableModels,
-      }),
-    {
-      wrapper: Wrapper,
-    },
-  );
-
-  return { tool: result.current, form: () => formRef.current! };
+const allOffFeatures = {
+  tools: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  avatarUpload: false,
+  skills: false,
+  model: false,
+  favorites: false,
+  browser: false,
 };
 
 const buildSkill = (id: string): StoredSkillResponse =>
@@ -80,107 +52,106 @@ const buildSkill = (id: string): StoredSkillResponse =>
     instructions: 'inst',
   }) as StoredSkillResponse;
 
-describe('useAgentBuilderTool execute routing', () => {
-  it('routes tool ids to form.tools and agent ids to form.agents', async () => {
-    const availableAgentTools: AgentTool[] = [
-      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
-      { id: 'tool-b', name: 'tool-b', isChecked: false, type: 'tool' },
-      { id: 'agent-x', name: 'Agent X', isChecked: false, type: 'agent' },
-    ];
+const renderWrapper = (args: {
+  features: typeof allOnFeatures;
+  availableAgentTools?: AgentTool[];
+  availableSkills?: StoredSkillResponse[];
+  availableModels?: ModelInfo[];
+}) => {
+  const Wrapper = ({ children }: { children: React.ReactNode }) => {
+    const methods = useForm<AgentBuilderEditFormValues>({
+      defaultValues: { name: '', description: '', instructions: '' },
+    });
+    return React.createElement(FormProvider, methods, children);
+  };
 
-    const { tool, form } = renderBuilderTool(availableAgentTools);
+  const { result } = renderHook(
+    () =>
+      useAgentBuilderTool({
+        features: args.features,
+        availableAgentTools: args.availableAgentTools ?? [],
+        availableSkills: args.availableSkills,
+        availableModels: args.availableModels,
+      }),
+    { wrapper: Wrapper },
+  );
 
-    await tool.execute!({
-      name: 'My agent',
-      description: 'desc',
-      instructions: 'do things',
-      tools: [
-        { id: 'tool-a', name: 'Tool A' },
-        { id: 'agent-x', name: 'Agent X' },
-      ],
-    } as any);
+  return result.current;
+};
 
-    expect(form().getValues('tools')).toEqual({ 'tool-a': true });
-    expect(form().getValues('agents')).toEqual({ 'agent-x': true });
-    expect(form().getValues('name')).toBe('My agent');
-    expect(form().getValues('instructions')).toBe('do things');
-  });
-
-  it('writes empty records when no tools entries arrive', async () => {
-    const { tool, form } = renderBuilderTool([{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]);
-
-    await tool.execute!({
-      name: 'No tools',
-      instructions: 'instructions',
-      tools: [],
-    } as any);
-
-    expect(form().getValues('tools')).toEqual({});
-    expect(form().getValues('agents')).toEqual({});
-  });
-
-  it('routes valid skill ids to form.skills and drops unknown ids', async () => {
-    const availableSkills = [buildSkill('skill-a'), buildSkill('skill-b')];
-    const { tool, form } = renderBuilderTool([], { availableSkills });
-
-    await tool.execute!({
-      name: 'With skills',
-      instructions: 'do things',
-      skills: [
-        { id: 'skill-a', name: 'Skill A' },
-        { id: 'unknown', name: 'Unknown' },
-      ],
-    } as any);
-
-    expect(form().getValues('skills')).toEqual({ 'skill-a': true });
-  });
-
-  it('ignores skills input when the feature is off', async () => {
-    const availableSkills = [buildSkill('skill-a')];
-    const featuresOff = { ...features, skills: false };
-    const { tool, form } = renderBuilderTool([], { features: featuresOff, availableSkills });
-
-    await tool.execute!({
-      name: 'With skills',
-      instructions: 'do things',
-      skills: [{ id: 'skill-a', name: 'Skill A' }],
-    } as any);
-
-    expect(form().getValues('skills')).toEqual({});
-  });
-
-  it('routes workflow ids to form.workflows', async () => {
-    const availableAgentTools: AgentTool[] = [
-      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
-      { id: 'wf-1', name: 'Workflow One', isChecked: false, type: 'workflow' },
-    ];
-
-    const { tool, form } = renderBuilderTool(availableAgentTools);
-
-    await tool.execute!({
-      name: 'With workflow',
-      instructions: 'do things',
-      tools: [
-        { id: 'tool-a', name: 'Tool A' },
-        { id: 'wf-1', name: 'Workflow One' },
-      ],
-    } as any);
-
-    expect(form().getValues('tools')).toEqual({ 'tool-a': true });
-    expect(form().getValues('workflows')).toEqual({ 'wf-1': true });
-  });
-
-  it('writes selected model to the form with a cleaned provider id', async () => {
-    const { tool, form } = renderBuilderTool([], {
-      availableModels: [{ provider: 'gateway/openai', providerName: 'OpenAI', model: 'gpt-4o' }],
+describe('useAgentBuilderTool (composition + gating wrapper)', () => {
+  it('returns all eight atomic tools when every feature is on and all lists are populated', () => {
+    const record = renderWrapper({
+      features: allOnFeatures,
+      availableAgentTools: [{ id: 'tool-a', name: 'Tool A', isChecked: false, type: 'tool' }],
+      availableSkills: [buildSkill('skill-a')],
+      availableModels: [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' }],
     });
 
-    await tool.execute!({
-      name: 'With model',
-      instructions: 'do things',
-      model: { provider: 'gateway/openai', name: 'gpt-4o' },
-    } as any);
+    expect(Object.keys(record).sort()).toEqual(
+      [
+        SET_AGENT_NAME_TOOL_NAME,
+        SET_AGENT_DESCRIPTION_TOOL_NAME,
+        SET_AGENT_INSTRUCTIONS_TOOL_NAME,
+        SET_AGENT_WORKSPACE_ID_TOOL_NAME,
+        SET_AGENT_TOOLS_TOOL_NAME,
+        SET_AGENT_SKILLS_TOOL_NAME,
+        SET_AGENT_MODEL_TOOL_NAME,
+        SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
+      ].sort(),
+    );
 
-    expect(form().getValues('model')).toEqual({ provider: 'gateway/openai', name: 'gpt-4o' });
+    expect(record[SET_AGENT_NAME_TOOL_NAME].id).toBe(SET_AGENT_NAME_TOOL_NAME);
+    expect(record[SET_AGENT_TOOLS_TOOL_NAME].id).toBe(SET_AGENT_TOOLS_TOOL_NAME);
+    expect(record[SET_AGENT_MODEL_TOOL_NAME].id).toBe(SET_AGENT_MODEL_TOOL_NAME);
+  });
+
+  it('returns only the always-on tools when every feature is off', () => {
+    const record = renderWrapper({ features: allOffFeatures });
+
+    expect(Object.keys(record).sort()).toEqual(
+      [
+        SET_AGENT_NAME_TOOL_NAME,
+        SET_AGENT_DESCRIPTION_TOOL_NAME,
+        SET_AGENT_INSTRUCTIONS_TOOL_NAME,
+        SET_AGENT_WORKSPACE_ID_TOOL_NAME,
+      ].sort(),
+    );
+  });
+
+  it('omits the tools tool when features.tools is false', () => {
+    const record = renderWrapper({ features: { ...allOnFeatures, tools: false } });
+    expect(record[SET_AGENT_TOOLS_TOOL_NAME]).toBeUndefined();
+  });
+
+  it('omits the skills tool when features.skills is true but no skills are available', () => {
+    const record = renderWrapper({ features: { ...allOnFeatures, skills: true }, availableSkills: [] });
+    expect(record[SET_AGENT_SKILLS_TOOL_NAME]).toBeUndefined();
+  });
+
+  it('includes the skills tool when features.skills is true and skills are available', () => {
+    const record = renderWrapper({
+      features: { ...allOnFeatures, skills: true },
+      availableSkills: [buildSkill('skill-a')],
+    });
+    expect(record[SET_AGENT_SKILLS_TOOL_NAME]).toBeDefined();
+  });
+
+  it('omits the model tool when features.model is true but no models are available', () => {
+    const record = renderWrapper({ features: { ...allOnFeatures, model: true }, availableModels: [] });
+    expect(record[SET_AGENT_MODEL_TOOL_NAME]).toBeUndefined();
+  });
+
+  it('includes the model tool when features.model is true and models are available', () => {
+    const record = renderWrapper({
+      features: { ...allOnFeatures, model: true },
+      availableModels: [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' }],
+    });
+    expect(record[SET_AGENT_MODEL_TOOL_NAME]).toBeDefined();
+  });
+
+  it('omits the browserEnabled tool when features.browser is false', () => {
+    const record = renderWrapper({ features: { ...allOnFeatures, browser: false } });
+    expect(record[SET_AGENT_BROWSER_ENABLED_TOOL_NAME]).toBeUndefined();
   });
 });
