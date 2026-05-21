@@ -6,10 +6,10 @@
  * a fully-stamped event with `id`, `timestamp`, and (where relevant)
  * `sessionId`.
  *
- * IDs are scoped to an emitter: `harness-v1:<epoch>:<seq>`. The epoch is regenerated
- * whenever the emitter is constructed (i.e. process start, eviction +
- * rehydration), so SSE clients can detect a regenerated emitter and reset
- * their replay cursor (§10.5).
+ * IDs are scoped to an emitter: `harness-v1:<epoch>:<seq>`. The epoch is
+ * materialized on first emission/read unless a persisted epoch is supplied,
+ * so SSE clients can detect a regenerated emitter and reset their replay
+ * cursor (§10.5).
  *
  * Subscribers see only events emitted after `subscribe()` returns. Remote
  * callers that need history replay query the durable session event ledger.
@@ -675,13 +675,13 @@ export interface EmitterScope {
  * producer or other listeners.
  *
  * Event IDs are formatted `harness-v1:<epoch>:<seq>`; the epoch is a
- * per-emitter UUID regenerated on every construction. Clients that have
- * buffered an `id` from a previous epoch and rejoin can detect mismatch and
- * reset.
+ * per-emitter UUID materialized on first emission/read unless a persisted
+ * epoch is supplied. Clients that have buffered an `id` from a previous epoch
+ * and rejoin can detect mismatch and reset.
  */
 export class EventEmitter {
   private readonly listeners: HarnessEventListener[] = [];
-  private readonly epoch: string;
+  private epoch?: string;
   private seq: number;
   private readonly scope: EmitterScope;
   private readonly onEvent?: HarnessEventListener;
@@ -692,9 +692,9 @@ export class EventEmitter {
   ) {
     this.scope = scope;
     this.onEvent = opts.onEvent;
-    this.epoch = opts.epoch ?? randomUUID();
+    this.epoch = opts.epoch;
     this.seq = opts.nextSequence ?? 0;
-    formatHarnessEventId(this.epoch, this.seq);
+    formatHarnessEventId(this.epoch ?? 'pending-epoch', this.seq);
   }
 
   subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
@@ -709,7 +709,7 @@ export class EventEmitter {
     const sessionId = overrides?.sessionId ?? this.scope.sessionId;
     const stamped = {
       ...event,
-      id: formatHarnessEventId(this.epoch, this.seq++),
+      id: formatHarnessEventId(this.epochId, this.seq++),
       timestamp: Date.now(),
       ...(sessionId !== undefined && { sessionId }),
     } as HarnessEvent;
@@ -733,6 +733,7 @@ export class EventEmitter {
 
   /** Current epoch id — for tests and for diagnostics on rehydrate. */
   get epochId(): string {
+    this.epoch ??= randomUUID();
     return this.epoch;
   }
 

@@ -144,8 +144,13 @@ function createRuntimeState(): AgentThreadRuntimeState {
 }
 
 export class AgentThreadStreamRuntime {
-  #id = randomUUID();
+  #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+
+  #sourceId(): string {
+    this.#id ??= randomUUID();
+    return this.#id;
+  }
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
@@ -227,7 +232,7 @@ export class AgentThreadStreamRuntime {
               type: 'stream-part',
               runId: output.runId,
               part,
-              sourceId: runtime.#id,
+              sourceId: runtime.#sourceId(),
             });
             yield part;
           }
@@ -257,7 +262,7 @@ export class AgentThreadStreamRuntime {
         type: 'stream-part',
         runId: output.runId,
         part,
-        sourceId: this.#id,
+        sourceId: this.#sourceId(),
       });
     }
   }
@@ -1197,7 +1202,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'stream-part') {
-        if (data.sourceId === this.#id) return;
+        if (this.#id && data.sourceId === this.#id) return;
         const remoteRun = remoteRuns.get(data.runId);
         if (!remoteRun) return;
         remoteRun.parts.push(data.part);
@@ -1205,7 +1210,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'signal-enqueued') {
-        if (data.sourceId === this.#id) return;
+        if (this.#id && data.sourceId === this.#id) return;
         const queue = state.pendingSignalsByThread.get(key) ?? [];
         queue.push(createSignal(data.signal));
         state.pendingSignalsByThread.set(key, queue);
@@ -1458,7 +1463,7 @@ export class AgentThreadStreamRuntime {
             type: 'signal-enqueued',
             runId,
             signal: this.#serializeSignal(signal),
-            sourceId: this.#id,
+            sourceId: this.#sourceId(),
           });
           void this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
           return acceptSignal({ accepted: true, runId, signal });
@@ -1477,7 +1482,7 @@ export class AgentThreadStreamRuntime {
           type: 'signal-enqueued',
           runId,
           signal: this.#serializeSignal(signal),
-          sourceId: this.#id,
+          sourceId: this.#sourceId(),
         });
         return acceptSignal({ accepted: true, runId, signal });
       }

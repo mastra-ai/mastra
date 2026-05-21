@@ -654,8 +654,7 @@ function projectChannelOutboxDiagnostic(item: ChannelOutboxItem): HarnessChannel
 }
 
 export class Harness {
-  /** Process-scoped owner id used as the lease holder for all sessions. */
-  readonly ownerId: string;
+  private _ownerId?: string;
 
   /**
    * The Mastra instance backing this harness. Either supplied at
@@ -706,7 +705,6 @@ export class Harness {
   private _shutdown = false;
 
   constructor(config: HarnessConfig) {
-    this.ownerId = `harness-${randomUUID()}`;
     const runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration;
     if (
       runtimeCompatibilityGeneration !== undefined &&
@@ -986,6 +984,12 @@ export class Harness {
     }
     // Otherwise: stay unbound. session() will throw HarnessConfigError
     // with a clear message until the parent Mastra registers.
+  }
+
+  /** Process-scoped owner id used as the lease holder for all sessions. */
+  get ownerId(): string {
+    this._ownerId ??= `harness-${randomUUID()}`;
+    return this._ownerId;
   }
 
   /**
