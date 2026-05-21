@@ -1,5 +1,73 @@
 # mastracode
 
+## 0.20.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`5d8003c`](https://github.com/mastra-ai/mastra/commit/5d8003c7b082e0b916458cbaf0fa274f226b0734), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509)]:
+  - @mastra/duckdb@1.4.0-alpha.1
+  - @mastra/core@1.36.0-alpha.8
+
+## 0.20.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0)]:
+  - @mastra/core@1.36.0-alpha.7
+
+## 0.20.0-alpha.8
+
+### Patch Changes
+
+- Added a Unix socket PubSub transport and wired the Mastra Code TUI through a per-resource socket so local sessions can coordinate thread streams across processes. Programmatic `createMastraCode` usage remains opt-in: ([#16669](https://github.com/mastra-ai/mastra/pull/16669))
+
+  ```ts
+  await createMastraCode({ unixSocketPubSub: true });
+  ```
+
+- Updated dependencies [[`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337)]:
+  - @mastra/core@1.36.0-alpha.6
+
+## 0.20.0-alpha.7
+
+### Minor Changes
+
+- Added PostHog product analytics for MastraCode sessions, prompts, thread changes, command usage, and interactive prompts. Set MASTRA_TELEMETRY_DISABLED=1 to disable telemetry. ([#15173](https://github.com/mastra-ai/mastra/pull/15173))
+
+### Patch Changes
+
+- Improved MastraCode quiet mode so terminal sessions are easier to scan. ([#16771](https://github.com/mastra-ai/mastra/pull/16771))
+  - Quiet mode is now the default for new installs, and existing classic users get a one-time prompt to choose whether to enable it.
+  - Added compact tool previews with a configurable preview-line limit, including an option to hide previews.
+  - Improved repeated tool-call rendering, path continuation handling, task wrapping, shell/error previews, and spacing between tools, messages, plans, and completed subagents.
+  - Added edited line ranges to workspace edit results so tool UIs can show where replacements happened.
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+
+## 0.20.0-alpha.6
+
+### Minor Changes
+
+- Added automatic return to Plan mode when a goal started from an approved plan finishes. ([#16676](https://github.com/mastra-ai/mastra/pull/16676))
+
+### Patch Changes
+
+- Add an "Observe attachments" toggle in `/om` settings that controls whether ([#16682](https://github.com/mastra-ai/mastra/pull/16682))
+  file and image attachments are forwarded to the Observer LLM. Turn it off when
+  running with a text-only observer model. Stored as `omObserveAttachments` in
+  global settings and seeded into the harness state at startup.
+
+- Updated MastraCode to use provider-aware Observational Memory idle activation. ([#16663](https://github.com/mastra-ai/mastra/pull/16663))
+
+  MastraCode now sets `activateAfterIdle: "auto"`, shows an idle-time counter above the input after one minute of inactivity, and combines back-to-back OM activation markers into a single line.
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`14b69c6`](https://github.com/mastra-ai/mastra/commit/14b69c6b05ce1e50c140b030a48cafb41d0746e3), [`4bd4e8e`](https://github.com/mastra-ai/mastra/commit/4bd4e8e042f6687559f49a560a7914cee9b85447), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`96d225b`](https://github.com/mastra-ai/mastra/commit/96d225b05ed52ff250e0a342a7e6398e291945f0)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/memory@1.19.0-alpha.1
+  - @mastra/mcp@1.8.0-alpha.1
+  - @mastra/fastembed@1.1.0-alpha.0
+
 ## 0.20.0-alpha.5
 
 ### Patch Changes

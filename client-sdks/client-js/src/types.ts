@@ -1796,7 +1796,7 @@ export type ListAgentsModelProvidersResponse = GeneratedResponse<'GET /agents/pr
 export interface Provider {
   id: string;
   name: string;
-  envVar: string;
+  envVar: string | string[];
   connected: boolean;
   docUrl?: string;
   models: string[];
@@ -2684,6 +2684,7 @@ export interface DatasetItemVersionResponse {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;

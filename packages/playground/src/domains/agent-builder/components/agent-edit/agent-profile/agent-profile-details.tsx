@@ -1,11 +1,17 @@
+import { cn } from '@mastra/playground-ui';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
 export interface AgentProfileDetailsProps {
   disabled?: boolean;
+  className?: string;
+  mode?: 'default' | 'highlighted';
 }
 
-export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsProps) => {
+const HIGHLIGHTED_CLASSNAME =
+  'px-24 justify-center items-center text-center [&_input]:text-center [&_textarea]:text-center';
+
+export const AgentProfileDetails = ({ disabled = false, className, mode = 'default' }: AgentProfileDetailsProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const draftName = useWatch({ control, name: 'name' }) ?? '';
   const draftDescription = useWatch({ control, name: 'description' }) ?? '';
@@ -19,8 +25,16 @@ export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsPro
     setValue('description', value, { shouldDirty: true });
   };
 
+  const isHighlighted = mode === 'highlighted';
+
   return (
-    <div className="flex w-full flex-col items-start gap-0.5">
+    <div
+      className={cn(
+        'flex w-full flex-col items-start gap-0.5 max-w-[60ch]',
+        isHighlighted && HIGHLIGHTED_CLASSNAME,
+        className,
+      )}
+    >
       <input
         type="text"
         value={draftName}
@@ -29,7 +43,8 @@ export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsPro
         aria-label="Agent name"
         disabled={disabled}
         data-testid="agent-configure-name"
-        className="w-full max-w-sm rounded-lg bg-transparent px-3 py-1.5 text-ui-lg font-semibold text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full max-w-sm rounded-lg px-3 py-1.5 text-ui-lg font-semibold text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed"
+        style={{ viewTransitionName: 'agent-name' }}
       />
       <textarea
         value={draftDescription}
@@ -39,7 +54,8 @@ export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsPro
         disabled={disabled}
         data-testid="agent-configure-description"
         rows={2}
-        className="w-full resize-none rounded-lg bg-transparent px-3 py-2 text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full resize-none field-sizing-content rounded-lg px-3 py-2 text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed"
+        style={{ viewTransitionName: 'agent-description' }}
       />
     </div>
   );

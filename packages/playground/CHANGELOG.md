@@ -1,5 +1,68 @@
 # @internal/playground
 
+## 1.9.4-alpha.9
+
+### Patch Changes
+
+- Removed the unused Primitives and Observability overview pages from the studio. These pages only showed links that already exist in the sidebar, so they were redundant and no longer reachable from the navigation. Also fixed extra padding around the Request Context page content. ([#16813](https://github.com/mastra-ai/mastra/pull/16813))
+
+- Updated dependencies [[`b699688`](https://github.com/mastra-ai/mastra/commit/b699688104e2f78fb2be65a2ddf28f4064504f5c)]:
+  - @mastra/playground-ui@29.0.0-alpha.9
+
+## 1.9.4-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`8d28cb9`](https://github.com/mastra-ai/mastra/commit/8d28cb987379a5e4054db98671592f8723aa41e5), [`8d28cb9`](https://github.com/mastra-ai/mastra/commit/8d28cb987379a5e4054db98671592f8723aa41e5), [`8d28cb9`](https://github.com/mastra-ai/mastra/commit/8d28cb987379a5e4054db98671592f8723aa41e5), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509), [`3d2c12e`](https://github.com/mastra-ai/mastra/commit/3d2c12e8d842df40a1dc20536d71282383dcf68f)]:
+  - @mastra/playground-ui@29.0.0-alpha.8
+  - @mastra/core@1.36.0-alpha.8
+  - @mastra/client-js@1.20.0-alpha.8
+  - @mastra/react@0.4.0-alpha.8
+
+## 1.9.4-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0)]:
+  - @mastra/core@1.36.0-alpha.7
+  - @mastra/react@0.4.0-alpha.7
+  - @mastra/client-js@1.20.0-alpha.7
+  - @mastra/playground-ui@29.0.0-alpha.7
+
+## 1.9.4-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337)]:
+  - @mastra/core@1.36.0-alpha.6
+  - @mastra/client-js@1.20.0-alpha.6
+  - @mastra/react@0.4.0-alpha.6
+  - @mastra/playground-ui@29.0.0-alpha.6
+
+## 1.9.4-alpha.5
+
+### Patch Changes
+
+- Show a chat warning when Studio agent streams reach maxSteps before pending tool calls finish. ([#16794](https://github.com/mastra-ai/mastra/pull/16794))
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+  - @mastra/client-js@1.20.0-alpha.5
+  - @mastra/react@0.4.0-alpha.5
+  - @mastra/playground-ui@29.0.0-alpha.5
+
+## 1.9.4-alpha.4
+
+### Patch Changes
+
+- Fixed Save as Dataset Item dialog showing stale data when trace details load asynchronously. The form now updates input, ground truth, and expected trajectory fields once trace data resolves, while preserving any edits the user already made before that data arrived. ([#16779](https://github.com/mastra-ai/mastra/pull/16779))
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`e8dc4c2`](https://github.com/mastra-ai/mastra/commit/e8dc4c2829438a7557befc7d02b7ae316034f3d6)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/playground-ui@29.0.0-alpha.4
+  - @mastra/client-js@1.20.0-alpha.4
+  - @mastra/react@0.4.0-alpha.4
+
 ## 1.9.4-alpha.3
 
 ### Patch Changes

@@ -17,37 +17,35 @@ function CreateLayoutWrapper() {
   });
 
   return (
-    <ModelPolicyProvider surface="editor">
-      <MainContentLayout>
-        <RouteHeaderActions owner="cms-agent-create">
-          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || !canPublish}>
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <Check />
-                </Icon>
-                Create agent
-              </>
-            )}
-          </Button>
-        </RouteHeaderActions>
-        <AgentCmsFormShell
-          form={form}
-          mode="create"
-          isSubmitting={isSubmitting}
-          handlePublish={handlePublish}
-          basePath="/cms/agents/create"
-          currentPath={location.pathname}
-        >
-          <Outlet />
-        </AgentCmsFormShell>
-      </MainContentLayout>
-    </ModelPolicyProvider>
+    <MainContentLayout>
+      <RouteHeaderActions owner="cms-agent-create">
+        <Button variant="primary" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
+          {isSubmitting ? (
+            <>
+              <Spinner className="h-4 w-4" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <Icon>
+                <Check />
+              </Icon>
+              Create agent
+            </>
+          )}
+        </Button>
+      </RouteHeaderActions>
+      <AgentCmsFormShell
+        form={form}
+        mode="create"
+        isSubmitting={isSubmitting}
+        handlePublish={handlePublish}
+        basePath="/cms/agents/create"
+        currentPath={location.pathname}
+      >
+        <Outlet />
+      </AgentCmsFormShell>
+    </MainContentLayout>
   );
 }
 

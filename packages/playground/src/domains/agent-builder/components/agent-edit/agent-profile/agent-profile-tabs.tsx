@@ -5,10 +5,13 @@ import { useFormContext } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
+import { Browser } from './browser';
 import { Instructions } from './instructions';
+import { Integrations } from './integrations';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
+import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 import { useBuilderModelPolicy } from '@/domains/builder';
 import { ToolProvidersSection } from '@/domains/tool-providers/components/tool-providers-section';
 
@@ -18,6 +21,7 @@ import { ToolProvidersSection } from '@/domains/tool-providers/components/tool-p
 const BUILDER_SCOPE = 'per-author' as const;
 
 export interface AgentProfileTabsProps {
+  agentId: string;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
   disabled?: boolean;
@@ -30,6 +34,7 @@ export interface AgentProfileTabsProps {
  * tab → panel mapping is greppable in a single file.
  */
 export const AgentProfileTabs = ({
+  agentId,
   availableAgentTools,
   availableSkills,
   disabled = false,
@@ -37,46 +42,37 @@ export const AgentProfileTabs = ({
 }: AgentProfileTabsProps) => {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
-  const form = useFormContext<AgentBuilderEditFormValues>();
-  const [activeTab, setActiveTab] = useState<string>('instructions');
+  const { data: channelPlatforms = [] } = useChannelPlatforms();
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
   const skillsTabEnabled = features.skills && availableSkills.length > 0;
-  const connectionsTabEnabled = Boolean(form);
+  const browserTabEnabled = features.browser;
+  const integrationsTabEnabled = channelPlatforms.some(platform => platform.id === 'slack' && platform.isConfigured);
 
-  const tabContentClassName = 'h-full min-h-0';
+  const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
   const isEditable = !disabled;
 
+  const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
+
   return (
-    <div
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] border-t border-border1 overflow-hidden"
-      data-testid="agent-profile-tabs"
-    >
-      <Tabs
-        defaultTab="instructions"
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
-      >
-        <TabList variant="line" sticky className="px-2">
-          <Tab value="instructions">Instructions</Tab>
+    <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
+      <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+        <TabList variant="line" sticky className="!bg-surface3 px-6">
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
-          {connectionsTabEnabled && <Tab value="connections">Connections</Tab>}
+          <Tab value="instructions">Instructions</Tab>
           {skillsTabEnabled && <Tab value="skills">Skills</Tab>}
+          {browserTabEnabled && <Tab value="browser">Browser</Tab>}
+          {integrationsTabEnabled && <Tab value="integrations">Integrations</Tab>}
         </TabList>
 
-        <div className="min-h-0 overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto h-full">
           {modelTabEnabled && (
             <TabContent value="model" className={tabContentClassName}>
               <Models editable={isEditable} />
             </TabContent>
           )}
-
-          <TabContent value="instructions" className={tabContentClassName}>
-            <Instructions editable={isEditable} fallbackPrompt={fallbackInstructions} />
-          </TabContent>
 
           {toolsTabEnabled && (
             <TabContent value="tools" className={tabContentClassName}>
@@ -96,9 +92,25 @@ export const AgentProfileTabs = ({
             </TabContent>
           )}
 
+          <TabContent value="instructions" className={tabContentClassName}>
+            <Instructions editable={isEditable} fallbackPrompt={fallbackInstructions} />
+          </TabContent>
+
           {skillsTabEnabled && (
             <TabContent value="skills" className={tabContentClassName}>
               <Skills availableSkills={availableSkills} editable={isEditable} />
+            </TabContent>
+          )}
+
+          {browserTabEnabled && (
+            <TabContent value="browser" className={tabContentClassName}>
+              <Browser editable={isEditable} />
+            </TabContent>
+          )}
+
+          {integrationsTabEnabled && (
+            <TabContent value="integrations" className={tabContentClassName}>
+              <Integrations agentId={agentId} editable={isEditable} />
             </TabContent>
           )}
         </div>

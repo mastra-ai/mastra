@@ -1,22 +1,13 @@
-import {
-  Button,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  toast,
-} from '@mastra/playground-ui';
-import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
-import type { Visibility } from '../components/agent-edit/visibility-select';
+
 import type { AgentBuilderEditFormValues } from '../schemas';
+import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
+import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 
-const COPY: Record<Visibility, { title: string; description: string; toast: string }> = {
+type Visibility = NonNullable<AgentBuilderEditFormValues['visibility']>;
+
+const COPY: Record<Visibility, VisibilityCopy> = {
   public: {
     title: 'Add this agent to your library?',
     description:
@@ -31,72 +22,23 @@ const COPY: Record<Visibility, { title: string; description: string; toast: stri
   },
 };
 
-export interface UseVisibilityChange {
-  requestChange: (next: Visibility) => void;
-  dialog: ReactNode;
-}
+export type UseVisibilityChange = UseVisibilityChangeDialogResult<Visibility>;
 
 export function useVisibilityChange(agentId: string): UseVisibilityChange {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
-  const [pending, setPending] = useState<Visibility | null>(null);
-  const isOpen = pending !== null;
 
-  const handleCancel = () => {
-    setPending(null);
-  };
-
-  const handleConfirm = async () => {
-    if (!pending) return;
-    const nextVisibility = pending;
-    try {
-      await updateStoredAgent.mutateAsync({ visibility: nextVisibility });
-      formMethods.setValue('visibility', nextVisibility, { shouldDirty: false });
-      toast.success(COPY[nextVisibility].toast);
-    } catch (error) {
-      toast.error(`Failed to update visibility: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setPending(null);
-    }
-  };
-
-  const dialogCopy = pending ? COPY[pending] : null;
-
-  const dialog = (
-    <Dialog open={isOpen} onOpenChange={open => !open && handleCancel()}>
-      <DialogContent data-testid="agent-builder-visibility-confirm-dialog">
-        {dialogCopy && (
-          <>
-            <DialogHeader>
-              <DialogTitle>{dialogCopy.title}</DialogTitle>
-              <DialogDescription>{dialogCopy.description}</DialogDescription>
-            </DialogHeader>
-            <DialogBody>
-              <p className="text-sm text-muted-foreground">{dialogCopy.description}</p>
-            </DialogBody>
-            <DialogFooter>
-              <Button
-                variant="ghost"
-                onClick={handleCancel}
-                disabled={updateStoredAgent.isPending}
-                data-testid="agent-builder-visibility-confirm-cancel"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                onClick={handleConfirm}
-                disabled={updateStoredAgent.isPending}
-                data-testid="agent-builder-visibility-confirm-yes"
-              >
-                Confirm
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-
-  return { requestChange: setPending, dialog };
+  return useVisibilityChangeDialog<Visibility>({
+    copy: COPY,
+    isPending: updateStoredAgent.isPending,
+    mutate: visibility => updateStoredAgent.mutateAsync({ visibility }),
+    onSuccess: visibility => {
+      formMethods.setValue('visibility', visibility, { shouldDirty: false });
+    },
+    testIds: {
+      dialog: 'agent-builder-visibility-confirm-dialog',
+      cancel: 'agent-builder-visibility-confirm-cancel',
+      confirm: 'agent-builder-visibility-confirm-yes',
+    },
+  });
 }

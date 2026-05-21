@@ -4,7 +4,6 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import { AgentChatPanelChat } from '@/domains/agent-builder/components/agent-edit/agent-chat-panel';
-import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
 import { ViewTopBar } from '@/domains/agent-builder/components/agent-view/view-top-bar';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
@@ -90,7 +89,7 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
 };
 
 const ViewTopBarSlot = () => {
-  const { canModify, onModeToggle, isOwner, isPublishable, agentId, agent } = useViewPage();
+  const { canModify, onModeToggle, isOwner, agentId, agent } = useViewPage();
   const { data: capabilities } = useAuthCapabilities();
   const isRunning = useStreamRunning();
 
@@ -102,15 +101,11 @@ const ViewTopBarSlot = () => {
       onModeToggle={onModeToggle}
       modeToggleDisabled={isRunning}
       ownerActions={
-        isOwner && (
-          <>
-            {isPublishable && <PublishToChannelButton agentId={agentId} />}
-            {showVisibilitySelect && (
-              <span style={{ viewTransitionName: 'agent-visibility-select' }}>
-                <VisibilitySelect agentId={agentId} />
-              </span>
-            )}
-          </>
+        isOwner &&
+        showVisibilitySelect && (
+          <span style={{ viewTransitionName: 'agent-visibility-select' }}>
+            <VisibilitySelect agentId={agentId} />
+          </span>
         )
       }
       mobileMenu={
@@ -118,7 +113,6 @@ const ViewTopBarSlot = () => {
           <AgentBuilderMobileMenu
             agentId={agentId}
             showSetVisibility={Boolean(capabilities?.enabled)}
-            showPublishToChannel={isPublishable}
             showDelete
             agentName={agent.name}
             disabled={isRunning}

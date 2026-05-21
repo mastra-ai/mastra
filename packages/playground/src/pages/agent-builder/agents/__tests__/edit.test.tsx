@@ -121,15 +121,6 @@ vi.mock('@/domains/builder', () => ({
   useBuilderModelPolicy: () => ({ active: false }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-edit/publish-to-channel-button', () => ({
-  PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
-    agentId ? (
-      <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
-        Publish to…
-      </button>
-    ) : null,
-}));
-
 vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu', () => ({
   AgentBuilderMobileMenu: () => null,
 }));
@@ -195,37 +186,6 @@ describe('AgentBuilderAgentEdit', () => {
       const { queryByTestId } = renderAt();
       expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
       expect(queryByTestId('agent-builder-edit-save')).toBeNull();
-    });
-
-    it('shows the Publish to channel button for the owner when the agent is public', () => {
-      storedAgent = {
-        id: 'agent-123',
-        name: 'Existing',
-        instructions: 'Do things',
-        tools: [],
-        agents: [],
-        workflows: [],
-        authorId: 'current-user',
-        visibility: 'public',
-      };
-      const { getByTestId } = renderAt();
-      const button = getByTestId('agent-builder-publish-channel') as HTMLButtonElement;
-      expect(button.disabled).toBe(false);
-    });
-
-    it('hides the Publish to channel button when the agent is private', () => {
-      storedAgent = {
-        id: 'agent-123',
-        name: 'Existing',
-        instructions: 'Do things',
-        tools: [],
-        agents: [],
-        workflows: [],
-        authorId: 'current-user',
-        visibility: 'private',
-      };
-      const { queryByTestId } = renderAt();
-      expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
     });
 
     it('back arrow navigates to the agents list without saving', () => {

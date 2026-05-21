@@ -62,7 +62,7 @@ describe('Tools', () => {
     // jsdom normalizes inline color values from hsl() to rgb() for color properties.
     expect(container.style.borderColor).toMatch(/^(rgb|hsl)\(/);
     expect(container.style.boxShadow).toBe('');
-    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-fg)]');
+    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('border-accent1');
     expect(container.className).not.toContain('ring-1 ring-accent1');
     expect(container.className).not.toContain('focus-visible:ring');
@@ -99,103 +99,141 @@ describe('Tools', () => {
     );
 
     const container = getByTestId('tool-card-tool-unchecked-tool') as HTMLButtonElement;
-    expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
+    expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
     expect(container.style.borderColor).toBe('');
     expect(container.className).toContain('border-border1');
-    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-fg)]');
+    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-visible:ring');
   });
 
-  describe('integration rows', () => {
-    const integrationTool: AgentTool = {
-      id: 'composio:GMAIL_FETCH_EMAILS',
-      name: 'GMAIL_FETCH_EMAILS',
-      description: 'Fetch Gmail emails',
-      isChecked: true,
-      type: 'integration',
-      providerId: 'composio',
-      toolkit: 'gmail',
-    };
+  it('renders the "Show only selected" filter checkbox unchecked by default with both tool cards visible', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
 
-    it('renders the Set up connection button when checked and toolkit has no pinned connections', () => {
-      const onOpen = vi.fn();
-      const { getByTestId } = render(
-        <FormHarness defaultValues={{ toolProviders: { composio: { tools: {}, connections: {} } } }}>
-          <Tools availableAgentTools={[integrationTool]} onOpenConnections={onOpen} />
-        </FormHarness>,
-      );
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
+    expect(getByTestId('tool-card-tool-checked-tool')).toBeTruthy();
+    expect(getByTestId('tool-card-tool-unchecked-tool')).toBeTruthy();
+  });
 
-      const setupBtn = getByTestId('tool-card-setup-composio-GMAIL_FETCH_EMAILS') as HTMLButtonElement;
-      expect(setupBtn.textContent).toBe('Set up connection');
-    });
+  it('checking the filter hides unselected tools and keeps selected ones', () => {
+    const { getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
 
-    it('clicking Set up connection calls onOpenConnections and does not toggle the row', () => {
-      const onOpen = vi.fn();
-      const formStates: unknown[] = [];
+    fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
 
-      const { getByTestId } = render(
-        <FormHarness defaultValues={{ toolProviders: { composio: { tools: {}, connections: {} } } }}>
-          <ToolProvidersProbe onChange={v => formStates.push(v)} />
-          <Tools availableAgentTools={[integrationTool]} onOpenConnections={onOpen} />
-        </FormHarness>,
-      );
+    expect(queryByTestId('tool-card-tool-checked-tool')).toBeTruthy();
+    expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeNull();
+  });
 
-      const before = formStates.length;
-      fireEvent.click(getByTestId('tool-card-setup-composio-GMAIL_FETCH_EMAILS'));
+  it('unchecking the filter restores hidden tools', () => {
+    const { getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
 
-      expect(onOpen).toHaveBeenCalledTimes(1);
-      // No form mutation occurred, so the watch probe did not re-emit.
-      expect(formStates.length).toBe(before);
-    });
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
+    fireEvent.click(checkbox);
+    expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeNull();
 
-    it('hides the Set up button when the toolkit already has a pinned connection', () => {
-      const { queryByTestId } = render(
-        <FormHarness
-          defaultValues={{
-            toolProviders: {
-              composio: {
-                tools: {},
-                connections: {
-                  gmail: [
-                    {
-                      connectionId: 'ca_1',
-                      toolkit: 'gmail',
-                      kind: 'author',
-                      scope: 'per-author',
-                      label: 'work',
-                    },
-                  ],
-                },
-              },
-            },
-          }}
-        >
-          <Tools availableAgentTools={[integrationTool]} onOpenConnections={vi.fn()} />
-        </FormHarness>,
-      );
+    fireEvent.click(checkbox);
+    expect(queryByTestId('tool-card-tool-checked-tool')).toBeTruthy();
+    expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeTruthy();
+  });
 
-      expect(queryByTestId('tool-card-setup-composio-GMAIL_FETCH_EMAILS')).toBeNull();
-    });
+  it('shows the empty-state copy when the filter is on and nothing is selected', () => {
+    const noneSelected = [
+      { id: 'a', name: 'a', isChecked: false, type: 'tool' as const },
+      { id: 'b', name: 'b', isChecked: false, type: 'tool' as const },
+    ];
+    const { getByTestId, getByText } = render(
+      <FormHarness>
+        <Tools availableAgentTools={noneSelected} />
+      </FormHarness>,
+    );
 
-    it('toggling an integration row writes only to toolProviders, never to the native tools allowlist', () => {
-      const formStates: AgentBuilderEditFormValues['toolProviders'][] = [];
-      const onChange = (v: unknown) => formStates.push(v as AgentBuilderEditFormValues['toolProviders']);
+    fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
 
-      const uncheckedItem: AgentTool = { ...integrationTool, isChecked: false };
-      const { getByTestId } = render(
-        <FormHarness defaultValues={{ toolProviders: {} }}>
-          <ToolProvidersProbe onChange={onChange} />
-          <Tools availableAgentTools={[uncheckedItem]} onOpenConnections={vi.fn()} />
-        </FormHarness>,
-      );
+    expect(getByText('No tools selected yet')).toBeTruthy();
+  });
 
-      fireEvent.click(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS'));
+  it('combines the filter with search to show the dedicated empty-state copy', async () => {
+    const { getByTestId, findByText } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
 
-      const last = formStates[formStates.length - 1];
-      expect(last?.composio?.tools?.GMAIL_FETCH_EMAILS).toEqual({
-        toolkit: 'gmail',
-        description: 'Fetch Gmail emails',
-      });
-    });
+    const searchInput = getByTestId('tools-card-picker-search').querySelector('input');
+    expect(searchInput).toBeTruthy();
+    fireEvent.change(searchInput!, { target: { value: 'unchecked' } });
+
+    fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
+
+    await findByText('No selected tools match "unchecked"');
+  });
+
+  it('uses the small-size classes matching the provider-filter checkbox in models.tsx', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
+    expect(checkbox.className).toContain('h-3');
+    expect(checkbox.className).toContain('w-3');
+    expect(checkbox.className).toContain('[&_svg]:h-2.5');
+  });
+
+  it('paints the filter checkbox with the agent color when checked and a name is set', () => {
+    const { getByTestId } = render(
+      <FormHarness agentName="Support agent">
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox') as HTMLButtonElement;
+    expect(checkbox.getAttribute('style')).toBeNull();
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
+    expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
+  });
+
+  it('does not apply an inline style to the filter checkbox when no agent name is set', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const checkbox = getByTestId('tools-only-selected-filter-checkbox') as HTMLButtonElement;
+    fireEvent.click(checkbox);
+
+    expect(checkbox.getAttribute('style')).toBeNull();
+  });
+
+  it('renders the search input and the filter checkbox in the same flex row', () => {
+    const { getByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={availableTools} />
+      </FormHarness>,
+    );
+
+    const searchWrapper = getByTestId('tools-card-picker-search');
+    const filterLabel = getByTestId('tools-only-selected-filter');
+
+    expect(searchWrapper.parentElement).toBe(filterLabel.parentElement);
+    expect(filterLabel.parentElement?.className).toContain('flex');
+    expect(filterLabel.parentElement?.className).toContain('justify-between');
   });
 });

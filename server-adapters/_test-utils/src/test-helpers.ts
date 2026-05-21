@@ -537,7 +537,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     hasEnabledBuilderConfig: () => true,
     resolveBuilder: async () => ({
       enabled: true,
-      getFeatures: () => ({ agent: { stars: true } }),
+      getFeatures: () => ({ agent: { favorites: true } }),
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
     }),

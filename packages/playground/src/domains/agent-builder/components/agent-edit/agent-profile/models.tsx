@@ -1,11 +1,13 @@
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
-import { Searchbar, Skeleton, Txt, cn } from '@mastra/playground-ui';
-import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
+import { Checkbox, Skeleton, Txt, cn } from '@mastra/playground-ui';
+import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
+import { AgentSearchbar } from '../agent-searchbar';
+import { AgentSelectableCard } from '../agent-selectable-card';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { toProviders } from '@/domains/agent-builder/services/to-providers';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
@@ -28,7 +30,10 @@ export const Models = ({ editable = true }: Modelprops) => {
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4" data-testid="model-detail-picker">
+    <div
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-y-auto"
+      data-testid="model-detail-picker"
+    >
       <ModelPicker disabled={!editable} />
     </div>
   );
@@ -36,6 +41,11 @@ export const Models = ({ editable = true }: Modelprops) => {
 
 interface ModelPickerProps {
   disabled?: boolean;
+}
+
+interface ProviderEntry {
+  providerId: string;
+  providerName: string;
 }
 
 const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
@@ -50,9 +60,71 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
 
   const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
   const [search, setSearch] = useState('');
+  const [selectedProviders, setSelectedProviders] = useState<Set<string> | null>(null);
+
+  const providerOptions = useMemo<ProviderEntry[]>(() => {
+    const seen = new Map<string, string>();
+    for (const m of policyAllowedModels) {
+      const id = cleanProviderId(m.provider);
+      if (!seen.has(id)) {
+        seen.set(id, m.providerName);
+      }
+    }
+    return Array.from(seen.entries())
+      .map(([providerId, providerName]) => ({ providerId, providerName }))
+      .sort((a, b) => a.providerName.localeCompare(b.providerName));
+  }, [policyAllowedModels]);
+
+  const isProviderChecked = (providerId: string) => selectedProviders === null || selectedProviders.has(providerId);
+
+  const handleToggleProvider = (providerId: string) => {
+    setSelectedProviders(prev => {
+      const base = prev ?? new Set(providerOptions.map(p => p.providerId));
+      const next = new Set(base);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
+  };
 
   if (isLoading) {
-    return <Skeleton className="h-40 w-full" />;
+    return (
+      <div className="h-full overflow-y-auto">
+        <div
+          className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 px-6 overflow-y-auto"
+          data-testid="model-card-picker-loading"
+        >
+          <div className="shrink-0 max-w-[30ch]">
+            <Skeleton className="h-10 w-full rounded-md" />
+          </div>
+
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Skeleton className="h-badge-default w-20 rounded-full" />
+            <Skeleton className="h-badge-default w-24 rounded-full" />
+            <Skeleton className="h-badge-default w-20 rounded-full" />
+            <Skeleton className="h-badge-default w-28 rounded-full" />
+            <Skeleton className="h-badge-default w-24 rounded-full" />
+          </div>
+
+          <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-4 w-24" />
+              <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-20 rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const provider = cleanProviderId(model?.provider ?? '');
@@ -61,30 +133,47 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const isSet = Boolean(provider && modelId);
   const isStale = isSet && policy.active && !isModelAllowed(policy.allowed, { provider, modelId });
 
-  const visibleEntries = filterProvidersModel(policyAllowedModels, provider, search);
+  const groups = groupModelsByProvider(policyAllowedModels, selectedProviders, search, provider);
+  const allProvidersUnchecked = selectedProviders !== null && selectedProviders.size === 0;
 
   return (
-    <div className="h-full">
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-4" data-testid="model-card-picker">
-        <div data-testid="model-card-picker-search" className="shrink-0">
-          <Searchbar
+    <div className="h-full overflow-y-auto">
+      <div
+        className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 px-6 overflow-y-auto"
+        data-testid="model-card-picker"
+      >
+        <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
+          <AgentSearchbar
             onSearch={setSearch}
             label="Search models"
             placeholder="Search models or providers..."
-            size="sm"
+            size="lg"
             debounceMs={0}
           />
         </div>
 
-        {visibleEntries.length === 0 ? (
-          <div className="flex min-h-0 items-center justify-center px-3 py-6">
-            <Txt variant="ui-sm" className="text-neutral3">
-              {search.trim() ? `No models match "${search.trim()}"` : 'No models available'}
+        {providerOptions.length > 0 && (
+          <ProviderFilterBadges
+            providers={providerOptions}
+            isProviderChecked={isProviderChecked}
+            onToggle={handleToggleProvider}
+            disabled={disabled}
+          />
+        )}
+
+        {groups.length === 0 ? (
+          <div className="flex min-h-0 items-center justify-center">
+            <Txt variant="ui-md" className="text-neutral3">
+              {search.trim()
+                ? `No models match "${search.trim()}"`
+                : allProvidersUnchecked
+                  ? 'Select at least one provider to see models'
+                  : 'No models available'}
             </Txt>
           </div>
         ) : (
-          <ModelList
-            visibleEntries={visibleEntries}
+          <ModelGroups
+            groups={groups}
             selectedProvider={provider}
             selectedModel={modelId}
             disabled={disabled}
@@ -98,102 +187,123 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   );
 };
 
-interface ModelListProps {
-  visibleEntries: ModelInfo[];
+interface ProviderFilterBadgesProps {
+  providers: ProviderEntry[];
+  isProviderChecked: (providerId: string) => boolean;
+  onToggle: (providerId: string) => void;
+  disabled?: boolean;
+}
+
+const ProviderFilterBadges = ({ providers, isProviderChecked, onToggle, disabled }: ProviderFilterBadgesProps) => {
+  const agentColor = useAgentColor();
+
+  return (
+    <div className="flex flex-wrap gap-2 shrink-0" data-testid="model-provider-filter">
+      {providers.map(({ providerId, providerName }) => {
+        const checked = isProviderChecked(providerId);
+        const useAgentColors = checked && agentColor !== null;
+
+        const labelStyle: CSSProperties | undefined = useAgentColors
+          ? {
+              borderColor: agentColor.background,
+              color: agentColor.background,
+            }
+          : undefined;
+
+        const checkboxStyle: CSSProperties | undefined = useAgentColors
+          ? {
+              backgroundColor: agentColor.background,
+              borderColor: agentColor.background,
+              color: agentColor.foreground,
+            }
+          : undefined;
+
+        return (
+          <label
+            key={providerId}
+            data-testid={`model-provider-filter-badge-${providerId}`}
+            data-checked={checked ? 'true' : 'false'}
+            style={labelStyle}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full border px-2.5 h-badge-default text-ui-sm font-mono cursor-pointer select-none transition-colors',
+              !useAgentColors &&
+                (checked
+                  ? 'border-accent1 bg-surface4 text-neutral6'
+                  : 'border-border1 bg-surface3 text-neutral5 hover:bg-surface4'),
+              disabled && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <Checkbox
+              variant={useAgentColors ? 'neutral' : 'primary'}
+              checked={checked}
+              disabled={disabled}
+              onCheckedChange={() => onToggle(providerId)}
+              style={checkboxStyle}
+              data-testid={`model-provider-filter-checkbox-${providerId}`}
+              className="h-3 w-3 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
+            />
+            <span>{providerName}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+};
+
+interface ModelGroup {
+  providerId: string;
+  providerName: string;
+  models: ModelInfo[];
+}
+
+interface ModelGroupsProps {
+  groups: ModelGroup[];
   selectedProvider: string;
   selectedModel: string;
   disabled: boolean;
   onChange: (provider: string, model: string) => void;
 }
 
-const ModelList = ({ visibleEntries, selectedProvider, selectedModel, disabled, onChange }: ModelListProps) => {
+const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChange }: ModelGroupsProps) => {
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-1.5 lg:gap-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-      {visibleEntries.map(entry => {
-        const cleanedProvider = cleanProviderId(entry.provider);
-        const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
+    <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
+      {groups.map(group => (
+        <section
+          key={group.providerId}
+          data-testid={`model-provider-section-${group.providerId}`}
+          className="flex flex-col gap-3"
+        >
+          <Txt
+            variant="ui-sm"
+            as="h3"
+            className="text-neutral3 uppercase tracking-wide"
+            data-testid={`model-provider-section-title-${group.providerId}`}
+          >
+            {group.providerName}
+          </Txt>
+          <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {group.models.map(entry => {
+              const cleanedProvider = cleanProviderId(entry.provider);
+              const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
 
-        return <ModelListEntry entry={entry} isSelected={isSelected} disabled={disabled} onChange={onChange} />;
-      })}
+              return (
+                <AgentSelectableCard
+                  key={`${entry.provider}__${entry.model}`}
+                  icon={<ProviderLogo providerId={entry.provider} size={32} />}
+                  title={entry.model}
+                  subtitle={entry.providerName}
+                  isSelected={isSelected}
+                  disabled={disabled}
+                  onClick={() => onChange(entry.provider, entry.model)}
+                  testId={`model-card-${entry.provider}-${entry.model}`}
+                  checkTestId={`model-card-check-${entry.provider}-${entry.model}`}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
-  );
-};
-
-interface ModelListEntryProps {
-  entry: ModelInfo;
-  isSelected: boolean;
-  disabled: boolean;
-  onChange: (provider: string, model: string) => void;
-}
-
-const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntryProps) => {
-  const agentColor = useAgentColor();
-  const hasAgentColor = agentColor !== null;
-  const useAgentColors = isSelected && hasAgentColor;
-
-  const containerStyle: CSSProperties | undefined = hasAgentColor
-    ? {
-        ['--agent-color-fg' as string]: agentColor.foreground,
-        ...(isSelected ? { borderColor: agentColor.foreground } : null),
-      }
-    : undefined;
-
-  const checkStyle: CSSProperties | undefined = useAgentColors
-    ? {
-        borderColor: agentColor.foreground,
-        backgroundColor: agentColor.background,
-        color: agentColor.foreground,
-      }
-    : undefined;
-
-  return (
-    <button
-      key={`${entry.provider}__${entry.model}`}
-      type="button"
-      onClick={() => onChange(entry.provider, entry.model)}
-      disabled={disabled}
-      aria-pressed={isSelected}
-      data-testid={`model-card-${entry.provider}-${entry.model}`}
-      style={containerStyle}
-      className={cn(
-        'flex items-center gap-3 rounded-md border bg-surface3 px-3 py-2.5 text-left transition-colors',
-        hasAgentColor
-          ? 'focus-visible:!border-[var(--agent-color-fg)] focus-visible:outline-none'
-          : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
-        hasAgentColor && 'hover:bg-surface4',
-        isSelected
-          ? useAgentColors
-            ? 'bg-surface4'
-            : 'border-accent1 bg-surface4 ring-1 ring-accent1'
-          : 'border-border1',
-        disabled && 'cursor-not-allowed opacity-60',
-      )}
-    >
-      <ProviderLogo providerId={entry.provider} size={20} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Txt variant="ui-sm" className="truncate font-medium text-neutral6">
-          {entry.model}
-        </Txt>
-        <Txt variant="ui-xs" className="truncate text-neutral3">
-          {entry.providerName}
-        </Txt>
-      </div>
-      <span
-        aria-hidden="true"
-        data-testid={`model-card-check-${entry.provider}-${entry.model}`}
-        style={checkStyle}
-        className={cn(
-          'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-          isSelected
-            ? useAgentColors
-              ? ''
-              : 'border-accent1 bg-accent1 text-surface1'
-            : 'border-border1 bg-transparent',
-        )}
-      >
-        {isSelected && <Check className="h-3 w-3" />}
-      </span>
-    </button>
   );
 };
 
@@ -240,21 +350,43 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
   </div>
 );
 
-function filterProvidersModel(modelInfo: ModelInfo[], selectedProvider: string, search: string) {
-  return modelInfo
-    .filter(m => {
-      if (m.provider.toLowerCase().includes(search.toLowerCase())) return true;
-      if (m.model.toLowerCase().includes(search.toLowerCase())) return true;
-      return false;
-    })
-    .sort((a, b) => {
-      const aSelectedProvider = cleanProviderId(a.provider) === selectedProvider ? 0 : 1;
-      const bSelectedProvider = cleanProviderId(b.provider) === selectedProvider ? 0 : 1;
-      if (aSelectedProvider !== bSelectedProvider) return aSelectedProvider - bSelectedProvider;
+function groupModelsByProvider(
+  modelInfo: ModelInfo[],
+  selectedProviders: Set<string> | null,
+  search: string,
+  selectedProvider: string,
+): ModelGroup[] {
+  const searchLower = search.toLowerCase();
 
-      const providerCompare = a.providerName.localeCompare(b.providerName);
-      if (providerCompare !== 0) return providerCompare;
+  const filtered = modelInfo.filter(m => {
+    const providerId = cleanProviderId(m.provider);
+    if (selectedProviders !== null && !selectedProviders.has(providerId)) return false;
 
-      return a.model.localeCompare(b.model);
-    });
+    if (!searchLower) return true;
+    if (m.provider.toLowerCase().includes(searchLower)) return true;
+    if (m.model.toLowerCase().includes(searchLower)) return true;
+    return false;
+  });
+
+  const groupsById = new Map<string, ModelGroup>();
+  for (const entry of filtered) {
+    const providerId = cleanProviderId(entry.provider);
+    let group = groupsById.get(providerId);
+    if (!group) {
+      group = { providerId, providerName: entry.providerName, models: [] };
+      groupsById.set(providerId, group);
+    }
+    group.models.push(entry);
+  }
+
+  for (const group of groupsById.values()) {
+    group.models.sort((a, b) => a.model.localeCompare(b.model));
+  }
+
+  return Array.from(groupsById.values()).sort((a, b) => {
+    const aSelected = a.providerId === selectedProvider ? 0 : 1;
+    const bSelected = b.providerId === selectedProvider ? 0 : 1;
+    if (aSelected !== bSelected) return aSelected - bSelected;
+    return a.providerName.localeCompare(b.providerName);
+  });
 }

@@ -181,17 +181,6 @@ export const sectionNav: NavItem[] = [
     Icon: ExperimentsIcon,
     docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Evaluation documentation' },
   },
-  {
-    name: 'Observability',
-    url: '/observability-overview',
-    Icon: TraceIcon,
-    docs: { href: 'https://mastra.ai/en/docs/observability/overview', label: 'Observability documentation' },
-  },
-  {
-    name: 'Primitives',
-    url: '/primitives',
-    Icon: AgentIcon,
-  },
 ];
 
 // sectionNav comes first so /evaluation resolves to "Evaluation" (section crumb) rather than the

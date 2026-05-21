@@ -1,10 +1,17 @@
 import { Spinner } from '@mastra/playground-ui';
 import { useState } from 'react';
-import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
+  AgentProfileInitialStep,
+  AgentProfileModelStep,
+  AgentProfileToolsStep,
+  AgentProfileInstructionsStep,
+  AgentProfileSkillsStep,
+  AgentProfileBrowserStep,
+  AgentProfileIntegrationsStep,
   AgentProfileAvatar,
   AgentProfileDetails,
   AgentProfileHero,
@@ -14,12 +21,12 @@ import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-edit
 import { ConversationPanelChat } from '@/domains/agent-builder/components/agent-edit/conversation-panel';
 import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-edit/delete-agent-action';
 import { EditTopBar } from '@/domains/agent-builder/components/agent-edit/edit-top-bar';
-import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
+import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
@@ -40,13 +47,17 @@ export default function AgentBuilderAgentEdit() {
 }
 
 const EditPageGate = () => {
-  const { agentId, storedAgent, isReady, isOwner, canWrite } = useAgentPrimitives();
+  const { agentId, storedAgent, isReady, isOwner, canWrite, initialUserMessage } = useAgentPrimitives();
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
   if (!storedAgent) return <Navigate to="/agent-builder/agents" replace />;
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
-  return <EditPageForm />;
+  return (
+    <WizardProvider initialStep={initialUserMessage ? 'initial' : 'end'}>
+      <EditPageForm />
+    </WizardProvider>
+  );
 };
 
 const EditPageForm = () => {
@@ -99,7 +110,7 @@ const EditPageBody = () => {
 };
 
 const EditTopBarSlot = () => {
-  const { autosave, onModeToggle, canPublishToChannel, agentId } = useEditPage();
+  const { autosave, onModeToggle } = useEditPage();
   const isRunning = useStreamRunning();
 
   return (
@@ -111,20 +122,13 @@ const EditTopBarSlot = () => {
       rightAside={
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
       }
-      modeAction={
-        canPublishToChannel ? (
-          <div className="hidden lg:flex items-center gap-2">
-            <PublishToChannelButton agentId={agentId} />
-          </div>
-        ) : null
-      }
       mobileExtra={<MobileMenuSlot />}
     />
   );
 };
 
 const MobileMenuSlot = () => {
-  const { agentId, canPublishToChannel } = useEditPage();
+  const { agentId } = useEditPage();
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
@@ -134,7 +138,6 @@ const MobileMenuSlot = () => {
     <AgentBuilderMobileMenu
       agentId={agentId}
       showSetVisibility={!!capabilities?.enabled}
-      showPublishToChannel={canPublishToChannel}
       showDelete
       agentName={name}
       disabled={isRunning}
@@ -148,6 +151,8 @@ const ProfileSlot = () => {
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
+  const { dirtyFields } = useFormState();
+  const { step } = useWizard();
 
   const heroActions = (
     <>
@@ -160,6 +165,42 @@ const ProfileSlot = () => {
     </>
   );
 
+  if (step === 'initial') {
+    const isReady = dirtyFields.name && dirtyFields.description;
+
+    return (
+      <AgentProfileInitialStep
+        isPreparing={!isReady}
+        avatar={<AgentProfileAvatar disabled={isRunning} />}
+        details={<AgentProfileDetails mode="highlighted" disabled={isRunning} />}
+      />
+    );
+  }
+
+  if (step === 'model') {
+    return <AgentProfileModelStep />;
+  }
+
+  if (step === 'tools') {
+    return <AgentProfileToolsStep />;
+  }
+
+  if (step === 'instructions') {
+    return <AgentProfileInstructionsStep />;
+  }
+
+  if (step === 'skills') {
+    return <AgentProfileSkillsStep />;
+  }
+
+  if (step === 'browser') {
+    return <AgentProfileBrowserStep />;
+  }
+
+  if (step === 'integrations') {
+    return <AgentProfileIntegrationsStep />;
+  }
+
   return (
     <AgentProfile>
       <AgentProfileHero
@@ -168,6 +209,7 @@ const ProfileSlot = () => {
         actions={heroActions}
       />
       <AgentProfileTabs
+        agentId={agentId}
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}
         disabled={isRunning}

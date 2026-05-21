@@ -116,7 +116,7 @@ function EditLayoutWrapper() {
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
     agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
@@ -192,49 +192,48 @@ function EditLayoutWrapper() {
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
 
   return (
-    <ModelPolicyProvider surface="editor">
-      <MainContentLayout>
-        {isReady && (
-          <RouteHeaderActions owner="cms-agent-edit">
-            <div className="flex items-center gap-2">
-              {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-              <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save />
-                    Save
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handlePublishVersion}
-                disabled={
-                  isViewingPreviousVersion
-                    ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
-                    : !hasDraft || isSubmitting || isSavingDraft
-                }
-              >
-                {isSubmitting ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Publishing...
-                  </>
-                ) : (
-                  <>
-                    <Check />
-                    {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-                  </>
-                )}
-              </Button>
-            </div>
-          </RouteHeaderActions>
-        )}
+    <MainContentLayout>
+      {isReady && (
+        <RouteHeaderActions owner="cms-agent-edit">
+          <div className="flex items-center gap-2">
+            {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+            <Button onClick={() => void handleSaveDraft()} disabled={!isDirty || isSavingDraft || isSubmitting}>
+              {isSavingDraft ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save />
+                  Save
+                </>
+              )}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handlePublishVersion()}
+              disabled={
+                isViewingPreviousVersion
+                  ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
+                  : !hasDraft || isSubmitting || isSavingDraft
+              }
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <Check />
+                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                </>
+              )}
+            </Button>
+          </div>
+        </RouteHeaderActions>
+      )}
 
         {isNotFound ? (
           <>

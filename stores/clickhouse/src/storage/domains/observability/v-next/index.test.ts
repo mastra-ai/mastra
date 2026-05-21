@@ -20,8 +20,13 @@ import {
   buildAllTableDDL,
   buildRetentionDDL,
   buildRetentionEntries,
+  MV_DISCOVERY_PAIRS,
+  MV_DISCOVERY_VALUES,
   parseTtlExpression,
+  TABLE_DISCOVERY_PAIRS,
+  TABLE_DISCOVERY_VALUES,
 } from './ddl';
+import { isReplacingMergeTreeEngine } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -2924,24 +2929,34 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       // In production, discovery MVs refresh automatically on a schedule.
       // In tests, we trigger an immediate refresh after inserting data.
       await triggerDiscoveryRefresh();
+
+      // Inject duplicate rows directly into the helper tables to model the
+      // intermediate state between an MV refresh and a `ReplacingMergeTree`
+      // background merge. The discovery read paths must dedupe these rows
+      // before returning them to callers — that's what the assertions below
+      // verify.
+      await injectDuplicateDiscoveryRows();
     });
 
     it('getMetricNames returns distinct names', async () => {
       const result = await storage.getMetricNames({});
       expect(result.names).toContain('mastra_agent_duration_ms');
       expect(result.names).toContain('mastra_tool_calls_started');
+      expect(result.names).toEqual([...new Set(result.names)]);
     });
 
     it('getMetricNames filters by prefix', async () => {
       const result = await storage.getMetricNames({ prefix: 'mastra_agent' });
       expect(result.names).toContain('mastra_agent_duration_ms');
       expect(result.names).not.toContain('mastra_tool_calls_started');
+      expect(result.names).toEqual([...new Set(result.names)]);
     });
 
     it('getMetricLabelKeys returns label keys', async () => {
       const result = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
       expect(result.keys).toContain('agent');
       expect(result.keys).toContain('status');
+      expect(result.keys).toEqual([...new Set(result.keys)]);
     });
 
     it('getMetricLabelValues returns values for a label key', async () => {
@@ -2950,6 +2965,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         labelKey: 'status',
       });
       expect(result.values).toContain('ok');
+      expect(result.values).toEqual([...new Set(result.values)]);
     });
 
     it('getEntityTypes returns distinct entity types', async () => {
@@ -2957,17 +2973,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.entityTypes).toContain('agent');
       expect(result.entityTypes).toContain('tool');
       expect(result.entityTypes).toContain('input_processor');
+      expect(result.entityTypes).toEqual([...new Set(result.entityTypes)]);
     });
 
     it('getEntityNames returns entity names', async () => {
       const result = await storage.getEntityNames({ entityType: EntityType.AGENT });
       expect(result.names).toContain('weatherAgent');
+      expect(result.names).toEqual([...new Set(result.names)]);
 
       const toolNames = await storage.getEntityNames({ entityType: EntityType.TOOL });
       expect(toolNames.names).toContain('metricTool');
+      expect(toolNames.names).toEqual([...new Set(toolNames.names)]);
 
       const processorNames = await storage.getEntityNames({ entityType: EntityType.INPUT_PROCESSOR });
       expect(processorNames.names).toContain('logProcessor');
+      expect(processorNames.names).toEqual([...new Set(processorNames.names)]);
     });
 
     it('getServiceNames returns service names', async () => {
@@ -2975,6 +2995,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.serviceNames).toContain('my-service');
       expect(result.serviceNames).toContain('metric-service');
       expect(result.serviceNames).toContain('log-service');
+      expect(result.serviceNames).toEqual([...new Set(result.serviceNames)]);
     });
 
     it('getEnvironments returns environments', async () => {
@@ -2982,6 +3003,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.environments).toContain('production');
       expect(result.environments).toContain('metric-env');
       expect(result.environments).toContain('log-env');
+      expect(result.environments).toEqual([...new Set(result.environments)]);
     });
 
     it('getTags returns distinct tags', async () => {
@@ -2990,6 +3012,107 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.tags).toContain('experiment');
       expect(result.tags).toContain('metric-tag');
       expect(result.tags).toContain('log-tag');
+      expect(result.tags).toEqual([...new Set(result.tags)]);
+    });
+
+    it('init() reconciles pre-existing MergeTree discovery tables to ReplacingMergeTree', async () => {
+      // Simulates an upgrade from an older deployment that created the
+      // discovery helper tables as MergeTree. init() should drop the MV
+      // and table, then recreate both with the current ReplacingMergeTree
+      // engine — preserving the discovery refresh behavior end-to-end.
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `mig_discovery_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_VALUES} (kind LowCardinality(String), key1 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, value)`,
+        });
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, key2, value)`,
+        });
+
+        // Seed refreshable MVs pointing at the legacy helper tables. This
+        // mirrors a real upgrade and proves the reconcile path drops the
+        // pre-existing MVs before recreating the tables — otherwise
+        // ClickHouse would refuse to drop a table that an MV still depends
+        // on, and the recreate would also fail with "view already exists".
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+        });
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+        });
+
+        const before = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+            query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(before.map(r => r.engine)).toEqual(['MergeTree', 'MergeTree']);
+
+        const beforeMvs = (await (
+          await scopedClient.query({
+            query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+            query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string }>;
+        expect(beforeMvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+
+        const migratedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        try {
+          await migratedStorage.init();
+
+          const after = (await (
+            await scopedClient.query({
+              query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+              query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string; engine: string }>;
+          // Use the same predicate that reconcileDiscoveryTables() uses to
+          // decide whether a table is already migrated, so this assertion
+          // passes on ClickHouse Cloud / replicated clusters where the
+          // engine is transparently rewritten to SharedReplacingMergeTree
+          // or ReplicatedReplacingMergeTree.
+          expect(after.map(r => r.name)).toEqual([TABLE_DISCOVERY_PAIRS, TABLE_DISCOVERY_VALUES]);
+          for (const row of after) {
+            expect(
+              isReplacingMergeTreeEngine(row.engine),
+              `expected ${row.name} engine to satisfy isReplacingMergeTreeEngine but got '${row.engine}'`,
+            ).toBe(true);
+          }
+
+          const mvs = (await (
+            await scopedClient.query({
+              query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+              query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string }>;
+          expect(mvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+        } finally {
+          await migratedStorage.dangerouslyClearAll();
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
     });
   });
 
@@ -5314,6 +5437,66 @@ async function triggerDiscoveryRefresh(): Promise<void> {
     await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
     await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
     await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Inserts a second copy of every row already in the discovery helper tables.
+ * This models the window between a refreshable MV firing and
+ * `ReplacingMergeTree` collapsing the duplicate parts: identical rows live
+ * in separate parts and a plain `SELECT` returns them all. The discovery
+ * read paths must compensate with their own `SELECT DISTINCT`.
+ *
+ * Also asserts the duplicates are present so a regression in the seeding
+ * step shows up here instead of as a confusing "tests passed for the
+ * wrong reason" later on.
+ */
+async function injectDuplicateDiscoveryRows(): Promise<void> {
+  const { createClient } = await import('@clickhouse/client');
+  const { TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } = await import('./ddl');
+
+  const client = createClient({
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  });
+
+  try {
+    const tables: Array<{ table: string; keys: string }> = [
+      { table: TABLE_DISCOVERY_VALUES, keys: 'kind, key1, value' },
+      { table: TABLE_DISCOVERY_PAIRS, keys: 'kind, key1, key2, value' },
+    ];
+    for (const { table, keys } of tables) {
+      // Pause background merges around the duplicate-seed + check so a fast
+      // server can't collapse the inserted parts before the assertion runs.
+      // Without this, the test would intermittently observe rowsInParts ==
+      // distinctRows on hot servers and fail for reasons unrelated to the
+      // read-side DISTINCT behavior we're trying to exercise.
+      await client.command({ query: `SYSTEM STOP MERGES ${table}` });
+      try {
+        await client.command({ query: `INSERT INTO ${table} SELECT * FROM ${table}` });
+        const partsResult = await client.query({
+          query: `SELECT sum(rows) AS rowsInParts FROM system.parts WHERE database = currentDatabase() AND table = '${table}' AND active`,
+          format: 'JSONEachRow',
+        });
+        const rowsInParts = Number(((await partsResult.json()) as Array<{ rowsInParts: string }>)[0]?.rowsInParts ?? 0);
+        const distinctResult = await client.query({
+          query: `SELECT countDistinct(${keys}) AS distinctRows FROM ${table}`,
+          format: 'JSONEachRow',
+        });
+        const distinctRows = Number(
+          ((await distinctResult.json()) as Array<{ distinctRows: string }>)[0]?.distinctRows ?? 0,
+        );
+        expect(
+          rowsInParts,
+          `expected duplicates in ${table} but got rowsInParts=${rowsInParts}, distinctRows=${distinctRows}`,
+        ).toBeGreaterThan(distinctRows);
+      } finally {
+        await client.command({ query: `SYSTEM START MERGES ${table}` });
+      }
+    }
   } finally {
     await client.close();
   }

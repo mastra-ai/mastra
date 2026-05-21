@@ -32,6 +32,7 @@ import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCurso
 const COLUMNS = [
   'eventType',
   'timestamp',
+  'cursorId',
   'traceId',
   'spanId',
   'parentSpanId',
@@ -401,6 +402,7 @@ function toValuesTuple(row: SpanEventRow): string {
   return [
     v(row.eventType),
     v(row.timestamp),
+    "nextval('span_events_cursor_id_seq')",
     v(row.traceId),
     v(row.spanId),
     v(row.parentSpanId),

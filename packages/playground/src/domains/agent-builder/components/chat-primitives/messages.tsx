@@ -169,7 +169,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
           className="bg-white text-black rounded-2xl px-4 py-2.5 max-w-[80%] [&_ul]:!space-y-1 [&_ol]:!space-y-1 [&_li]:!my-0 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_li]:!leading-normal"
           as="div"
         >
-          <MarkdownRenderer className="space-y-2">{txt}</MarkdownRenderer>
+          <MarkdownRenderer>{txt}</MarkdownRenderer>
         </Txt>
       </div>
     );
@@ -182,7 +182,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
         className="text-neutral4 max-w-[80%] [&_ul]:!space-y-1 [&_ol]:!space-y-1 [&_li]:!my-0 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_li]:!leading-normal"
         as="div"
       >
-        <MarkdownRenderer className="space-y-2">{txt}</MarkdownRenderer>
+        <MarkdownRenderer>{txt}</MarkdownRenderer>
       </Txt>
     );
   }

@@ -80,7 +80,7 @@ export const ConversationPanelProvider = ({
   const { isLoading: isLoadingIntegrationTools } = useAllProviderTools();
   const initialMessageToolsReady = toolsReady && (!features.model || !isLoadingModels) && !isLoadingIntegrationTools;
 
-  const agentBuilderTool = useAgentBuilderTool({
+  const agentBuilderTools = useAgentBuilderTool({
     features,
     availableAgentTools,
     availableWorkspaces,
@@ -96,11 +96,11 @@ export const ConversationPanelProvider = ({
   const connectChannelTool = useConnectChannelTool();
   const clientTools = useMemo(
     () => ({
-      agentBuilderTool,
+      ...agentBuilderTools,
       ...(canPublishToChannel ? { [CONNECT_CHANNEL_TOOL_NAME]: connectChannelTool } : {}),
       ...(features.skills ? { [CREATE_SKILL_TOOL_NAME]: createSkillTool } : {}),
     }),
-    [agentBuilderTool, canPublishToChannel, connectChannelTool, createSkillTool, features.skills],
+    [agentBuilderTools, canPublishToChannel, connectChannelTool, createSkillTool, features.skills],
   );
 
   const conversationContextValue = useMemo(

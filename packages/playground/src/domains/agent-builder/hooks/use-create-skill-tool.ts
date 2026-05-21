@@ -24,9 +24,12 @@ export function useCreateSkillTool({ availableWorkspaces = [] }: UseCreateSkillT
     const workspaceIds = availableWorkspaces.map(w => w.id);
     const hasWorkspaces = workspaceIds.length > 0;
 
-    const workspaceField = hasWorkspaces
-      ? z.enum(workspaceIds as [string, ...string[]]).optional()
-      : z.string().optional();
+    const workspaceField =
+      workspaceIds.length > 1
+        ? z.enum(workspaceIds as [string, ...string[]])
+        : hasWorkspaces
+          ? z.enum(workspaceIds as [string, ...string[]]).optional()
+          : z.string().optional();
 
     const inputSchema = z.object({
       name: z.string().min(1),
