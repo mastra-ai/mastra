@@ -38,6 +38,8 @@ import type {
   ActiveSubagentState,
   ActiveToolState,
   AttachmentRef,
+  GoalOptions,
+  GoalState,
   ListMessagesOptions,
   MessageOptions,
   MessageOptionsDefault,
@@ -88,6 +90,18 @@ const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mc
 const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'];
 const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
+
+function escapeGoalXml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function buildKickoffContinuation(objective: string): string {
+  return `<system-reminder type="goal">${escapeGoalXml(objective)}</system-reminder>`;
+}
+
+function buildResumeContinuation(objective: string): string {
+  return `Continue working toward the goal: ${objective}`;
+}
 
 function pendingResumeForDisplay(pending: SessionRecord['pendingResume']): SessionDisplayPending | null {
   if (!pending) return null;
@@ -509,6 +523,107 @@ export class Session {
         transitionToMode: opts.approved ? opts.transitionToMode : undefined,
       },
     );
+  }
+
+  async setGoal(opts: GoalOptions): Promise<GoalState> {
+    this.assertLive('setGoal()');
+    if (this.parentSessionId !== undefined || this.record.origin === 'subagent-tool') {
+      throw new HarnessValidationError('setGoal', 'goals cannot be set on subagent sessions (parent owns the loop)');
+    }
+    if (typeof opts.objective !== 'string' || opts.objective.length === 0) {
+      throw new HarnessValidationError('setGoal.objective', 'must be a non-empty string');
+    }
+    if (opts.maxTurns !== undefined && (!Number.isInteger(opts.maxTurns) || opts.maxTurns < 1)) {
+      throw new HarnessValidationError('setGoal.maxTurns', 'must be a positive integer');
+    }
+
+    const defaults = this.harness._internalGoalDefaults;
+    const judgeModelId = opts.judgeModel ?? defaults.defaultJudgeModel;
+    if (typeof judgeModelId !== 'string' || judgeModelId.length === 0) {
+      throw new HarnessValidationError(
+        'setGoal.judgeModel',
+        'no judge model provided and `goals.defaultJudgeModel` is not configured',
+      );
+    }
+
+    const priorId = this.record.goal?.id;
+    const goal: GoalState = {
+      id: `goal-${randomUUID()}`,
+      objective: opts.objective,
+      status: 'active',
+      turnsUsed: 0,
+      maxTurns: opts.maxTurns ?? defaults.defaultMaxTurns,
+      judgeModelId,
+      createdAt: Date.now(),
+    };
+
+    await this.flushUpdate(prev => ({ ...prev, goal }));
+    if (priorId !== undefined) {
+      this._emit({ type: 'goal_cleared', goalId: priorId });
+    }
+    this._emit({ type: 'goal_set', goal });
+
+    if (opts.kickoff !== false) {
+      await this.enqueueGoalContinuation(goal, buildKickoffContinuation(opts.objective));
+    }
+
+    return goal;
+  }
+
+  getGoal(): GoalState | undefined {
+    this.assertLive('getGoal()');
+    return this.record.goal;
+  }
+
+  async pauseGoal(): Promise<GoalState | undefined> {
+    this.assertLive('pauseGoal()');
+    const goal = this.record.goal;
+    if (!goal || goal.status === 'paused') return goal;
+    const updated: GoalState = { ...goal, status: 'paused' };
+    await this.flushUpdate(prev => ({ ...prev, goal: updated }));
+    this._emit({ type: 'goal_paused', goalId: goal.id, reason: 'requested' });
+    return updated;
+  }
+
+  async resumeGoal(): Promise<GoalState | undefined> {
+    this.assertLive('resumeGoal()');
+    const goal = this.record.goal;
+    if (!goal) return undefined;
+    if (goal.status === 'active') return goal;
+    const updated: GoalState = { ...goal, status: 'active' };
+    await this.flushUpdate(prev => ({ ...prev, goal: updated }));
+    this._emit({ type: 'goal_resumed', goalId: goal.id });
+    await this.enqueueGoalContinuation(updated, buildResumeContinuation(updated.objective));
+    return updated;
+  }
+
+  async clearGoal(): Promise<void> {
+    this.assertLive('clearGoal()');
+    const goal = this.record.goal;
+    if (!goal) return;
+    await this.flushUpdate(prev => {
+      const next = { ...prev };
+      delete next.goal;
+      return next;
+    });
+    this._emit({ type: 'goal_cleared', goalId: goal.id });
+  }
+
+  async updateJudgeDefaults(opts: { judgeModelId?: string; maxTurns?: number }): Promise<GoalState | undefined> {
+    this.assertLive('updateJudgeDefaults()');
+    const goal = this.record.goal;
+    if (!goal) return undefined;
+    if (opts.judgeModelId === undefined && opts.maxTurns === undefined) return goal;
+    if (opts.maxTurns !== undefined && (!Number.isFinite(opts.maxTurns) || opts.maxTurns <= 0)) {
+      throw new HarnessValidationError('maxTurns', 'maxTurns must be a positive number');
+    }
+    const updated: GoalState = {
+      ...goal,
+      ...(opts.judgeModelId !== undefined ? { judgeModelId: opts.judgeModelId } : {}),
+      ...(opts.maxTurns !== undefined ? { maxTurns: opts.maxTurns } : {}),
+    };
+    await this.flushUpdate(prev => ({ ...prev, goal: updated }));
+    return updated;
   }
 
   async queue(opts: QueueOptions): Promise<AgentResult> {
@@ -1201,6 +1316,55 @@ export class Session {
       toolName: pending.toolName,
       runId: pending.runId,
     });
+  }
+
+  private async enqueueGoalContinuation(goal: GoalState, content: string): Promise<void> {
+    if ((this.record.pendingQueue?.length ?? 0) >= this.harness._internalMaxQueueDepth) {
+      return;
+    }
+    const now = Date.now();
+    const admissionId = `goal-${goal.id}-${now}`;
+    const admissionHash = computeQueueAdmissionHash({
+      content,
+      mode: this.record.modeId,
+      model: this.record.modelId,
+      source: 'goal',
+      goalId: goal.id,
+    });
+    const queuedItem: QueuedItem = {
+      id: `q-${randomUUID()}`,
+      admissionId,
+      admissionHash,
+      enqueuedAt: now,
+      content,
+      attachments: [],
+      mode: this.record.modeId,
+      source: 'goal',
+      goalId: goal.id,
+    };
+    const receipt: QueueAdmissionReceipt = {
+      admissionId,
+      admissionHash,
+      queuedItemId: queuedItem.id,
+      modeId: this.record.modeId,
+      runtimeDependencies: {
+        modeId: this.record.modeId,
+        modelId: this.record.modelId,
+      },
+      status: 'queued',
+      attempts: 0,
+      enqueuedAt: now,
+      updatedAt: now,
+    };
+
+    await this.flushUpdate(prev => ({
+      ...prev,
+      pendingQueue: [...(prev.pendingQueue ?? []), queuedItem],
+      queueAdmissionReceipts: {
+        ...(prev.queueAdmissionReceipts ?? {}),
+        [queuedItem.id]: receipt,
+      },
+    }));
   }
 
   private async admitQueueInternal(
