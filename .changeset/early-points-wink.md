@@ -4,9 +4,9 @@
 
 Added Mastra SDK agent wrappers for Claude Agent SDK and Cursor Agent SDK.
 
-These wrappers let developers initialize the vendor SDK client themselves, pass it into Mastra, and call `generate` or `stream` through Mastra-compatible outputs. The wrappers bypass Mastra's model loop so each SDK can run its own agent implementation while still behaving like registered Mastra agents.
+Developers can now use Claude Agent SDK and Cursor Agent SDK agents inside Mastra. They can initialize the vendor SDK client themselves or let Mastra create the Cursor SDK agent from Cursor options.
 
-SDK agent runs now create Mastra agent and model observability spans. Cursor usage is collected from turn updates, Claude usage is collected from result messages, and Claude SDK runs preserve the SDK's estimated `total_cost_usd` value as Mastra cost context.
+These agents support `generate` and `stream` with Mastra-compatible outputs, so they can be registered and called like other Mastra agents. Their runs also show up in Mastra observability with usage data, and Claude SDK cost estimates are preserved for cost reporting.
 
 ```ts
 import { query } from '@anthropic-ai/claude-agent-sdk';

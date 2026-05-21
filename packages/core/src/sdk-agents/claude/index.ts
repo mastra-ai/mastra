@@ -373,17 +373,19 @@ function createClaudeUsageCollector() {
       }
     },
     totals(): ClaudeUsageTotals {
+      const assistantUsage = getAssistantUsageTotals(assistantUsageById);
+
       if (hasAnyUsage(resultUsage)) {
-        return resultUsage;
+        return {
+          ...resultUsage,
+          inputTokens: resultUsage.inputTokens ?? assistantUsage.inputTokens,
+          outputTokens: resultUsage.outputTokens ?? assistantUsage.outputTokens,
+          cacheReadInputTokens: resultUsage.cacheReadInputTokens ?? assistantUsage.cacheReadInputTokens,
+          cacheCreationInputTokens: resultUsage.cacheCreationInputTokens ?? assistantUsage.cacheCreationInputTokens,
+        };
       }
 
-      return [...assistantUsageById.values()].reduce<ClaudeUsageTotals>((totals, item) => {
-        totals.inputTokens = addOptional(totals.inputTokens, item.inputTokens);
-        totals.outputTokens = addOptional(totals.outputTokens, item.outputTokens);
-        totals.cacheReadInputTokens = addOptional(totals.cacheReadInputTokens, item.cacheReadInputTokens);
-        totals.cacheCreationInputTokens = addOptional(totals.cacheCreationInputTokens, item.cacheCreationInputTokens);
-        return totals;
-      }, {});
+      return assistantUsage;
     },
     toV3Usage(): V3Usage {
       return toV3Usage(this.totals());
@@ -392,6 +394,16 @@ function createClaudeUsageCollector() {
       return toLanguageModelUsage(toV3Usage(this.totals()));
     },
   };
+}
+
+function getAssistantUsageTotals(assistantUsageById: Map<string, ClaudeUsageTotals>): ClaudeUsageTotals {
+  return [...assistantUsageById.values()].reduce<ClaudeUsageTotals>((totals, item) => {
+    totals.inputTokens = addOptional(totals.inputTokens, item.inputTokens);
+    totals.outputTokens = addOptional(totals.outputTokens, item.outputTokens);
+    totals.cacheReadInputTokens = addOptional(totals.cacheReadInputTokens, item.cacheReadInputTokens);
+    totals.cacheCreationInputTokens = addOptional(totals.cacheCreationInputTokens, item.cacheCreationInputTokens);
+    return totals;
+  }, {});
 }
 
 function usageFromClaudeMessage(usage: unknown): ClaudeUsageTotals {

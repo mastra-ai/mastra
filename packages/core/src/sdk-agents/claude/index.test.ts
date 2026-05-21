@@ -61,6 +61,40 @@ function createResultMessage(result: string): SDKMessage {
   } as SDKMessage;
 }
 
+function createCostOnlyResultMessage(result: string): SDKMessage {
+  return {
+    type: 'result',
+    subtype: 'success',
+    duration_ms: 25,
+    duration_api_ms: 20,
+    is_error: false,
+    num_turns: 1,
+    result,
+    stop_reason: 'end_turn',
+    total_cost_usd: 0.0123,
+    permission_denials: [],
+    uuid: 'message-uuid',
+    session_id: 'session-id',
+  } as SDKMessage;
+}
+
+function createAssistantMessage(id: string, usage: Record<string, number>): SDKMessage {
+  return {
+    type: 'assistant',
+    message: {
+      id,
+      type: 'message',
+      role: 'assistant',
+      content: [],
+      model: 'claude-sonnet-4-6',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage,
+    },
+    session_id: 'session-id',
+  } as SDKMessage;
+}
+
 describe('ClaudeSDKAgent', () => {
   it('is compatible with the Agent/SubAgent contract', () => {
     const query = vi.fn<ClaudeQueryFunction>(() => createQuery([createResultMessage('ok')]));
@@ -134,6 +168,44 @@ describe('ClaudeSDKAgent', () => {
         pathToClaudeCodeExecutable: '/usr/local/bin/claude',
         abortController: expect.any(AbortController),
       }),
+    });
+  });
+
+  it('keeps assistant token usage when the result message only includes cost', async () => {
+    const query = vi.fn<ClaudeQueryFunction>(() =>
+      createQuery([
+        createAssistantMessage('assistant-1', {
+          input_tokens: 10,
+          output_tokens: 4,
+          cache_read_input_tokens: 2,
+          cache_creation_input_tokens: 3,
+        }),
+        createCostOnlyResultMessage('generated text'),
+      ]),
+    );
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      agent: query,
+      model: 'claude-sonnet-4-6',
+    });
+
+    const result = await agent.generate('Generate prompt');
+
+    expect(result.usage.inputTokens).toBe(15);
+    expect(result.usage.outputTokens).toBe(4);
+    expect(result.usage.totalTokens).toBe(19);
+    expect(result.providerMetadata).toMatchObject({
+      claude: {
+        totalCostUsd: 0.0123,
+        usage: {
+          inputTokens: 10,
+          outputTokens: 4,
+          cacheReadInputTokens: 2,
+          cacheCreationInputTokens: 3,
+          totalCostUsd: 0.0123,
+        },
+      },
     });
   });
 
