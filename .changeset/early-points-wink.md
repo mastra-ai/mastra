@@ -31,4 +31,4 @@ const cursorAgent = new CursorSDKAgent({
 });
 ```
 
-`CursorSDKAgent` can also receive a pre-created Cursor SDK agent through `agent`. Factory functions receive the Cursor options from the wrapper, so callers can split options between `new CursorSDKAgent(...)` and their own `CursorAgent.create(...)` call. If `agent` is already a `CursorAgent.create({...})` promise, put all Cursor create options in that call because the wrapper cannot merge options after the promise has been created. When `apiKey` is not passed to the wrapper, it falls back to `process.env.CURSOR_API_KEY` before calling the factory.
+`CursorSDKAgent` can also receive a pre-created Cursor SDK agent through `agent`, or a factory that receives the wrapper's Cursor options.
