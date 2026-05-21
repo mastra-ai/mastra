@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { useBuilderAgentAccess } from '../use-builder-agent-access';
+import { useBuilderSettings } from '../use-builder-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
 
 vi.mock('@/domains/auth/hooks/use-permissions', () => ({
   usePermissions: vi.fn(),
 }));
 
-vi.mock('@/domains/builder/hooks/use-builder-settings', () => ({
+vi.mock('../use-builder-settings', () => ({
   useBuilderSettings: vi.fn(),
 }));
 

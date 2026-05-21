@@ -43,8 +43,10 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
 
 const openDropdown = async () => {
   const trigger = await screen.findByTestId('agent-builder-mobile-menu-trigger');
-  trigger.focus();
-  fireEvent.keyDown(trigger, { key: 'Enter' });
+  await act(async () => {
+    fireEvent.pointerDown(trigger, { pointerType: 'mouse', button: 0 });
+    fireEvent.click(trigger);
+  });
   await screen.findByRole('menu');
 };
 
@@ -149,7 +151,12 @@ describe('AgentBuilderMobileMenu', () => {
     );
 
     await openDropdown();
-    fireEvent.click(screen.getByTestId('agent-builder-mobile-menu-visibility-add'));
+    const addItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
+    await act(async () => {
+      fireEvent.pointerDown(addItem, { pointerType: 'mouse', button: 0 });
+      fireEvent.pointerUp(addItem, { pointerType: 'mouse', button: 0 });
+      fireEvent.click(addItem);
+    });
 
     await act(async () => {
       fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));

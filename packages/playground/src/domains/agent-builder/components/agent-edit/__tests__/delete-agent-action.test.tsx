@@ -76,7 +76,7 @@ describe('DeleteAgentPanelButton', () => {
     cleanup();
   });
 
-  it('opens the confirmation dialog with the agent name when clicked', () => {
+  it('opens the confirmation dialog with the agent name when clicked', async () => {
     render(
       <Wrapper>
         <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
@@ -84,11 +84,11 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     const button = screen.getByTestId('agent-builder-delete-agent');
-    expect(button.textContent).toContain('Delete agent');
+    expect(button.getAttribute('aria-label')).toBe('Delete agent');
 
     fireEvent.click(button);
 
-    const dialog = screen.getByTestId('agent-builder-delete-agent-dialog');
+    const dialog = await screen.findByTestId('agent-builder-delete-agent-dialog');
     expect(dialog.textContent).toContain('My Agent');
   });
 
@@ -157,13 +157,13 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
-    fireEvent.click(screen.getByTestId('agent-builder-delete-agent-confirm'));
+    fireEvent.click(await screen.findByTestId('agent-builder-delete-agent-confirm'));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalled();
     });
     expect(navigate).not.toHaveBeenCalled();
-    expect(screen.getByTestId('agent-builder-delete-agent-dialog')).toBeTruthy();
+    expect(await screen.findByTestId('agent-builder-delete-agent-dialog')).toBeTruthy();
   });
 });
 

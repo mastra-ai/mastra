@@ -71,8 +71,7 @@ const installRadixDomShims = () => {
 
 const openDropdown = async () => {
   const trigger = await screen.findByTestId('skill-builder-mobile-menu-trigger');
-  trigger.focus();
-  fireEvent.keyDown(trigger, { key: 'Enter' });
+  fireEvent.click(trigger);
   await screen.findByRole('menu');
 };
 

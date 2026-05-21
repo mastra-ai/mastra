@@ -32,7 +32,7 @@ export const EditTopBar = ({
   primaryAction,
   mobileExtra,
 }: EditTopBarProps) => {
-  const toggleLabel = mode === 'test' ? 'Switch to Edit' : 'Switch to View';
+  const toggleLabel = mode === 'test' ? 'Switch to Edit mode' : 'Switch to View mode';
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
@@ -56,6 +56,7 @@ export const EditTopBar = ({
             disabled={modeToggleDisabled}
             className="hidden lg:inline-flex shrink-0"
             data-testid="agent-builder-mode-toggle"
+            aria-label={toggleLabel}
           >
             <RefreshCwIcon />
             {toggleLabel}

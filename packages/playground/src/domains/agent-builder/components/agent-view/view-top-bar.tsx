@@ -28,7 +28,7 @@ export const ViewTopBar = ({
   ownerActions,
   mobileMenu,
 }: ViewTopBarProps) => {
-  const toggleLabel = mode === 'test' ? 'Switch to Edit' : 'Switch to View';
+  const toggleLabel = mode === 'test' ? 'Switch to Edit mode' : 'Switch to View mode';
 
   return (
     <div
@@ -54,6 +54,7 @@ export const ViewTopBar = ({
             disabled={modeToggleDisabled}
             className="hidden lg:inline-flex shrink-0"
             data-testid="agent-builder-mode-toggle"
+            aria-label={toggleLabel}
           >
             <RefreshCwIcon />
             {toggleLabel}

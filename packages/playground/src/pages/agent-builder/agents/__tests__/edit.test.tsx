@@ -125,6 +125,10 @@ vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu
   AgentBuilderMobileMenu: () => null,
 }));
 
+vi.mock('@/domains/agents/hooks/use-channels', () => ({
+  useChannelPlatforms: () => ({ data: [], isLoading: false, isPending: false }),
+}));
+
 vi.mock('@mastra/react', async () => {
   const actual = await vi.importActual<typeof MastraReact>('@mastra/react');
   return {
