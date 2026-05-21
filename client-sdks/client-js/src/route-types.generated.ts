@@ -1600,6 +1600,117 @@ export type PostAgentsAgentIdClone_Response = {
           }[]
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+  toolProviders?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  toolkit?: string | undefined;
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolkit: string;
+                  connectionId: string;
+                  label?: string | undefined;
+                  scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    toolkit?: string | undefined;
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolkit: string;
+                    connectionId: string;
+                    label?: string | undefined;
+                    scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -21283,6 +21394,117 @@ export type GetStoredAgents_Response = {
             }[]
         )
       | undefined;
+    /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+    toolProviders?:
+      | (
+          | {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    toolkit?: string | undefined;
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolkit: string;
+                    connectionId: string;
+                    label?: string | undefined;
+                    scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                  }[];
+                };
+              };
+            }
+          | {
+              value: {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      toolkit?: string | undefined;
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolkit: string;
+                      connectionId: string;
+                      label?: string | undefined;
+                      scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                    }[];
+                  };
+                };
+              };
+              rules?:
+                | {
+                    operator: 'AND' | 'OR';
+                    conditions: (
+                      | {
+                          field: string;
+                          operator:
+                            | 'equals'
+                            | 'not_equals'
+                            | 'contains'
+                            | 'not_contains'
+                            | 'greater_than'
+                            | 'less_than'
+                            | 'greater_than_or_equal'
+                            | 'less_than_or_equal'
+                            | 'in'
+                            | 'not_in'
+                            | 'exists'
+                            | 'not_exists';
+                          value?: unknown | undefined;
+                        }
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }[];
+                              }
+                          )[];
+                        }
+                    )[];
+                  }
+                | undefined;
+            }[]
+        )
+      | undefined;
     /** Map of stored MCP client IDs to their tool configurations — static or conditional */
     mcpClients?:
       | (
@@ -25663,6 +25885,117 @@ export type GetStoredAgentsStoredAgentId_Response = {
           }[]
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+  toolProviders?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  toolkit?: string | undefined;
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolkit: string;
+                  connectionId: string;
+                  label?: string | undefined;
+                  scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    toolkit?: string | undefined;
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolkit: string;
+                    connectionId: string;
+                    label?: string | undefined;
+                    scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -29913,6 +30246,117 @@ export type PostStoredAgents_Body = {
           }[]
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+  toolProviders?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  toolkit?: string | undefined;
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolkit: string;
+                  connectionId: string;
+                  label?: string | undefined;
+                  scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    toolkit?: string | undefined;
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolkit: string;
+                    connectionId: string;
+                    label?: string | undefined;
+                    scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -34072,6 +34516,117 @@ export type PostStoredAgents_Response = {
                       };
                     }
                   | undefined;
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+  toolProviders?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  toolkit?: string | undefined;
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolkit: string;
+                  connectionId: string;
+                  label?: string | undefined;
+                  scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    toolkit?: string | undefined;
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolkit: string;
+                    connectionId: string;
+                    label?: string | undefined;
+                    scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                  }[];
+                };
               };
             };
             rules?:
@@ -38405,6 +38960,119 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  toolProviders?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      toolkit?: string | undefined;
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolkit: string;
+                      connectionId: string;
+                      label?: string | undefined;
+                      scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                    }[];
+                  };
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools: {
+                      [key: string]: {
+                        toolkit?: string | undefined;
+                        description?: string | undefined;
+                      };
+                    };
+                    connections: {
+                      [key: string]: {
+                        kind: 'author' | 'invoker' | 'platform';
+                        toolkit: string;
+                        connectionId: string;
+                        label?: string | undefined;
+                        scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                      }[];
+                    };
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
   mcpClients?:
     | (
         | (
@@ -42602,6 +43270,117 @@ export type PatchStoredAgentsStoredAgentId_Response =
                           };
                         }
                       | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined;
+      /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+      toolProviders?:
+        | (
+            | {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      toolkit?: string | undefined;
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolkit: string;
+                      connectionId: string;
+                      label?: string | undefined;
+                      scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                    }[];
+                  };
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools: {
+                      [key: string]: {
+                        toolkit?: string | undefined;
+                        description?: string | undefined;
+                      };
+                    };
+                    connections: {
+                      [key: string]: {
+                        kind: 'author' | 'invoker' | 'platform';
+                        toolkit: string;
+                        connectionId: string;
+                        label?: string | undefined;
+                        scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                      }[];
+                    };
                   };
                 };
                 rules?:
@@ -73408,6 +74187,15 @@ export type GetToolProviders_Response = {
     id: string;
     name: string;
     description?: string | undefined;
+    displayName?: string | undefined;
+    capabilities?:
+      | {
+          multipleConnectionsPerToolkit: boolean;
+          batchConnectionStatus: boolean;
+          reauthorizeReusesConnectionId: boolean;
+          supportsRevoke?: boolean | undefined;
+        }
+      | undefined;
   }[];
 };
 
@@ -73481,7 +74269,7 @@ export type GetToolProvidersProviderIdTools_QueryParams = {
   toolkit?: string | undefined;
   /** Search tools by name or description */
   search?: string | undefined;
-  /** Page number for pagination */
+  /** Page number for pagination (1-indexed) */
   page?: number | undefined;
   /** Number of items per page */
   perPage?: number | undefined;
@@ -73553,6 +74341,360 @@ export interface GetToolProvidersProviderIdToolsToolSlugSchema_RouteContract {
   body: never;
   request: GetToolProvidersProviderIdToolsToolSlugSchema_Request;
   response: GetToolProvidersProviderIdToolsToolSlugSchema_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /tool-providers/:providerId/authorize
+// ============================================================================
+export type PostToolProvidersProviderIdAuthorize_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+};
+
+export type PostToolProvidersProviderIdAuthorize_Body = {
+  /** Toolkit slug being authorized */
+  toolkit: string;
+  /** Existing or newly-minted connection bucket id */
+  connectionId: string;
+  /** Optional tool slug for tool-scoped authorization */
+  toolName?: string | undefined;
+  /** Provider-specific user-supplied connection fields (e.g. subdomain) */
+  config?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Optional human label to persist on the resulting tool_provider_connections row */
+  label?: (string | null) | undefined;
+  /** Identity bucket. "shared" pins under SHARED_BUCKET_ID. "caller-supplied" pins under the request-context resourceId (returns 400 when missing). Defaults to "per-author". */
+  scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+};
+
+export type PostToolProvidersProviderIdAuthorize_Response = {
+  url: string;
+  authId: string;
+};
+
+export type PostToolProvidersProviderIdAuthorize_Request = Simplify<
+  (PostToolProvidersProviderIdAuthorize_PathParams extends never
+    ? {}
+    : { params: PostToolProvidersProviderIdAuthorize_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostToolProvidersProviderIdAuthorize_Body extends never
+      ? {}
+      : {} extends PostToolProvidersProviderIdAuthorize_Body
+        ? { body?: PostToolProvidersProviderIdAuthorize_Body }
+        : { body: PostToolProvidersProviderIdAuthorize_Body })
+>;
+
+export interface PostToolProvidersProviderIdAuthorize_RouteContract {
+  pathParams: PostToolProvidersProviderIdAuthorize_PathParams;
+  queryParams: never;
+  body: PostToolProvidersProviderIdAuthorize_Body;
+  request: PostToolProvidersProviderIdAuthorize_Request;
+  response: PostToolProvidersProviderIdAuthorize_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-providers/:providerId/auth-status/:authId
+// ============================================================================
+export type GetToolProvidersProviderIdAuthStatusAuthId_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+  /** Opaque auth handle returned by authorize */
+  authId: string;
+};
+
+export type GetToolProvidersProviderIdAuthStatusAuthId_Response = {
+  status: 'pending' | 'completed' | 'failed';
+};
+
+export type GetToolProvidersProviderIdAuthStatusAuthId_Request = Simplify<
+  (GetToolProvidersProviderIdAuthStatusAuthId_PathParams extends never
+    ? {}
+    : { params: GetToolProvidersProviderIdAuthStatusAuthId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolProvidersProviderIdAuthStatusAuthId_RouteContract {
+  pathParams: GetToolProvidersProviderIdAuthStatusAuthId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetToolProvidersProviderIdAuthStatusAuthId_Request;
+  response: GetToolProvidersProviderIdAuthStatusAuthId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /tool-providers/:providerId/connection-status
+// ============================================================================
+export type PostToolProvidersProviderIdConnectionStatus_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+};
+
+export type PostToolProvidersProviderIdConnectionStatus_Body = {
+  /** Connection tuples to batch-check */
+  items: {
+    connectionId: string;
+    toolkit: string;
+  }[];
+};
+
+export type PostToolProvidersProviderIdConnectionStatus_Response = {
+  items: {
+    [key: string]: {
+      connected: boolean;
+    };
+  };
+};
+
+export type PostToolProvidersProviderIdConnectionStatus_Request = Simplify<
+  (PostToolProvidersProviderIdConnectionStatus_PathParams extends never
+    ? {}
+    : { params: PostToolProvidersProviderIdConnectionStatus_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostToolProvidersProviderIdConnectionStatus_Body extends never
+      ? {}
+      : {} extends PostToolProvidersProviderIdConnectionStatus_Body
+        ? { body?: PostToolProvidersProviderIdConnectionStatus_Body }
+        : { body: PostToolProvidersProviderIdConnectionStatus_Body })
+>;
+
+export interface PostToolProvidersProviderIdConnectionStatus_RouteContract {
+  pathParams: PostToolProvidersProviderIdConnectionStatus_PathParams;
+  queryParams: never;
+  body: PostToolProvidersProviderIdConnectionStatus_Body;
+  request: PostToolProvidersProviderIdConnectionStatus_Request;
+  response: PostToolProvidersProviderIdConnectionStatus_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-providers/:providerId/connections
+// ============================================================================
+export type GetToolProvidersProviderIdConnections_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+};
+
+export type GetToolProvidersProviderIdConnections_QueryParams = {
+  /** Toolkit slug whose connections to list */
+  toolkit: string;
+  /** Admin-only: restrict listing to a specific author. Silently ignored for non-admin callers. */
+  authorId?: string | undefined;
+  /** Filter results by scope. Omit to include shared + per-author pins for the caller. */
+  scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+  /** Opaque pagination cursor returned by a previous call */
+  cursor?: string | undefined;
+  /** Max items per page (default 50, max 200) */
+  limit?: number | undefined;
+};
+
+export type GetToolProvidersProviderIdConnections_Response = {
+  items: {
+    connectionId: string;
+    status: 'active' | 'pending' | 'failed' | 'inactive';
+    createdAt?: string | undefined;
+    /** Persisted display label from tool_provider_connections, if any */
+    label?: (string | null) | undefined;
+    /** Owner of the connection (when known) */
+    authorId?: string | undefined;
+    /** Persisted scope from tool_provider_connections. Missing for rows that predate the scope field. */
+    scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+  }[];
+  /** Opaque cursor for the next page, when more results exist */
+  nextCursor?: string | undefined;
+};
+
+export type GetToolProvidersProviderIdConnections_Request = Simplify<
+  (GetToolProvidersProviderIdConnections_PathParams extends never
+    ? {}
+    : { params: GetToolProvidersProviderIdConnections_PathParams }) &
+    (GetToolProvidersProviderIdConnections_QueryParams extends never
+      ? {}
+      : {} extends GetToolProvidersProviderIdConnections_QueryParams
+        ? { query?: GetToolProvidersProviderIdConnections_QueryParams }
+        : { query: GetToolProvidersProviderIdConnections_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolProvidersProviderIdConnections_RouteContract {
+  pathParams: GetToolProvidersProviderIdConnections_PathParams;
+  queryParams: GetToolProvidersProviderIdConnections_QueryParams;
+  body: never;
+  request: GetToolProvidersProviderIdConnections_Request;
+  response: GetToolProvidersProviderIdConnections_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-providers/:providerId/connection-fields
+// ============================================================================
+export type GetToolProvidersProviderIdConnectionFields_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+};
+
+export type GetToolProvidersProviderIdConnectionFields_QueryParams = {
+  /** Toolkit slug whose connection field schema to list */
+  toolkit: string;
+};
+
+export type GetToolProvidersProviderIdConnectionFields_Response = {
+  fields: {
+    name: string;
+    displayName?: string | undefined;
+    description?: string | undefined;
+    type: 'string' | 'number' | 'boolean';
+    required: boolean;
+    default?: unknown | undefined;
+  }[];
+};
+
+export type GetToolProvidersProviderIdConnectionFields_Request = Simplify<
+  (GetToolProvidersProviderIdConnectionFields_PathParams extends never
+    ? {}
+    : { params: GetToolProvidersProviderIdConnectionFields_PathParams }) &
+    (GetToolProvidersProviderIdConnectionFields_QueryParams extends never
+      ? {}
+      : {} extends GetToolProvidersProviderIdConnectionFields_QueryParams
+        ? { query?: GetToolProvidersProviderIdConnectionFields_QueryParams }
+        : { query: GetToolProvidersProviderIdConnectionFields_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolProvidersProviderIdConnectionFields_RouteContract {
+  pathParams: GetToolProvidersProviderIdConnectionFields_PathParams;
+  queryParams: GetToolProvidersProviderIdConnectionFields_QueryParams;
+  body: never;
+  request: GetToolProvidersProviderIdConnectionFields_Request;
+  response: GetToolProvidersProviderIdConnectionFields_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /tool-providers/:providerId/connections/:connectionId
+// ============================================================================
+export type DeleteToolProvidersProviderIdConnectionsConnectionId_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+  /** Adapter-native connection id (e.g. Composio ca_...) */
+  connectionId: string;
+};
+
+export type DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams = {
+  /** When true, revoke at the provider and drop the row even if pinned by agents */
+  force?: (boolean | ('true' | 'false')) | undefined;
+  /** Toolkit slug for the connection (used when the row was upserted with one) */
+  toolkit?: string | undefined;
+};
+
+export type DeleteToolProvidersProviderIdConnectionsConnectionId_Response = {
+  ok: true;
+  /** Whether the provider-side connection was revoked */
+  revoked: boolean;
+};
+
+export type DeleteToolProvidersProviderIdConnectionsConnectionId_Request = Simplify<
+  (DeleteToolProvidersProviderIdConnectionsConnectionId_PathParams extends never
+    ? {}
+    : { params: DeleteToolProvidersProviderIdConnectionsConnectionId_PathParams }) &
+    (DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams extends never
+      ? {}
+      : {} extends DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams
+        ? { query?: DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams }
+        : { query: DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContract {
+  pathParams: DeleteToolProvidersProviderIdConnectionsConnectionId_PathParams;
+  queryParams: DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams;
+  body: never;
+  request: DeleteToolProvidersProviderIdConnectionsConnectionId_Request;
+  response: DeleteToolProvidersProviderIdConnectionsConnectionId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-providers/:providerId/connections/:connectionId/usage
+// ============================================================================
+export type GetToolProvidersProviderIdConnectionsConnectionIdUsage_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+  /** Adapter-native connection id (e.g. Composio ca_...) */
+  connectionId: string;
+};
+
+export type GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams = {
+  /** Optional toolkit slug to scope the usage scan */
+  toolkit?: string | undefined;
+};
+
+export type GetToolProvidersProviderIdConnectionsConnectionIdUsage_Response = {
+  agents: {
+    id: string;
+    name: string;
+  }[];
+};
+
+export type GetToolProvidersProviderIdConnectionsConnectionIdUsage_Request = Simplify<
+  (GetToolProvidersProviderIdConnectionsConnectionIdUsage_PathParams extends never
+    ? {}
+    : { params: GetToolProvidersProviderIdConnectionsConnectionIdUsage_PathParams }) &
+    (GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams extends never
+      ? {}
+      : {} extends GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams
+        ? { query?: GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams }
+        : { query: GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteContract {
+  pathParams: GetToolProvidersProviderIdConnectionsConnectionIdUsage_PathParams;
+  queryParams: GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams;
+  body: never;
+  request: GetToolProvidersProviderIdConnectionsConnectionIdUsage_Request;
+  response: GetToolProvidersProviderIdConnectionsConnectionIdUsage_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-providers/:providerId/health
+// ============================================================================
+export type GetToolProvidersProviderIdHealth_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+};
+
+export type GetToolProvidersProviderIdHealth_Response = {
+  ok: boolean;
+  message?: string | undefined;
+  details?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type GetToolProvidersProviderIdHealth_Request = Simplify<
+  (GetToolProvidersProviderIdHealth_PathParams extends never
+    ? {}
+    : { params: GetToolProvidersProviderIdHealth_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolProvidersProviderIdHealth_RouteContract {
+  pathParams: GetToolProvidersProviderIdHealth_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetToolProvidersProviderIdHealth_Request;
+  response: GetToolProvidersProviderIdHealth_Response;
   responseType: 'json';
 }
 
@@ -76319,6 +77461,63 @@ export interface GetEditorBuilderSettings_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /editor/settings/model-policy
+// ============================================================================
+export type GetEditorSettingsModelPolicy_QueryParams = {
+  surface: 'builder' | 'editor';
+};
+
+export type GetEditorSettingsModelPolicy_Response = {
+  active: boolean;
+  pickerVisible?: boolean | undefined;
+  allowed?:
+    | (
+        | {
+            kind: 'custom';
+            provider: string;
+            modelId?: string | undefined;
+          }
+        | {
+            provider: string;
+            modelId?: string | undefined;
+          }
+      )[]
+    | undefined;
+  default?:
+    | (
+        | {
+            kind: 'custom';
+            provider: string;
+            modelId: string;
+          }
+        | {
+            provider: string;
+            modelId: string;
+          }
+      )
+    | undefined;
+};
+
+export type GetEditorSettingsModelPolicy_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetEditorSettingsModelPolicy_QueryParams extends never
+      ? {}
+      : {} extends GetEditorSettingsModelPolicy_QueryParams
+        ? { query?: GetEditorSettingsModelPolicy_QueryParams }
+        : { query: GetEditorSettingsModelPolicy_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorSettingsModelPolicy_RouteContract {
+  pathParams: never;
+  queryParams: GetEditorSettingsModelPolicy_QueryParams;
+  body: never;
+  request: GetEditorSettingsModelPolicy_Request;
+  response: GetEditorSettingsModelPolicy_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /editor/builder/infrastructure
 // ============================================================================
 export type GetEditorBuilderInfrastructure_Response = {
@@ -77407,6 +78606,14 @@ export interface RouteTypes {
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
   'GET /tool-providers/:providerId/tools': GetToolProvidersProviderIdTools_RouteContract;
   'GET /tool-providers/:providerId/tools/:toolSlug/schema': GetToolProvidersProviderIdToolsToolSlugSchema_RouteContract;
+  'POST /tool-providers/:providerId/authorize': PostToolProvidersProviderIdAuthorize_RouteContract;
+  'GET /tool-providers/:providerId/auth-status/:authId': GetToolProvidersProviderIdAuthStatusAuthId_RouteContract;
+  'POST /tool-providers/:providerId/connection-status': PostToolProvidersProviderIdConnectionStatus_RouteContract;
+  'GET /tool-providers/:providerId/connections': GetToolProvidersProviderIdConnections_RouteContract;
+  'GET /tool-providers/:providerId/connection-fields': GetToolProvidersProviderIdConnectionFields_RouteContract;
+  'DELETE /tool-providers/:providerId/connections/:connectionId': DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContract;
+  'GET /tool-providers/:providerId/connections/:connectionId/usage': GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteContract;
+  'GET /tool-providers/:providerId/health': GetToolProvidersProviderIdHealth_RouteContract;
   'GET /processor-providers': GetProcessorProviders_RouteContract;
   'GET /processor-providers/:providerId': GetProcessorProvidersProviderId_RouteContract;
   'GET /system/packages': GetSystemPackages_RouteContract;
@@ -77440,6 +78647,7 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/settings/model-policy': GetEditorSettingsModelPolicy_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
   'GET /editor/builder/registries/:registryId/search': GetEditorBuilderRegistriesRegistryIdSearch_RouteContract;
@@ -77719,6 +78927,9 @@ export interface Client {
   };
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;
+  };
+  '/editor/settings/model-policy': {
+    GET: GetEditorSettingsModelPolicy_RouteContract;
   };
   '/embedders': {
     GET: GetEmbedders_RouteContract;
@@ -78128,6 +79339,30 @@ export interface Client {
   };
   '/tool-providers': {
     GET: GetToolProviders_RouteContract;
+  };
+  '/tool-providers/:providerId/auth-status/:authId': {
+    GET: GetToolProvidersProviderIdAuthStatusAuthId_RouteContract;
+  };
+  '/tool-providers/:providerId/authorize': {
+    POST: PostToolProvidersProviderIdAuthorize_RouteContract;
+  };
+  '/tool-providers/:providerId/connection-fields': {
+    GET: GetToolProvidersProviderIdConnectionFields_RouteContract;
+  };
+  '/tool-providers/:providerId/connection-status': {
+    POST: PostToolProvidersProviderIdConnectionStatus_RouteContract;
+  };
+  '/tool-providers/:providerId/connections': {
+    GET: GetToolProvidersProviderIdConnections_RouteContract;
+  };
+  '/tool-providers/:providerId/connections/:connectionId': {
+    DELETE: DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContract;
+  };
+  '/tool-providers/:providerId/connections/:connectionId/usage': {
+    GET: GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteContract;
+  };
+  '/tool-providers/:providerId/health': {
+    GET: GetToolProvidersProviderIdHealth_RouteContract;
   };
   '/tool-providers/:providerId/toolkits': {
     GET: GetToolProvidersProviderIdToolkits_RouteContract;

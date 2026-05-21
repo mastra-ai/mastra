@@ -7,6 +7,8 @@ export type {
   DefaultModelEntry,
   IAgentBuilder,
   KnownProviderEntry,
+  ModelPolicy,
+  ModelPolicySurface,
   ProviderModelEntry,
   ResolveAgentFeaturesContext,
 } from './types';
@@ -29,7 +31,13 @@ export {
   type ModelCandidateOrigin,
 } from './normalize-candidate';
 
-export { builderToModelPolicy, isBuilderModelPolicyActive, type BuilderModelPolicyInputs } from './policy';
+export {
+  builderToModelPolicy,
+  isBuilderModelPolicyActive,
+  isModelPolicyActive,
+  type BuilderModelPolicyInputs,
+  type ModelPolicyInputs,
+} from './policy';
 
 export { resolvePickerVisibility, type ResolvePickerVisibilityInputs, type ResolvedPickerVisibility } from './picker';
 
