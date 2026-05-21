@@ -1063,16 +1063,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // availableTools / toolChoice reflect any per-step mutations.
             const currentStepUsesModelConfig = currentStep.model === modelConfig.model;
             const stepMaxRetries = (currentStep.modelSettings as { maxRetries?: number } | undefined)?.maxRetries;
-            const currentStepModelSettings = {
-              ...currentStep.modelSettings,
+            // Strip maxRetries from span parameters — it's a transport concern (p-retry), not an
+            // inference parameter, and bundling it here changes the tracing surface area.
+            const { maxRetries: _stepMaxRetriesIgnored, ...currentStepModelSettingsForSpan } =
+              (currentStep.modelSettings ?? {}) as { maxRetries?: number } & Record<string, unknown>;
+            const currentStepSpanParameters = {
+              ...currentStepModelSettingsForSpan,
               ...(currentStepUsesModelConfig ? modelConfig.modelSettings : {}),
+            };
+            const currentStepModelSettings = {
+              ...currentStepSpanParameters,
               maxRetries: currentStepUsesModelConfig
                 ? (modelConfig.maxRetries ?? stepMaxRetries)
                 : (stepMaxRetries ?? modelConfig.maxRetries),
             };
 
             modelSpanTracker?.setInferenceContext?.({
-              parameters: currentStepModelSettings as Record<string, unknown> | undefined,
+              parameters: currentStepSpanParameters as Record<string, unknown> | undefined,
               providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(
                 currentStep.tools as Record<string, unknown> | undefined,
