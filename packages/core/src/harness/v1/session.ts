@@ -8,6 +8,7 @@ import { RequestContext } from '../../request-context';
 import type {
   HarnessStorage,
   OperationAdmissionTombstone,
+  PendingResume,
   PermissionRules,
   PersistedAttachment,
   QueueAdmissionReceipt,
@@ -80,6 +81,8 @@ const QUEUE_DUPLICATE_WAIT_TIMEOUT_MS = 30_000;
 const QUEUE_DUPLICATE_WAIT_INTERVAL_MS = 100;
 const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'];
+const ASK_USER_TOOL_NAME = 'ask_user';
+const SUBMIT_PLAN_TOOL_NAME = 'submit_plan';
 
 export class Session {
   private readonly harness: Harness;
@@ -432,6 +435,41 @@ export class Session {
       this.endTurn(turnAbortController);
       throw err;
     }
+  }
+
+  async respondToToolApproval(opts: { approved: boolean; reason?: string; toolCallId?: string }): Promise<AgentResult> {
+    return this.resumePending('tool-approval', compactJsonObject({ approved: opts.approved, reason: opts.reason }), {
+      toolCallId: opts.toolCallId,
+    });
+  }
+
+  async respondToToolSuspension(opts: { resumeData: unknown; toolCallId?: string }): Promise<AgentResult> {
+    return this.resumePending('tool-suspension', opts.resumeData, { toolCallId: opts.toolCallId });
+  }
+
+  async respondToQuestion(opts: { answer: unknown; toolCallId?: string }): Promise<AgentResult> {
+    return this.resumePending('question', { answer: opts.answer }, { toolCallId: opts.toolCallId });
+  }
+
+  async respondToPlanApproval(opts: {
+    approved: boolean;
+    revision?: string;
+    transitionToMode?: string;
+    toolCallId?: string;
+  }): Promise<AgentResult> {
+    if (opts.transitionToMode !== undefined) this.harness._getMode(opts.transitionToMode);
+    return this.resumePending(
+      'plan-approval',
+      compactJsonObject({
+        approved: opts.approved,
+        revision: opts.revision,
+        transitionToMode: opts.transitionToMode,
+      }),
+      {
+        toolCallId: opts.toolCallId,
+        transitionToMode: opts.approved ? opts.transitionToMode : undefined,
+      },
+    );
   }
 
   async queue(opts: QueueOptions): Promise<AgentResult> {
@@ -1078,6 +1116,46 @@ export class Session {
         totalTokens: prev.tokenUsage.totalTokens + usage.totalTokens,
       },
     }));
+    await this.maybeCaptureSuspend(full);
+  }
+
+  private async maybeCaptureSuspend(full: FullOutput<unknown>): Promise<void> {
+    if (full.finishReason !== 'suspended') return;
+    const payload = full.suspendPayload as
+      | { toolCallId?: unknown; toolName?: unknown; args?: unknown; suspendPayload?: unknown }
+      | undefined;
+    if (!payload || typeof payload.toolCallId !== 'string' || typeof payload.toolName !== 'string' || !full.runId) {
+      return;
+    }
+    const suspendPayload = {
+      toolCallId: payload.toolCallId,
+      toolName: payload.toolName,
+      args: payload.args,
+      suspendPayload: payload.suspendPayload,
+    };
+    const kind = classifyResumeKind(suspendPayload);
+    const pending: PendingResume = {
+      kind,
+      runId: full.runId,
+      toolCallId: suspendPayload.toolCallId,
+      toolName: suspendPayload.toolName,
+      source: (this.record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      requestedAt: Date.now(),
+      ...(this.currentQueuedItemId !== undefined ? { queuedItemId: this.currentQueuedItemId } : {}),
+      payload: buildResumePayload(kind, suspendPayload),
+    };
+    if (kind === 'plan-approval') {
+      const transitionModeId = this.getCurrentMode().transitionsTo;
+      if (transitionModeId) pending.transitionModeId = transitionModeId;
+    }
+    await this.flushUpdate(prev => ({ ...prev, pendingResume: pending }));
+    this.emitTurnEvent({
+      type: 'suspension_required',
+      kind,
+      toolCallId: pending.toolCallId,
+      toolName: pending.toolName,
+      runId: pending.runId,
+    });
   }
 
   private async admitQueueInternal(
@@ -1276,6 +1354,16 @@ export class Session {
             ...(item.model !== undefined ? { model: item.model } : {}),
             attachments: item.attachments.map(queuedAttachmentToRef),
           })) as AgentResult;
+          if (result.finishReason === 'suspended') {
+            await this.updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
+              ...receipt,
+              status: 'accepted',
+              runId: result.runId,
+              acceptedAt: receipt.acceptedAt ?? now,
+              updatedAt: now,
+            }));
+            break;
+          }
           await this.completeQueuedItem(item, result);
         } catch (err) {
           await this.failQueuedItem(item, err);
@@ -1395,6 +1483,105 @@ export class Session {
     }
     return persisted;
   }
+
+  private async resumePending(
+    expectedKind: PendingResume['kind'],
+    resumeData: unknown,
+    opts: { toolCallId?: string; transitionToMode?: string },
+  ): Promise<AgentResult> {
+    this.assertLive(`respondTo(${expectedKind})`);
+    this.assertCanStartTurn(`respondTo(${expectedKind})`);
+    const pending = this.record.pendingResume;
+    if (!pending) {
+      throw new HarnessValidationError(`respondTo(${expectedKind})`, 'no pending suspension exists');
+    }
+    if (pending.kind !== expectedKind) {
+      throw new HarnessValidationError(
+        `respondTo(${expectedKind})`,
+        `pending suspension is "${pending.kind}", not "${expectedKind}"`,
+      );
+    }
+    if (opts.toolCallId !== undefined && opts.toolCallId !== pending.toolCallId) {
+      throw new HarnessValidationError(`respondTo(${expectedKind}).toolCallId`, 'does not match pending suspension');
+    }
+    if (pending.resumedAt !== undefined) {
+      throw new HarnessValidationError(`respondTo(${expectedKind})`, 'pending suspension has already been resumed');
+    }
+
+    const resumedAt = Date.now();
+    await this.flushUpdate(prev => {
+      if (!prev.pendingResume || prev.pendingResume.toolCallId !== pending.toolCallId) return prev;
+      return { ...prev, pendingResume: { ...prev.pendingResume, resumedAt } };
+    });
+
+    const mode = this.harness._getMode(this.record.modeId);
+    const agent = this.harness.getAgentForMode(this.record.modeId);
+    const resumeStream = (agent as { resumeStream?: (resumeData: unknown, opts?: unknown) => Promise<unknown> })
+      .resumeStream;
+    if (!resumeStream) {
+      throw new HarnessConfigError('respondTo()', 'current agent does not support resumeStream');
+    }
+    const turnAbortController = this.beginTurn(undefined);
+    this.currentQueuedItemId = pending.queuedItemId;
+
+    try {
+      this.emitTurnEvent({ type: 'agent_start' });
+      const output = (await resumeStream.call(agent, resumeData, {
+        runId: pending.runId,
+        toolCallId: pending.toolCallId,
+        ...this.buildExecutionOptions({
+          mode,
+          modeId: this.record.modeId,
+          modelId: this.record.modelId,
+          abortSignal: turnAbortController.signal,
+        }),
+      })) as MastraModelOutput<unknown>;
+      this.currentRunId = output.runId;
+      const streamDrain = this.consumeAgentStream(output);
+      void streamDrain.catch(() => undefined);
+      const full = (await output.getFullOutput()) as FullOutput<unknown>;
+      await streamDrain;
+      await this.recordTurnCompletion(full);
+      if (full.finishReason !== 'suspended') {
+        const queuedItemId = pending.queuedItemId;
+        if (opts.transitionToMode ?? pending.transitionModeId) {
+          const transitionModeId = opts.transitionToMode ?? pending.transitionModeId!;
+          await this.flushUpdate(prev => ({
+            ...prev,
+            modeId: transitionModeId,
+            pendingResume: undefined,
+          }));
+          this.emitter.emit({
+            type: 'mode_changed',
+            modeId: transitionModeId,
+            previousModeId: mode.id,
+          });
+        } else {
+          await this.flushUpdate(prev => ({ ...prev, pendingResume: undefined }));
+        }
+        this.emitTurnEvent({
+          type: 'suspension_resolved',
+          kind: pending.kind,
+          toolCallId: pending.toolCallId,
+          runId: full.runId,
+        });
+        if (queuedItemId !== undefined) {
+          const queuedItem = this.record.pendingQueue.find(item => item.id === queuedItemId);
+          if (queuedItem) await this.completeQueuedItem(queuedItem, full as AgentResult);
+        }
+      }
+      this.emitTurnEvent({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+      return full as AgentResult;
+    } catch (err) {
+      this.emitTurnEvent({ type: 'agent_end', reason: 'error', runId: this.currentRunId ?? pending.runId });
+      throw err;
+    } finally {
+      this.endTurn(turnAbortController);
+      if ((this.record.pendingQueue?.length ?? 0) > 0 && this.record.pendingResume === undefined) {
+        void this._kickQueueDrain();
+      }
+    }
+  }
 }
 
 function assertAgentType(method: string, value: unknown): asserts value is string {
@@ -1493,6 +1680,52 @@ function toPublicQueueError(reason: unknown): { code: string; message: string } 
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function compactJsonObject<T extends Record<string, unknown>>(value: T): Partial<T> {
+  const compacted: Partial<T> = {};
+  for (const [key, entry] of Object.entries(value) as Array<[keyof T, T[keyof T]]>) {
+    if (entry !== undefined) compacted[key] = entry;
+  }
+  return compacted;
+}
+
+function classifyResumeKind(payload: { toolName: string; suspendPayload?: unknown }): PendingResume['kind'] {
+  if (payload.toolName === ASK_USER_TOOL_NAME) return 'question';
+  if (payload.toolName === SUBMIT_PLAN_TOOL_NAME) return 'plan-approval';
+  if ('suspendPayload' in payload && payload.suspendPayload !== undefined) return 'tool-suspension';
+  return 'tool-approval';
+}
+
+function buildResumePayload(
+  kind: PendingResume['kind'],
+  payload: { args?: unknown; suspendPayload?: unknown },
+): PendingResume['payload'] {
+  switch (kind) {
+    case 'tool-approval':
+      return { input: payload.args };
+    case 'tool-suspension':
+      return { input: payload.args, suspendData: payload.suspendPayload };
+    case 'question': {
+      const args = (payload.args ?? {}) as {
+        question?: string;
+        options?: { label: string; description?: string }[];
+        selectionMode?: 'single_select' | 'multi_select';
+      };
+      return {
+        question: args.question ?? '',
+        ...(args.options !== undefined ? { options: args.options } : {}),
+        ...(args.selectionMode !== undefined ? { selectionMode: args.selectionMode } : {}),
+      };
+    }
+    case 'plan-approval': {
+      const args = (payload.args ?? {}) as { title?: string; plan?: string };
+      return {
+        title: args.title ?? '',
+        plan: args.plan ?? '',
+      };
+    }
+  }
 }
 
 function cloneJsonLike<T>(value: T): T {

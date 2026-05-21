@@ -88,6 +88,8 @@ export interface PendingResume {
   source: 'parent' | 'subagent';
   subagentToolCallId?: string;
   requestedAt: number;
+  /** Set when the suspension belongs to the head queue item. */
+  queuedItemId?: string;
   /**
    * Idempotency marker. Set by the resume helper before calling
    * `agent.resumeStream(...)` and observed on replay so a crash between
