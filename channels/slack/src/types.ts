@@ -55,19 +55,34 @@ export interface SlackAdapterChannelConfig {
   streaming?: boolean | { updateIntervalMs?: number };
 
   /**
+   * Show Slack typing indicators and Assistant-mode status text (e.g.
+   * "Typing…", "Calling weatherTool…"). Set to `true` to enable typing
+   * indicators — useful if you override the default `toolDisplay` to a
+   * mode that doesn't convey progress on its own.
+   *
+   * SlackProvider defaults this to `false` because the default
+   * `toolDisplay: 'grouped'` already shows live progress inside the
+   * "Thinking Steps" widget, making typing indicators redundant.
+   *
+   * @default false
+   */
+  typingStatus?: ChannelAdapterConfig['typingStatus'];
+
+  /**
    * How tool calls are rendered in Slack.
    *
-   * - `'cards'` (default) — per-tool "Running…" → "Result" cards.
+   * - `'cards'` — per-tool "Running…" → "Result" cards.
    * - `'timeline'` — render tools as inline task entries beside the streaming
    *   text (requires `streaming: true`, which is the Slack default).
-   * - `'grouped'` — render tools together inside a single plan block.
+   * - `'grouped'` (default in Slack) — render tools together inside a single
+   *   "Thinking Steps" plan block. Renders well in Slack's AI Assistant UI.
    * - `'hidden'` — execute tools silently; only the typing status indicates work.
    *
    * Approve/deny prompts (`requireApproval`) always render as a separate card,
    * regardless of mode, because inline task entries can't carry interactive
    * buttons.
    *
-   * @default 'cards'
+   * @default 'grouped'
    */
   toolDisplay?: ChannelAdapterConfig['toolDisplay'];
 }
@@ -130,19 +145,34 @@ export interface SlackProviderConfig {
   streaming?: boolean | { updateIntervalMs?: number };
 
   /**
+   * Show Slack typing indicators and Assistant-mode status text (e.g.
+   * "Typing…", "Calling weatherTool…"). Set to `true` to enable typing
+   * indicators — useful if you override the default `toolDisplay` to a
+   * mode that doesn't convey progress on its own.
+   *
+   * SlackProvider defaults this to `false` because the default
+   * `toolDisplay: 'grouped'` already shows live progress inside the
+   * "Thinking Steps" widget, making typing indicators redundant.
+   *
+   * @default false
+   */
+  typingStatus?: ChannelAdapterConfig['typingStatus'];
+
+  /**
    * How tool calls are rendered in Slack.
    *
-   * - `'cards'` (default) — per-tool "Running…" → "Result" cards.
+   * - `'cards'` — per-tool "Running…" → "Result" cards.
    * - `'timeline'` — render tools as inline task entries beside the streaming
    *   text (requires `streaming: true`, which is the Slack default).
-   * - `'grouped'` — render tools together inside a single plan block.
+   * - `'grouped'` (default in Slack) — render tools together inside a single
+   *   "Thinking Steps" plan block. Renders well in Slack's AI Assistant UI.
    * - `'hidden'` — execute tools silently; only the typing status indicates work.
    *
    * Approve/deny prompts (`requireApproval`) always render as a separate card,
    * regardless of mode, because inline task entries can't carry interactive
    * buttons.
    *
-   * @default 'cards'
+   * @default 'grouped'
    */
   toolDisplay?: ChannelAdapterConfig['toolDisplay'];
 

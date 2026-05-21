@@ -73,6 +73,19 @@ export interface ChannelAdapterBaseConfig {
    * @default false
    */
   streaming?: boolean | { updateIntervalMs?: number };
+
+  /**
+   * Show platform typing indicators (and adaptive status text where supported,
+   * e.g. Slack Assistant mode displays "Typing…" / "Calling weatherTool…").
+   *
+   * Set to `false` to disable all typing indicators for this adapter — useful
+   * when `streaming: true` or `toolDisplay: 'timeline' | 'grouped'` already
+   * surface progress via the live widget and the extra typing status feels
+   * redundant or occasionally lingers after a run.
+   *
+   * @default true
+   */
+  typingStatus?: boolean;
 }
 
 /**
@@ -1604,6 +1617,11 @@ export class AgentChannels {
     const groupTasks: 'plan' | 'timeline' | undefined =
       toolDisplay === 'timeline' ? 'timeline' : toolDisplay === 'grouped' ? 'plan' : undefined;
 
+    // Typing indicators (and adaptive status text on platforms that support it,
+    // e.g. Slack Assistant mode) default on. Disable when the live streaming
+    // widget already conveys progress and the extra indicator feels redundant.
+    const typingStatusEnabled = adapterConfig?.typingStatus !== false;
+
     interface TrackedTool {
       displayName: string;
       argsSummary: string;
@@ -1623,6 +1641,7 @@ export class AgentChannels {
     // typing indicator and ignore the text.
     let currentTypingStatus: string | undefined;
     const setTypingStatus = (status: string) => {
+      if (!typingStatusEnabled) return;
       if (status === currentTypingStatus) return;
       currentTypingStatus = status;
       sdkThread.startTyping(status).catch(e => {
@@ -1768,7 +1787,14 @@ export class AgentChannels {
       // --- Signal echo: subscription streams replay user-message / system-reminder /
       // custom data parts that callers wrote via sendSignal(). The platform already
       // rendered the user's message, so we drop the echo to avoid double-posting.
-      if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
+      // For `data-user-message` echoes, flush any in-flight text first so the
+      // agent's response to the signal renders as its own message after the
+      // user's signal message instead of streaming into the prior reply.
+      const chunkType = chunk.type as string;
+      if (typeof chunkType === 'string' && chunkType.startsWith('data-')) {
+        if (chunkType === 'data-user-message') {
+          await flushText();
+        }
         continue;
       }
 
@@ -1928,14 +1954,17 @@ export class AgentChannels {
           // default "Thinking…"/"completed" labels. Mirrors the behavior of
           // Chat SDK `Plan.addTask` which overwrites the plan title on each
           // new task.
-          if (toolDisplay === 'grouped') {
-            streamingSession.push({ type: 'plan_update', title: displayName });
-          }
           // For `'grouped'` fold args inline into the title so the at-a-glance
           // widget stays a single line per call (e.g. `read_file foo.md`).
           // `'timeline'` keeps args on a second `details` line — each task has
           // its own row so the extra line reads fine and is more scannable.
           const taskTitle = toolDisplay === 'grouped' && argsSummary ? `${displayName} ${argsSummary}` : displayName;
+          if (toolDisplay === 'grouped') {
+            // Mirror the task title (with inline args) into the plan title so
+            // Slack's AI Assistant Thinking Steps widget shows the current
+            // tool + args instead of the default "Thinking…"/"completed".
+            streamingSession.push({ type: 'plan_update', title: taskTitle });
+          }
           streamingSession.push({
             type: 'task_update',
             id: chunk.payload.toolCallId,

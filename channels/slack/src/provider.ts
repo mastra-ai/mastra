@@ -756,14 +756,33 @@ export class SlackProvider implements ChannelProvider {
    */
   #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
-    const { adapterConfig, cors, gateway, cards, formatToolCall, formatError, streaming, toolDisplay } =
-      this.#channelConfig;
-    const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, toolDisplay };
+    const {
+      adapterConfig,
+      cors,
+      gateway,
+      cards,
+      formatToolCall,
+      formatError,
+      streaming,
+      typingStatus,
+      toolDisplay,
+    } = this.#channelConfig;
+    const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, typingStatus, toolDisplay };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
-    // Slack supports native message streaming, so SlackProvider defaults `streaming: true`.
-    // Users can opt out by passing `streaming: false` at the top level (or via `adapterConfig`).
-    // Keep in sync with the `@default true` JSDoc on `SlackAdapterChannelConfig.streaming` in ./types.ts.
-    return { streaming: true, ...adapterConfig, ...filteredTopLevel } as SlackAdapterChannelConfig;
+    // SlackProvider opinionated defaults — these render well in Slack's AI Assistant UI
+    // but aren't appropriate for every platform, so they live here rather than in core.
+    //   - `streaming: true`         — Slack supports native message streaming.
+    //   - `toolDisplay: 'grouped'`  — tools collapse into a single "Thinking Steps" widget.
+    //   - `typingStatus: false`     — the grouped widget already shows progress, typing indicators are redundant.
+    // Users can opt out of any of these by passing the field at the top level (or via `adapterConfig`).
+    // Keep in sync with the `@default` JSDoc on `SlackAdapterChannelConfig` in ./types.ts.
+    return {
+      streaming: true,
+      toolDisplay: 'grouped',
+      typingStatus: false,
+      ...adapterConfig,
+      ...filteredTopLevel,
+    } as SlackAdapterChannelConfig;
   }
 
   /**
