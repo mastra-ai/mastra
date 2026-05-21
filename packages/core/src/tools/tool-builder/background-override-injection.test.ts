@@ -85,6 +85,42 @@ describe('CoreToolBuilder background override injection', () => {
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
     });
+
+    // The JSON Schema fallback used to replace the original Zod v3 schema with
+    // an Ajv-only wrapper, silently dropping `.transform()` / `.default()` /
+    // `.refine()` parsing before `execute()` saw the args. Lock that behavior
+    // in: the inner execute() must still receive the *parsed* value.
+    // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282520408
+    it('preserves Zod v3 transforms and defaults through to execute()', async () => {
+      const execute = vi.fn().mockResolvedValue({ ok: true });
+      const tool = createTool({
+        id: 'v3-transform-tool',
+        description: 'Zod v3 tool with transform + default',
+        inputSchema: z3.object({
+          query: z3.string().transform(s => s.toUpperCase()),
+          mode: z3.string().default('fast'),
+        }) as any,
+        execute,
+      });
+
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+        backgroundTaskEnabled: true,
+      });
+
+      const built = builder.build();
+      await built.execute!({ query: 'docs', _background: { enabled: true } } as any, {
+        toolCallId: 'call-1',
+        messages: [],
+      });
+
+      // Transform ran ("docs" -> "DOCS"), default filled ("mode" -> "fast"),
+      // and the injected `_background` key was preserved on the parsed value.
+      expect(execute).toHaveBeenCalledTimes(1);
+      const [parsed] = execute.mock.calls[0]!;
+      expect(parsed).toMatchObject({ query: 'DOCS', mode: 'fast', _background: { enabled: true } });
+    });
   });
 
   describe('Zod v4 input schema', () => {
@@ -189,6 +225,30 @@ describe('CoreToolBuilder background override injection', () => {
       });
 
       const properties = extractJsonProperties(tool);
+      expect(properties).toHaveProperty('suspendedToolRunId');
+      expect(properties).toHaveProperty('resumeData');
+    });
+
+    // Both gates can fire at once: a resumable id AND backgroundTaskEnabled.
+    // Ensure all three injected fields end up in the same schema.
+    // https://github.com/mastra-ai/mastra/pull/16915#pullrequestreview
+    it('merges _background and resume fields when both gates apply', () => {
+      const tool = createTool({
+        id: 'agent-combo',
+        description: 'Agent-as-tool with background tasks',
+        inputSchema: z4.object({ message: z4.string() }),
+        execute: vi.fn(),
+      });
+
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+        backgroundTaskEnabled: true,
+      });
+
+      const properties = extractJsonProperties(tool);
+      expect(properties).toHaveProperty('message');
+      expect(properties).toHaveProperty('_background');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
     });
