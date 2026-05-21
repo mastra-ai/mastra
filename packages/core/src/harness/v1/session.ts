@@ -2408,6 +2408,31 @@ export class Session {
     }
     const admissionIdentity =
       opts.admissionId !== undefined ? this._messageAdmissionIdentity(opts.admissionId) : undefined;
+    const admissionStart =
+      opts.admissionId !== undefined
+        ? createDeferred<AgentSignalResultEvidence | OperationAdmissionTombstone>()
+        : undefined;
+    if (admissionStart) void admissionStart.promise.catch(() => {});
+    if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
+      const existingStart = this._messageAdmissionStarts.get(opts.admissionId!);
+      if (existingStart) {
+        if (existingStart.admissionHash !== admissionHash) {
+          throw new HarnessAdmissionConflictError(
+            this.id,
+            opts.admissionId!,
+            existingStart.admissionHash,
+            admissionHash,
+          );
+        }
+        const evidence = await existingStart.promise;
+        return this._returnDuplicateMessageResult(evidence, opts);
+      }
+      this._messageAdmissionStarts.set(opts.admissionId!, {
+        admissionHash,
+        modeId: effectiveModeId,
+        promise: admissionStart.promise,
+      });
+    }
 
     // Per-turn additionalTools merge with the mode's surface, never replace.
     const toolsets = this._buildToolsets(mode, opts.additionalTools);
@@ -2521,36 +2546,12 @@ export class Session {
         }
       } catch (err) {
         clearPendingAdmission?.();
+        admissionStart?.reject(err);
+        if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
         throw err;
       } finally {
         subscriptionWaiter.cleanup();
       }
-    }
-
-    const admissionStart =
-      opts.admissionId !== undefined
-        ? createDeferred<AgentSignalResultEvidence | OperationAdmissionTombstone>()
-        : undefined;
-    if (admissionStart) void admissionStart.promise.catch(() => {});
-    if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
-      const existingStart = this._messageAdmissionStarts.get(opts.admissionId!);
-      if (existingStart) {
-        if (existingStart.admissionHash !== admissionHash) {
-          throw new HarnessAdmissionConflictError(
-            this.id,
-            opts.admissionId!,
-            existingStart.admissionHash,
-            admissionHash,
-          );
-        }
-        const evidence = await existingStart.promise;
-        return this._returnDuplicateMessageResult(evidence, opts);
-      }
-      this._messageAdmissionStarts.set(opts.admissionId!, {
-        admissionHash,
-        modeId: effectiveModeId,
-        promise: admissionStart.promise,
-      });
     }
 
     // Every turn runs under a session-owned AbortController so
@@ -7374,7 +7375,11 @@ export class Session {
       },
       getSubagentModelId: params => {
         const agentType = params?.agentType;
-        if (agentType) return this._record.subagentModelOverrides?.[agentType] ?? null;
+        if (agentType) {
+          return (
+            this._record.subagentModelOverrides?.[agentType] ?? this._record.subagentModelOverrides?.default ?? null
+          );
+        }
         return this._record.subagentModelOverrides?.default ?? null;
       },
       emitEvent: event => this._emitTurnEvent(event as EmitInput),
