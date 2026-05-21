@@ -12,8 +12,7 @@ import type {
   HarnessPrimitiveType,
   JsonValue,
   PendingResume,
-  PermissionRules,
-  SessionGrants,
+  TokenUsage,
 } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { HarnessMode } from './shared';
@@ -175,23 +174,49 @@ export interface HarnessRunOperationalState {
   abortReason?: 'requested' | 'shutdown' | 'session_closed' | 'superseded';
 }
 
-export interface HarnessDisplayStateSnapshotV1<TState = unknown> {
-  version: 1;
+export interface ActiveToolState {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  startedAt: number;
+  subagentSessionId?: string;
+}
+
+export interface ActiveSubagentState {
+  subagentSessionId: string;
+  agentType: string;
+  task: string;
+  parentToolCallId: string;
+  startedAt: number;
+}
+
+export type SessionDisplayPending = Omit<NonNullable<PendingResume>, 'runtimeDependencies'>;
+
+export interface SessionDisplayState {
   sessionId: string;
-  resourceId: string;
   threadId: string;
+  resourceId: string;
+  parentSessionId?: string;
+  lifecycleState: SessionLifecycleState;
   modeId: string;
   modelId: string;
-  state: TState;
-  lifecycleState: SessionLifecycleState;
-  operationalState: HarnessRunOperationalState;
-  pendingResume?: PendingResume | null;
-  pendingQueueDepth: number;
-  goal?: GoalState | null;
-  grants?: SessionGrants;
-  permissionRules?: PermissionRules;
-  updatedAt: number;
+  createdAt: number;
+  lastActivityAt: number;
+  isRunning: boolean;
+  currentRunId?: string;
+  currentMessageId?: string;
+  currentTraceId?: string;
+  activeTools: Record<string, ActiveToolState>;
+  toolInputBuffers: Record<string, { toolName: string; text: string }>;
+  activeSubagents: Record<string, ActiveSubagentState>;
+  tokenUsage: TokenUsage;
+  pending: SessionDisplayPending | null;
+  queueDepth: number;
+  currentQueuedItemId?: string;
+  goal?: GoalState;
 }
+
+export type HarnessDisplayStateSnapshotV1 = SessionDisplayState;
 
 export interface ListPage<T> {
   items: T[];

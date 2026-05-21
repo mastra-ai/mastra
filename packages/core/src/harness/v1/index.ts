@@ -62,6 +62,8 @@ export type { HarnessRequestContext, RegisterPlanApprovalParams, RegisterQuestio
 export type {
   AgentResult,
   AgentStream,
+  ActiveSubagentState,
+  ActiveToolState,
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
@@ -106,6 +108,8 @@ export type {
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionLifecycleState,
+  SessionDisplayPending,
+  SessionDisplayState,
   SessionListOptions,
   SessionLoadByIdOptions,
   SessionResolveById,

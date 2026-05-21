@@ -35,6 +35,8 @@ import { ASK_USER_TOOL_ID, harnessBuiltInTools, SUBMIT_PLAN_TOOL_ID } from './to
 import type {
   AgentResult,
   AgentStream,
+  ActiveSubagentState,
+  ActiveToolState,
   AttachmentRef,
   ListMessagesOptions,
   MessageOptions,
@@ -48,6 +50,8 @@ import type {
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionLifecycleState,
+  SessionDisplayPending,
+  SessionDisplayState,
   SessionSignalOptions,
   SessionSignalResult,
   TokenUsage,
@@ -85,6 +89,11 @@ const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'
 const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 
+function pendingResumeForDisplay(pending: SessionRecord['pendingResume']): SessionDisplayPending | null {
+  if (!pending) return null;
+  return cloneJsonLike(pending) as SessionDisplayPending;
+}
+
 export class Session {
   private readonly harness: Harness;
   private readonly storage: HarnessStorage;
@@ -101,7 +110,9 @@ export class Session {
   private currentTraceId?: string;
   private draining = false;
   private readonly idleWaiters = new Set<IdleWaiter>();
-  private readonly activeToolNames = new Map<string, string>();
+  private readonly activeTools = new Map<string, ActiveToolState>();
+  private readonly toolInputBuffers = new Map<string, { toolName: string; text: string }>();
+  private readonly activeSubagents = new Map<string, ActiveSubagentState>();
   private readonly queueWaiters = new Map<string, QueueWaiter>();
 
   constructor(opts: SessionConstructorOptions) {
@@ -168,6 +179,33 @@ export class Session {
 
   subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
     return this.emitter.subscribe(listener);
+  }
+
+  getDisplayState(): SessionDisplayState {
+    this.assertLive('getDisplayState()');
+    const snapshot: SessionDisplayState = {
+      sessionId: this.id,
+      threadId: this.threadId,
+      resourceId: this.resourceId,
+      lifecycleState: this.lifecycle,
+      modeId: this.record.modeId,
+      modelId: this.record.modelId,
+      createdAt: this.createdAt,
+      lastActivityAt: this.record.lastActivityAt,
+      isRunning: this.isRunning(),
+      activeTools: Object.fromEntries(this.activeTools.entries()),
+      toolInputBuffers: Object.fromEntries(this.toolInputBuffers.entries()),
+      activeSubagents: Object.fromEntries(this.activeSubagents.entries()),
+      tokenUsage: { ...this.record.tokenUsage },
+      pending: pendingResumeForDisplay(this.record.pendingResume),
+      queueDepth: this.record.pendingQueue.length,
+    };
+    if (this.parentSessionId !== undefined) snapshot.parentSessionId = this.parentSessionId;
+    if (this.isRunning() && this.currentRunId !== undefined) snapshot.currentRunId = this.currentRunId;
+    if (this.isRunning() && this.currentTraceId !== undefined) snapshot.currentTraceId = this.currentTraceId;
+    if (this.currentQueuedItemId !== undefined) snapshot.currentQueuedItemId = this.currentQueuedItemId;
+    if (this.record.goal !== undefined) snapshot.goal = cloneJsonLike(this.record.goal);
+    return snapshot;
   }
 
   async close(): Promise<void> {
@@ -869,7 +907,8 @@ export class Session {
     this.currentTurnAbortController = controller;
     this.currentRunId = undefined;
     this.currentTraceId = undefined;
-    this.activeToolNames.clear();
+    this.activeTools.clear();
+    this.toolInputBuffers.clear();
 
     if (callerSignal) {
       if (callerSignal.aborted) {
@@ -890,7 +929,8 @@ export class Session {
     if (this.currentTurnAbortController === controller) {
       this.currentTurnAbortController = undefined;
       this.currentQueuedItemId = undefined;
-      this.activeToolNames.clear();
+      this.activeTools.clear();
+      this.toolInputBuffers.clear();
       this.notifyMaybeIdle();
       if ((this.record.pendingQueue?.length ?? 0) > 0) {
         void this._kickQueueDrain();
@@ -1044,7 +1084,7 @@ export class Session {
         const toolCallId = stringField(payload, 'toolCallId');
         const toolName = stringField(payload, 'toolName');
         if (toolCallId && toolName) {
-          this.activeToolNames.set(toolCallId, toolName);
+          this.activeTools.set(toolCallId, { toolCallId, toolName, args: payload.args, startedAt: Date.now() });
           this.emitTurnEvent({ type: 'tool_start', toolCallId, toolName, args: payload.args });
         }
         break;
@@ -1054,6 +1094,8 @@ export class Session {
         const toolCallId = stringField(payload, 'toolCallId');
         if (toolCallId) {
           const isError = record.type === 'tool-error';
+          this.activeTools.delete(toolCallId);
+          this.toolInputBuffers.delete(toolCallId);
           this.emitTurnEvent({
             type: 'tool_end',
             toolCallId,
@@ -1104,7 +1146,9 @@ export class Session {
   }
 
   private async recordTurnCompletion(full: FullOutput<unknown>): Promise<void> {
-    if (full.runId) this.currentRunId = full.runId;
+    if (full.runId) {
+      this.currentRunId = full.runId;
+    }
     if (typeof (full as { traceId?: unknown }).traceId === 'string') {
       this.currentTraceId = (full as { traceId: string }).traceId;
     }
