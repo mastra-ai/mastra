@@ -138,3 +138,12 @@ Add a Delete action to existing-connection rows in the inline
 "Disconnect everywhere" confirm dialog used by pinned rows. Previously the
 Pin button was disabled on inactive rows with no way to clean them up
 without leaving the picker.
+
+Agent Builder Tools tab now lists Composio tools alongside code tools,
+agents, and workflows as `type: 'integration'` rows in a single flat list.
+Toggling an integration row writes to
+`toolProviders[providerId].tools[<SLUG>]` (never the native `tools`
+allowlist). Rows whose toolkit has no pinned connection show an inline
+"Set up connection" button that switches the active tab to Connections.
+The Connections tab remains the source of truth for OAuth, labels, and
+scopes.

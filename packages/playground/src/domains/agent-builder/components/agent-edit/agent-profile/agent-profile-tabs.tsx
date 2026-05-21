@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -37,6 +38,7 @@ export const AgentProfileTabs = ({
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
   const form = useFormContext<AgentBuilderEditFormValues>();
+  const [activeTab, setActiveTab] = useState<string>('instructions');
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
@@ -51,7 +53,12 @@ export const AgentProfileTabs = ({
       className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] border-t border-border1 overflow-hidden"
       data-testid="agent-profile-tabs"
     >
-      <Tabs defaultTab="instructions" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+      <Tabs
+        defaultTab="instructions"
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+      >
         <TabList variant="line" sticky className="px-2">
           <Tab value="instructions">Instructions</Tab>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
@@ -73,7 +80,11 @@ export const AgentProfileTabs = ({
 
           {toolsTabEnabled && (
             <TabContent value="tools" className={tabContentClassName}>
-              <Tools availableAgentTools={availableAgentTools} editable={isEditable} />
+              <Tools
+                availableAgentTools={availableAgentTools}
+                editable={isEditable}
+                onOpenConnections={connectionsTabEnabled ? () => setActiveTab('connections') : undefined}
+              />
             </TabContent>
           )}
 

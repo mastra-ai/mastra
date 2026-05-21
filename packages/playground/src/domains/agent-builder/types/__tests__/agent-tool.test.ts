@@ -152,6 +152,29 @@ describe('splitAgentTools', () => {
     });
   });
 
+  it('skips integration items so they never leak into the native tools allowlist', () => {
+    const result = splitAgentTools([
+      { id: 'tool-a', name: 'tool-a', isChecked: true, type: 'tool' },
+      {
+        id: 'composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        isChecked: true,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'gmail',
+      },
+    ]);
+
+    expect(result).toEqual({
+      tools: { 'tool-a': true },
+      agents: {},
+      workflows: {},
+    });
+    // Explicit guard: integration slug must not collide into native tools map.
+    expect(result.tools).not.toHaveProperty('composio:GMAIL_FETCH_EMAILS');
+    expect(result.tools).not.toHaveProperty('GMAIL_FETCH_EMAILS');
+  });
+
   it('round-trips with buildAgentTools', () => {
     const items = buildAgentTools({
       tools: { 'tool-a': {} },
