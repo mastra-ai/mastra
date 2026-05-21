@@ -1,4 +1,9 @@
-import type { ChannelAdapterConfig, ChannelConfig, ChannelHandlers } from '@mastra/core/channels';
+import type {
+  ChannelAdapterCardsConfig,
+  ChannelAdapterConfig,
+  ChannelConfig,
+  ChannelHandlers,
+} from '@mastra/core/channels';
 import type { ChannelsStorage } from '@mastra/core/storage';
 import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
@@ -20,12 +25,18 @@ export interface SlackAdapterChannelConfig {
    * Use rich card formatting for tool calls, approvals, and results.
    * Set to `false` to fall back to plain text.
    *
+   * Only applies when `toolDisplay` is `'cards'` (the default).
+   *
    * @default true
    */
-  cards?: ChannelAdapterConfig['cards'];
+  cards?: ChannelAdapterCardsConfig['cards'];
 
-  /** Override how tool calls are rendered in Slack messages. */
-  formatToolCall?: ChannelAdapterConfig['formatToolCall'];
+  /**
+   * Override how tool calls are rendered in Slack messages.
+   *
+   * Only applies when `toolDisplay` is `'cards'` (the default).
+   */
+  formatToolCall?: ChannelAdapterCardsConfig['formatToolCall'];
 
   /** Override how errors are rendered in Slack messages. */
   formatError?: ChannelAdapterConfig['formatError'];
@@ -42,6 +53,23 @@ export interface SlackAdapterChannelConfig {
    * @default true
    */
   streaming?: boolean | { updateIntervalMs?: number };
+
+  /**
+   * How tool calls are rendered in Slack.
+   *
+   * - `'cards'` (default) — per-tool "Running…" → "Result" cards.
+   * - `'timeline'` — render tools as inline task entries beside the streaming
+   *   text (requires `streaming: true`, which is the Slack default).
+   * - `'grouped'` — render tools together inside a single plan block.
+   * - `'hidden'` — execute tools silently; only the typing status indicates work.
+   *
+   * Approve/deny prompts (`requireApproval`) always render as a separate card,
+   * regardless of mode, because inline task entries can't carry interactive
+   * buttons.
+   *
+   * @default 'cards'
+   */
+  toolDisplay?: ChannelAdapterConfig['toolDisplay'];
 }
 
 // =============================================================================
@@ -72,12 +100,18 @@ export interface SlackProviderConfig {
    * Use rich card formatting for tool calls, approvals, and results.
    * Set to `false` to fall back to plain text.
    *
+   * Only applies when `toolDisplay` is `'cards'` (the default).
+   *
    * @default true
    */
-  cards?: ChannelAdapterConfig['cards'];
+  cards?: ChannelAdapterCardsConfig['cards'];
 
-  /** Override how tool calls are rendered in Slack messages. */
-  formatToolCall?: ChannelAdapterConfig['formatToolCall'];
+  /**
+   * Override how tool calls are rendered in Slack messages.
+   *
+   * Only applies when `toolDisplay` is `'cards'` (the default).
+   */
+  formatToolCall?: ChannelAdapterCardsConfig['formatToolCall'];
 
   /** Override how errors are rendered in Slack messages. */
   formatError?: ChannelAdapterConfig['formatError'];
@@ -94,6 +128,23 @@ export interface SlackProviderConfig {
    * @default true
    */
   streaming?: boolean | { updateIntervalMs?: number };
+
+  /**
+   * How tool calls are rendered in Slack.
+   *
+   * - `'cards'` (default) — per-tool "Running…" → "Result" cards.
+   * - `'timeline'` — render tools as inline task entries beside the streaming
+   *   text (requires `streaming: true`, which is the Slack default).
+   * - `'grouped'` — render tools together inside a single plan block.
+   * - `'hidden'` — execute tools silently; only the typing status indicates work.
+   *
+   * Approve/deny prompts (`requireApproval`) always render as a separate card,
+   * regardless of mode, because inline task entries can't carry interactive
+   * buttons.
+   *
+   * @default 'cards'
+   */
+  toolDisplay?: ChannelAdapterConfig['toolDisplay'];
 
   // ---------------------------------------------------------------------------
   // Forwarded AgentChannels-level options

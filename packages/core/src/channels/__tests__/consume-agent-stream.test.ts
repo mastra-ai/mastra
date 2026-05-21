@@ -64,10 +64,33 @@ async function* chunkStream(chunks: any[]): AsyncIterable<any> {
   for (const c of chunks) yield c;
 }
 
-function makeChannels(opts: { streaming?: boolean | { updateIntervalMs?: number } } = {}) {
+function makeChannels(
+  opts: {
+    streaming?: boolean | { updateIntervalMs?: number };
+    toolDisplay?: 'cards' | 'timeline' | 'grouped' | 'hidden';
+    cards?: boolean;
+    formatToolCall?: (info: {
+      toolName: string;
+      args: Record<string, unknown>;
+      result: unknown;
+      isError?: boolean;
+    }) => any;
+  } = {},
+) {
   const recording = createRecording();
+  // Build the adapter config as the right discriminated-union variant.
+  const baseAdapter = { adapter: recording.adapter, streaming: opts.streaming ?? false };
+  const adapterConfig =
+    !opts.toolDisplay || opts.toolDisplay === 'cards'
+      ? {
+          ...baseAdapter,
+          ...(opts.toolDisplay ? { toolDisplay: opts.toolDisplay } : {}),
+          ...(opts.cards !== undefined ? { cards: opts.cards } : {}),
+          ...(opts.formatToolCall ? { formatToolCall: opts.formatToolCall } : {}),
+        }
+      : { ...baseAdapter, toolDisplay: opts.toolDisplay };
   const channels = new AgentChannels({
-    adapters: { test: { adapter: recording.adapter, streaming: opts.streaming ?? false } },
+    adapters: { test: adapterConfig as any },
   });
   return { channels, ...recording };
 }
@@ -83,9 +106,9 @@ async function drive(
 
 // Drain a StreamingPlan's underlying iterable so we can assert on the
 // pieces that would have been streamed to the platform.
-async function drainStreamingPlan(plan: any): Promise<string[]> {
-  const pieces: string[] = [];
-  for await (const piece of plan.stream as AsyncIterable<string>) {
+async function drainStreamingPlan(plan: any): Promise<Array<string | Record<string, unknown>>> {
+  const pieces: Array<string | Record<string, unknown>> = [];
+  for await (const piece of plan.stream as AsyncIterable<string | Record<string, unknown>>) {
     pieces.push(piece);
   }
   return pieces;
@@ -205,12 +228,14 @@ describe('consumeAgentStream', () => {
       expect(await drainStreamingPlan((plans[1] as Extract<Call, { kind: 'post' }>).arg)).toEqual(['second']);
     });
 
-    it('closes the streaming session before posting an out-of-band tool card', async () => {
+    it('streams tool cards as separate posts in the default cards mode', async () => {
+      // When `toolDisplay` is left at the default `'cards'`, tools render via
+      // running/result cards (one post per tool) regardless of streaming.
       const { channels, calls, sdkThread } = makeChannels({ streaming: true });
       await drive(
         channels,
         [
-          { type: 'text-delta', payload: { text: 'thinking' } },
+          { type: 'text-delta', payload: { text: 'thinking ' } },
           {
             type: 'tool-call',
             payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
@@ -223,21 +248,220 @@ describe('consumeAgentStream', () => {
         ],
         sdkThread,
       );
-      // Ordering: stream post lands before tool card; nothing posts AFTER tool card
-      // since the post for the running card returned a messageId and the result
-      // edits that same card.
-      const kinds = calls.map(c => c.kind);
-      const firstPostIdx = kinds.indexOf('post');
-      const secondPostIdx = kinds.indexOf('post', firstPostIdx + 1);
-      const editIdx = kinds.indexOf('editMessage');
-      expect(firstPostIdx).toBeGreaterThanOrEqual(0); // streaming plan
-      expect(secondPostIdx).toBeGreaterThan(firstPostIdx); // running card
-      expect(editIdx).toBeGreaterThan(secondPostIdx); // result edit
+      // Running card posts as its own message; the result edits that card.
+      const posts = calls.filter(c => c.kind === 'post');
+      // One StreamingPlan post for the text segment + one card post for the running tool.
+      expect(posts.length).toBeGreaterThanOrEqual(2);
+      expect(calls.find(c => c.kind === 'editMessage')).toBeDefined();
+    });
+  });
+
+  describe('toolDisplay modes', () => {
+    it("'timeline': emits task_update chunks into the streaming session (one task per tool)", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'thinking ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' }, result: 'sunny' },
+          },
+          { type: 'text-delta', payload: { text: 'done' } },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      // Text-before-tools triggers a session flush so the leading text posts
+      // as its own platform message; the tool widget + trailing text post as
+      // a second message. Without the flush, Slack's AI Assistant widget
+      // would always render tasks above text within a single post.
+      expect(posts).toHaveLength(2);
+      expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
+
+      // First post: streaming text only (no task_update chunks).
+      const firstPost = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      const firstDrained = await drainStreamingPlan(firstPost);
+      const firstText = firstDrained.filter((p): p is string => typeof p === 'string').join('');
+      expect(firstText).toContain('thinking');
+
+      // Second post: tool widget + trailing text.
+      const planArg = (posts[1] as Extract<Call, { kind: 'post' }>).arg as any;
+      // `'timeline'` mode tells StreamingPlan to render each task inline.
+      expect(planArg.options?.groupTasks).toBe('timeline');
+
+      const drained = await drainStreamingPlan(planArg);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; status: string; id: string; output?: string; details?: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      expect(taskUpdates).toHaveLength(2);
+      expect(taskUpdates[0]).toMatchObject({ id: 't1', status: 'in_progress' });
+      expect(taskUpdates[1]).toMatchObject({ id: 't1', status: 'complete' });
+      // The completion chunk must not repeat `details` — Chat SDK appends to
+      // the existing task entry by id, so re-sending would render duplicates.
+      expect(taskUpdates[1].details).toBeUndefined();
+      const text = drained.filter((p): p is string => typeof p === 'string').join('');
+      expect(text).toContain('done');
+    });
+
+    it("'grouped': renders task_updates inside a single plan block (groupTasks: 'plan')", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const planArg = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      expect(planArg.options?.groupTasks).toBe('plan');
+
+      const drained = await drainStreamingPlan(planArg);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      // 2 tools × 2 updates each (in_progress + complete) → 4 chunks total.
+      expect(taskUpdates).toHaveLength(4);
+      expect(new Set(taskUpdates.map(t => t.id))).toEqual(new Set(['t1', 't2']));
+    });
+
+    it("'hidden': drops tool-call/result chunks entirely (no card, no task_update)", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'thinking ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' }, result: 'sunny' },
+          },
+          { type: 'text-delta', payload: { text: 'done' } },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      // Streaming text still posts; tools render nothing.
+      // Hidden mode flushes pending text on tool-call so the leading text
+      // posts before the silent tool runs (otherwise the user sees the
+      // typing status with no leading message until the tool resolves).
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+      expect(calls.find(c => c.kind === 'editMessage')).toBeUndefined();
+
+      const allDrained = (
+        await Promise.all(posts.map(p => drainStreamingPlan((p as Extract<Call, { kind: 'post' }>).arg)))
+      ).flat();
+      const taskUpdates = allDrained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
+      expect(taskUpdates).toHaveLength(0);
+      const text = allDrained.filter((p): p is string => typeof p === 'string').join('');
+      expect(text).toContain('thinking');
+      expect(text).toContain('done');
+    });
+
+    it("'timeline' without streaming: warns once and falls back to cards", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false, toolDisplay: 'timeline' });
+      const warn = vi.fn();
+      (channels as any).__setLogger({
+        info: vi.fn(),
+        warn,
+        error: vi.fn(),
+        debug: vi.fn(),
+      });
+
+      // Two runs in a row — the warn should fire on the first and stay quiet on the second.
+      const chunks = [
+        {
+          type: 'tool-call',
+          payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+        },
+        {
+          type: 'tool-result',
+          payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' }, result: 'sunny' },
+        },
+        { type: 'finish', payload: {} },
+      ];
+      await drive(channels, chunks, sdkThread);
+      await drive(channels, chunks, sdkThread);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain("toolDisplay: 'timeline' requires streaming: true");
+
+      // Fallback behavior should be `'cards'`: running card posted, edited on result.
+      const posts = calls.filter(c => c.kind === 'post');
+      const edits = calls.filter(c => c.kind === 'editMessage');
+      expect(posts.length).toBeGreaterThan(0);
+      expect(edits.length).toBeGreaterThan(0);
+    });
+
+    it("'timeline' with parallel tool calls: each gets its own task entry", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          { type: 'tool-call', payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      expect(taskUpdates.map(t => `${t.id}:${t.status}`)).toEqual([
+        't1:in_progress',
+        't2:in_progress',
+        't1:complete',
+        't2:complete',
+      ]);
     });
   });
 
   describe('adaptive typing status', () => {
-    it('emits Thinking → Typing → Using {tool} → Thinking transitions', async () => {
+    it('emits Typing → Calling {tool} → Typing transitions (no Thinking… on reasoning/tool-result)', async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: false });
       await drive(
         channels,
@@ -259,7 +483,7 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['Thinking…', 'Typing…', 'Using weather…', 'Thinking…', 'Typing…']);
+      expect(typingStatuses).toEqual(['Typing…', 'Calling weather…', 'Typing…']);
     });
 
     it('dedups consecutive same-status calls', async () => {

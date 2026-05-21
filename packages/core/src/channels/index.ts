@@ -1,6 +1,9 @@
 export { AgentChannels } from './agent-channels';
 export type {
+  ChannelAdapterBaseConfig,
+  ChannelAdapterCardsConfig,
   ChannelAdapterConfig,
+  ChannelAdapterStreamingToolsConfig,
   ChannelConfig,
   ChannelHandler,
   ChannelHandlerConfig,
