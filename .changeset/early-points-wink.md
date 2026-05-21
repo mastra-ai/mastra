@@ -10,7 +10,6 @@ SDK agent runs now create Mastra agent and model observability spans. Cursor usa
 
 ```ts
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { Agent as CursorAgent } from '@cursor/sdk';
 import { ClaudeSDKAgent, CursorSDKAgent } from '@mastra/core/sdk-agents';
 
 const claudeAgent = new ClaudeSDKAgent({
@@ -20,17 +19,14 @@ const claudeAgent = new ClaudeSDKAgent({
   model: 'claude-sonnet-4-6',
 });
 
-const cursorSdkAgent = await CursorAgent.create({
-  apiKey: process.env.CURSOR_API_KEY,
+const cursorAgent = new CursorSDKAgent({
+  id: 'cursor-agent',
+  description: 'Use Cursor Agent SDK through Mastra.',
   model: { id: 'gpt-5.5' },
   local: {
     cwd: process.cwd(),
   },
 });
-
-const cursorAgent = new CursorSDKAgent({
-  id: 'cursor-agent',
-  description: 'Use Cursor Agent SDK through Mastra.',
-  agent: cursorSdkAgent,
-});
 ```
+
+`CursorSDKAgent` can also receive a pre-created Cursor SDK agent through `agent`. When `apiKey` is not passed to the wrapper, it falls back to `process.env.CURSOR_API_KEY`.

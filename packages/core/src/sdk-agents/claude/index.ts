@@ -55,17 +55,57 @@ export type ClaudeQueryFunction = (params: { prompt: string; options?: ClaudeQue
 export type ClaudeAgentInput = ClaudeQueryFunction | { query: ClaudeQueryFunction };
 
 export type ClaudeAgentOptions = {
+  /**
+   * Mastra agent id used when registering this wrapper with Mastra.
+   */
   id: string;
+  /**
+   * Optional display name for the Mastra agent. Defaults to `id`.
+   */
   name?: string;
+  /**
+   * Description surfaced by Mastra when listing or selecting agents.
+   */
   description: string;
+  /**
+   * Claude Agent SDK `query` function, or an object with a `query` function.
+   *
+   * Passing the function directly avoids coupling the app to the dependency
+   * instance used to type `@mastra/core`.
+   */
   agent: ClaudeAgentInput;
+  /**
+   * Working directory passed to Claude Agent SDK query options.
+   */
   cwd?: string;
+  /**
+   * Claude model id passed to Claude Agent SDK query options.
+   */
   model?: string;
+  /**
+   * Maximum Claude Agent SDK turns for a run.
+   */
   maxTurns?: number;
+  /**
+   * Claude Agent SDK permission mode for tool and edit approval behavior.
+   */
   permissionMode?: ClaudePermissionMode;
+  /**
+   * Tool names Claude Agent SDK is allowed to use.
+   */
   allowedTools?: string[];
+  /**
+   * Tool names Claude Agent SDK is not allowed to use.
+   */
   disallowedTools?: string[];
+  /**
+   * Environment variables passed to the Claude Agent SDK process.
+   */
   env?: Record<string, string>;
+  /**
+   * Path to the Claude Code executable when the default binary resolution
+   * should not be used.
+   */
   pathToClaudeCodeExecutable?: string;
 };
 

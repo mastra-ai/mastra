@@ -1,8 +1,16 @@
 import type { InteractionUpdate, ModelSelection, Run, SDKAgent, SDKMessage, SendOptions } from '@cursor/sdk';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isAgentCompatible } from '../../agent';
 import { CursorSDKAgent } from './index';
+
+const createCursorAgent = vi.hoisted(() => vi.fn());
+
+vi.mock('@cursor/sdk', () => ({
+  Agent: {
+    create: createCursorAgent,
+  },
+}));
 
 function createTurnEndedUpdate({
   inputTokens = 10,
@@ -94,6 +102,10 @@ function createSDKAgent(run: Run, updates: InteractionUpdate[] = [createTurnEnde
 }
 
 describe('CursorSDKAgent', () => {
+  beforeEach(() => {
+    createCursorAgent.mockReset();
+  });
+
   it('is compatible with the Agent/SubAgent contract', () => {
     const { sdkAgent } = createSDKAgent(createRun());
     const agent = new CursorSDKAgent({
@@ -107,6 +119,43 @@ describe('CursorSDKAgent', () => {
     expect(agent.name).toBe('Cursor Agent');
     expect(agent.getDescription()).toBe('Use Cursor Agent as a Mastra agent.');
     expect(isAgentCompatible(agent)).toBe(true);
+  });
+
+  it('creates a Cursor SDK agent from options and falls back to CURSOR_API_KEY', async () => {
+    const originalApiKey = process.env['CURSOR_API_KEY'];
+    process.env['CURSOR_API_KEY'] = 'cursor-env-key';
+    const { sdkAgent } = createSDKAgent(createRun({ id: 'created-run', result: 'created text' }));
+    createCursorAgent.mockResolvedValueOnce(sdkAgent);
+
+    try {
+      const agent = new CursorSDKAgent({
+        id: 'cursor-agent',
+        name: 'Cursor Agent',
+        description: 'Cursor',
+        model: { id: 'gpt-5.5' },
+        local: {
+          cwd: '/repo',
+        },
+      });
+
+      const result = await agent.generate('Generate prompt');
+
+      expect(result.text).toBe('created text');
+      expect(createCursorAgent).toHaveBeenCalledWith({
+        apiKey: 'cursor-env-key',
+        model: { id: 'gpt-5.5' },
+        name: 'Cursor Agent',
+        local: {
+          cwd: '/repo',
+        },
+      });
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env['CURSOR_API_KEY'];
+      } else {
+        process.env['CURSOR_API_KEY'] = originalApiKey;
+      }
+    }
   });
 
   it('generate calls the provided Cursor SDK agent directly and returns Mastra output', async () => {
