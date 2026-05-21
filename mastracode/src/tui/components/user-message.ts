@@ -69,7 +69,14 @@ class BorderedBox {
     }
 
     // Box inner width = content width + prompt prefix (the "│ " and " │" add the padding)
-    const boxInner = maxContentWidth + 2;
+    let boxInner = maxContentWidth + 2;
+    // When a label is present, ensure the box is wide enough so the top border
+    // (╭── label ──...──╮) doesn't exceed the content/bottom border width.
+    if (this.label) {
+      const labelOverhead = ` ${this.label} `.length + 4; // ╭── + label + ╮
+      const neededBoxWidth = Math.max(boxInner + 4, labelOverhead);
+      boxInner = neededBoxWidth - 4;
+    }
     // Total box width: "│" + " " + content + " " + "│" = boxInner + 4
     const boxWidth = boxInner + 4;
 
