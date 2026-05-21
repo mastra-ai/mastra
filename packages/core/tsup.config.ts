@@ -89,6 +89,7 @@ export default defineConfig({
     __MASTRA_VERSION__: JSON.stringify(pkg.version),
   },
   sourcemap: true,
+  external: ['@cursor/sdk'],
   onSuccess: async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     await generateTypes(
