@@ -42,6 +42,16 @@ function Agent() {
     refetch: refreshThreads,
   } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
+  const sidebarThreads = useMemo(
+    () =>
+      (threads || []).map(thread => ({
+        ...thread,
+        createdAt: new Date(thread.createdAt),
+        updatedAt: new Date(thread.updatedAt),
+      })),
+    [threads],
+  );
+
   useEffect(() => {
     if (threadId) return;
 
@@ -145,7 +155,7 @@ function Agent() {
                             <AgentSidebar
                               agentId={agentId!}
                               threadId={actualThreadId!}
-                              threads={threads || []}
+                              threads={sidebarThreads}
                               isLoading={isThreadsLoading}
                             />
                           )

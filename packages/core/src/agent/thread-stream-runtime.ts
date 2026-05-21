@@ -610,6 +610,8 @@ export class AgentThreadStreamRuntime {
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
           remoteRuns.delete(data.runId);
         }
+        // Allow the same runId to be re-enqueued when it resumes (e.g. after tool approval).
+        seenRunIds.delete(data.runId);
         void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
         wake();
       }

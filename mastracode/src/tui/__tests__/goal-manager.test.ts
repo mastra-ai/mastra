@@ -152,7 +152,72 @@ describe('GoalManager', () => {
     expect(manager.getGoal()?.turnsUsed).toBe(0);
   });
 
-  it('pauses with a specific reason when the judge returns no structured output', async () => {
+  it('pauses instead of sending a continuation when judge resume has no assistant response to evaluate', async () => {
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    const result = await manager.evaluateAfterTurn(
+      createState({
+        listMessages: vi.fn().mockResolvedValue([
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'Continue the goal.' }],
+          },
+        ]),
+      }),
+      { requireAssistantMessage: true },
+    );
+
+    expect(result.continuation).toBeNull();
+    expect(result.judgeResult).toEqual({
+      decision: 'paused',
+      reason: 'Judge could not evaluate this turn: no assistant response.',
+    });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: true });
+    expect(mocks.stream).not.toHaveBeenCalled();
+  });
+
+  it('clears stale judge-failure state when budget exhaustion pauses without an assistant response', async () => {
+    const manager = new GoalManager();
+    const goal = manager.setGoal('finish the task', 'openai/gpt-5.4-mini', 1);
+    goal.turnsUsed = 1;
+    goal.lastPauseWasJudgeFailure = true;
+
+    const result = await manager.evaluateAfterTurn(
+      createState({
+        listMessages: vi.fn().mockResolvedValue([{ role: 'user', content: [{ type: 'text', text: 'resume goal' }] }]),
+      }),
+    );
+
+    expect(result).toEqual({ continuation: null, judgeResult: null });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: false });
+  });
+
+  it('clears stale judge-failure state when budget exhaustion pauses after judge continuation', async () => {
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'continue', reason: 'Keep going.' } }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    const goal = manager.setGoal('finish the task', 'openai/gpt-5.4-mini', 1);
+    goal.lastPauseWasJudgeFailure = true;
+
+    const result = await manager.evaluateAfterTurn(createState());
+
+    expect(result.continuation).toBeNull();
+    expect(result.judgeResult).toEqual({ decision: 'continue', reason: 'Keep going.' });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: false, turnsUsed: 1 });
+  });
+
+  it('pauses with a specific reason when the judge returns no structured output after retry', async () => {
     mocks.stream.mockResolvedValue({
       consumeStream: vi.fn().mockResolvedValue(undefined),
       getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
@@ -170,6 +235,78 @@ describe('GoalManager', () => {
     expect(result.judgeResult).toEqual({ decision: 'paused', reason: 'Judge returned no structured decision.' });
     expect(manager.getGoal()?.status).toBe('paused');
     expect(manager.getGoal()?.turnsUsed).toBe(0);
+    // Both the initial and retry calls should have been made
+    expect(mocks.stream).toHaveBeenCalledTimes(2);
+    expect(manager.getGoal()?.lastPauseWasJudgeFailure).toBe(true);
+  });
+
+  it('returns interrupted instead of retrying when aborted after empty output', async () => {
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const abortController = new AbortController();
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    abortController.abort();
+    const result = await manager.evaluateAfterTurn(createState(), { abortSignal: abortController.signal });
+
+    expect(result.judgeResult).toEqual({ decision: 'paused', reason: 'Judge evaluation was interrupted.' });
+    expect(mocks.stream).toHaveBeenCalledTimes(1);
+    expect(manager.getGoal()?.status).toBe('paused');
+  });
+
+  it('recovers via the retry follow-up prompt when the first stream has no structured output', async () => {
+    let callCount = 0;
+    mocks.stream.mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          consumeStream: vi.fn().mockResolvedValue(undefined),
+          getFullOutput: vi.fn().mockResolvedValue({ object: undefined }),
+        };
+      }
+      return {
+        consumeStream: vi.fn().mockResolvedValue(undefined),
+        getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'continue', reason: 'Still working.' } }),
+      };
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    const result = await manager.evaluateAfterTurn(createState());
+
+    expect(result.judgeResult).toEqual({ decision: 'continue', reason: 'Still working.' });
+    expect(result.continuation).toBeTruthy();
+    expect(manager.getGoal()?.status).toBe('active');
+    // The retry prompt should ask for JSON without tools
+    expect(mocks.stream.mock.calls[1][0]).toContain('JSON');
+  });
+
+  it('passes maxSteps: 50 to the judge stream call', async () => {
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'done', reason: 'Finished.' } }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    await manager.evaluateAfterTurn(createState());
+
+    expect(mocks.stream).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ maxSteps: 50 }));
   });
 
   it('uses stream with structured output and judge memory thread parent-goalId', async () => {
