@@ -34,6 +34,8 @@ export interface AskQuestionInlineOptions {
   isNegativeAnswer?: (answer: string) => boolean;
   /** Allow submitting an empty string in free-text mode. */
   allowEmptyInput?: boolean;
+  /** Show the "Custom response..." option in select mode. Defaults to true. */
+  allowCustomResponse?: boolean;
   /**
    * Use a multiline editor for free-text input (Shift+Enter / \+Enter for new lines).
    * Defaults to false — most prompts ask for short answers like names, paths, or yes/no.
@@ -236,6 +238,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private isNegativeAnswer?: (answer: string) => boolean;
   private allowEmptyInput = false;
   private multiline = false;
+  private allowCustomResponse = true;
   private answered = false;
 
   /**
@@ -308,6 +311,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       this.isNegativeAnswer = options.isNegativeAnswer;
       this.allowEmptyInput = Boolean(options.allowEmptyInput);
       this.multiline = Boolean(options.multiline);
+      this.allowCustomResponse = options.allowCustomResponse ?? true;
 
       const questionLines = options.question.split('\n');
 
@@ -408,10 +412,12 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     }));
 
     // Append a "Custom response..." option so the user can type a free-text answer
-    items.push({
-      value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
-      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
-    });
+    if (this.allowCustomResponse) {
+      items.push({
+        value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
+        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+      });
+    }
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
