@@ -598,20 +598,20 @@ export const ConnectionPicker = ({
                   </Txt>
                 )}
               </div>
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={disabled}
-                    aria-label="Connection actions"
-                    data-testid={`connection-actions-${toolkit}-${index}`}
-                  >
-                    <MoreVertical className="size-3" />
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  {!isCallerSupplied && (
+              {!isCallerSupplied && (
+                <DropdownMenu>
+                  <DropdownMenu.Trigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={disabled}
+                      aria-label="Connection actions"
+                      data-testid={`connection-actions-${toolkit}-${index}`}
+                    >
+                      <MoreVertical className="size-3" />
+                    </Button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
                     <DropdownMenu.Item
                       onSelect={() => handleReauthorize(index)}
                       disabled={disabled || authorize.isPending}
@@ -620,31 +620,31 @@ export const ConnectionPicker = ({
                       <RefreshCw />
                       Reauthorize
                     </DropdownMenu.Item>
-                  )}
-                  <DropdownMenu.Item
-                    onSelect={() => handleRemove(index)}
-                    disabled={disabled}
-                    data-testid={`connection-unpin-${toolkit}-${index}`}
-                  >
-                    <Unlink2 />
-                    Unpin from this agent
-                  </DropdownMenu.Item>
-                  {supportsRevoke && !isCallerSupplied && (
-                    <>
-                      <DropdownMenu.Separator />
-                      <DropdownMenu.Item
-                        onSelect={() => setDisconnectTargetId(conn.connectionId)}
-                        disabled={disabled}
-                        className="text-error"
-                        data-testid={`connection-disconnect-${toolkit}-${index}`}
-                      >
-                        <Trash2 />
-                        Disconnect everywhere
-                      </DropdownMenu.Item>
-                    </>
-                  )}
-                </DropdownMenu.Content>
-              </DropdownMenu>
+                    <DropdownMenu.Item
+                      onSelect={() => handleRemove(index)}
+                      disabled={disabled}
+                      data-testid={`connection-unpin-${toolkit}-${index}`}
+                    >
+                      <Unlink2 />
+                      Unpin from this agent
+                    </DropdownMenu.Item>
+                    {supportsRevoke && (
+                      <>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Item
+                          onSelect={() => setDisconnectTargetId(conn.connectionId)}
+                          disabled={disabled}
+                          className="text-error"
+                          data-testid={`connection-disconnect-${toolkit}-${index}`}
+                        >
+                          <Trash2 />
+                          Disconnect everywhere
+                        </DropdownMenu.Item>
+                      </>
+                    )}
+                  </DropdownMenu.Content>
+                </DropdownMenu>
+              )}
             </div>
           );
         })

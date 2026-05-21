@@ -183,3 +183,10 @@ row's secondary copy with **"User ID must be supplied at runtime from
 request context."** With the editor surface hard-locked to
 `caller-supplied` scope, the badge labeled a non-choice; the simplified
 copy keeps the runtime-resolution reminder users actually need.
+
+Hide the per-row actions kebab on caller-supplied pins in `ConnectionPicker`.
+Reauthorize and Disconnect were already gated `!isCallerSupplied`, and
+Unpin would be immediately undone by the `useEffect` that auto-stamps
+the sentinel pin on mount — so the entire trigger is removed for those
+rows. Per-author rows retain the full Reauthorize / Unpin / Disconnect
+menu.

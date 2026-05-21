@@ -839,6 +839,10 @@ describe('ConnectionPicker', () => {
     expect(copy).toBeTruthy();
     expect(copy.textContent).toMatch(/user id must be supplied at runtime/i);
     expect(screen.queryByTestId(`connection-label-${TOOL_SERVICE}-0`)).toBeNull();
+    // Caller-supplied rows have no row-actions kebab — there's nothing meaningful
+    // to do (unpin would be auto-restamped; reauth/disconnect are out of scope).
+    expect(screen.queryByTestId(`connection-actions-${TOOL_SERVICE}-0`)).toBeNull();
+    expect(screen.queryByTestId(`connection-unpin-${TOOL_SERVICE}-0`)).toBeNull();
   });
 
   it('does not render the label-input / Connect flow when locked to caller-supplied (editor)', async () => {
@@ -872,24 +876,5 @@ describe('ConnectionPicker', () => {
     );
     renderPicker({ initial: [], scope: 'caller-supplied' });
     expect(screen.queryByTestId(`connection-picker-${TOOL_SERVICE}-existing`)).toBeNull();
-  });
-
-  it('omits reauthorize and disconnect-everywhere actions for caller-supplied pins', async () => {
-    renderPicker({
-      initial: [
-        {
-          connectionId: 'caller-supplied',
-          toolkit: TOOL_SERVICE,
-          scope: 'caller-supplied',
-        },
-      ],
-      supportsRevoke: true,
-    });
-    await openKebab(0);
-    await waitFor(() => {
-      expect(screen.getByTestId(`connection-unpin-${TOOL_SERVICE}-0`)).toBeTruthy();
-    });
-    expect(screen.queryByTestId(`connection-reauthorize-${TOOL_SERVICE}-0`)).toBeNull();
-    expect(screen.queryByTestId(`connection-disconnect-${TOOL_SERVICE}-0`)).toBeNull();
   });
 });
