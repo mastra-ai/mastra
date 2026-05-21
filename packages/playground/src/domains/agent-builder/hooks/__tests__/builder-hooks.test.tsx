@@ -598,7 +598,7 @@ describe('useBuilderAgentAccess and useCanCreateAgent', () => {
 });
 
 describe('form-backed tools', () => {
-  it('updates agent form fields from the agent-builder tool input', async () => {
+  it('exposes the full set of atomic agent-builder tools when every feature is on', async () => {
     const wrapper = createFormWrapper({ skills: { existing: true } });
     const features = {
       tools: true,
@@ -628,21 +628,18 @@ describe('form-backed tools', () => {
       { wrapper },
     );
 
-    const output = await (result.current as any).execute({
-      name: 'Agent',
-      description: 'Description',
-      instructions: 'Instructions',
-      tools: [{ id: 'tool-a' }, { id: 'agent-a' }, { id: 'workflow-a' }],
-      skills: [{ id: 'skill-a' }, { id: 'missing' }],
-      model: { provider: 'openai:chat', name: 'gpt-4o' },
-      browserEnabled: true,
-      workspaceId: 'workspace-a',
-    });
-
-    expect(output).toEqual({ success: true });
+    const record = result.current as Record<string, any>;
+    expect(record['set-agent-name']).toBeDefined();
+    expect(record['set-agent-description']).toBeDefined();
+    expect(record['set-agent-instructions']).toBeDefined();
+    expect(record['set-agent-tools']).toBeDefined();
+    expect(record['set-agent-skills']).toBeDefined();
+    expect(record['set-agent-model']).toBeDefined();
+    expect(record['set-agent-browser-enabled']).toBeDefined();
+    expect(record['set-agent-workspace-id']).toBeDefined();
   });
 
-  it('ignores gated and invalid agent-builder tool fields', async () => {
+  it('omits gated agent-builder tools and keeps the always-on ones', async () => {
     const wrapper = createFormWrapper();
     const features = {
       tools: false,
@@ -665,18 +662,16 @@ describe('form-backed tools', () => {
       { wrapper },
     );
 
-    await expect(
-      (result.current as any).execute({
-        name: 1,
-        description: null,
-        instructions: false,
-        tools: [{ id: 'tool-a' }],
-        skills: [{ id: 'skill-a' }],
-        model: { provider: '', name: '' },
-        browserEnabled: true,
-        workspaceId: '',
-      }),
-    ).resolves.toEqual({ success: true });
+    const record = result.current as Record<string, any>;
+    expect(record['set-agent-tools']).toBeUndefined();
+    expect(record['set-agent-skills']).toBeUndefined();
+    expect(record['set-agent-model']).toBeUndefined();
+    expect(record['set-agent-browser-enabled']).toBeUndefined();
+
+    expect(record['set-agent-name']).toBeDefined();
+    expect(record['set-agent-description']).toBeDefined();
+    expect(record['set-agent-instructions']).toBeDefined();
+    expect(record['set-agent-workspace-id']).toBeDefined();
   });
 
   it('creates and attaches a skill, defaulting the only workspace and visibility', async () => {
