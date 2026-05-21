@@ -1699,11 +1699,12 @@ export class AgentChannels {
           // Drain whatever was queued plus anything pushed after the failure
           // and post it as a single buffered message. Drop non-string chunks
           // (task_update etc.) since the buffered fallback is text-only.
-          const fallback = buffer.filter((p): p is string => typeof p === 'string').join('');
+          let fallback = buffer.filter((p): p is string => typeof p === 'string').join('');
           buffer = [];
           if (!closed) {
             await waitForNext();
-            fallback.concat(buffer.filter((p): p is string => typeof p === 'string').join(''));
+            fallback += buffer.filter((p): p is string => typeof p === 'string').join('');
+            buffer = [];
           }
           const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
           if (cleaned) {
