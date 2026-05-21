@@ -466,7 +466,7 @@ describe('consumeAgentStream', () => {
   });
 
   describe('adaptive typing status', () => {
-    it('emits Typing → Calling {tool} → Typing transitions (no Thinking… on reasoning/tool-result)', async () => {
+    it('emits Thinking → Typing → Calling {tool} → Typing transitions', async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: false });
       await drive(
         channels,
@@ -488,7 +488,23 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is typing…', 'is calling weather…', 'is typing…']);
+      expect(typingStatuses).toEqual(['is thinking…', 'is typing…', 'is calling weather…', 'is typing…']);
+    });
+
+    it('emits "is working…" on the start chunk before other activity', async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'start', payload: {} },
+          { type: 'text-delta', payload: { text: 'hi' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is working…', 'is typing…']);
     });
 
     it('dedups consecutive same-status calls', async () => {

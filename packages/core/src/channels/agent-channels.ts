@@ -28,9 +28,22 @@ import {
 } from './formatting';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
-import type { ChannelContext, ThreadHistoryMessage } from './types';
+import type {
+  ChannelContext,
+  DataOmActivationPart,
+  DataOmBufferingEndPart,
+  DataOmBufferingFailedPart,
+  DataOmBufferingPart,
+  ThreadHistoryMessage,
+} from './types';
 import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
+
+interface StreamingSession {
+  push: (piece: string | StreamChunk) => void;
+  close: () => void;
+  done: Promise<void>;
+}
 
 const DEFAULT_INLINE_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
@@ -420,6 +433,31 @@ export function matchesDomain(url: string, pattern: string): boolean {
 /** Find the first matching inline-link rule for a URL. */
 function findInlineLinkRule(url: string, rules: InlineLinkRule[]): InlineLinkRule | undefined {
   return rules.find(rule => matchesDomain(url, rule.match));
+}
+
+/** Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0"). @internal */
+function formatTokens(tokens: number): string {
+  if (tokens === 0) return '0';
+  const k = tokens / 1000;
+  return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
+}
+
+/**
+ * Pull a human-readable message out of a `tool-error` chunk's `error` payload.
+ * The error can be a string, an `Error`-shaped object, a `MastraError`-shaped
+ * object with `message`/`details.errorMessage`, or anything else — fall back
+ * to the raw value so the failure stays debuggable. @internal
+ */
+function extractErrorMessage(error: unknown): unknown {
+  if (error == null) return error;
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object') {
+    const err = error as Record<string, unknown>;
+    if (typeof err.message === 'string' && err.message.length > 0) return err.message;
+    const details = err.details as Record<string, unknown> | undefined;
+    if (details && typeof details.errorMessage === 'string') return details.errorMessage;
+  }
+  return error;
 }
 
 /** Extract URLs from plain text. @internal */
@@ -1621,22 +1659,7 @@ export class AgentChannels {
     const streamingEnabled = streamingConfig !== false;
     const streamingOptions = streamingConfig === true ? {} : streamingConfig === false ? undefined : streamingConfig;
 
-    // Resolve the tool-display mode once per run. `'timeline'` and `'grouped'`
-    // require streaming because they push `task_update` chunks into the
-    // streaming session — fall back to `'cards'` (with a one-time warn) if a
-    // user asks for them without enabling streaming.
-    const requestedToolDisplay = adapterConfig?.toolDisplay ?? 'cards';
-    let toolDisplay: 'cards' | 'timeline' | 'grouped' | 'hidden' = requestedToolDisplay;
-    if ((toolDisplay === 'timeline' || toolDisplay === 'grouped') && !streamingEnabled) {
-      if (!this.warnedToolDisplayFallback.has(platform)) {
-        this.warnedToolDisplayFallback.add(platform);
-        this.log(
-          'warn',
-          `[${platform}] toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`,
-        );
-      }
-      toolDisplay = 'cards';
-    }
+    const toolDisplay = this.resolveToolDisplay(platform, adapterConfig?.toolDisplay, streamingEnabled);
     const groupTasks: 'plan' | 'timeline' | undefined =
       toolDisplay === 'timeline' ? 'timeline' : toolDisplay === 'grouped' ? 'plan' : undefined;
 
@@ -1676,6 +1699,12 @@ export class AgentChannels {
     let currentTypingStatus: string | undefined;
     const emitTypingStatus = (chunk: AgentChunkType<any>) => {
       if (!typingStatusFn) return;
+      // Don't compete with an open streaming session: the streaming widget IS
+      // the activity indicator while it's open, and Slack's
+      // `assistant.threads.setStatus` (what `startTyping` maps to) only
+      // auto-clears on `chat.postMessage`, not on `chat.stopStream` — so a
+      // status set during streaming would stick after the run ends.
+      if (streamingSession) return;
       let result: ReturnType<TypingStatusFn>;
       try {
         const ctx: TypingStatusContext = {
@@ -1697,38 +1726,11 @@ export class AgentChannels {
       });
     };
 
-    // TODO(follow-up): replace this Slack-specific branch with a portable
-    // `adapter.stopTyping(threadId)` capability check once `MastraSlackAdapter`
-    // lands (alongside `setHeaderTitle`). Adapters that implement `stopTyping`
-    // would handle this; adapters whose typing indicator auto-expires (Discord,
-    // Telegram) would simply not implement it.
-    //
-    // Quick fix rationale: Slack's `assistant.threads.setStatus` (what
-    // `startTyping` maps to) persists until a non-streaming `chat.postMessage`
-    // clears it. When we use `chatStream`, the status sticks after the run
-    // completes. Slack accepts an empty status string as a clear, so we send
-    // one at run end. Other platforms either auto-expire their typing indicator
-    // or would interpret an empty string as a literal status, so we gate on
-    // platform name here.
-    const clearTypingStatusAtRunEnd = () => {
-      if (platform !== 'slack') return;
-      if (!typingStatusFn) return;
-      if (currentTypingStatus === undefined) return;
-      sdkThread.startTyping('').catch(e => {
-        this.logger?.debug('[CHANNEL] Typing indicator clear failed (best-effort)', { error: e });
-      });
-    };
-
     // Streaming text session: when `streaming` is enabled, text deltas push into
     // an async iterable consumed by `sdkThread.post(...)` so the platform sees
     // text progressively. The session opens on the first text-delta of a run and
     // closes on step-finish / finish / error / abort / out-of-band chunk so the
     // next message (tool card, file, follow-up text) lands in the right order.
-    interface StreamingSession {
-      push: (piece: string | StreamChunk) => void;
-      close: () => void;
-      done: Promise<void>;
-    }
     let streamingSession: StreamingSession | null = null;
 
     const openStreamingSession = (): StreamingSession => {
@@ -1859,9 +1861,6 @@ export class AgentChannels {
     };
 
     for await (const chunk of stream) {
-      // Adaptive typing status: one call per chunk, resolved via the configured
-      // `typingStatus` function (built-in defaults when `typingStatus: true`).
-      // De-duped against the currently displayed status inside `emitTypingStatus`.
       emitTypingStatus(chunk);
 
       // --- Signal echo: subscription streams replay user-message / system-reminder /
@@ -1874,6 +1873,10 @@ export class AgentChannels {
       if (typeof chunkType === 'string' && chunkType.startsWith('data-')) {
         if (chunkType === 'data-user-message') {
           await flushText();
+        }
+
+        if (chunkType.startsWith('data-om-') && streamingSession) {
+          this.emitOMStatus(chunk, streamingSession);
         }
         continue;
       }
@@ -1943,7 +1946,6 @@ export class AgentChannels {
       // so we flush whatever's pending and reset per-run state before the next run starts.
       if (chunk.type === 'finish') {
         await flushText();
-        clearTypingStatusAtRunEnd();
         resetRunState();
         continue;
       }
@@ -1970,14 +1972,12 @@ export class AgentChannels {
         } catch (postErr) {
           this.logger?.debug('[CHANNEL] Failed to post error message', { error: postErr });
         }
-        clearTypingStatusAtRunEnd();
         resetRunState();
         continue;
       }
 
       if (chunk.type === 'abort') {
         await flushText();
-        clearTypingStatusAtRunEnd();
         resetRunState();
         continue;
       }
@@ -2036,7 +2036,7 @@ export class AgentChannels {
           // widget stays a single line per call (e.g. `read_file foo.md`).
           // `'timeline'` keeps args on a second `details` line — each task has
           // its own row so the extra line reads fine and is more scannable.
-          const taskTitle = toolDisplay === 'grouped' && argsSummary ? `${displayName} ${argsSummary}` : displayName;
+          const taskTitle = `${displayName} ${argsSummary}`;
           if (toolDisplay === 'grouped') {
             // Mirror the task title (with inline args) into the plan title so
             // Slack's AI Assistant Thinking Steps widget shows the current
@@ -2048,7 +2048,6 @@ export class AgentChannels {
             id: chunk.payload.toolCallId,
             title: taskTitle,
             status: 'in_progress',
-            details: toolDisplay === 'grouped' ? undefined : argsSummary || undefined,
           });
           toolCalls.set(chunk.payload.toolCallId, {
             toolName: chunk.payload.toolName,
@@ -2117,21 +2116,19 @@ export class AgentChannels {
         //
         // For `'grouped'` we suppress the full result body and just mark the
         // task complete — `grouped` is an at-a-glance summary of what the
-        // agent did, not a detailed trace. Errors still get the full text so
-        // failures stay debuggable. `'timeline'` shows the full result.
+        // agent did, not a detailed trace. `'timeline'` shows the full result.
         if (toolDisplay === 'timeline' || toolDisplay === 'grouped') {
           if (!streamingSession) streamingSession = openStreamingSession();
           // Mirror the inline-args title from the tool-call handler so the
           // completed task keeps the same `read_file foo.md` label instead
           // of collapsing back to the bare tool name.
-          const taskTitle = toolDisplay === 'grouped' && argsSummary ? `${displayName} ${argsSummary}` : displayName;
-          const groupedOutput = chunk.payload.isError ? resultText || undefined : undefined;
+          const taskTitle = `${displayName} ${argsSummary}`;
           streamingSession.push({
             type: 'task_update',
             id: chunk.payload.toolCallId,
             title: taskTitle,
-            status: chunk.payload.isError ? 'error' : 'complete',
-            output: toolDisplay === 'grouped' ? groupedOutput : resultText || undefined,
+            status: 'complete',
+            output: toolDisplay === 'timeline' ? resultText || undefined : undefined,
           });
           continue;
         }
@@ -2162,6 +2159,68 @@ export class AgentChannels {
         continue;
       }
 
+      // --- Tool error ---
+      // A failing tool produces a `tool-error` chunk instead of `tool-result`,
+      // so without this handler the tracked task stays `in_progress` forever
+      // (Slack then renders it as ⚠ when the streaming session closes) and
+      // cards-mode never edits the "Running…" card.
+      if (chunk.type === 'tool-error') {
+        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+
+        let tracked = toolCalls.get(chunk.payload.toolCallId);
+        if (!tracked) {
+          const pending = this.pendingApprovalCards.get(chunk.payload.toolCallId);
+          if (pending) {
+            tracked = {
+              ...pending,
+              toolName: pending.toolName ?? chunk.payload.toolName,
+              args: pending.args ?? chunk.payload.args ?? {},
+            };
+            this.pendingApprovalCards.delete(chunk.payload.toolCallId);
+          }
+        }
+        const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
+        const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
+        const errorText = formatResult(extractErrorMessage(chunk.payload.error), true);
+        const channelMsgId = tracked?.messageId;
+        const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
+
+        if (toolDisplay === 'hidden') continue;
+
+        if (toolDisplay === 'timeline' || toolDisplay === 'grouped') {
+          if (!streamingSession) streamingSession = openStreamingSession();
+          const taskTitle = `${displayName} ${argsSummary}`;
+          // Mark as `complete` rather than `error` so a single failing tool
+          // doesn't flip the overall plan header to ⚠. The error text in
+          // `output` is enough to convey the failure; the plan as a whole
+          // usually continued past the failure anyway.
+          streamingSession.push({
+            type: 'task_update',
+            id: chunk.payload.toolCallId,
+            title: taskTitle,
+            status: 'complete',
+            details: '⚠ ' + errorText,
+          });
+          continue;
+        }
+
+        if (cardsConfig?.formatToolCall) {
+          const custom = cardsConfig.formatToolCall({
+            toolName: displayName,
+            args: (chunk.payload.args ?? {}) as Record<string, unknown>,
+            result: chunk.payload.error,
+            isError: true,
+          });
+          if (custom != null) {
+            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
+          }
+        } else {
+          const resultMessage = formatToolResult(displayName, argsSummary, errorText, true, durationMs, useCards);
+          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
+        }
+        continue;
+      }
+
       // --- Tool approval: post an out-of-band Approve/Deny card. ---
       // Approvals always render as a separate card because `task_update` chunks
       // can't carry interactive buttons. In non-`'cards'` modes we close the
@@ -2175,6 +2234,13 @@ export class AgentChannels {
         const channelMsgId = tracked?.messageId;
 
         if (toolDisplay !== 'cards') {
+          streamingSession?.push({
+            type: 'task_update',
+            id: toolCallId,
+            title: `${displayName} ${argsSummary}`,
+            status: 'pending',
+            details: 'Requesting user approval…',
+          });
           await closeStreamingSession();
         }
 
@@ -2351,6 +2417,111 @@ export class AgentChannels {
     };
 
     void reconnect();
+  }
+
+  private emitOMStatus(chunk: AgentChunkType<any>, streamingSession: StreamingSession | null) {
+    if (!streamingSession) return;
+    const chunkType = chunk.type as string;
+
+    if (
+      chunkType === 'data-om-buffering-start' ||
+      chunkType === 'data-om-buffering-end' ||
+      chunkType === 'data-om-buffering-failed'
+    ) {
+      const data = 'data' in chunk ? (chunk.data as unknown as DataOmBufferingPart['data']) : null;
+      if (!data?.cycleId) return;
+
+      const isReflection = data.operationType === 'reflection';
+      let title = isReflection ? 'Reflecting on observations…' : 'Saving to memory…';
+      let status: 'in_progress' | 'complete' | 'error' = 'in_progress';
+      let details: string | undefined;
+
+      if (chunkType === 'data-om-buffering-end') {
+        status = 'complete';
+        const end = data as DataOmBufferingEndPart['data'];
+        // For observations the bufferedTokens field is a cumulative total, so
+        // approximate this cycle's output from the observations string
+        // (~4 chars/token) — same heuristic mastracode uses. For reflections
+        // bufferedTokens is the actual output token count.
+        const outputTokens =
+          end.operationType === 'observation' && end.observations
+            ? Math.round(end.observations.length / 4)
+            : end.bufferedTokens;
+        const ratio =
+          end.tokensBuffered > 0 && outputTokens > 0 ? ` (${Math.round(end.tokensBuffered / outputTokens)}x)` : '';
+        title = isReflection ? `Reflected on observations${ratio}` : `Saved to memory${ratio}`;
+        if (end.tokensBuffered > 0) {
+          details = `${formatTokens(end.tokensBuffered)} → ${formatTokens(outputTokens)} tokens`;
+        }
+      } else if (chunkType === 'data-om-buffering-failed') {
+        status = 'error';
+        const failed = data as DataOmBufferingFailedPart['data'];
+        title = isReflection ? 'Reflection failed' : 'Failed to save to memory';
+        details = failed.error;
+      }
+
+      streamingSession.push({
+        type: 'task_update',
+        id: `om-buffer:${data.cycleId}`,
+        title,
+        status,
+        details,
+      });
+      return;
+    }
+
+    if (chunkType === 'data-om-activation') {
+      const data = 'data' in chunk ? (chunk.data as unknown as DataOmActivationPart['data']) : null;
+      if (!data?.cycleId) return;
+
+      let title: string;
+      let details: string | undefined;
+
+      if (data.operationType === 'reflection') {
+        // Reflection compresses observations in place — no message tokens move.
+        // tokensActivated = obs tokens before, observationTokens = obs tokens after.
+        const delta = data.tokensActivated - data.observationTokens;
+        const deltaStr = delta > 0 ? ` (-${formatTokens(delta)})` : delta < 0 ? ` (+${formatTokens(-delta)})` : '';
+        title = `Activated reflection${deltaStr}`;
+        details = `${formatTokens(data.tokensActivated)} → ${formatTokens(data.observationTokens)} obs tokens`;
+      } else {
+        title = 'Recalled memory';
+        details = `-${formatTokens(data.tokensActivated)} msg tokens, +${formatTokens(data.observationTokens)} obs tokens`;
+      }
+
+      streamingSession.push({
+        type: 'task_update',
+        id: `om-activation:${data.cycleId}`,
+        title,
+        status: 'complete',
+        details,
+      });
+    }
+  }
+
+  /**
+   * Resolve the tool-display mode for a run. `'timeline'` and `'grouped'`
+   * require streaming because they push `task_update` chunks into the
+   * streaming session — fall back to `'cards'` (with a one-time warn per
+   * platform) if a user asks for them without enabling streaming.
+   */
+  private resolveToolDisplay(
+    platform: string,
+    requested: 'cards' | 'timeline' | 'grouped' | 'hidden' | undefined,
+    streamingEnabled: boolean,
+  ): 'cards' | 'timeline' | 'grouped' | 'hidden' {
+    const toolDisplay = requested ?? 'cards';
+    if ((toolDisplay === 'timeline' || toolDisplay === 'grouped') && !streamingEnabled) {
+      if (!this.warnedToolDisplayFallback.has(platform)) {
+        this.warnedToolDisplayFallback.add(platform);
+        this.log(
+          'warn',
+          `[${platform}] toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`,
+        );
+      }
+      return 'cards';
+    }
+    return toolDisplay;
   }
 
   private log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {

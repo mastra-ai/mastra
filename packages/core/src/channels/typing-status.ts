@@ -60,15 +60,32 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  */
 export function defaultTypingStatus(chunk: AgentChunkType<any>, _ctx: TypingStatusContext): TypingStatusReturn {
   if (chunk.type.startsWith('data-om-')) {
-    return undefined;
+    const t = chunk.type as string;
+    if (t === 'data-om-buffering-start') {
+      return 'is saving to memory…';
+    }
+    if (t === 'data-om-activation') {
+      return 'is recalling memory…';
+    }
   }
+
+  if (['reasoning-start', 'reasoning-delta'].includes(chunk.type)) {
+    return 'is thinking…';
+  }
+
+  if (['text-start', 'text-delta'].includes(chunk.type)) {
+    return 'is typing…';
+  }
+
   switch (chunk.type) {
-    case 'text-delta':
-      return 'is typing…';
+    case 'start':
+      return 'is working…';
     case 'tool-call':
       return `is calling ${chunk.payload.toolName}…`;
+
     case 'tool-call-approval':
       return `is requesting approval for ${chunk.payload.toolName}…`;
+
     default:
       return undefined;
   }
