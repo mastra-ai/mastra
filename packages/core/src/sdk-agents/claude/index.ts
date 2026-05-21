@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
-import type { ModelUsage, Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { ModelUsage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import { Agent } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -35,10 +35,22 @@ type ClaudeUsageTotals = {
   modelUsage?: Record<string, ModelUsage>;
 };
 
-export type ClaudeQueryFunction = (params: {
-  prompt: string | AsyncIterable<SDKUserMessage>;
-  options?: Options;
-}) => Query;
+export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
+
+export type ClaudeQueryOptions = {
+  abortController?: AbortController;
+  additionalDirectories?: string[];
+  cwd?: string;
+  model?: string;
+  maxTurns?: number;
+  permissionMode?: ClaudePermissionMode;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  env?: Record<string, string>;
+  pathToClaudeCodeExecutable?: string;
+};
+
+export type ClaudeQueryFunction = (params: { prompt: string; options?: ClaudeQueryOptions }) => AsyncIterable<unknown>;
 export type ClaudeAgentInput = ClaudeQueryFunction | { query: ClaudeQueryFunction };
 
 export type ClaudeAgentOptions = {
@@ -49,7 +61,7 @@ export type ClaudeAgentOptions = {
   cwd?: string;
   model?: string;
   maxTurns?: number;
-  permissionMode?: Options['permissionMode'];
+  permissionMode?: ClaudePermissionMode;
   allowedTools?: string[];
   disallowedTools?: string[];
   env?: Record<string, string>;
@@ -255,7 +267,7 @@ function runClaudeAsMastraStream(
   });
 }
 
-function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSignal): Query {
+function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSignal): AsyncIterable<SDKMessage> {
   const abortController = createAbortController(signal);
   const agent = options.agent;
   const query = typeof agent === 'function' ? agent : agent.query;
@@ -273,7 +285,7 @@ function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSi
       pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
       abortController,
     },
-  });
+  }) as AsyncIterable<SDKMessage>;
 }
 
 function createAbortController(signal: AbortSignal | undefined): AbortController | undefined {

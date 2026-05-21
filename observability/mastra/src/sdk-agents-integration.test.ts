@@ -10,6 +10,7 @@ import { TestExporter } from './exporters';
 function createCursorAgent() {
   return {
     agentId: 'cursor-sdk-agent',
+    model: { id: 'gpt-5.5' },
     send: async (_prompt: string, options?: { onDelta?: (args: { update: unknown }) => Promise<void> | void }) => {
       await options?.onDelta?.({
         update: {
@@ -53,7 +54,6 @@ function createMastraWithSDKAgent(testExporter: TestExporter) {
     name: 'Cursor Agent',
     description: 'Cursor SDK agent',
     agent: createCursorAgent() as never,
-    model: { id: 'gpt-5.5' },
   });
 
   return new Mastra({

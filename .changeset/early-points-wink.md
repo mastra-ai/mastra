@@ -16,6 +16,5 @@ const cursorAgent = new CursorSDKAgent({
   id: 'cursor-agent',
   description: 'Use Cursor Agent SDK through Mastra.',
   agent: cursorSdkAgent,
-  model: { id: 'gpt-5.5' },
 });
 ```

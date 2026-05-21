@@ -48,7 +48,6 @@ export type CursorAgentOptions = {
   name?: string;
   description: string;
   agent: CursorAgentInput;
-  model?: ModelSelection;
   mcpServers?: Record<string, McpServerConfig>;
   sendOptions?: SendOptions;
 };
@@ -64,7 +63,7 @@ export class CursorSDKAgent extends Agent {
       description: options.description,
       instructions: '',
       model: createNoopModel({
-        modelId: getModelId(getRequestedModel(options)),
+        modelId: getModelId(options.sendOptions?.model),
         provider: PROVIDER,
       }),
     });
@@ -82,11 +81,13 @@ export class CursorSDKAgent extends Agent {
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
+    const sdkAgent = await resolveCursorAgent(this.options.agent);
+    const modelId = getCursorModelId(this.options, sdkAgent);
     const telemetry = createSDKAgentTelemetry({
       agentId: this.id,
       agentName: this.name,
       provider: PROVIDER,
-      modelId: getModelId(getRequestedModel(this.options)),
+      modelId,
       messages,
       prompt,
       runId,
@@ -97,7 +98,7 @@ export class CursorSDKAgent extends Agent {
     });
     let result: SDKModelGenerateResult;
     try {
-      result = await telemetry.execute(() => runCursorGenerate(prompt, this.options));
+      result = await telemetry.execute(() => runCursorGenerate(prompt, this.options, sdkAgent));
       telemetry.endGenerate(result);
     } catch (error) {
       telemetry.fail(error);
@@ -119,7 +120,8 @@ export class CursorSDKAgent extends Agent {
   ): Promise<MastraModelOutput<OUTPUT>> {
     const runId = options?.runId ?? randomUUID();
     const prompt = promptToText(messages);
-    const modelId = getModelId(getRequestedModel(this.options));
+    const sdkAgent = await resolveCursorAgent(this.options.agent);
+    const modelId = getCursorModelId(this.options, sdkAgent);
     const telemetry = createSDKAgentTelemetry({
       agentId: this.id,
       agentName: this.name,
@@ -139,14 +141,17 @@ export class CursorSDKAgent extends Agent {
       runId,
       modelId,
       provider: PROVIDER,
-      stream: telemetry.wrapStream(runCursorAsMastraStream(prompt, this.options, runId)),
+      stream: telemetry.wrapStream(runCursorAsMastraStream(prompt, this.options, sdkAgent, runId)),
       options: telemetry.outputOptions(),
     });
   }
 }
 
-async function runCursorGenerate(prompt: string, options: CursorAgentOptions): Promise<SDKModelGenerateResult> {
-  const agent = await resolveCursorAgent(options.agent);
+async function runCursorGenerate(
+  prompt: string,
+  options: CursorAgentOptions,
+  agent: SDKAgent,
+): Promise<SDKModelGenerateResult> {
   const usage = createCursorUsageCollector();
   const run = await agent.send(prompt, createCursorSendOptions(options, usage));
   const result = await run.wait();
@@ -155,7 +160,7 @@ async function runCursorGenerate(prompt: string, options: CursorAgentOptions): P
     throw new Error(`Cursor run ${result.id} ended with status ${result.status}`);
   }
 
-  const responseModel = getModelId(result.model ?? run.model ?? getRequestedModel(options));
+  const responseModel = getModelId(result.model ?? run.model ?? getRequestedModel(options) ?? agent.model);
   const providerMetadata = getCursorProviderMetadata(
     options,
     agent.agentId,
@@ -163,6 +168,7 @@ async function runCursorGenerate(prompt: string, options: CursorAgentOptions): P
     result.status,
     result.durationMs,
     usage.totals(),
+    responseModel,
   );
 
   return {
@@ -181,6 +187,7 @@ async function runCursorGenerate(prompt: string, options: CursorAgentOptions): P
 function runCursorAsMastraStream(
   prompt: string,
   options: CursorAgentOptions,
+  agent: SDKAgent,
   runId: string,
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
@@ -190,10 +197,9 @@ function runCursorAsMastraStream(
       let text = '';
 
       try {
-        const agent = await resolveCursorAgent(options.agent);
         const run = await agent.send(prompt, createCursorSendOptions(options, usage));
         const responseId = run.id;
-        const responseModel = getModelId(run.model ?? getRequestedModel(options));
+        const responseModel = getModelId(run.model ?? getRequestedModel(options) ?? agent.model);
 
         enqueueStartChunks(controller, {
           runId,
@@ -208,6 +214,7 @@ function runCursorAsMastraStream(
             run.status,
             run.durationMs,
             usage.totals(),
+            responseModel,
           ),
         });
 
@@ -248,6 +255,7 @@ function runCursorAsMastraStream(
           result.status,
           result.durationMs,
           usage.totals(),
+          getModelId(result.model ?? run.model ?? getRequestedModel(options) ?? agent.model),
         );
         enqueueFinishChunks(controller, {
           runId,
@@ -255,7 +263,7 @@ function runCursorAsMastraStream(
           textId,
           text,
           responseId,
-          modelId: getModelId(result.model ?? run.model ?? getRequestedModel(options)),
+          modelId: getModelId(result.model ?? run.model ?? getRequestedModel(options) ?? agent.model),
           usage: usage.toLanguageModelUsage(),
           providerMetadata,
         });
@@ -281,7 +289,6 @@ function createCursorSendOptions(options: CursorAgentOptions, usage: CursorUsage
   const sendOptions = {
     ...options.sendOptions,
     mcpServers: options.sendOptions?.mcpServers ?? options.mcpServers,
-    model: options.sendOptions?.model ?? options.model,
   };
   const originalOnDelta = sendOptions.onDelta;
 
@@ -354,7 +361,7 @@ function toV3Usage(usage: CursorUsageTotals): V3Usage {
 }
 
 function getRequestedModel(options: CursorAgentOptions): ModelSelection | undefined {
-  return options.sendOptions?.model ?? options.model;
+  return options.sendOptions?.model;
 }
 
 function getModelId(model: ModelSelection | undefined): string {
@@ -365,6 +372,10 @@ function getModelId(model: ModelSelection | undefined): string {
   return typeof model === 'string' ? model : model.id;
 }
 
+function getCursorModelId(options: CursorAgentOptions, agent: SDKAgent): string {
+  return getModelId(getRequestedModel(options) ?? agent.model);
+}
+
 function getCursorProviderMetadata(
   options: CursorAgentOptions,
   agentId: string,
@@ -372,12 +383,13 @@ function getCursorProviderMetadata(
   status?: Run['status'],
   durationMs?: number,
   usage?: CursorUsageTotals,
+  requestedModel?: string,
 ): ProviderMetadata {
   return createProviderMetadata('cursor', {
     agentId,
     runId,
     status,
-    requestedModel: getModelId(getRequestedModel(options)),
+    requestedModel: requestedModel ?? getModelId(getRequestedModel(options)),
     durationMs,
     mcpServerNames: getMcpServerNames(options),
     usage,

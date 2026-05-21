@@ -180,7 +180,6 @@ describe('SDK agent observability', () => {
       name: 'Cursor Agent',
       description: 'Cursor',
       agent: createCursorSDKAgent(createCursorRun({ id: 'cursor-generate-run', result: 'generated text' })),
-      model: { id: 'gpt-5.5' },
     });
 
     const result = await agent.generate('Generate prompt', {
@@ -254,7 +253,6 @@ describe('SDK agent observability', () => {
           streamMessages: [createCursorTaskMessage('streamed '), createCursorTaskMessage('text')],
         }),
       ),
-      model: { id: 'gpt-5.5' },
     });
 
     const stream = await agent.stream('Stream prompt', {
@@ -299,7 +297,6 @@ describe('SDK agent observability', () => {
       id: 'cursor-agent',
       description: 'Cursor',
       agent: sdkAgent,
-      model: { id: 'gpt-5.5' },
     });
 
     await expect(

@@ -89,7 +89,6 @@ describe('CursorSDKAgent', () => {
       name: 'Cursor Agent',
       description: 'Use Cursor Agent as a Mastra agent.',
       agent: sdkAgent,
-      model: { id: 'gpt-5.5' },
     });
 
     expect(agent.id).toBe('cursor-agent');
@@ -105,7 +104,6 @@ describe('CursorSDKAgent', () => {
       id: 'cursor-agent',
       description: 'Cursor',
       agent: sdkAgent,
-      model: { id: 'gpt-5.5' },
       mcpServers: {
         filesystem: { command: 'node', args: ['server.js'] },
       },
@@ -133,7 +131,6 @@ describe('CursorSDKAgent', () => {
     expect(send).toHaveBeenCalledWith(
       'Generate prompt',
       expect.objectContaining({
-        model: { id: 'gpt-5.5' },
         mcpServers: {
           filesystem: { command: 'node', args: ['server.js'] },
         },
@@ -154,7 +151,6 @@ describe('CursorSDKAgent', () => {
       id: 'cursor-agent',
       description: 'Cursor',
       agent: () => sdkAgent,
-      model: { id: 'gpt-5.5' },
     });
 
     const stream = await agent.stream('Stream prompt', { runId: 'stream-mastra-run' });
