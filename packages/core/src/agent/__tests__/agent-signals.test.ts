@@ -2085,13 +2085,13 @@ describe('Agent signals', () => {
         contents: 'hello',
         attributes: { existing: 'yes' },
         deliveryAttributes: {
-          ifActive: { delivery: 'interjection' },
+          ifActive: { delivery: 'while-active' },
           ifIdle: { delivery: 'message' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'active');
-      expect(resolved.attributes).toEqual({ existing: 'yes', delivery: 'interjection' });
+      expect(resolved.attributes).toEqual({ existing: 'yes', delivery: 'while-active' });
       expect(resolved.deliveryAttributes).toBeUndefined();
     });
 
@@ -2100,7 +2100,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { delivery: 'interjection' },
+          ifActive: { delivery: 'while-active' },
           ifIdle: { delivery: 'message' },
         },
       });
@@ -2115,7 +2115,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { delivery: 'interjection' },
+          ifActive: { delivery: 'while-active' },
         },
       });
 
@@ -2139,14 +2139,14 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'fix the bug',
         deliveryAttributes: {
-          ifActive: { delivery: 'interjection' },
+          ifActive: { delivery: 'while-active' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'active');
       expect(resolved.toLLMMessage()).toEqual({
         role: 'user',
-        content: '<user-message delivery="interjection">fix the bug</user-message>',
+        content: '<user-message delivery="while-active">fix the bug</user-message>',
       });
     });
 
@@ -2155,18 +2155,18 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'fix the bug',
         deliveryAttributes: {
-          ifActive: { delivery: 'interjection' },
+          ifActive: { delivery: 'while-active' },
         },
       });
 
       const resolved = resolveDeliveryAttributes(signal, 'active');
       const db = resolved.toDBMessage({ threadId: 't', resourceId: 'r' });
       expect((db.content.metadata!.signal as Record<string, unknown>).attributes).toEqual({
-        delivery: 'interjection',
+        delivery: 'while-active',
       });
 
       const dataPart = resolved.toDataPart();
-      expect(dataPart.data.attributes).toEqual({ delivery: 'interjection' });
+      expect(dataPart.data.attributes).toEqual({ delivery: 'while-active' });
     });
 
     it('idle-resolved user-message without attributes renders as plain text', () => {
@@ -2174,7 +2174,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'hello',
         deliveryAttributes: {
-          ifActive: { delivery: 'interjection' },
+          ifActive: { delivery: 'while-active' },
         },
       });
 
@@ -2185,7 +2185,7 @@ describe('Agent signals', () => {
       });
     });
 
-    it('thread-stream-runtime resolves deliveryAttributes as interjection on active signal delivery', () => {
+    it('thread-stream-runtime resolves deliveryAttributes as while-active on active signal delivery', () => {
       const runtime = new AgentThreadStreamRuntime();
       const pubsub = new EventEmitterPubSub();
       const agent = { id: 'delivery-active-agent' } as any;
@@ -2214,9 +2214,9 @@ describe('Agent signals', () => {
         agent,
         {
           type: 'user-message',
-          contents: 'interjection test',
+          contents: 'while-active test',
           deliveryAttributes: {
-            ifActive: { delivery: 'interjection' },
+            ifActive: { delivery: 'while-active' },
             ifIdle: { delivery: 'message' },
           },
         },
@@ -2232,8 +2232,8 @@ describe('Agent signals', () => {
         pubsub,
       );
 
-      // Active run → ifActive branch → delivery: 'interjection'
-      expect(result.signal.attributes).toEqual({ delivery: 'interjection' });
+      // Active run → ifActive branch → delivery: 'while-active'
+      expect(result.signal.attributes).toEqual({ delivery: 'while-active' });
       expect(result.signal.deliveryAttributes).toBeUndefined();
     });
 
@@ -2249,7 +2249,7 @@ describe('Agent signals', () => {
           type: 'user-message',
           contents: 'idle test',
           deliveryAttributes: {
-            ifActive: { delivery: 'interjection' },
+            ifActive: { delivery: 'while-active' },
             ifIdle: { delivery: 'message' },
           },
         },

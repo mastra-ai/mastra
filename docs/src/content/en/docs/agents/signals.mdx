@@ -153,6 +153,47 @@ The model receives the custom signal as context like this:
 
 Use XML-safe signal type names and attribute names. Signal type names and attribute names can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
 
+## Delivery attributes
+
+Use `deliveryAttributes` to tag a signal with context that depends on whether the agent is active or idle at delivery time. Mastra resolves the correct branch when the signal is accepted.
+
+```typescript title="src/mastra/signals.ts"
+agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Also cover the edge cases.',
+    deliveryAttributes: {
+      ifActive: { delivery: 'while-active' },
+      ifIdle: { delivery: 'message' },
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+When the agent is working, the model sees:
+
+```xml
+<user-message delivery="while-active">Also cover the edge cases.</user-message>
+```
+
+When the agent is idle:
+
+```xml
+<user-message delivery="message">Also cover the edge cases.</user-message>
+```
+
+The `ifActive` branch merges into `attributes` when the signal is delivered to a running agent loop. The `ifIdle` branch merges when the signal wakes an idle thread. If the selected branch is `undefined`, no extra attributes are added.
+
+Delivery attributes work with any signal type and can carry any key-value pairs — the `delivery` attribute shown above is just a convention used by mastracode.
+
+:::note
+Visit [Agent.sendSignal() reference](/reference/agents/agent#sendsignalsignal-options) for the full `AgentSignalInput` type.
+:::
+
 ## Use the client SDK
 
 The JavaScript client exposes the same thread signal APIs. Use `subscribeToThread()` before `sendSignal()` so the client can render the stream that wakes from, or receives, the signal.

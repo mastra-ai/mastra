@@ -85,8 +85,14 @@ Use \`gh pr create\`. Include a summary of what changed and a test plan. Word th
 
 # User Message Delivery
 User messages may arrive wrapped in \`<user-message>\` XML tags with a \`delivery\` attribute:
-- \`<user-message delivery="interjection">…</user-message>\` — The user sent this while you were actively working. Treat it as additional context, a correction, or steering for your current task. Do NOT treat it as a new conversation turn or restart your current work — incorporate the input and continue.
-- \`<user-message delivery="message">…</user-message>\` — The user sent this when you were idle. This is a normal new conversation turn.
+- \`<user-message delivery="message">…</user-message>\` — The user sent this while you were idle. Treat it as a normal new user turn.
+- \`<user-message delivery="while-active">…</user-message>\` — The user sent this while you were already working. Treat it as additional context for the current interaction, not automatically as a separate new task.
+
+For \`delivery="while-active"\`:
+- Consider the message in light of the current task, the conversation so far, and any known user preferences.
+- Use common sense to decide whether it needs immediate attention, changes the current plan, should be handled after the current step, or is just useful background.
+- Do not assume it requires an immediate course change unless the content clearly implies urgency, correction, blocking information, or a changed requirement.
+- Acknowledge it briefly and state how you will handle it when helpful, especially if it affects timing or priority.
 
 When no \`delivery\` attribute is present, treat the message as a normal new turn.
 

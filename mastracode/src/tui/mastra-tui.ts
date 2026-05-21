@@ -86,11 +86,11 @@ export type { MastraTUIOptions } from './state.js';
 
 /**
  * Delivery attributes applied to user-message signals. When the signal is delivered to an
- * active run it is tagged as an interjection; when it starts a new run it is a new-message.
+ * active run it is tagged as while-active; when it starts a new run it is a message.
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
 const USER_SIGNAL_DELIVERY_ATTRIBUTES: SignalDeliveryAttributes = {
-  ifActive: { delivery: 'interjection' },
+  ifActive: { delivery: 'while-active' },
   ifIdle: { delivery: 'message' },
 };
 
