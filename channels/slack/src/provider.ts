@@ -756,17 +756,8 @@ export class SlackProvider implements ChannelProvider {
    */
   #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
-    const {
-      adapterConfig,
-      cors,
-      gateway,
-      cards,
-      formatToolCall,
-      formatError,
-      streaming,
-      typingStatus,
-      toolDisplay,
-    } = this.#channelConfig;
+    const { adapterConfig, cors, gateway, cards, formatToolCall, formatError, streaming, typingStatus, toolDisplay } =
+      this.#channelConfig;
     const topLevel = { cors, gateway, cards, formatToolCall, formatError, streaming, typingStatus, toolDisplay };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
     // SlackProvider opinionated defaults — these render well in Slack's AI Assistant UI
