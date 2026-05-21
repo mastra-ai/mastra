@@ -49,7 +49,7 @@ export default defineConfig(options => ({
   sourcemap: true,
   external: [/^@mastra\/core/],
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set());
+    await generateTypes(process.cwd());
     await rewritePathAliases(process.cwd());
   },
 }));

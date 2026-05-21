@@ -36,7 +36,7 @@ function matchesBundledPackage(moduleSpecifier, bundledPackage) {
     return packageName.startsWith(bundledPackage.slice(0, -1));
   }
 
-  return packageName === bundledPackage;
+  return packageName === bundledPackage || getTypesPackageName(packageName) === bundledPackage;
 }
 
 async function getPackageRootPath(packageName, parentPath) {

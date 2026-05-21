@@ -13,6 +13,6 @@ export default defineConfig({
   sourcemap: true,
   external: ['@mastra/core', '@e2b/code-interpreter'],
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set());
+    await generateTypes(process.cwd());
   },
 });

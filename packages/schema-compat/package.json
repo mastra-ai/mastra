@@ -101,10 +101,7 @@
     "json-schema-to-zod": "^2.7.0",
     "zod-from-json-schema": "^0.5.2",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
-    "zod-to-json-schema": "^3.25.1",
-    "@standard-schema/spec": "^1.1.0",
-    "ajv": "^8.18.0",
-    "@types/json-schema": "^7.0.15"
+    "zod-to-json-schema": "^3.25.1"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -120,9 +117,12 @@
     "@internal/lint": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@standard-schema/spec": "^1.1.0",
+    "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "ajv": "^8.18.0",
     "arktype": "^2.2.0",
     "eslint": "^10.2.1",
     "json-schema-traverse": "^1.0.0",

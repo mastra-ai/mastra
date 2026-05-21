@@ -67,7 +67,15 @@ function getTypesPackageName(packageName) {
   return `@types/${packageName}`;
 }
 
-async function validateDeclarationRuntimeImports(rootDir) {
+function matchesBundledPackage(packageName, bundledPackage) {
+  if (bundledPackage.endsWith('/*')) {
+    return packageName.startsWith(bundledPackage.slice(0, -1));
+  }
+
+  return packageName === bundledPackage || getTypesPackageName(packageName) === bundledPackage;
+}
+
+async function validateDeclarationRuntimeImports(rootDir, bundledPackages) {
   const packageJsonPath = path.join(rootDir, 'package.json');
   const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
   const runtimeDependencies = new Set([
@@ -101,7 +109,8 @@ async function validateDeclarationRuntimeImports(rootDir) {
         !importedPackage ||
         importedPackage === packageName ||
         runtimeDependencies.has(importedPackage) ||
-        runtimeDependencies.has(getTypesPackageName(importedPackage))
+        runtimeDependencies.has(getTypesPackageName(importedPackage)) ||
+        Array.from(bundledPackages).some(bundledPackage => matchesBundledPackage(importedPackage, bundledPackage))
       ) {
         continue;
       }
@@ -210,7 +219,7 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
       await fs.writeFile(fullPath, code);
     }
 
-    await validateDeclarationRuntimeImports(rootDir);
+    await validateDeclarationRuntimeImports(rootDir, bundledPackages);
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
     if (typeof err.code !== 'number') {
