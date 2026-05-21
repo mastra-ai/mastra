@@ -28,6 +28,7 @@ import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,
   AgentSignalResultStatus,
+  AppendWorkspaceActionJournalEntryResult,
   AttachmentReference,
   AttachmentRecord,
   AttachmentSemanticMetadata,
@@ -53,6 +54,7 @@ import type {
   ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
+  ListWorkspaceActionJournalInput,
   LoadedAttachment,
   JsonValue,
   OperationAdmissionEvidence,
@@ -72,6 +74,7 @@ import type {
   SessionSummary,
   ThreadDeleteFenceLease,
   WithThreadDeleteFenceInput,
+  WorkspaceActionJournalEntry,
 } from './types';
 
 /**
@@ -435,6 +438,11 @@ export class InMemoryHarness extends HarnessStorage {
     for (const [key, event] of this.db.harnessSessionEvents) {
       if (event.harnessName === namespace && event.sessionId === sessionId) {
         this.db.harnessSessionEvents.delete(key);
+      }
+    }
+    for (const [key, entry] of this.db.harnessWorkspaceActionJournal) {
+      if (entry.harnessName === namespace && entry.sessionId === sessionId) {
+        this.db.harnessWorkspaceActionJournal.delete(key);
       }
     }
     const refPrefix = `${namespace}\u0000${sessionId}\u0000`;
@@ -1040,6 +1048,50 @@ export class InMemoryHarness extends HarnessStorage {
         event.sequence > afterSequence,
     );
     rows.sort((a, b) => a.sequence - b.sequence);
+    return rows.slice(0, limit).map(row => cloneJson(row));
+  }
+
+  async appendWorkspaceActionJournalEntry(
+    record: WorkspaceActionJournalEntry,
+  ): Promise<AppendWorkspaceActionJournalEntryResult> {
+    assertWorkspaceActionKindMatches(record);
+    const namespaced = { ...record, harnessName: resolveHarnessName(record.harnessName, this.harnessName) };
+    const session = this.db.harnessSessions.get(sessionKey(namespaced.harnessName, namespaced.sessionId));
+    if (!session || session.resourceId !== namespaced.resourceId || session.threadId !== namespaced.threadId) {
+      return { created: false };
+    }
+    const key = workspaceActionJournalKey(namespaced.harnessName, namespaced.sessionId, namespaced.id);
+    if (!this.db.harnessWorkspaceActionJournal.has(key)) {
+      this.db.harnessWorkspaceActionJournal.set(key, cloneJson(namespaced));
+      return { created: true };
+    }
+    return { created: false };
+  }
+
+  async listWorkspaceActionJournalEntries({
+    harnessName,
+    sessionId,
+    resourceId,
+    threadId,
+    actionKind,
+    operation,
+    policyDecision,
+    after,
+    limit,
+  }: ListWorkspaceActionJournalInput): Promise<WorkspaceActionJournalEntry[]> {
+    if (limit <= 0) return [];
+    const namespace = resolveHarnessName(harnessName, this.harnessName);
+    const rows = Array.from(this.db.harnessWorkspaceActionJournal.values()).filter(entry => {
+      if (entry.harnessName !== namespace) return false;
+      if (entry.sessionId !== sessionId || entry.resourceId !== resourceId) return false;
+      if (threadId !== undefined && entry.threadId !== threadId) return false;
+      if (actionKind !== undefined && entry.actionKind !== actionKind) return false;
+      if (operation !== undefined && entry.operation !== operation) return false;
+      if (policyDecision !== undefined && entry.policyDecision !== policyDecision) return false;
+      if (after !== undefined && compareWorkspaceActionJournalCursor(entry, after) <= 0) return false;
+      return true;
+    });
+    rows.sort(compareWorkspaceActionJournalOrder);
     return rows.slice(0, limit).map(row => cloneJson(row));
   }
 
@@ -2357,6 +2409,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessMessageResultEvidence.clear();
     this.db.harnessOperationTombstones.clear();
     this.db.harnessSessionEvents.clear();
+    this.db.harnessWorkspaceActionJournal.clear();
     this.db.harnessChannelInbox.clear();
     this.db.harnessProviderCallbackBindings.clear();
     this.db.harnessChannelActionTokens.clear();
@@ -2406,6 +2459,10 @@ function sessionEventKey(
   record: Pick<HarnessSessionEventRecord, 'harnessName' | 'sessionId' | 'epoch' | 'sequence'>,
 ): string {
   return `${record.harnessName}\u0000${record.sessionId}\u0000${record.epoch}\u0000${record.sequence}`;
+}
+
+function workspaceActionJournalKey(harnessName: string, sessionId: string, id: string): string {
+  return `${harnessName}\u0000${sessionId}\u0000${id}`;
 }
 
 function channelInboxKey(_harnessName: string, inboxItemId: string): string {
@@ -3411,6 +3468,32 @@ function attachmentSemantic(record: AttachmentRecord): AttachmentSemanticMetadat
     ...(record.metadata ? { metadata: cloneJsonRecord(record.metadata) } : {}),
     ...(record.object ? { object: { ...record.object } } : {}),
   };
+}
+
+function compareWorkspaceActionJournalOrder(a: WorkspaceActionJournalEntry, b: WorkspaceActionJournalEntry): number {
+  return a.createdAt - b.createdAt || compareWorkspaceActionJournalId(a.id, b.id);
+}
+
+function compareWorkspaceActionJournalCursor(
+  entry: WorkspaceActionJournalEntry,
+  cursor: NonNullable<ListWorkspaceActionJournalInput['after']>,
+): number {
+  return entry.createdAt - cursor.createdAt || compareWorkspaceActionJournalId(entry.id, cursor.id);
+}
+
+function compareWorkspaceActionJournalId(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+function assertWorkspaceActionKindMatches(record: WorkspaceActionJournalEntry): void {
+  const action = record.action;
+  if (action && typeof action === 'object' && !Array.isArray(action) && 'kind' in action) {
+    const actionKind = (action as { kind?: unknown }).kind;
+    if (actionKind !== undefined && actionKind !== record.actionKind) {
+      throw new Error(`Workspace action journal kind mismatch: ${String(actionKind)} != ${record.actionKind}`);
+    }
+  }
 }
 
 function cloneJsonRecord(value: Record<string, JsonValue>): Record<string, JsonValue> {

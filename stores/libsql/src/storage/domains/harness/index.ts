@@ -36,6 +36,7 @@ import {
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_WAKEUPS,
+  TABLE_HARNESS_WORKSPACE_ACTIONS,
   TABLE_SCHEMAS,
   getSqlType,
 } from '@mastra/core/storage';
@@ -43,6 +44,7 @@ import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,
   AgentSignalResultStatus,
+  AppendWorkspaceActionJournalEntryResult,
   AttachmentReference,
   AttachmentRecord,
   AttachmentSemanticMetadata,
@@ -67,6 +69,7 @@ import type {
   ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
+  ListWorkspaceActionJournalInput,
   LoadedAttachment,
   JsonValue,
   OperationAdmissionEvidence,
@@ -87,6 +90,7 @@ import type {
   StorageColumn,
   ThreadDeleteFenceLease,
   WithThreadDeleteFenceInput,
+  WorkspaceActionJournalEntry,
   WriteMessageResultEvidenceResult,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -113,6 +117,7 @@ export class HarnessLibSQL extends HarnessStorage {
   #harnessName: string;
   #compactionLocks = new Map<string, Promise<void>>();
   #sessionEventsReady: Promise<void> | undefined;
+  #workspaceActionsReady: Promise<void> | undefined;
   #providerCallbackBindingIndexesReady: Promise<void> | undefined;
   #channelInboxIndexesReady: Promise<void> | undefined;
   #channelActionIndexesReady: Promise<void> | undefined;
@@ -153,6 +158,7 @@ export class HarnessLibSQL extends HarnessStorage {
     });
     await this.#ensureMessageResultsTable();
     await this.#ensureSessionEventsTable();
+    await this.#ensureWorkspaceActionsTable();
     const tombstonesConfig = TABLE_CONFIGS[TABLE_HARNESS_OPERATION_TOMBSTONES];
     await this.#db.createTable({
       tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
@@ -241,6 +247,7 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#ensureMessageResultsTable();
     await this.#ensureOperationTombstonesTable();
     await this.#ensureSessionEventsTable();
+    await this.#ensureWorkspaceActionsTable();
     await this.#ensureThreadDeleteFencesTable();
     await this.#ensureChannelInboxTable();
     await this.#ensureProviderCallbackBindingsTable();
@@ -253,6 +260,7 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSION_EVENTS}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_WORKSPACE_ACTIONS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_INBOX}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}`);
@@ -835,6 +843,7 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#ensureMessageResultsTable();
     await this.#ensureOperationTombstonesTable();
     await this.#ensureSessionEventsTable();
+    await this.#ensureWorkspaceActionsTable();
     const tx = await this.#client.transaction('write');
     const deleteCandidates = new Map<
       string,
@@ -893,6 +902,11 @@ export class HarnessLibSQL extends HarnessStorage {
         });
         await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_SESSION_EVENTS}
+                WHERE harness_name = ? AND session_id = ?`,
+          args: [namespace, sessionId],
+        });
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_WORKSPACE_ACTIONS}
                 WHERE harness_name = ? AND session_id = ?`,
           args: [namespace, sessionId],
         });
@@ -1506,6 +1520,97 @@ export class HarnessLibSQL extends HarnessStorage {
       args: [namespace, sessionId, resourceId, threadId, epoch, afterSequence, limit],
     });
     return result.rows.map(row => rowToSessionEvent(row as Record<string, unknown>));
+  }
+
+  async appendWorkspaceActionJournalEntry(
+    record: WorkspaceActionJournalEntry,
+  ): Promise<AppendWorkspaceActionJournalEntryResult> {
+    assertWorkspaceActionKindMatches(record);
+    const namespace = this.#resolveHarnessName(record.harnessName);
+    await this.#ensureWorkspaceActionsTable();
+    const result = await this.#client.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_WORKSPACE_ACTIONS}
+            (id, harness_name, session_id, resource_id, thread_id, action_kind, operation, action,
+             policy_decision, policy_reasons, matched_rules, path, to_path, cwd, actor, request_id, result, created_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM ${TABLE_HARNESS_SESSIONS}
+              WHERE harness_name = ? AND id = ? AND resource_id = ? AND thread_id = ?
+            )
+            ON CONFLICT(harness_name, session_id, id) DO NOTHING`,
+      args: [
+        record.id,
+        namespace,
+        record.sessionId,
+        record.resourceId,
+        record.threadId,
+        record.actionKind,
+        record.operation ?? null,
+        JSON.stringify(record.action),
+        record.policyDecision,
+        JSON.stringify(record.policyReasons),
+        JSON.stringify(record.matchedRules),
+        record.path === undefined ? null : JSON.stringify(record.path),
+        record.toPath === undefined ? null : JSON.stringify(record.toPath),
+        record.cwd === undefined ? null : JSON.stringify(record.cwd),
+        record.actor === undefined ? null : JSON.stringify(record.actor),
+        record.requestId ?? null,
+        record.result === undefined ? null : JSON.stringify(record.result),
+        record.createdAt,
+        namespace,
+        record.sessionId,
+        record.resourceId,
+        record.threadId,
+      ],
+    });
+    return { created: result.rowsAffected > 0 };
+  }
+
+  async listWorkspaceActionJournalEntries({
+    harnessName,
+    sessionId,
+    resourceId,
+    threadId,
+    actionKind,
+    operation,
+    policyDecision,
+    after,
+    limit,
+  }: ListWorkspaceActionJournalInput): Promise<WorkspaceActionJournalEntry[]> {
+    if (limit <= 0) return [];
+    const namespace = this.#resolveHarnessName(harnessName);
+    await this.#ensureWorkspaceActionsTable();
+    const conditions = ['harness_name = ?', 'session_id = ?', 'resource_id = ?'];
+    const args: (string | number)[] = [namespace, sessionId, resourceId];
+    if (threadId !== undefined) {
+      conditions.push('thread_id = ?');
+      args.push(threadId);
+    }
+    if (actionKind !== undefined) {
+      conditions.push('action_kind = ?');
+      args.push(actionKind);
+    }
+    if (operation !== undefined) {
+      conditions.push('operation = ?');
+      args.push(operation);
+    }
+    if (policyDecision !== undefined) {
+      conditions.push('policy_decision = ?');
+      args.push(policyDecision);
+    }
+    if (after !== undefined) {
+      conditions.push('(created_at > ? OR (created_at = ? AND id > ?))');
+      args.push(after.createdAt, after.createdAt, after.id);
+    }
+    args.push(limit);
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_WORKSPACE_ACTIONS}
+            WHERE ${conditions.join(' AND ')}
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?`,
+      args,
+    });
+    return result.rows.map(row => rowToWorkspaceActionJournalEntry(row as Record<string, unknown>));
   }
 
   async resolveOperationAdmissionEvidence({
@@ -3732,6 +3837,34 @@ export class HarnessLibSQL extends HarnessStorage {
     return this.#sessionEventsReady;
   }
 
+  async #ensureWorkspaceActionsTable(): Promise<void> {
+    if (this.#workspaceActionsReady !== undefined) {
+      return this.#workspaceActionsReady;
+    }
+    this.#workspaceActionsReady = (async () => {
+      const workspaceActionsConfig = TABLE_CONFIGS[TABLE_HARNESS_WORKSPACE_ACTIONS];
+      await this.#db.createTable({
+        tableName: TABLE_HARNESS_WORKSPACE_ACTIONS,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_WORKSPACE_ACTIONS],
+        compositePrimaryKey: workspaceActionsConfig?.compositePrimaryKey,
+      });
+      await this.#client.execute({
+        sql: `CREATE INDEX IF NOT EXISTS idx_harness_workspace_actions_session
+              ON "${TABLE_HARNESS_WORKSPACE_ACTIONS}" ("harness_name", "session_id", "resource_id", "thread_id", "created_at", "id")`,
+        args: [],
+      });
+      await this.#client.execute({
+        sql: `CREATE INDEX IF NOT EXISTS idx_harness_workspace_actions_page
+              ON "${TABLE_HARNESS_WORKSPACE_ACTIONS}" ("harness_name", "session_id", "resource_id", "created_at", "id")`,
+        args: [],
+      });
+    })().catch(error => {
+      this.#workspaceActionsReady = undefined;
+      throw error;
+    });
+    return this.#workspaceActionsReady;
+  }
+
   async #ensureThreadDeleteFencesTable(): Promise<void> {
     const threadDeleteFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_THREAD_DELETE_FENCES];
     await this.#db.createTable({
@@ -4969,6 +5102,41 @@ function rowToSessionEvent(row: Record<string, unknown>): HarnessSessionEventRec
     emittedAt: Number(row.emitted_at),
     storedAt: Number(row.stored_at),
   };
+}
+
+function rowToWorkspaceActionJournalEntry(row: Record<string, unknown>): WorkspaceActionJournalEntry {
+  const entry: WorkspaceActionJournalEntry = {
+    id: String(row.id),
+    harnessName: String(row.harness_name),
+    sessionId: String(row.session_id),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    actionKind: String(row.action_kind) as WorkspaceActionJournalEntry['actionKind'],
+    ...(row.operation == null ? {} : { operation: String(row.operation) }),
+    action: parseJson(row.action) as JsonValue,
+    policyDecision: String(row.policy_decision) as WorkspaceActionJournalEntry['policyDecision'],
+    policyReasons: (parseJson(row.policy_reasons) ?? []) as string[],
+    matchedRules: (parseJson(row.matched_rules) ?? []) as JsonValue[],
+    ...(row.path == null ? {} : { path: parseJson(row.path) as WorkspaceActionJournalEntry['path'] }),
+    ...(row.to_path == null ? {} : { toPath: parseJson(row.to_path) as WorkspaceActionJournalEntry['toPath'] }),
+    ...(row.cwd == null ? {} : { cwd: parseJson(row.cwd) as WorkspaceActionJournalEntry['cwd'] }),
+    ...(row.actor == null ? {} : { actor: parseJson(row.actor) as JsonValue }),
+    ...(row.request_id == null ? {} : { requestId: String(row.request_id) }),
+    ...(row.result == null ? {} : { result: parseJson(row.result) as JsonValue }),
+    createdAt: Number(row.created_at),
+  };
+  assertWorkspaceActionKindMatches(entry);
+  return entry;
+}
+
+function assertWorkspaceActionKindMatches(record: WorkspaceActionJournalEntry): void {
+  const action = record.action;
+  if (action && typeof action === 'object' && !Array.isArray(action) && 'kind' in action) {
+    const actionKind = (action as { kind?: unknown }).kind;
+    if (actionKind !== undefined && actionKind !== record.actionKind) {
+      throw new Error(`Workspace action journal kind mismatch: ${String(actionKind)} != ${record.actionKind}`);
+    }
+  }
 }
 
 function rowToMessageResultEvidence(row: Record<string, unknown>): AgentSignalResultEvidence {

@@ -16,6 +16,7 @@ import {
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_WAKEUPS,
+  TABLE_HARNESS_WORKSPACE_ACTIONS,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageChannelActionClaimConflictError,
@@ -39,6 +40,7 @@ import type {
   HarnessProviderCallbackBinding,
   HarnessWakeupItem,
   SessionRecord,
+  WorkspaceActionJournalEntry,
   HarnessStorageParentSessionUnavailableError,
 } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -544,6 +546,92 @@ describe('HarnessLibSQL active session admission', () => {
         threadId: 'thread-1',
       }),
     ).resolves.toBeNull();
+  });
+
+  it('appends and pages workspace action journal rows by session/resource', async () => {
+    await storage.saveSession(sampleSession(), { ownerId: 'h-1', ifVersion: 0 });
+    await storage.saveSession(sampleSession({ id: 'other-session', resourceId: 'other-resource' }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await storage.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'b', createdAt: 1000 }));
+    await storage.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'a', createdAt: 1000 }));
+    await storage.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'c', createdAt: 1100 }));
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'other-resource-entry',
+        sessionId: 'other-session',
+        resourceId: 'other-resource',
+      }),
+    );
+
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        limit: 2,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'a', actionKind: 'file', path: expect.objectContaining({ rootId: 'project' }) }),
+      expect.objectContaining({ id: 'b', actionKind: 'file' }),
+    ]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        after: { createdAt: 1000, id: 'b' },
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'c' })]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        limit: -1,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('ignores duplicate or mismatched workspace action journal appends and deletes rows with the session', async () => {
+    await storage.saveSession(sampleSession({ closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'entry-1' })),
+    ).resolves.toEqual({ created: true });
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'entry-1', result: { status: 'changed' } }),
+      ),
+    ).resolves.toEqual({ created: false });
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'wrong-resource', resourceId: 'other-resource' }),
+      ),
+    ).resolves.toEqual({ created: false });
+
+    await expect(
+      storage.listWorkspaceActionJournalEntries({ sessionId: 'session-1', resourceId: 'resource-1', limit: 10 }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'entry-1', result: { status: 'ok' } })]);
+
+    const closed = await storage.loadSession({ sessionId: 'session-1' });
+    if (!closed) throw new Error('expected closed session');
+    await storage.deleteSession({
+      sessionId: 'session-1',
+      ifVersion: closed.version,
+      expectedResourceId: closed.resourceId,
+      expectedThreadId: closed.threadId,
+      expectedParentSessionId: closed.parentSessionId ?? null,
+      expectedCreatedAt: closed.createdAt,
+      requireClosed: true,
+    });
+
+    await expect(
+      storage.listWorkspaceActionJournalEntries({ sessionId: 'session-1', resourceId: 'resource-1', limit: 10 }),
+    ).resolves.toEqual([]);
   });
 
   it('lists sessions by exact resource/thread and can include closed records', async () => {
@@ -2943,6 +3031,35 @@ function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
     createdAt: 1000,
     lastActivityAt: 1000,
     version: 0,
+    ...overrides,
+  };
+}
+
+function sampleWorkspaceActionJournalEntry(
+  overrides: Partial<WorkspaceActionJournalEntry> = {},
+): WorkspaceActionJournalEntry {
+  return {
+    id: 'workspace-action-1',
+    harnessName: 'default',
+    sessionId: 'session-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    actionKind: 'file',
+    operation: 'write',
+    action: { kind: 'file', operation: 'write', path: 'notes.md' },
+    policyDecision: 'ask',
+    policyReasons: ['workspace.default_ask'],
+    matchedRules: [],
+    path: {
+      rootId: 'project',
+      rootPath: '/workspace',
+      path: '/workspace/notes.md',
+      relativePath: 'notes.md',
+    },
+    actor: { type: 'user', id: 'user-1' },
+    requestId: 'request-1',
+    result: { status: 'ok' },
+    createdAt: 1000,
     ...overrides,
   };
 }

@@ -6,7 +6,9 @@ import {
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageThreadDeleteFenceConflictError,
   TABLE_HARNESS_SESSION_EVENTS,
+  TABLE_HARNESS_WORKSPACE_ACTIONS,
 } from '@mastra/core/storage';
+import type { WorkspaceActionJournalEntry } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { exportSchemas, HarnessPG, PostgresStore } from '../..';
@@ -38,8 +40,11 @@ describe('HarnessPG', () => {
     expect(ddl).toContain('mastra_harness_channel_inbox');
     expect(ddl).toContain('mastra_harness_wakeups');
     expect(ddl).toContain(TABLE_HARNESS_SESSION_EVENTS);
+    expect(ddl).toContain(TABLE_HARNESS_WORKSPACE_ACTIONS);
     expect(ddl).toContain('idx_harness_sessions_active_key');
     expect(ddl).toContain('idx_harness_session_events_replay');
+    expect(ddl).toContain('idx_harness_workspace_actions_page');
+    expect(ddl).toContain('idx_harness_workspace_actions_session');
     expect(ddl).toContain('idx_harness_channel_outbox_idempotency');
 
     const indexes = await store.db.manyOrNone<{ indexname: string }>(
@@ -54,6 +59,8 @@ describe('HarnessPG', () => {
           'idx_harness_channel_outbox_idempotency',
           'idx_harness_session_events_replay',
           'idx_harness_wakeups_idempotency',
+          'idx_harness_workspace_actions_page',
+          'idx_harness_workspace_actions_session',
         ],
       ],
     );
@@ -63,6 +70,8 @@ describe('HarnessPG', () => {
       'idx_harness_session_events_replay',
       'idx_harness_sessions_active_key',
       'idx_harness_wakeups_idempotency',
+      'idx_harness_workspace_actions_page',
+      'idx_harness_workspace_actions_session',
     ]);
   });
 
@@ -236,6 +245,98 @@ describe('HarnessPG', () => {
       renderer: { id: 'citation-card', version: '2' },
       metadata: { doi: '10.1234/example' },
     });
+  });
+
+  it('appends and pages workspace action journal rows by session/resource', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+    await harness!.saveSession(createSampleSessionRecord({ id: 'other-session', resourceId: 'other-resource' }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'b', createdAt: 1000 }));
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'a', createdAt: 1000 }));
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'c', createdAt: 1100 }));
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'other-resource-entry',
+        sessionId: 'other-session',
+        resourceId: 'other-resource',
+      }),
+    );
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        limit: 2,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'a', actionKind: 'file', path: expect.objectContaining({ rootId: 'project' }) }),
+      expect.objectContaining({ id: 'b', actionKind: 'file' }),
+    ]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        after: { createdAt: 1000, id: 'b' },
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'c' })]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        limit: -1,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('ignores duplicate or mismatched workspace action journal appends and deletes rows with the session', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord({ closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'entry-1' })),
+    ).resolves.toEqual({ created: true });
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'entry-1', result: { status: 'changed' } }),
+      ),
+    ).resolves.toEqual({ created: false });
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'wrong-resource', resourceId: 'other-resource' }),
+      ),
+    ).resolves.toEqual({ created: false });
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({ sessionId: 'session-1', resourceId: 'resource-1', limit: 10 }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'entry-1', result: { status: 'ok' } })]);
+
+    const closed = await harness!.loadSession({ sessionId: 'session-1' });
+    if (!closed) throw new Error('expected closed session');
+    await harness!.deleteSession({
+      sessionId: 'session-1',
+      ifVersion: closed.version,
+      expectedResourceId: closed.resourceId,
+      expectedThreadId: closed.threadId,
+      expectedParentSessionId: closed.parentSessionId ?? null,
+      expectedCreatedAt: closed.createdAt,
+      requireClosed: true,
+    });
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({ sessionId: 'session-1', resourceId: 'resource-1', limit: 10 }),
+    ).resolves.toEqual([]);
   });
 
   it('keeps §15 attachment-reference admission atomic and delete-guarded', async () => {
@@ -545,3 +646,32 @@ describe('HarnessPG', () => {
     ).resolves.toEqual({ inbox: [], actionTokens: [], actionReceipts: [], outbox: [] });
   });
 });
+
+function sampleWorkspaceActionJournalEntry(
+  overrides: Partial<WorkspaceActionJournalEntry> = {},
+): WorkspaceActionJournalEntry {
+  return {
+    id: 'workspace-action-1',
+    harnessName: 'default',
+    sessionId: 'session-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    actionKind: 'file',
+    operation: 'write',
+    action: { kind: 'file', operation: 'write', path: 'notes.md' },
+    policyDecision: 'ask',
+    policyReasons: ['workspace.default_ask'],
+    matchedRules: [],
+    path: {
+      rootId: 'project',
+      rootPath: '/workspace',
+      path: '/workspace/notes.md',
+      relativePath: 'notes.md',
+    },
+    actor: { type: 'user', id: 'user-1' },
+    requestId: 'request-1',
+    result: { status: 'ok' },
+    createdAt: 1000,
+    ...overrides,
+  };
+}
