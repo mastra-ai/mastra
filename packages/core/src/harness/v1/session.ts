@@ -1,12 +1,37 @@
+import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
+
+import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
+import { createSignal } from '../../agent/signals';
+import type { ToolsInput } from '../../agent/types';
+import { RequestContext } from '../../request-context';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
-import { HarnessSessionClosedError, HarnessValidationError } from './errors';
+import {
+  HarnessConfigError,
+  HarnessOverrideConflictError,
+  HarnessSessionClosedError,
+  HarnessValidationError,
+} from './errors';
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe, EmitInput } from './events';
 import type { Harness } from './harness';
 import type { HarnessMessage, HarnessMode } from './shared';
-import type { ListMessagesOptions, ModelAuthStatus, SessionLifecycleState, TokenUsage } from './types';
+import type {
+  AgentResult,
+  AgentStream,
+  AttachmentRef,
+  ListMessagesOptions,
+  MessageOptions,
+  MessageOptionsDefault,
+  MessageOptionsStream,
+  MessageOptionsStructured,
+  ModelAuthStatus,
+  SessionLifecycleState,
+  TokenUsage,
+} from './types';
 
 export interface SessionConstructorOptions {
   harness: Harness;
@@ -39,6 +64,7 @@ export class Session {
   private currentTraceId?: string;
   private draining = false;
   private readonly idleWaiters = new Set<IdleWaiter>();
+  private readonly activeToolNames = new Map<string, string>();
 
   constructor(opts: SessionConstructorOptions) {
     this.harness = opts.harness;
@@ -189,6 +215,83 @@ export class Session {
 
   getCurrentTraceId(): string | null {
     return this.currentTraceId ?? null;
+  }
+
+  async message(opts: MessageOptionsDefault): Promise<AgentResult>;
+  async message(opts: MessageOptionsStream): Promise<AgentStream>;
+  async message<S extends z.ZodTypeAny>(opts: MessageOptionsStructured<S>): Promise<z.infer<S>>;
+  async message(opts: MessageOptions): Promise<AgentResult | AgentStream | unknown> {
+    this.assertLive('message()');
+    this.assertCanStartTurn('message()');
+
+    if (typeof opts.content !== 'string' || opts.content.length === 0) {
+      throw new HarnessValidationError('message().content', 'content must be a non-empty string');
+    }
+    if (opts.stream === true && opts.output !== undefined) {
+      throw new HarnessConfigError('message()', '`stream: true` and `output` are mutually exclusive');
+    }
+    if (opts.output !== undefined && opts.sync !== true) {
+      throw new HarnessConfigError('message()', 'structured `output` requires `sync: true`');
+    }
+
+    const effectiveModeId = opts.mode ?? this.record.modeId;
+    const effectiveModelId = opts.model ?? this.record.modelId;
+    const mode = this.harness._getMode(effectiveModeId);
+    const agent = this.harness.getAgentForMode(effectiveModeId);
+    const toolsets = this.buildToolsets(mode, opts.additionalTools);
+    const turnAbortController = this.beginTurn(opts.abortSignal);
+
+    try {
+      const requestContext = this.buildRequestContext({
+        modeId: effectiveModeId,
+        abortSignal: turnAbortController.signal,
+      });
+      const execOptions: AgentExecutionOptionsBase<unknown> = {
+        memory: { thread: this.threadId, resource: this.resourceId },
+        abortSignal: turnAbortController.signal,
+        requestContext,
+        ...(effectiveModelId ? { model: effectiveModelId as never } : {}),
+        ...(toolsets ? { toolsets } : {}),
+        ...(mode.instructions ? { instructions: mode.instructions } : {}),
+      };
+
+      if (opts.output !== undefined && opts.sync === true) {
+        this._emit({ type: 'agent_start' });
+        const full = (await agent.generate(opts.content, {
+          ...execOptions,
+          structuredOutput: { schema: opts.output as never },
+        } as never)) as FullOutput<unknown>;
+        await this.recordTurnCompletion(full);
+        this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+        return full.object;
+      }
+
+      const signalContents = await this.buildSignalContents(opts.content, opts.attachments ?? []);
+      const signal = createSignal({ type: 'user-message', contents: signalContents });
+      this._emit({ type: 'agent_start' });
+      const output = (await agent.stream(signal, execOptions as never)) as MastraModelOutput<unknown>;
+      this.currentRunId = output.runId;
+
+      if (opts.stream === true) {
+        void this.finalizeStreamedTurn(output).finally(() => this.endTurn(turnAbortController));
+        return output as AgentStream;
+      }
+
+      const streamDrain = this.consumeAgentStream(output);
+      void streamDrain.catch(() => undefined);
+      try {
+        const full = (await output.getFullOutput()) as FullOutput<unknown>;
+        await streamDrain;
+        await this.recordTurnCompletion(full);
+        this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+        return full as AgentResult;
+      } finally {
+        this.endTurn(turnAbortController);
+      }
+    } catch (err) {
+      this.endTurn(turnAbortController);
+      throw err;
+    }
   }
 
   waitForIdle(opts?: { timeoutMs?: number }): Promise<void> {
@@ -428,6 +531,229 @@ export class Session {
     }
     void method;
   }
+
+  private assertCanStartTurn(method: string): void {
+    if (!this.isRunning()) return;
+    throw new HarnessOverrideConflictError(
+      this.id,
+      'mode',
+      `${method} cannot start while another message turn is active`,
+    );
+  }
+
+  private beginTurn(callerSignal: AbortSignal | undefined): AbortController {
+    const controller = new AbortController();
+    this.currentTurnAbortController = controller;
+    this.currentRunId = undefined;
+    this.currentTraceId = undefined;
+    this.activeToolNames.clear();
+
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        controller.abort((callerSignal as { reason?: unknown }).reason ?? 'aborted');
+      } else {
+        callerSignal.addEventListener(
+          'abort',
+          () => controller.abort((callerSignal as { reason?: unknown }).reason ?? 'aborted'),
+          { once: true },
+        );
+      }
+    }
+
+    return controller;
+  }
+
+  private endTurn(controller: AbortController): void {
+    if (this.currentTurnAbortController === controller) {
+      this.currentTurnAbortController = undefined;
+      this.currentQueuedItemId = undefined;
+      this.activeToolNames.clear();
+      this.notifyMaybeIdle();
+    }
+  }
+
+  private buildRequestContext(opts: { modeId: string; abortSignal: AbortSignal }): RequestContext {
+    const session = this;
+    const stateSnapshot = cloneJsonLike((this.record.state ?? {}) as unknown);
+    const requestContext = new RequestContext();
+    requestContext.set('harness', {
+      harnessId: this.harness.ownerId,
+      sessionId: this.id,
+      requestId: `req-${randomUUID()}`,
+      threadId: this.threadId,
+      resourceId: this.resourceId,
+      modeId: opts.modeId,
+      state: stateSnapshot,
+      getState: () => cloneJsonLike((session.record.state ?? {}) as unknown),
+      setState: (updatesOrUpdater: unknown) =>
+        session.setState(updatesOrUpdater as Partial<unknown> | ((prev: unknown) => unknown)),
+      abortSignal: opts.abortSignal,
+      registerQuestion: () => {
+        throw new HarnessConfigError('requestContext.registerQuestion', 'pending question support is not enabled yet');
+      },
+      registerPlanApproval: () => {
+        throw new HarnessConfigError(
+          'requestContext.registerPlanApproval',
+          'pending plan approval support is not enabled yet',
+        );
+      },
+      subagentDepth: this.record.subagentDepth ?? 0,
+      source: (this.record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      parentSessionId: this.record.parentSessionId,
+      getSubagentModel: (params?: { agentType?: string }) =>
+        params?.agentType ? (this.record.subagentModelOverrides?.[params.agentType] ?? null) : null,
+      useSkill: async () => {
+        throw new HarnessConfigError('requestContext.useSkill', 'skill execution support is not enabled yet');
+      },
+    });
+    return requestContext;
+  }
+
+  private buildToolsets(mode: HarnessMode, callAdditional?: ToolsInput): Record<string, ToolsInput> | undefined {
+    const toolsets: Record<string, ToolsInput> = {};
+    if (mode.tools) toolsets[`mode:${mode.id}`] = mode.tools;
+    if (mode.additionalTools) toolsets[`mode:${mode.id}:add`] = mode.additionalTools;
+    if (callAdditional) toolsets['call:additional'] = callAdditional;
+    return Object.keys(toolsets).length === 0 ? undefined : toolsets;
+  }
+
+  private async buildSignalContents(content: string, attachments: AttachmentRef[]) {
+    if (attachments.length === 0) return content;
+
+    const parts: Array<
+      { type: 'text'; text: string } | { type: 'file'; data: Uint8Array; mediaType: string; filename?: string }
+    > = [{ type: 'text', text: content }];
+    for (let i = 0; i < attachments.length; i += 1) {
+      const attachment = attachments[i]!;
+      if (!attachment.attachmentId) {
+        throw new HarnessValidationError(`message().attachments[${i}].attachmentId`, 'attachmentId is required');
+      }
+      if (attachment.ownerSessionId !== undefined && attachment.ownerSessionId !== this.id) {
+        throw new HarnessValidationError(
+          `message().attachments[${i}].ownerSessionId`,
+          'attachment must belong to this session',
+        );
+      }
+      const loaded = await this.storage.loadAttachment({
+        sessionId: attachment.ownerSessionId ?? this.id,
+        attachmentId: attachment.attachmentId,
+      });
+      if (!loaded) {
+        throw new HarnessValidationError(`message().attachments[${i}].attachmentId`, 'attachment was not found');
+      }
+      if (attachment.bytes !== undefined && attachment.bytes !== loaded.bytes) {
+        throw new HarnessValidationError(
+          `message().attachments[${i}].bytes`,
+          'attachment byte count does not match storage',
+        );
+      }
+      if (attachment.sha256 !== undefined && attachment.sha256 !== loaded.sha256) {
+        throw new HarnessValidationError(
+          `message().attachments[${i}].sha256`,
+          'attachment digest does not match storage',
+        );
+      }
+      parts.push({
+        type: 'file',
+        data: loaded.data,
+        mediaType: loaded.mimeType,
+        filename: loaded.name,
+      });
+    }
+    return parts;
+  }
+
+  private async consumeAgentStream(output: MastraModelOutput<unknown>): Promise<void> {
+    for await (const chunk of output.fullStream as AsyncIterable<unknown>) {
+      this.emitChunkEvent(chunk);
+    }
+  }
+
+  private emitChunkEvent(chunk: unknown): void {
+    if (!chunk || typeof chunk !== 'object') return;
+    const record = chunk as Record<string, unknown>;
+    const payload = (record.payload && typeof record.payload === 'object' ? record.payload : record) as Record<
+      string,
+      unknown
+    >;
+
+    if (typeof record.runId === 'string') this.currentRunId = record.runId;
+
+    switch (record.type) {
+      case 'text-start': {
+        const messageId = stringField(payload, 'id') ?? stringField(payload, 'messageId');
+        if (messageId) this._emit({ type: 'message_start', messageId });
+        break;
+      }
+      case 'text-delta': {
+        const messageId = stringField(payload, 'id') ?? stringField(payload, 'messageId');
+        const delta = stringField(payload, 'text') ?? stringField(payload, 'delta');
+        if (messageId && delta !== undefined) this._emit({ type: 'message_update', messageId, delta });
+        break;
+      }
+      case 'text-end': {
+        const messageId = stringField(payload, 'id') ?? stringField(payload, 'messageId');
+        if (messageId) this._emit({ type: 'message_end', messageId });
+        break;
+      }
+      case 'tool-call': {
+        const toolCallId = stringField(payload, 'toolCallId');
+        const toolName = stringField(payload, 'toolName');
+        if (toolCallId && toolName) {
+          this.activeToolNames.set(toolCallId, toolName);
+          this._emit({ type: 'tool_start', toolCallId, toolName, args: payload.args });
+        }
+        break;
+      }
+      case 'tool-result':
+      case 'tool-error': {
+        const toolCallId = stringField(payload, 'toolCallId');
+        if (toolCallId) {
+          const isError = record.type === 'tool-error';
+          this._emit({
+            type: 'tool_end',
+            toolCallId,
+            result: isError ? projectErrorLike(payload.error) : payload.result,
+            isError,
+          });
+        }
+        break;
+      }
+      case 'data-task-updated': {
+        const data = (record.data && typeof record.data === 'object' ? record.data : undefined) as
+          | { tasks?: unknown }
+          | undefined;
+        if (Array.isArray(data?.tasks)) this._emit({ type: 'task_updated', tasks: data.tasks as never });
+        break;
+      }
+    }
+  }
+
+  private async finalizeStreamedTurn(output: MastraModelOutput<unknown>): Promise<void> {
+    try {
+      const full = (await output.getFullOutput()) as FullOutput<unknown>;
+      await this.recordTurnCompletion(full);
+      this._emit({ type: 'agent_end', reason: agentEndReason(full), runId: full.runId });
+    } catch {
+      this._emit({ type: 'agent_end', reason: 'error', runId: output.runId });
+    }
+  }
+
+  private async recordTurnCompletion(full: FullOutput<unknown>): Promise<void> {
+    if (full.runId) this.currentRunId = full.runId;
+    if (typeof (full as { traceId?: unknown }).traceId === 'string') {
+      this.currentTraceId = (full as { traceId: string }).traceId;
+    }
+    const usage = extractUsage(full);
+    await this.flushUpdate(prev => ({
+      ...prev,
+      tokenUsage: {
+        promptTokens: prev.tokenUsage.promptTokens + usage.promptTokens,
+        completionTokens: prev.tokenUsage.completionTokens + usage.completionTokens,
+        totalTokens: prev.tokenUsage.totalTokens + usage.totalTokens,
+      },
+    }));
+  }
 }
 
 function assertAgentType(method: string, value: unknown): asserts value is string {
@@ -440,6 +766,43 @@ function assertModelId(method: string, value: unknown): asserts value is string 
   if (typeof value !== 'string' || value.length === 0) {
     throw new HarnessValidationError(method, 'model must be a non-empty string');
   }
+}
+
+function agentEndReason(full: FullOutput<unknown>): 'complete' | 'aborted' | 'error' | 'suspended' {
+  if (full.finishReason === 'suspended') return 'suspended';
+  if (full.finishReason === 'aborted') return 'aborted';
+  if (full.finishReason === 'error' || full.error) return 'error';
+  return 'complete';
+}
+
+function extractUsage(full: FullOutput<unknown>): TokenUsage {
+  const raw = (full as { totalUsage?: unknown; usage?: unknown }).totalUsage ?? (full as { usage?: unknown }).usage;
+  if (!raw || typeof raw !== 'object') return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  const usage = raw as Record<string, unknown>;
+  const promptTokens = numberField(usage, 'inputTokens') ?? numberField(usage, 'promptTokens') ?? 0;
+  const completionTokens = numberField(usage, 'outputTokens') ?? numberField(usage, 'completionTokens') ?? 0;
+  const totalTokens = numberField(usage, 'totalTokens') ?? promptTokens + completionTokens;
+  return { promptTokens, completionTokens, totalTokens };
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function numberField(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function projectErrorLike(value: unknown): { name: string; message: string } | unknown {
+  if (value instanceof Error) return { name: value.name, message: value.message };
+  return value;
+}
+
+function cloneJsonLike<T>(value: T): T {
+  if (value === undefined) return value;
+  return structuredClone(value);
 }
 
 function diffStateKeys(prev: unknown, next: unknown): string[] {
