@@ -164,12 +164,11 @@ export default function Workspace() {
   // None of these operations require sandbox - all are done via GitHub API + filesystem
   const canManageSkills = hasFilesystem && !isReadOnly;
 
-  // Derive writable mounts and mount paths for CompositeFilesystem
+  // Derive writable mounts for CompositeFilesystem
   const mounts = workspaceInfo?.mounts;
   const writableMounts = mounts
     ?.filter(m => !m.readOnly)
     .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
-  const mountPaths = mounts && mounts.length > 1 ? mounts.map(m => m.path) : undefined;
 
   // Skills.sh handlers
   const handleInstallSkill = useCallback(
@@ -555,7 +554,6 @@ export default function Workspace() {
                   onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
                   updatingSkillName={updatingSkillName ?? undefined}
                   removingSkillName={removingSkillName ?? undefined}
-                  mountPaths={mountPaths}
                 />
               </TabContent>
             )}

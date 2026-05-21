@@ -1,4 +1,14 @@
-import { DataListCell, DataListTextCell, DataListNameCell, DataListDescriptionCell } from './data-list-cells';
+import {
+  DataListCell,
+  DataListTextCell,
+  DataListNameCell,
+  DataListDescriptionCell,
+  DataListIdCell,
+  DataListSelectCell,
+  DataListMonoCell,
+  DataListDateCell,
+  DataListTimeCell,
+} from './data-list-cells';
 import { DataListNextPageLoading } from './data-list-next-page-loading';
 import { DataListNoMatch } from './data-list-no-match';
 import { DataListPagination } from './data-list-pagination';
@@ -10,10 +20,17 @@ import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
 import { DataListTop } from './data-list-top';
-import { DataListTopCell, DataListTopCellWithTooltip, DataListTopCellSmart } from './data-list-top-cell';
+import {
+  DataListTopCell,
+  DataListTopCellWithTooltip,
+  DataListTopCellSmart,
+  DataListTopSelectCell,
+} from './data-list-top-cell';
+import { DataListTopCells } from './data-list-top-cells';
 
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,
+  TopCells: DataListTopCells,
   TopCell: DataListTopCell,
   TopCellWithTooltip: DataListTopCellWithTooltip,
   TopCellSmart: DataListTopCellSmart,
@@ -24,6 +41,12 @@ export const DataList = Object.assign(DataListRoot, {
   TextCell: DataListTextCell,
   NameCell: DataListNameCell,
   DescriptionCell: DataListDescriptionCell,
+  IdCell: DataListIdCell,
+  MonoCell: DataListMonoCell,
+  DateCell: DataListDateCell,
+  TimeCell: DataListTimeCell,
+  SelectCell: DataListSelectCell,
+  TopSelectCell: DataListTopSelectCell,
   NoMatch: DataListNoMatch,
   Subheader: DataListSubheader,
   SubHeading: DataListSubHeading,
