@@ -507,11 +507,12 @@ export const useChat = ({
     onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
 
     try {
+      const signalContents = getSignalContents(coreUserMessages);
       await agent.sendSignal({
         signal: {
           id: resolvedSignalId,
           type: 'user-message',
-          contents: getSignalContents(coreUserMessages),
+          contents: signalContents as unknown as Parameters<typeof agent.sendSignal>[0]['signal']['contents'],
         },
         resourceId: resourceId || agentId,
         threadId,

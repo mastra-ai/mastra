@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
+import type { HarnessRouteAuthConfig } from '../../auth/helpers';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import type { AGENT_BUILDER_ROUTES } from './agent-builder';
@@ -16,6 +17,7 @@ import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
+import { HARNESS_ROUTES } from './harness';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -54,6 +56,12 @@ export type ServerContext = {
   abortSignal: AbortSignal;
   /** The route prefix configured for the server (e.g., '/api') */
   routePrefix?: string;
+  /** Adapter-normalized request header lookup. */
+  getHeader?: (name: string) => string | undefined;
+  /** Adapter-validated request body before body fields are flattened into handler params. */
+  requestBody?: unknown;
+  /** Adapter-validated path params before body fields are flattened into handler params. */
+  requestPathParams?: Record<string, unknown>;
 };
 
 /**
@@ -152,6 +160,7 @@ export type ServerRoute<
    * fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_EXECUTE }
    */
   fga?: FGARouteConfig;
+  harnessAuth?: HarnessRouteAuthConfig;
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;
@@ -174,6 +183,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
+  ...HARNESS_ROUTES,
   ...STORED_AGENTS_ROUTES,
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_PROMPT_BLOCKS_ROUTES,
@@ -212,6 +222,7 @@ export type ServerRoutes = readonly [
   ...typeof WORKSPACE_ROUTES,
   ...typeof LEGACY_ROUTES,
   ...typeof MCP_ROUTES,
+  ...typeof HARNESS_ROUTES,
   ...StoredAgentRoutes,
   ...typeof STORED_MCP_CLIENTS_ROUTES,
   ...typeof STORED_PROMPT_BLOCKS_ROUTES,

@@ -3131,6 +3131,300 @@ export const API_ROUTE_METADATA = {
       "listProperty": "contents"
     }
   },
+  "GET /harness/:name/sessions": {
+    "method": "GET",
+    "path": "/harness/:name/sessions",
+    "pathParams": [
+      "name"
+    ],
+    "queryParams": [
+      "cursor",
+      "includeClosed",
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions": {
+    "method": "POST",
+    "path": "/harness/:name/sessions",
+    "pathParams": [
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "modeId",
+      "modelId",
+      "origin",
+      "parentSessionId",
+      "sessionId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId/channel-diagnostics": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/channel-diagnostics",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions/:sessionId/attachments": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/attachments",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "contentType",
+      "data",
+      "dataBase64",
+      "elementType",
+      "file",
+      "filename",
+      "kind",
+      "metadata",
+      "mimeType",
+      "name",
+      "payload",
+      "primitiveType",
+      "renderer",
+      "schemaId",
+      "value"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions/:sessionId/messages": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/messages",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "admissionId",
+      "attachments",
+      "content",
+      "files",
+      "mode",
+      "model"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions/:sessionId/queue": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/queue",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "admissionId",
+      "attachments",
+      "content",
+      "files",
+      "mode",
+      "model",
+      "yolo"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId/message-results/:signalId": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/message-results/:signalId",
+    "pathParams": [
+      "name",
+      "sessionId",
+      "signalId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/queue/:queuedItemId/result",
+    "pathParams": [
+      "name",
+      "sessionId",
+      "queuedItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /harness/:name/sessions/:sessionId/mode": {
+    "method": "PATCH",
+    "path": "/harness/:name/sessions/:sessionId/mode",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "mode"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /harness/:name/sessions/:sessionId/model": {
+    "method": "PATCH",
+    "path": "/harness/:name/sessions/:sessionId/model",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "model"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /harness/:name/sessions/:sessionId/permissions": {
+    "method": "PATCH",
+    "path": "/harness/:name/sessions/:sessionId/permissions",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions/:sessionId/inbox/:itemId": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/inbox/:itemId",
+    "pathParams": [
+      "name",
+      "sessionId",
+      "itemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /harness/:name/sessions/:sessionId/goal": {
+    "method": "PUT",
+    "path": "/harness/:name/sessions/:sessionId/goal",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "judgeModel",
+      "kickoff",
+      "maxTurns",
+      "objective"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId/goal": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/goal",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions/:sessionId/goal/pause": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/goal/pause",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:name/sessions/:sessionId/goal/resume": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/goal/resume",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents": {
     "method": "GET",
     "path": "/stored/agents",

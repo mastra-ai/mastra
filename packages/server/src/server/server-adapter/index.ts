@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
@@ -9,7 +11,14 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware } from '../auth/helpers';
+import {
+  allowsHarnessSseSubscriptionToken,
+  coreAuthMiddleware,
+  findBearerEquivalentHarnessQueryParam,
+  HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM,
+  hasHarnessSseSubscriptionToken,
+  isHarnessClientRoute,
+} from '../auth/helpers';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
@@ -98,6 +107,59 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+const SENSITIVE_QUERY_PARAMS = new Set([
+  HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM.toLowerCase(),
+  'access_token',
+  'accesstoken',
+  'apikey',
+  'authorization',
+  'authtoken',
+  'bearer',
+  'token',
+]);
+
+function normalizeSensitiveQueryParamKey(key: string): string {
+  return key.toLowerCase().split('[')[0]?.split('.')[0] ?? key.toLowerCase();
+}
+
+export function redactSensitiveQueryParams<T extends Record<string, unknown>>(queryParams: T): T {
+  const redacted: Record<string, unknown> = { ...queryParams };
+
+  for (const key of Object.keys(redacted)) {
+    const normalizedKey = key.toLowerCase();
+    const baseKey = normalizeSensitiveQueryParamKey(key);
+    if (SENSITIVE_QUERY_PARAMS.has(normalizedKey) || SENSITIVE_QUERY_PARAMS.has(baseKey)) {
+      redacted[key] = '[REDACTED]';
+    }
+  }
+
+  return redacted as T;
+}
+
+function isAbortSignalError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code, name } = error as { code?: string; name?: string };
+  return name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function isExpectedResponseCloseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code } = error as { code?: string };
+  return (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === 'ERR_STREAM_DESTROYED' ||
+    code === 'ERR_STREAM_WRITE_AFTER_END' ||
+    code === 'ERR_STREAM_PREMATURE_CLOSE'
+  );
+}
+
+function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
+  return Boolean(response.writableEnded || response.destroyed);
 }
 
 function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
@@ -449,22 +511,56 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     const authConfig = this.mastra.getServer()?.auth;
+    const harnessClientRoute = isHarnessClientRoute(route);
 
-    // No auth config means no auth required
+    if (harnessClientRoute) {
+      const queryCredential = findBearerEquivalentHarnessQueryParam(context.getQuery);
+      if (queryCredential) {
+        return {
+          status: 400,
+          error: `Bearer-equivalent query credentials are not accepted on Harness routes: ${queryCredential}`,
+        };
+      }
+
+      if (hasHarnessSseSubscriptionToken(route, context.getQuery) && !allowsHarnessSseSubscriptionToken(route)) {
+        return {
+          status: 400,
+          error: 'Scoped Harness SSE subscription tokens are only accepted on the session events route',
+        };
+      }
+
+      if (route.requiresAuth === false) {
+        return {
+          status: 500,
+          error: 'Harness routes require authentication',
+        };
+      }
+
+      if (!authConfig) {
+        return {
+          status: 500,
+          error: 'Harness routes require server auth configuration',
+        };
+      }
+    }
+
+    // No auth config means no auth required for legacy/non-Harness routes.
     if (!authConfig) {
       return null;
     }
 
-    // Check route-level requiresAuth flag first (explicit per-route setting)
-    // This opt-out is route-specific and not available in the global middleware
+    // Check route-level requiresAuth flag first (explicit per-route setting).
+    // This opt-out is route-specific and not available in the global middleware.
     if (route.requiresAuth === false) {
       return null;
     }
 
-    // Extract token from headers/query
+    // Extract token from headers/query. Harness routes intentionally skip the
+    // legacy apiKey query fallback; scoped SSE tokens stay in the raw request
+    // for route-scoped auth providers and are never forwarded as auth context.
     const authHeader = context.getHeader('authorization');
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
-    if (!token) {
+    if (!token && !harnessClientRoute) {
       token = context.getQuery('apiKey') || null;
     }
 
@@ -479,6 +575,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       requestContext: context.requestContext,
       rawRequest: context.request,
       token,
+      forceAuth: harnessClientRoute,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
       requiresAuth: route.requiresAuth,
     });
@@ -778,6 +875,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     headers: Record<string, string | string[] | undefined>,
     body: unknown,
     requestContext?: RequestContext,
+    signal?: AbortSignal,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -790,7 +888,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         });
     }
 
-    const init: RequestInit = { method, headers: fetchHeaders };
+    const init: RequestInit = { method, headers: fetchHeaders, signal };
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
@@ -824,7 +922,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       writeHead(status: number, headers: Record<string, string | string[]>): void;
       write(chunk: unknown): void;
       end(data?: string): void;
-    },
+      writableEnded?: boolean;
+      destroyed?: boolean;
+    } & NodeJS.WritableStream,
+    signal?: AbortSignal,
   ): Promise<void> {
     const headers: Record<string, string | string[]> = {};
     response.headers.forEach((value, key) => {
@@ -836,21 +937,44 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (setCookies && setCookies.length > 0) {
       headers['set-cookie'] = setCookies;
     }
+    if (isResponseClosed(nodeRes)) {
+      return;
+    }
     nodeRes.writeHead(response.status, headers);
 
     if (response.body) {
-      const reader = response.body.getReader();
+      let responseBodyError: unknown;
+      let responseBodyErrorAfterResponseClosed = false;
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          nodeRes.write(value);
+        const responseStream = Readable.fromWeb(response.body as any);
+        // This listener must run before pipeline's cleanup so source errors are
+        // not mistaken for client disconnects after pipeline destroys nodeRes.
+        responseStream.once('error', error => {
+          responseBodyError = error;
+          responseBodyErrorAfterResponseClosed = isResponseClosed(nodeRes);
+        });
+        if (signal) {
+          await pipeline(responseStream, nodeRes, { signal });
+        } else {
+          await pipeline(responseStream, nodeRes);
         }
-      } finally {
-        nodeRes.end();
+      } catch (error) {
+        const expectedSignalAbort =
+          signal?.aborted && isAbortSignalError(error) && (!responseBodyError || responseBodyErrorAfterResponseClosed);
+        const expectedResponseClose =
+          (!responseBodyError || responseBodyErrorAfterResponseClosed) &&
+          isResponseClosed(nodeRes) &&
+          isExpectedResponseCloseError(error);
+        // Request cancellation is expected unless the response body already reported its own error.
+        if (!expectedSignalAbort && !expectedResponseClose) {
+          throw error;
+        }
       }
     } else {
-      nodeRes.end(await response.text());
+      const text = await response.text();
+      if (!isResponseClosed(nodeRes)) {
+        nodeRes.end(text);
+      }
     }
   }
 

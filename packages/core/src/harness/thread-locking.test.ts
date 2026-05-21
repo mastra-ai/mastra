@@ -3,7 +3,10 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { HarnessLegacy } from './harness';
 
-function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
+function createHarness(
+  threadLock?: { acquire: (id: string) => void; release: (id: string) => void },
+  storage = new InMemoryStore(),
+) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -12,7 +15,7 @@ function createHarness(threadLock?: { acquire: (id: string) => void; release: (i
 
   return new HarnessLegacy({
     id: 'test-harness',
-    storage: new InMemoryStore(),
+    storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
     threadLock,
   });
@@ -173,6 +176,29 @@ describe('Harness thread locking', () => {
     });
   });
 
+  describe('runtime service propagation', () => {
+    it('does not install a browser factory as a concrete agent browser', async () => {
+      const agent = new Agent({
+        name: 'browser-factory-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const browserFactory = vi.fn(() => ({}) as any);
+      const harnessWithBrowserFactory = new HarnessLegacy({
+        id: 'browser-factory-harness',
+        storage: new InMemoryStore(),
+        browser: browserFactory,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+
+      await harnessWithBrowserFactory.init();
+
+      expect(browserFactory).not.toHaveBeenCalled();
+      expect(agent.browser).toBeUndefined();
+      expect(agent.hasOwnBrowser()).toBe(false);
+    });
+  });
+
   describe('selectOrCreateThread', () => {
     it('acquires lock when selecting an existing thread', async () => {
       // Pre-create a thread so selectOrCreateThread finds it
@@ -243,6 +269,45 @@ describe('Harness thread locking', () => {
 
       const threads = await harness.listThreads();
       expect(threads.find(t => t.id === thread.id)).toBeUndefined();
+    });
+
+    it('clears thread-scoped observational memory when deleting a thread', async () => {
+      const storage = new InMemoryStore();
+      const harnessWithStorage = createHarness({ acquire, release }, storage);
+      await harnessWithStorage.init();
+      const thread = await harnessWithStorage.createThread({ title: 'with observations' });
+      const memoryStorage = (await storage.getStore('memory'))!;
+      await memoryStorage.initializeObservationalMemory({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await expect(memoryStorage.getObservationalMemory(thread.id, thread.resourceId)).resolves.not.toBeNull();
+      await harnessWithStorage.memory.deleteThread({ threadId: thread.id });
+
+      await expect(memoryStorage.getObservationalMemory(thread.id, thread.resourceId)).resolves.toBeNull();
+    });
+
+    it('continues current-thread teardown when observational memory cleanup fails', async () => {
+      const storage = new InMemoryStore();
+      const harnessWithStorage = createHarness({ acquire, release }, storage);
+      await harnessWithStorage.init();
+      const thread = await harnessWithStorage.createThread({ title: 'cleanup failure' });
+      const memoryStorage = (await storage.getStore('memory'))!;
+      const errors: Error[] = [];
+      harnessWithStorage.subscribe(event => {
+        if (event.type === 'error') errors.push(event.error);
+      });
+      vi.spyOn(memoryStorage, 'clearObservationalMemory').mockRejectedValueOnce(new Error('om cleanup failed'));
+
+      await expect(harnessWithStorage.memory.deleteThread({ threadId: thread.id })).resolves.toBeUndefined();
+
+      expect(release).toHaveBeenCalledWith(thread.id);
+      expect(harnessWithStorage.getCurrentThreadId()).toBeNull();
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.message).toBe('om cleanup failed');
     });
 
     it('releases lock when deleting the current thread', async () => {

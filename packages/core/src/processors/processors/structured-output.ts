@@ -253,6 +253,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           options: { readOnly: true },
         },
         providerOptions: this.providerOptions,
+        _skipThreadRunReservation: true,
         ...observabilityContext,
       });
     }

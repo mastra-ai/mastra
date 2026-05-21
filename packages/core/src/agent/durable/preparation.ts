@@ -9,6 +9,7 @@ import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
+import { deepEqual } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -204,16 +205,28 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       const memoryConfig = execOptions?.memory?.options;
       if (memory && threadId && resourceId) {
         const existingThread = await memory.getThreadById({ threadId });
-        threadObject =
-          existingThread ??
-          (await memory.createThread({
+        if (existingThread) {
+          if (
+            (!existingThread.metadata && thread?.metadata) ||
+            (thread?.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+          ) {
+            threadObject = await memory.saveThread({
+              thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
+              memoryConfig,
+            });
+          } else {
+            threadObject = existingThread;
+          }
+        } else {
+          threadObject = await memory.createThread({
             threadId,
             metadata: thread?.metadata,
             title: thread?.title,
             memoryConfig,
             resourceId,
             saveThread: true,
-          }));
+          });
+        }
         threadExists = true;
         requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
       }

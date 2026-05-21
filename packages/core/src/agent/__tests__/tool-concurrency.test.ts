@@ -17,15 +17,19 @@ import { Agent } from '../agent';
  * Note: Enable DEBUG_TOOL_CONCURRENCY=1 environment variable to see detailed debug logs
  * showing workflow creation, sequential execution checks, and event ordering.
  */
+let toolConcurrencyRunCounter = 0;
+
 async function verifyToolExecutionOrder(
   agent: Agent,
   options?: { requireToolApproval?: boolean; toolCallConcurrency?: number },
 ) {
+  const threadSuffix = ++toolConcurrencyRunCounter;
   const stream = await agent.stream('Use both tools', {
     memory: {
-      thread: 'test-thread-concurrency',
-      resource: 'user-test-concurrency',
+      thread: `test-thread-concurrency-${threadSuffix}`,
+      resource: `user-test-concurrency-${threadSuffix}`,
     },
+    runId: `tool-concurrency-run-${threadSuffix}`,
     maxSteps: 1,
     ...(options || {}),
   });

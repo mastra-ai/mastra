@@ -2,6 +2,7 @@ import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
 import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
+import type { HarnessRouteAuthConfig } from '../../auth/helpers';
 import { generateRouteOpenAPI } from '../openapi-utils';
 import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
@@ -180,6 +181,7 @@ interface RouteConfig<
    * If set, the user must have the specified permission on the resource.
    */
   fga?: FGARouteConfig;
+  harnessAuth?: HarnessRouteAuthConfig;
   onValidationError?: ValidationErrorHook;
 }
 

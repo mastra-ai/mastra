@@ -104,25 +104,64 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
+function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  return contents.flatMap((part): HarnessMessageContent[] => {
-    if (part.type === 'text') {
-      return [{ type: 'text', text: part.text }];
-    }
-    if (typeof part.data !== 'string') return [];
-    if (part.mediaType.startsWith('image/')) {
-      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
+  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
+  if (!contents || typeof contents !== 'object') return [];
+
+  const record = getRecordValue(contents);
+  if (record?.type === 'text' && typeof record.text === 'string') {
+    return [{ type: 'text', text: record.text }];
+  }
+  if (record?.type === 'file' && typeof record.data === 'string') {
+    const mediaType = getStringValue(record.mediaType) ?? getStringValue(record.mimeType);
+    if (!mediaType) return [];
+    if (mediaType.startsWith('image/')) {
+      return [{ type: 'image', data: record.data, mimeType: mediaType }];
     }
     return [
       {
         type: 'file',
-        data: part.data,
-        mediaType: part.mediaType,
-        filename: part.filename,
+        data: record.data,
+        mediaType,
+        filename: typeof record.filename === 'string' ? record.filename : undefined,
       },
     ];
-  });
+  }
+
+  const content = (contents as { content?: unknown }).content;
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (Array.isArray(content)) {
+    return content.flatMap((part): HarnessMessageContent[] => {
+      const record = getRecordValue(part);
+      if (!record) return [];
+      if (record.type === 'text' && typeof record.text === 'string') {
+        return [{ type: 'text', text: record.text }];
+      }
+      if (record.type === 'file' && typeof record.data === 'string') {
+        const mediaType = getStringValue(record.mediaType) ?? getStringValue(record.mimeType);
+        if (!mediaType) return [];
+        if (mediaType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType: mediaType }];
+        }
+        return [
+          {
+            type: 'file',
+            data: record.data,
+            mediaType,
+            filename: typeof record.filename === 'string' ? record.filename : undefined,
+          },
+        ];
+      }
+      return [];
+    });
+  }
+
+  return [];
+}
+
+function firstTextPart(parts: Array<{ type: string; text?: string }>): string | undefined {
+  return parts.find(part => part.type === 'text' && typeof part.text === 'string')?.text;
 }
 
 function toSystemReminderContent(
@@ -130,7 +169,7 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents);
+  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
   if (message === undefined) return undefined;
 
   return {
@@ -160,29 +199,23 @@ function toSystemReminderContent(
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
-  const rawContents = payload.contents;
-  if (!id || rawContents === undefined) return undefined;
+  const contents = payload.contents ?? payload.message;
+  if (!id || contents === undefined) return undefined;
 
-  const signal = createSignal({
-    id,
-    type: 'user-message',
-    contents: rawContents as AgentSignalContents,
-    createdAt: getStringValue(payload.createdAt),
-  });
-  const content = signalContentsToHarnessContent(signal.contents);
+  const content = signalContentsToHarnessContent(contents);
   if (content.length === 0) return undefined;
 
   return {
-    id: signal.id,
+    id,
     role: 'user',
     content,
-    createdAt: signal.createdAt,
+    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
   };
 }
 
 /**
- * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
- * It's the core abstraction that a TUI (or other UI) controls.
+ * The legacy Harness orchestrates multiple agent modes, shared state, memory, and storage.
+ * It's the legacy core abstraction that a TUI (or other UI) controls.
  *
  * @example
  * ```ts
@@ -433,7 +466,7 @@ export class HarnessLegacy<TState = {}> {
     if (this.stateSchema) {
       const result = await this.stateSchema['~standard'].validate(newState);
       if (result.issues) {
-        const messages = result.issues.map(i => i.message).join('; ');
+        const messages = result.issues.map((i: { message: string }) => i.message).join('; ');
         throw new Error(`Invalid state update: ${messages}`);
       }
       this.state = result.value as TState;
@@ -594,8 +627,8 @@ export class HarnessLegacy<TState = {}> {
     if (workspaceForAgents && !agent.hasOwnWorkspace()) {
       agent.__setWorkspace(workspaceForAgents);
     }
-    if (browserForAgents && !agent.hasOwnBrowser()) {
-      agent.setBrowser(browserForAgents as MastraBrowser);
+    if (browserForAgents && typeof browserForAgents !== 'function' && !agent.hasOwnBrowser()) {
+      agent.setBrowser(browserForAgents);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {
       agent.__setPubSub(this.config.pubsub);
@@ -933,7 +966,6 @@ export class HarnessLegacy<TState = {}> {
 
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread });
-    await this.ensureCurrentAgentThreadSubscription();
 
     return thread;
   }
@@ -963,6 +995,13 @@ export class HarnessLegacy<TState = {}> {
     const isDeletingCurrentThread = this.currentThreadId === threadId;
 
     await memoryStorage.deleteThread({ threadId });
+    if (memoryStorage.supportsObservationalMemory) {
+      try {
+        await memoryStorage.clearObservationalMemory(threadId, thread.resourceId);
+      } catch (error) {
+        this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+      }
+    }
 
     if (isDeletingCurrentThread) {
       try {
@@ -1048,6 +1087,7 @@ export class HarnessLegacy<TState = {}> {
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
+    await this.ensureCurrentAgentThreadSubscription();
     this.emit({ type: 'thread_created', thread: clonedThread });
     await this.ensureCurrentAgentThreadSubscription();
 
@@ -1078,6 +1118,7 @@ export class HarnessLegacy<TState = {}> {
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
+    await this.ensureCurrentAgentThreadSubscription();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
     await this.ensureCurrentAgentThreadSubscription();
@@ -1798,10 +1839,10 @@ export class HarnessLegacy<TState = {}> {
           type: 'file' as const,
           data: f.data,
           mediaType: f.mediaType,
-          ...(f.filename ? { filename: f.filename } : {}),
+          filename: f.filename,
         };
       });
-      messageInput = [{ type: 'text', text: content }, ...fileParts];
+      messageInput = [{ type: 'text', text: content }, ...fileParts] as AgentSignalContents;
     }
 
     const wasActive = this.isCurrentThreadStreamActive();
@@ -1969,6 +2010,40 @@ export class HarnessLegacy<TState = {}> {
       };
     }
 
+    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
+    if (signalMetadata?.type === 'user-message') {
+      const signalContent = signalContentsToHarnessContent(
+        signalMetadata.contents ?? msg.content.content ?? msg.content.parts,
+      );
+      if (signalContent.length > 0) {
+        return {
+          id: msg.id,
+          role: 'user',
+          content: signalContent,
+          createdAt: msg.createdAt,
+        };
+      }
+    }
+
+    if (signalMetadata?.type === 'system-reminder') {
+      const reminder = toSystemReminderContent({
+        type: signalMetadata.type,
+        contents: signalMetadata.contents ?? msg.content.content ?? firstTextPart(msg.content.parts),
+        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
+        metadata: getRecordValue(signalMetadata.metadata),
+      });
+      if (reminder) {
+        content.push(reminder);
+      }
+
+      return {
+        id: msg.id,
+        role: 'user',
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
+
     if (msg.role === 'signal') {
       const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
 
@@ -1987,13 +2062,7 @@ export class HarnessLegacy<TState = {}> {
       if (signal.type === 'system-reminder') {
         const reminder = toSystemReminderContent({
           type: signal.type,
-          contents:
-            typeof signal.contents === 'string'
-              ? signal.contents
-              : signal.contents
-                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-                  .map(p => p.text)
-                  .join('\n'),
+          contents: signal.contents,
           attributes: signal.attributes ?? msg.content.metadata,
           metadata: signal.metadata,
         });
@@ -2694,8 +2763,7 @@ export class HarnessLegacy<TState = {}> {
             triggeredBy: payload.triggeredBy,
             lastActivityAt: payload.lastActivityAt,
             ttlExpiredMs: payload.ttlExpiredMs,
-            activateAfterIdle:
-              typeof payload.config?.activateAfterIdle === 'number' ? payload.config.activateAfterIdle : undefined,
+            activateAfterIdle: payload.config?.activateAfterIdle,
             previousModel: payload.previousModel,
             currentModel: payload.currentModel,
           });
@@ -3917,3 +3985,5 @@ export class HarnessLegacy<TState = {}> {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 }
+
+export { HarnessLegacy as Harness };

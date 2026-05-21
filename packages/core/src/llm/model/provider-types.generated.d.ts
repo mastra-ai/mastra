@@ -2290,6 +2290,8 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
+    'google/gemini-2.5-pro-preview-05-06',
+    'google/gemini-2.5-pro-preview-06-05',
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-lite-preview',

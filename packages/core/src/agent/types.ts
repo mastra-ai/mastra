@@ -109,6 +109,13 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       ifIdle?: never;
     }
   | {
+      runId?: never;
+      resourceId?: undefined;
+      threadId: string;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: never;
+    }
+  | {
       runId?: string;
       resourceId: string;
       threadId: string;
@@ -123,6 +130,8 @@ export interface SendAgentSignalResult {
   accepted: true;
   runId: string;
   signal: CreatedAgentSignal;
+  /** Resolves with the stream output when this signal starts an idle thread run. */
+  output?: Promise<MastraModelOutput<unknown>>;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }

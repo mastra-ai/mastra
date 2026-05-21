@@ -45,6 +45,21 @@ export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 
+// Harness tables (HARNESS_V1_SPEC.md §5)
+export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
+export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
+export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
+export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
+export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
+export const TABLE_HARNESS_SESSION_EVENTS = 'mastra_harness_session_events';
+export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
+export const TABLE_HARNESS_CHANNEL_INBOX = 'mastra_harness_channel_inbox';
+export const TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS = 'mastra_harness_provider_callback_bindings';
+export const TABLE_HARNESS_CHANNEL_ACTION_TOKENS = 'mastra_harness_channel_action_tokens';
+export const TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS = 'mastra_harness_channel_action_receipts';
+export const TABLE_HARNESS_CHANNEL_OUTBOX = 'mastra_harness_channel_outbox';
+export const TABLE_HARNESS_WAKEUPS = 'mastra_harness_wakeups';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -69,17 +84,30 @@ export type TABLE_NAMES =
   | typeof TABLE_SKILLS
   | typeof TABLE_SKILL_VERSIONS
   | typeof TABLE_SKILL_BLOBS
+  | typeof TABLE_FAVORITES
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_BACKGROUND_TASKS
-  | typeof TABLE_FAVORITES
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
-  | typeof TABLE_CHANNEL_CONFIG;
+  | typeof TABLE_CHANNEL_CONFIG
+  | typeof TABLE_HARNESS_SESSIONS
+  | typeof TABLE_HARNESS_ATTACHMENTS
+  | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
+  | typeof TABLE_HARNESS_MESSAGE_RESULTS
+  | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
+  | typeof TABLE_HARNESS_SESSION_EVENTS
+  | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
+  | typeof TABLE_HARNESS_CHANNEL_INBOX
+  | typeof TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS
+  | typeof TABLE_HARNESS_CHANNEL_ACTION_TOKENS
+  | typeof TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS
+  | typeof TABLE_HARNESS_CHANNEL_OUTBOX
+  | typeof TABLE_HARNESS_WAKEUPS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -636,6 +664,309 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     data: { type: 'jsonb', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  // Harness session record + lease columns. See HARNESS_V1_SPEC.md §5.1.
+  // Pending interrupts (approval/suspension/question/plan), the queue,
+  // workspace state, and user state are stored as JSONB blobs because the
+  // shapes are defined by the harness layer and the adapter does not query
+  // their internals.
+  [TABLE_HARNESS_SESSIONS]: {
+    harness_name: { type: 'text', nullable: false },
+    id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    parent_session_id: { type: 'text', nullable: true },
+    origin: { type: 'text', nullable: false },
+    subagent_depth: { type: 'integer', nullable: true },
+    owns_thread: { type: 'boolean', nullable: false },
+    mode_id: { type: 'text', nullable: false },
+    model_id: { type: 'text', nullable: false },
+    subagent_model_overrides: { type: 'jsonb', nullable: false },
+    permission_rules: { type: 'jsonb', nullable: false },
+    session_grants: { type: 'jsonb', nullable: false },
+    token_usage: { type: 'jsonb', nullable: false },
+    pending_queue: { type: 'jsonb', nullable: false },
+    pending_resume: { type: 'jsonb', nullable: true },
+    queue_admission_receipts: { type: 'jsonb', nullable: true },
+    inbox_response_receipts: { type: 'jsonb', nullable: true },
+    observational_memory: { type: 'jsonb', nullable: true },
+    goal: { type: 'jsonb', nullable: true },
+    workspace: { type: 'jsonb', nullable: true },
+    state: { type: 'jsonb', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    last_activity_at: { type: 'bigint', nullable: false },
+    closing_at: { type: 'bigint', nullable: true },
+    close_deadline_at: { type: 'bigint', nullable: true },
+    closed_at: { type: 'bigint', nullable: true },
+    version: { type: 'integer', nullable: false },
+    owner_id: { type: 'text', nullable: true },
+    lease_expires_at: { type: 'bigint', nullable: true },
+  },
+  // Harness attachments. Bytes are stored as base64 in `data_b64` because
+  // the shared `StorageColumn['type']` union does not yet include `blob`.
+  // For v1 attachment sizes (HarnessConfig.files.maxAttachmentBytes, default
+  // 100 MiB) the 33% base64 overhead is acceptable; switching to a true
+  // BLOB column is a lossless schema migration when we extend the union.
+  [TABLE_HARNESS_ATTACHMENTS]: {
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    attachment_id: { type: 'text', nullable: false },
+    name: { type: 'text', nullable: false },
+    mime_type: { type: 'text', nullable: false },
+    size_bytes: { type: 'bigint', nullable: false },
+    sha256: { type: 'text', nullable: false },
+    source: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: true },
+    primitive_type: { type: 'text', nullable: true },
+    element_type: { type: 'text', nullable: true },
+    renderer_json: { type: 'jsonb', nullable: true },
+    schema_id: { type: 'text', nullable: true },
+    metadata_json: { type: 'jsonb', nullable: true },
+    object_json: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    data_b64: { type: 'text', nullable: false },
+  },
+  [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    attachment_id: { type: 'text', nullable: false },
+    source: { type: 'text', nullable: false },
+    source_id: { type: 'text', nullable: false },
+    retained_until: { type: 'bigint', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_MESSAGE_RESULTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    signal_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: true },
+    admission_id: { type: 'text', nullable: true },
+    admission_hash: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    result: { type: 'jsonb', nullable: true },
+    error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    admission_id: { type: 'text', nullable: true },
+    admission_hash: { type: 'text', nullable: true },
+    queued_item_id: { type: 'text', nullable: true },
+    signal_id: { type: 'text', nullable: true },
+    run_id: { type: 'text', nullable: true },
+    terminal_at: { type: 'bigint', nullable: false },
+    compacted_at: { type: 'bigint', nullable: false },
+    expires_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_SESSION_EVENTS]: {
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    event_id: { type: 'text', nullable: false },
+    epoch: { type: 'text', nullable: false },
+    sequence: { type: 'bigint', nullable: false },
+    event: { type: 'jsonb', nullable: false },
+    emitted_at: { type: 'bigint', nullable: false },
+    stored_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
+    thread_id: { type: 'text', nullable: false, primaryKey: true },
+    owner_id: { type: 'text', nullable: false },
+    lease_id: { type: 'text', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    expires_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_CHANNEL_INBOX]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    idempotency_key: { type: 'text', nullable: false },
+    payload_hash: { type: 'text', nullable: false },
+    admission_hash: { type: 'text', nullable: true },
+    admission_id: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: true },
+    resource_id: { type: 'text', nullable: true },
+    thread_id: { type: 'text', nullable: true },
+    session_id: { type: 'text', nullable: true },
+    run_id: { type: 'text', nullable: true },
+    signal_id: { type: 'text', nullable: true },
+    queued_item_id: { type: 'text', nullable: true },
+    external_message_id: { type: 'text', nullable: false },
+    received_at: { type: 'bigint', nullable: false },
+    admitted_at: { type: 'bigint', nullable: true },
+    accepted_at: { type: 'bigint', nullable: true },
+    queued_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    updated_at: { type: 'bigint', nullable: false },
+    status: { type: 'text', nullable: false },
+    delivery: { type: 'text', nullable: true },
+    mode: { type: 'text', nullable: true },
+    model: { type: 'text', nullable: true },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    request_context: { type: 'jsonb', nullable: false },
+    content: { type: 'text', nullable: false },
+    attachments: { type: 'jsonb', nullable: false },
+    last_error: { type: 'jsonb', nullable: true },
+  },
+  [TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    provider_id: { type: 'text', nullable: false },
+    selector_kind: { type: 'text', nullable: false },
+    selector_value: { type: 'text', nullable: false },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    origin: { type: 'jsonb', nullable: false },
+    status: { type: 'text', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    replaced_at: { type: 'bigint', nullable: true },
+    replaced_by_binding_id: { type: 'text', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: {
+    action_token_id: { type: 'text', nullable: false },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    owning_session_id: { type: 'text', nullable: false },
+    item_id: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: false },
+    binding_generation: { type: 'integer', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    pending_requested_at: { type: 'bigint', nullable: false },
+    audience: { type: 'jsonb', nullable: false },
+    metadata_hash: { type: 'text', nullable: false },
+    transport_hash: { type: 'text', nullable: false },
+    key_id: { type: 'text', nullable: true },
+    expires_at: { type: 'bigint', nullable: true },
+    revoked_at: { type: 'bigint', nullable: true },
+    revoked_reason: { type: 'text', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    action_token_id: { type: 'text', nullable: false },
+    action_id: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: false },
+    binding_generation: { type: 'integer', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    owning_session_id: { type: 'text', nullable: false },
+    item_id: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    pending_requested_at: { type: 'bigint', nullable: false },
+    audience: { type: 'jsonb', nullable: false },
+    verified_actor: { type: 'jsonb', nullable: true },
+    response_hash: { type: 'text', nullable: false },
+    response: { type: 'jsonb', nullable: false },
+    status: { type: 'text', nullable: false },
+    conflict_reason: { type: 'text', nullable: true },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    accepted_at: { type: 'bigint', nullable: true },
+    applied_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    result: { type: 'jsonb', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_CHANNEL_OUTBOX]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: false },
+    binding_generation: { type: 'integer', nullable: false },
+    idempotency_key: { type: 'text', nullable: false },
+    payload_hash: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: true },
+    owning_session_id: { type: 'text', nullable: true },
+    source: { type: 'jsonb', nullable: true },
+    target: { type: 'jsonb', nullable: false },
+    kind: { type: 'text', nullable: false },
+    operation_kind: { type: 'text', nullable: false },
+    operation_name: { type: 'text', nullable: true },
+    payload: { type: 'jsonb', nullable: false },
+    delivery_semantics: { type: 'text', nullable: false },
+    status: { type: 'text', nullable: false },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    sent_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    provider_message_id: { type: 'text', nullable: true },
+    provider_receipt: { type: 'jsonb', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_WAKEUPS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    source: { type: 'text', nullable: false },
+    source_id: { type: 'text', nullable: false },
+    fire_id: { type: 'text', nullable: false },
+    idempotency_key: { type: 'text', nullable: false },
+    payload_hash: { type: 'text', nullable: false },
+    admission_id: { type: 'text', nullable: false },
+    admission_hash: { type: 'text', nullable: true },
+    resource_id: { type: 'text', nullable: true },
+    thread_id: { type: 'text', nullable: true },
+    session_id: { type: 'text', nullable: true },
+    queued_item_id: { type: 'text', nullable: true },
+    run_id: { type: 'text', nullable: true },
+    signal_id: { type: 'text', nullable: true },
+    due_at: { type: 'bigint', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    claimed_at: { type: 'bigint', nullable: true },
+    queued_at: { type: 'bigint', nullable: true },
+    completed_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    status: { type: 'text', nullable: false },
+    mode: { type: 'text', nullable: true },
+    model: { type: 'text', nullable: true },
+    yolo: { type: 'boolean', nullable: true },
+    attempts: { type: 'integer', nullable: false },
+    missed_count: { type: 'integer', nullable: true },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    request_context: { type: 'jsonb', nullable: true },
+    content: { type: 'text', nullable: false },
+    attachments: { type: 'jsonb', nullable: false },
+    result: { type: 'jsonb', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+  },
 };
 
 /**
@@ -644,7 +975,50 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
-  [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
+  [TABLE_HARNESS_SESSIONS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
+    compositePrimaryKey: ['harness_name', 'id'],
+  },
+  [TABLE_HARNESS_ATTACHMENTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
+    compositePrimaryKey: ['harness_name', 'session_id', 'attachment_id'],
+  },
+  [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
+    compositePrimaryKey: ['harness_name', 'session_id', 'attachment_id', 'source', 'source_id'],
+  },
+  [TABLE_HARNESS_MESSAGE_RESULTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
+  },
+  [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
+  },
+  [TABLE_HARNESS_SESSION_EVENTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_EVENTS],
+    compositePrimaryKey: ['harness_name', 'session_id', 'epoch', 'sequence'],
+  },
+  [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
+  },
+  [TABLE_HARNESS_CHANNEL_INBOX]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_INBOX],
+  },
+  [TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS],
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_TOKENS],
+    compositePrimaryKey: ['harness_name', 'channel_id', 'action_token_id'],
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS],
+  },
+  [TABLE_HARNESS_CHANNEL_OUTBOX]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_OUTBOX],
+  },
+  [TABLE_HARNESS_WAKEUPS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_WAKEUPS],
+  },
 };
 
 /**

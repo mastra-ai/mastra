@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { InternalSpans } from '../observability';
 import type { SuspendOptions } from '../workflows';
 import { createStep, createWorkflow } from '../workflows/evented';
 import type { BackgroundTaskManager } from './manager';
+import { BACKGROUND_TASK_SHUTDOWN_ABORT_MESSAGE } from './shutdown';
 import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
@@ -63,6 +63,10 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         manager.deregisterTaskContext(taskId);
         return { taskId, outcome: 'cancelled' as const };
       }
+      if (manager.isShuttingDown()) {
+        manager.deregisterTaskContext(taskId);
+        return { taskId, outcome: 'cancelled' as const };
+      }
 
       // Resolve the executor. Two paths:
       //   1. Per-task `TaskContext` registered on the producer (in-process).
@@ -106,6 +110,12 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       const abortController = new AbortController();
       manager.activeAbortControllers.set(taskId, abortController);
+      if (manager.isShuttingDown()) {
+        abortController.abort(new Error(BACKGROUND_TASK_SHUTDOWN_ABORT_MESSAGE));
+        manager.activeAbortControllers.delete(taskId);
+        manager.deregisterTaskContext(taskId);
+        return { taskId, outcome: 'cancelled' as const };
+      }
       // Wire the workflow's run-level abort signal into our local controller
       // so `workflow.getRun(taskId).cancel()` propagates to the executor.
       const onWorkflowAbort = () => abortController.abort(new Error('Task cancelled'));
@@ -117,6 +127,10 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       const timeoutHandle = setTimeout(() => {
         abortController.abort(new Error(`Task timed out after ${task.timeoutMs}ms`));
       }, task.timeoutMs);
+      const wasShutdownAbort = () =>
+        abortController.signal.aborted &&
+        abortController.signal.reason instanceof Error &&
+        abortController.signal.reason.message === BACKGROUND_TASK_SHUTDOWN_ABORT_MESSAGE;
 
       // Wrap the workflow runtime's `suspend` so we persist
       // `status: 'suspended'` + `suspendPayload`, fire the per-task
@@ -130,6 +144,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // tool's call.
       let pendingSuspend: { data?: unknown; suspendOptions?: SuspendOptions } | undefined;
       const wrappedSuspend = async (data?: unknown, suspendOptions?: SuspendOptions) => {
+        if (wasShutdownAbort()) return;
         await storage.updateTask(taskId, {
           status: 'suspended',
           suspendPayload: data,
@@ -161,6 +176,11 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
         }
 
+        if (wasShutdownAbort()) {
+          manager.deregisterTaskContext(taskId);
+          return { taskId, outcome: 'cancelled' as const };
+        }
+
         return { taskId, outcome: 'success' as const, result };
       } catch (error: any) {
         const currentTask = await storage.getTask(taskId);
@@ -169,11 +189,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           return { taskId, outcome: 'cancelled' as const };
         }
 
-        // Treat any aborted-signal exit as a timeout. The cancel path is
-        // already handled by the storage-status check above, so if we reach
-        // here with `signal.aborted`, it's the timeout abort. The
-        // `AbortError` / message checks are belt-and-braces for executors
-        // that throw their own abort error instead of propagating ours.
+        // Shutdown aborts are local process teardown, not task timeouts. Other
+        // aborted-signal exits are treated as timeouts; explicit cancellation is
+        // already handled by the storage-status check above.
+        if (wasShutdownAbort()) {
+          manager.deregisterTaskContext(taskId);
+          return { taskId, outcome: 'cancelled' as const };
+        }
+
         if (
           abortController.signal.aborted ||
           error?.name === 'AbortError' ||
@@ -277,12 +300,6 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // than widen every step's input schema.
       validateInputs: false,
       shouldPersistSnapshot: ({ workflowStatus }) => WORKFLOW_STATUS_TO_PERSIST.includes(workflowStatus),
-      // Internal scheduler plumbing — hide workflow spans from exported
-      // traces. The task body itself runs as user code and keeps its own
-      // spans.
-      tracingPolicy: {
-        internal: InternalSpans.WORKFLOW,
-      },
     },
   })
     .then(runAttemptStep)
@@ -296,10 +313,6 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
     steps: [attemptBodyWorkflow],
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => WORKFLOW_STATUS_TO_PERSIST.includes(workflowStatus),
-      // Internal scheduler plumbing — see the inner workflow comment.
-      tracingPolicy: {
-        internal: InternalSpans.WORKFLOW,
-      },
     },
   })
     .dountil(attemptBodyWorkflow, async ({ inputData }) => inputData?.done === true)

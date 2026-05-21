@@ -46,6 +46,7 @@ interface StreamStepOptions {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  initialSignalEchoes?: CreatedAgentSignal[];
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -70,6 +71,7 @@ export function createStreamStep<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  initialSignalEchoes,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -114,7 +116,7 @@ export function createStreamStep<OUTPUT = undefined>({
           toolPayloadTransform,
           skipBgTaskWait,
           drainPendingSignals,
-          initialSignalEchoes: validatedInputData.initialSignalEchoes,
+          initialSignalEchoes,
         },
         agentId,
         agentName,

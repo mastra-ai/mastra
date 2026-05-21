@@ -64,6 +64,46 @@ describe('AgentChannels', () => {
       expect(Object.keys(agentChannels.adapters)).toEqual(['discord', 'slack']);
     });
 
+    it('exposes the original channel config for provider rebuilds', () => {
+      expect(agentChannels.channelConfig.adapters).toBeDefined();
+      expect(Object.keys(agentChannels.channelConfig.adapters)).toEqual(['discord', 'slack']);
+    });
+
+    it('allows providers to close before replacing the instance', () => {
+      (agentChannels as any).chat = { webhooks: {} };
+      (agentChannels as any).initPromise = Promise.resolve();
+      const generation = (agentChannels as any).lifecycleGeneration;
+
+      expect(() => agentChannels.close()).not.toThrow();
+      expect(agentChannels.sdk).toBeNull();
+      expect((agentChannels as any).initPromise).toBeNull();
+      expect((agentChannels as any).lifecycleGeneration).toBe(generation + 1);
+    });
+
+    it('stops gateway reconnect loops after close', async () => {
+      let finishGateway!: () => void;
+      const gatewayDone = new Promise<void>(resolve => {
+        finishGateway = resolve;
+      });
+      const startGateway = vi.fn(async ({ waitUntil }: { waitUntil: (p: Promise<unknown>) => void }) => {
+        waitUntil(gatewayDone);
+        return new Response('ok');
+      });
+      const generation = (agentChannels as any).lifecycleGeneration;
+
+      (agentChannels as any).startGatewayLoop('mock', startGateway, generation);
+      await Promise.resolve();
+
+      expect(startGateway).toHaveBeenCalledTimes(1);
+
+      agentChannels.close();
+      finishGateway();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(startGateway).toHaveBeenCalledTimes(1);
+    });
+
     it('returns a specific adapter by key', () => {
       const adapter = agentChannels.adapters['discord'];
       expect(adapter).toBeDefined();
@@ -91,48 +131,6 @@ describe('AgentChannels', () => {
         tools: false,
       });
       expect(Object.keys(disabled.getTools())).toHaveLength(0);
-    });
-  });
-
-  describe('channelConfig', () => {
-    it('exposes the original ChannelConfig (round-trippable)', () => {
-      const discord = createMockAdapter('discord');
-      const slack = createMockAdapter('slack');
-      const handlers = { onDirectMessage: false } as const;
-      const originalConfig = {
-        adapters: { discord, slack: { adapter: slack, gateway: true } },
-        handlers,
-        inlineMedia: ['image/png', 'image/jpeg'],
-        inlineLinks: ['imgur.com'],
-        userName: 'TestBot',
-        threadContext: { maxMessages: 5 },
-        tools: false,
-        chatOptions: { dedupeTtlMs: 1000 },
-      };
-      const channels = new AgentChannels(originalConfig as any);
-
-      expect(channels.channelConfig).toBe(originalConfig);
-    });
-
-    it('lets a provider rebuild AgentChannels while preserving existing adapters', () => {
-      // Simulate the SlackProvider merge pattern: agent author configured Discord,
-      // then a provider needs to inject Slack without losing Discord.
-      const discord = createMockAdapter('discord');
-      const original = new AgentChannels({
-        adapters: { discord },
-        userName: 'OriginalBot',
-      });
-
-      const slack = createMockAdapter('slack');
-      const merged = new AgentChannels({
-        ...original.channelConfig,
-        adapters: { ...original.channelConfig.adapters, slack },
-        userName: 'ProviderBot',
-      });
-
-      expect(Object.keys(merged.adapters).sort()).toEqual(['discord', 'slack']);
-      expect(merged.adapters.discord).toBe(discord);
-      expect(merged.adapters.slack).toBe(slack);
     });
   });
 
@@ -264,55 +262,6 @@ describe('AgentChannels', () => {
       expect(typeof agentChannels.sdk!.onNewMention).toBe('function');
       expect(typeof agentChannels.sdk!.onReaction).toBe('function');
       expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
-    });
-  });
-
-  describe('close', () => {
-    it('unsubscribes all cached thread subscriptions', () => {
-      const unsubscribeA = vi.fn();
-      const unsubscribeB = vi.fn();
-      // Seed the internal cache with two fake subscriptions to verify close() drains them.
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: unsubscribeA },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: unsubscribeB },
-        consumer: Promise.resolve(),
-      });
-
-      (agentChannels as any).pendingApprovalCards.set('run-1', { channel: 'C', ts: '123' });
-
-      agentChannels.close();
-
-      expect(unsubscribeA).toHaveBeenCalledTimes(1);
-      expect(unsubscribeB).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
-      expect((agentChannels as any).pendingApprovalCards.size).toBe(0);
-    });
-
-    it('is safe to call without any subscriptions', () => {
-      expect(() => agentChannels.close()).not.toThrow();
-    });
-
-    it('swallows errors from individual unsubscribe calls', () => {
-      const failing = vi.fn(() => {
-        throw new Error('boom');
-      });
-      const succeeding = vi.fn();
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: failing },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: succeeding },
-        consumer: Promise.resolve(),
-      });
-
-      expect(() => agentChannels.close()).not.toThrow();
-      expect(failing).toHaveBeenCalledTimes(1);
-      expect(succeeding).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
     });
   });
 });

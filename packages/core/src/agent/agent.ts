@@ -33,7 +33,6 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -103,9 +102,10 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import { isCreatedAgentSignal } from './signals';
+import { runStreamUntilIdle, runResumeStreamUntilIdle, STREAM_UNTIL_IDLE_DEFAULT_OPTIONS } from './stream-until-idle';
 import type { SubAgent } from './subagent';
-import { agentThreadStreamRuntime } from './thread-stream-runtime';
+import { agentThreadStreamRuntime, defaultAgentThreadPubSub } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -134,6 +134,21 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+const SKIP_AGENT_EXECUTION_PREFLIGHT = Symbol('skipAgentExecutionPreflight');
+
+type AgentExecutionPreflightOptions = {
+  [SKIP_AGENT_EXECUTION_PREFLIGHT]?: true;
+  [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]?: AgentExecutionOptions<any>;
+};
+
+type ResumeStreamInternalOptions = AgentExecutionOptionsBase<any> &
+  AgentExecutionPreflightOptions & {
+    structuredOutput?: PublicStructuredOutputOptions<any>;
+    toolCallId?: string;
+    model?: DynamicArgument<MastraModelConfig>;
+    _pubsub: PubSub;
+  };
 
 type ModelFallbacks = {
   id: string;
@@ -349,6 +364,8 @@ export class Agent<
    * close if they're still the active one.
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
+  #threadStreamPubSubsByRunId = new Map<string, PubSub>();
+  #threadStreamPubSubsByThreadKey = new Map<string, { runId: string; pubsub: PubSub }>();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -550,6 +567,121 @@ export class Agent<
 
   getPubSub() {
     return this.#pubsub ?? this.#inheritedPubSub ?? this.#mastra?.pubsub;
+  }
+
+  #getThreadTarget(options?: { memory?: AgentExecutionOptionsBase<any>['memory']; requestContext?: RequestContext }) {
+    const thread = options?.memory?.thread;
+    const threadId =
+      (options?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+      (typeof thread === 'string' ? thread : thread?.id);
+    const resourceId =
+      (options?.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) || options?.memory?.resource;
+
+    return { threadId, resourceId };
+  }
+
+  #hasExplicitThreadMemory(options?: {
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    requestContext?: RequestContext;
+  }) {
+    const { threadId } = this.#getThreadTarget(options);
+    return typeof threadId === 'string';
+  }
+
+  #sameThreadTarget(
+    left: { threadId?: string; resourceId?: string },
+    right: { threadId?: string; resourceId?: string },
+  ) {
+    return left.threadId === right.threadId && left.resourceId === right.resourceId;
+  }
+
+  #generateStreamRunId(target?: { threadId?: string; resourceId?: string }) {
+    return (
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+        threadId: target?.threadId,
+        resourceId: target?.resourceId,
+      }) ?? randomUUID()
+    );
+  }
+
+  #threadStreamKey(resourceId: string | undefined, threadId: string): string {
+    return [resourceId ?? '', threadId].join('\u0000');
+  }
+
+  #rememberThreadStreamPubSub(options: AgentExecutionOptionsBase<any> & { runId?: string }, pubsub: PubSub) {
+    const { threadId, resourceId } = this.#getThreadTarget(options);
+    if (!options.runId) return;
+
+    this.#threadStreamPubSubsByRunId.set(options.runId, pubsub);
+    if (!threadId) return;
+
+    this.#threadStreamPubSubsByThreadKey.set(this.#threadStreamKey(resourceId, threadId), {
+      runId: options.runId,
+      pubsub,
+    });
+  }
+
+  #forgetThreadStreamPubSub(options: AgentExecutionOptionsBase<any> & { runId?: string }) {
+    const { threadId, resourceId } = this.#getThreadTarget(options);
+    if (!options.runId) return;
+
+    this.#forgetThreadStreamPubSubForTarget({
+      runId: options.runId,
+      resourceId,
+      threadId,
+    });
+  }
+
+  #rememberThreadStreamPubSubForTarget(
+    options: { runId?: string; resourceId?: string; threadId?: string },
+    pubsub: PubSub,
+  ) {
+    if (!options.runId) return;
+
+    this.#threadStreamPubSubsByRunId.set(options.runId, pubsub);
+    if (!options.threadId) return;
+
+    this.#threadStreamPubSubsByThreadKey.set(this.#threadStreamKey(options.resourceId, options.threadId), {
+      runId: options.runId,
+      pubsub,
+    });
+  }
+
+  #forgetThreadStreamPubSubForTarget(options: { runId?: string; resourceId?: string; threadId?: string }) {
+    if (!options.runId) return;
+
+    this.#threadStreamPubSubsByRunId.delete(options.runId);
+    if (!options.threadId) return;
+
+    const key = this.#threadStreamKey(options.resourceId, options.threadId);
+    if (this.#threadStreamPubSubsByThreadKey.get(key)?.runId === options.runId) {
+      this.#threadStreamPubSubsByThreadKey.delete(key);
+    }
+  }
+
+  #trackThreadStreamPubSub(
+    output: MastraModelOutput<any>,
+    options: AgentExecutionOptionsBase<any> & { runId?: string },
+    completion?: Promise<void>,
+  ) {
+    void (completion ?? output._waitUntilFinished())
+      .finally(() => this.#forgetThreadStreamPubSub(options))
+      .catch(() => {});
+  }
+
+  #resolveThreadStreamPubSub(options: { runId?: string; threadId?: string; resourceId?: string }): PubSub | undefined {
+    if (options.runId) {
+      const runPubSub = this.#threadStreamPubSubsByRunId.get(options.runId);
+      if (runPubSub) return runPubSub;
+    }
+    if (options.threadId) {
+      return this.#threadStreamPubSubsByThreadKey.get(this.#threadStreamKey(options.resourceId, options.threadId))
+        ?.pubsub;
+    }
+    return undefined;
   }
 
   hasOwnPubSub(): boolean {
@@ -774,7 +906,7 @@ export class Agent<
       if (validation.issues) {
         const errors = validation.issues;
         const errorMessages = errors
-          .map(e => {
+          .map((e: any) => {
             const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
             return `- ${pathStr}: ${e.message}`;
           })
@@ -895,6 +1027,48 @@ export class Agent<
   }
 
   /**
+   * Enforces the request-context and FGA boundary shared by fresh and resumed agent execution.
+   */
+  async #assertAgentExecutionPreflight(
+    requestContext?: RequestContext,
+    options?: {
+      authorize?: boolean;
+      memory?: AgentExecutionOptionsBase<any>['memory'];
+      runId?: string;
+      snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+    },
+  ) {
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = requestContext?.get('user');
+      const { FGADeniedError } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+      if (!user) {
+        throw new FGADeniedError(
+          { id: 'unknown' },
+          { type: 'agent', id: this.id },
+          MastraFGAPermissions.AGENTS_EXECUTE,
+        );
+      }
+
+      await this.#validateRequestContext(requestContext);
+
+      if (options?.authorize === false) {
+        return;
+      }
+
+      await this.#requireAgentExecutionFGA({
+        requestContext,
+        memory: options?.memory,
+        runId: options?.runId,
+        snapshotMemoryInfo: options?.snapshotMemoryInfo,
+      });
+      return;
+    }
+
+    await this.#validateRequestContext(requestContext);
+  }
+
+  /**
    * Returns the agents configured for this agent, resolving function-based agents if necessary.
    * Used in multi-agent collaboration scenarios where this agent can delegate to other agents.
    *
@@ -928,13 +1102,9 @@ export class Agent<
         throw mastraError;
       }
 
-      const pubsub = this.getPubSub();
       Object.entries(agents || {}).forEach(([_agentName, agent]) => {
         if (this.#mastra) {
           agent.__registerMastra?.(this.#mastra);
-        }
-        if (pubsub && agent instanceof Agent && !agent.hasOwnPubSub()) {
-          agent.__setPubSub(pubsub);
         }
       });
 
@@ -1782,6 +1952,9 @@ export class Agent<
         mastra: this.#mastra,
         getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
         getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
+        assertAgentExecutionPreflight: this.#assertAgentExecutionPreflight.bind(this),
+        needsAgentExecutionPreflight: () =>
+          Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga),
         hasOwnMemory: this.hasOwnMemory.bind(this),
         getInstructions: async (options: { requestContext: RequestContext }) => {
           const result = await this.getInstructions(options);
@@ -2534,6 +2707,12 @@ export class Agent<
     }
     if (this.#primitives) {
       fork.#primitives = this.#primitives;
+    }
+    if (this.#pubsub) {
+      fork.#pubsub = this.#pubsub;
+    }
+    if (this.#inheritedPubSub) {
+      fork.#inheritedPubSub = this.#inheritedPubSub;
     }
 
     fork.source = this.source;
@@ -3312,7 +3491,6 @@ export class Agent<
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
-      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
@@ -3337,7 +3515,6 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
-      providerOptions,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -3354,10 +3531,6 @@ export class Agent<
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
-        const processInputProviderOptions =
-          llm instanceof MastraLLMVNext
-            ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
-            : providerOptions;
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
@@ -3368,7 +3541,6 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
-          providerOptions: processInputProviderOptions,
           retryCount: 0,
         });
         if (result.tools) {
@@ -3804,6 +3976,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     delegation,
+    pubsub,
     backgroundTaskEnabled,
     ...rest
   }: {
@@ -3814,6 +3987,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    pubsub?: PubSub;
     backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4184,6 +4358,7 @@ export class Agent<
                 const generateResult = resumeData
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4201,6 +4376,7 @@ export class Agent<
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4302,6 +4478,7 @@ export class Agent<
                 const streamResult = resumeData
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4321,6 +4498,7 @@ export class Agent<
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
+                      _pubsub: pubsub,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -4988,6 +5166,7 @@ export class Agent<
       ...options,
       requestContext,
       methodType: 'stream',
+      pubsub: this.getPubSub() ?? defaultAgentThreadPubSub,
     });
   }
 
@@ -5007,6 +5186,7 @@ export class Agent<
     memoryConfig,
     autoResumeSuspendedTools,
     delegation,
+    pubsub,
     backgroundTaskEnabled,
     inputProcessors,
     ...rest
@@ -5022,6 +5202,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    pubsub?: PubSub;
     backgroundTaskEnabled?: boolean;
     inputProcessors?: InputProcessorOrWorkflow[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
@@ -5090,6 +5271,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
+      pubsub,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -5438,12 +5620,28 @@ export class Agent<
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
-  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+  async #loadAgenticLoopSnapshotOrThrow({
+    runId,
+    method,
+    workflowName = 'agentic-loop',
+  }: {
+    runId: string;
+    method: string;
+    workflowName?: string;
+  }) {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId,
-    });
+    let workflowRun: { resourceId?: unknown; snapshot?: unknown } | null | undefined;
+    if (typeof workflowsStore?.getWorkflowRunById === 'function') {
+      workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
+    }
+    const workflowRunSnapshot =
+      workflowRun?.snapshot && typeof workflowRun.snapshot === 'object' ? workflowRun.snapshot : undefined;
+    const existingSnapshot =
+      workflowRunSnapshot ??
+      (await workflowsStore?.loadWorkflowSnapshot({
+        workflowName,
+        runId,
+      }));
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -5465,7 +5663,115 @@ export class Agent<
       });
     }
 
-    return existingSnapshot;
+    return {
+      resourceId: typeof workflowRun?.resourceId === 'string' ? workflowRun.resourceId : undefined,
+      snapshot: existingSnapshot,
+    };
+  }
+
+  #getResumeCallerResourceId(
+    requestContext: RequestContext | undefined,
+    options: AgentExecutionOptionsBase<any> | undefined,
+    { trustMemoryResource = true }: { trustMemoryResource?: boolean } = {},
+  ): string | undefined {
+    const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+    if (typeof contextResourceId === 'string' && contextResourceId.length > 0) {
+      return contextResourceId;
+    }
+    if (!trustMemoryResource) {
+      return undefined;
+    }
+    const memoryResourceId = options?.memory?.resource;
+    return typeof memoryResourceId === 'string' && memoryResourceId.length > 0 ? memoryResourceId : undefined;
+  }
+
+  #assertAgenticLoopResumeOwnership({
+    method,
+    runId,
+    runResourceId,
+    requestContext,
+    options,
+  }: {
+    method: string;
+    runId: string;
+    runResourceId?: string;
+    requestContext?: RequestContext;
+    options?: AgentExecutionOptionsBase<any>;
+  }): void {
+    const hasFga = Boolean(this.#mastra?.getServer()?.fga);
+    const callerResourceId = this.#getResumeCallerResourceId(requestContext, options, {
+      trustMemoryResource: !hasFga,
+    });
+
+    if (runResourceId && callerResourceId && runResourceId !== callerResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_OWNER_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume runId "${runId}" from a different resource.`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    if (hasFga && runResourceId && !callerResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_OWNER_UNVERIFIED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() requires a matching resource id to resume runId "${runId}".`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    if (hasFga && !runResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_PERSISTED_RUN_NO_OWNER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot verify ownership for runId "${runId}" because the persisted run has no resource id.`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+  }
+
+  #getAgenticLoopSnapshotMemoryInfo(existingSnapshot: any): { threadId?: string; resourceId?: string } | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+      }
+    }
+    return undefined;
+  }
+
+  #withSnapshotThreadTarget<T extends { memory?: AgentExecutionOptionsBase<any>['memory'] }>(
+    options: T | undefined,
+    snapshotMemoryInfo: { threadId?: string; resourceId?: string } | undefined,
+  ): T | undefined {
+    if (!snapshotMemoryInfo?.threadId && !snapshotMemoryInfo?.resourceId) return options;
+
+    const memory = options?.memory as ({ resource?: string; thread?: unknown } & Record<string, unknown>) | undefined;
+    const memoryPatch: Record<string, unknown> = {};
+    if (!memory?.resource && snapshotMemoryInfo.resourceId) memoryPatch.resource = snapshotMemoryInfo.resourceId;
+    if (!memory?.thread && snapshotMemoryInfo.threadId) memoryPatch.thread = snapshotMemoryInfo.threadId;
+    if (Object.keys(memoryPatch).length === 0) return options;
+
+    return {
+      ...(options ?? ({} as T)),
+      memory: {
+        ...(memory && typeof memory === 'object' ? memory : {}),
+        ...memoryPatch,
+      },
+    } as T;
   }
 
   #getSnapshotMemoryInfo(existingSnapshot: any): AgentSnapshotMemoryInfo | undefined {
@@ -5533,15 +5839,9 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({
-    methodType,
-    resumeContext,
-    _threadStreamPubSub,
-    ...options
-  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
-    const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
+  async #execute<OUTPUT>({ methodType, resumeContext, _pubsub, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
-    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    const snapshotMemoryInfo = existingSnapshot ? this.#getAgenticLoopSnapshotMemoryInfo(existingSnapshot) : undefined;
     const requestContext = options.requestContext || new RequestContext();
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
@@ -5762,6 +6062,14 @@ export class Agent<
       llm,
     };
 
+    const initialSignalEchoes =
+      methodType === 'stream'
+        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
+        : [];
+    const initialSignalEchoesForRun =
+      initialSignalEchoes.length > 0
+        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
+        : options._initialSignalEchoes;
     const toolPayloadTransform =
       normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
       this.#toolPayloadTransform ??
@@ -5769,10 +6077,12 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
+    const pubsub = _pubsub ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
-      options: { ...options, methodType } as any,
+      options: { ...options, methodType, _pubsub: pubsub } as any,
       threadFromArgs,
       resourceId,
       runId,
@@ -5799,7 +6109,8 @@ export class Agent<
             agentBackgroundConfig: this.#backgroundTasks,
           }),
       skipBgTaskWait: options._skipBgTaskWait,
-      drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
+      drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub),
+      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();
@@ -6041,31 +6352,59 @@ export class Agent<
     options?: MultiPrimitiveExecutionOptions<OUTPUT>,
   ): Promise<MastraAgentNetworkStream<OUTPUT>>;
   async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const explicitRequestContext = options?.requestContext;
+    const requestContextForDefaults = explicitRequestContext || new RequestContext();
+    if (explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(explicitRequestContext, { authorize: false });
+    }
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextForDefaults });
     const mergedOptions = {
       ...defaultNetworkOptions,
       ...options,
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
-
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    const requestContextToUse = explicitRequestContext || mergedOptions.requestContext || requestContextForDefaults;
+    if (!explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { authorize: false });
+    }
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
     const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const hasFga = Boolean(this.#mastra?.getServer()?.fga);
 
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
+    const memoryThreadId =
+      typeof mergedOptions?.memory?.thread === 'string'
         ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+        : mergedOptions?.memory?.thread?.id;
+    const threadId = hasFga ? threadIdFromContext : threadIdFromContext || memoryThreadId;
+    const resourceId = hasFga ? resourceIdFromContext : resourceIdFromContext || mergedOptions?.memory?.resource;
+
+    if (hasFga && !resourceId) {
+      throw new MastraError({
+        id: 'AGENT_NETWORK_OWNER_UNVERIFIED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" network() requires a verified resource id when FGA is configured.`,
+        details: {
+          agentName: this.name,
+        },
+      });
+    }
+
+    const runId = hasFga
+      ? this.#mastra?.generateId() || randomUUID()
+      : mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    await this.#requireAgentExecutionFGA({
+      requestContext: requestContextToUse,
+      memory: mergedOptions?.memory,
+      runId,
+    });
 
     return await networkLoop<OUTPUT>({
       networkName: this.name,
@@ -6118,16 +6457,61 @@ export class Agent<
    */
   async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     const runId = options.runId;
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const explicitRequestContext = options.requestContext;
+    const requestContextForDefaults = explicitRequestContext || new RequestContext();
+    if (explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(explicitRequestContext, { authorize: false });
+    }
+    const isNetworkToolApprovalResume =
+      (options as { __mastraNetworkToolApprovalResume?: boolean }).__mastraNetworkToolApprovalResume === true;
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextForDefaults });
     const mergedOptions = {
       ...defaultNetworkOptions,
       ...options,
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
+    let requestContextToUse = explicitRequestContext || mergedOptions.requestContext || requestContextForDefaults;
+    if (!explicitRequestContext) {
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { authorize: false });
+    }
+    if (isNetworkToolApprovalResume) {
+      requestContextToUse = new RequestContext(requestContextToUse.entries());
+      requestContextToUse.set('__mastra_networkToolApprovalResume', true);
+    }
+    const hasFga = Boolean(this.#mastra?.getServer()?.fga);
+    const trustedResourceId = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    if (hasFga && !trustedResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_OWNER_UNVERIFIED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" resumeNetwork() requires a matching resource id to resume runId "${runId}".`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+    await this.#requireAgentExecutionFGA({
+      requestContext: requestContextToUse,
+      memory: mergedOptions?.memory,
+      runId,
+    });
+    const { resourceId: runResourceId } = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeNetwork',
+      workflowName: 'agent-loop-main-workflow',
+    });
+    this.#assertAgenticLoopResumeOwnership({
+      method: 'resumeNetwork',
+      runId,
+      runResourceId,
+      requestContext: requestContextToUse,
+      options: { memory: mergedOptions?.memory },
+    });
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
@@ -6135,12 +6519,12 @@ export class Agent<
     const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
+    const memoryThreadId =
+      typeof mergedOptions?.memory?.thread === 'string'
         ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+        : mergedOptions?.memory?.thread?.id;
+    const threadId = hasFga ? threadIdFromContext : threadIdFromContext || memoryThreadId;
+    const resourceId = hasFga ? resourceIdFromContext : resourceIdFromContext || mergedOptions?.memory?.resource;
 
     return await networkLoop({
       networkName: this.name,
@@ -6185,7 +6569,9 @@ export class Agent<
    * ```
    */
   async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: true }, options);
+    const resumeOptions = { ...options } as typeof options & { __mastraNetworkToolApprovalResume: true };
+    resumeOptions.__mastraNetworkToolApprovalResume = true;
+    return this.resumeNetwork({ approved: true }, resumeOptions);
   }
 
   /**
@@ -6204,7 +6590,9 @@ export class Agent<
    * ```
    */
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: false }, options);
+    const resumeOptions = { ...options } as typeof options & { __mastraNetworkToolApprovalResume: true };
+    resumeOptions.__mastraNetworkToolApprovalResume = true;
+    return this.resumeNetwork({ approved: false }, resumeOptions);
   }
 
   async generate<
@@ -6239,16 +6627,23 @@ export class Agent<
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
 
-    // Validate request context if schema is provided
-    await this.#validateRequestContext(options?.requestContext);
+    const requestContextToUse = options?.requestContext;
+    if (requestContextToUse) {
+      await this.#assertAgentExecutionPreflight(requestContextToUse, { authorize: false });
+    }
 
     const defaultOptions = await this.getDefaultOptions({
-      requestContext: options?.requestContext,
+      requestContext: requestContextToUse,
     });
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    if (requestContextToUse) {
+      mergedOptions.requestContext = requestContextToUse;
+    } else {
+      await this.#assertAgentExecutionPreflight(mergedOptions.requestContext, { authorize: false });
+    }
 
     await this.#requireAgentExecutionFGA(mergedOptions);
 
@@ -6319,7 +6714,8 @@ export class Agent<
       });
     }
 
-    const fullOutput = await result.result.getFullOutput();
+    const output = result.result as MastraModelOutput<OUTPUT>;
+    const fullOutput = await output.getFullOutput();
 
     const error = fullOutput.error;
 
@@ -6331,31 +6727,156 @@ export class Agent<
   }
 
   /**
+   * @internal Test-only hook for duck-typed agents (e.g. harness v1 MockAgent) that
+   * override `stream()` without going through the real execution loop. Production
+   * `Agent.stream()` registers its output via the same runtime path (§thread-stream-runtime).
+   * Without this hook, signal-routed `subscribeToThread` consumers never see chunks
+   * from test agents. Do not use outside of test mocks.
+   */
+  _internalRegisterStreamRun<OUTPUT = TOutput>(
+    output: MastraModelOutput<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT>,
+  ): void {
+    const pubsub =
+      (streamOptions as { _pubsub?: PubSub })._pubsub ??
+      this.#resolveThreadStreamPubSub({
+        runId: output.runId,
+        ...this.#getThreadTarget(streamOptions),
+      }) ??
+      this.getPubSub() ??
+      defaultAgentThreadPubSub;
+    const streamOptionsWithRunId = { ...streamOptions, runId: output.runId };
+    const completion = agentThreadStreamRuntime.registerRun(
+      this as Agent<any, any, any, any>,
+      output,
+      streamOptionsWithRunId,
+      pubsub,
+    );
+    this.#rememberThreadStreamPubSub(streamOptionsWithRunId, pubsub);
+    this.#trackThreadStreamPubSub(output, streamOptionsWithRunId, completion);
+  }
+
+  /**
+   * Look up the `MastraModelOutput` for a run registered with the thread stream
+   * runtime. Returns `undefined` if the run has finished and been cleared.
+   * Signal-routed callers (e.g. harness v1 `Session.message()`) use this after
+   * `sendSignal()` returns a `runId` to drain events from the run's output.
+   */
+  getRunOutput<OUTPUT = TOutput>(runId: string): MastraModelOutput<OUTPUT> | undefined {
+    return agentThreadStreamRuntime.getRunOutput<OUTPUT>(
+      runId,
+      this.#resolveThreadStreamPubSub({ runId }) ?? this.getPubSub(),
+    );
+  }
+
+  /**
+   * Resolves with the `MastraModelOutput` for `runId` as soon as it is
+   * registered with the thread stream runtime (or immediately if already
+   * registered). Pairs with `sendSignal()` to give callers a handle to the
+   * output without polling `getRunOutput()` until it returns non-undefined.
+   *
+   * The returned promise rejects if the run is rejected or aborted before it registers.
+   * Callers waiting on optional/admission paths should still enforce their own deadline.
+   */
+  waitForRunOutput<OUTPUT = TOutput>(
+    runId: string,
+    options?: { abortSignal?: AbortSignal; signal?: AbortSignal },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return agentThreadStreamRuntime.waitForRunOutput<OUTPUT>(
+      runId,
+      this.#resolveThreadStreamPubSub({ runId }) ?? this.getPubSub(),
+      options?.abortSignal ?? options?.signal,
+    );
+  }
+
+  /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
-    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(
-      this as Agent<any, any, any, any>,
-      options,
-      this.getPubSub(),
-    );
+    const pubsub = this.#resolveThreadStreamPubSub(options) ?? this.getPubSub();
+    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(this as Agent<any, any, any, any>, options, pubsub);
   }
 
   abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
-    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    return agentThreadStreamRuntime.abortThread(options, this.#resolveThreadStreamPubSub(options) ?? this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    return agentThreadStreamRuntime.abortRun(runId, this.#resolveThreadStreamPubSub({ runId }) ?? this.getPubSub());
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
+    const requestedIdlePubSub = (target.ifIdle?.streamOptions as { _pubsub?: PubSub } | undefined)?._pubsub;
+    const pubsub =
+      this.#resolveThreadStreamPubSub(target) ?? requestedIdlePubSub ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+    const idleStreamTarget = this.#getThreadTarget(target.ifIdle?.streamOptions);
+    const idleResourceId = idleStreamTarget.resourceId ?? target.resourceId;
+    const idleThreadId = idleStreamTarget.threadId ?? target.threadId;
+    const idleThreadKey = idleThreadId ? this.#threadStreamKey(idleResourceId, idleThreadId) : undefined;
+    const previousThreadPubSubEntry = idleThreadKey
+      ? this.#threadStreamPubSubsByThreadKey.get(idleThreadKey)
+      : undefined;
+    const previousThreadRunId = previousThreadPubSubEntry?.runId;
+    const shouldSnapshotIdleWake =
+      Boolean(idleThreadId) && target.ifIdle?.behavior !== 'persist' && target.ifIdle?.behavior !== 'discard';
+    const shouldTrackIdleWake = shouldSnapshotIdleWake && (Boolean(target.ifIdle) || !target.runId);
+    const idleWakeCanRejectBeforeRegistration =
+      shouldTrackIdleWake && (Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga));
+    let acceptedIdleRunId: string | undefined;
+    const forgetAcceptedIdleRunPubSub = () => {
+      if (!acceptedIdleRunId) return;
+      const currentThreadPubSubEntry = idleThreadKey
+        ? this.#threadStreamPubSubsByThreadKey.get(idleThreadKey)
+        : undefined;
+      this.#threadStreamPubSubsByRunId.delete(acceptedIdleRunId);
+      if (!idleThreadKey || currentThreadPubSubEntry?.runId !== acceptedIdleRunId) return;
+      if (
+        previousThreadPubSubEntry &&
+        previousThreadPubSubEntry.runId !== acceptedIdleRunId &&
+        this.#threadStreamPubSubsByRunId.get(previousThreadPubSubEntry.runId) === previousThreadPubSubEntry.pubsub
+      ) {
+        this.#threadStreamPubSubsByThreadKey.set(idleThreadKey, previousThreadPubSubEntry);
+        return;
+      }
+      this.#threadStreamPubSubsByThreadKey.delete(idleThreadKey);
+    };
+    const signalTarget = shouldSnapshotIdleWake
+      ? ({
+          ...target,
+          resourceId: target.resourceId ?? idleResourceId,
+          threadId: target.threadId ?? idleThreadId,
+          ifIdle: {
+            ...(target.ifIdle ?? {}),
+            _attachToReservedRun: !target.ifIdle,
+            _onThreadStreamRunRejected: forgetAcceptedIdleRunPubSub,
+            _skipThreadRunReservationBeforePreflight: idleWakeCanRejectBeforeRegistration,
+            streamOptions: {
+              ...(target.ifIdle?.streamOptions ?? {}),
+              _pubsub: requestedIdlePubSub ?? pubsub,
+            },
+          },
+        } as unknown as SendAgentSignalOptions<OUTPUT>)
+      : target;
+
+    const result = agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, signalTarget, pubsub);
+    acceptedIdleRunId = result.runId;
+    if (shouldTrackIdleWake && idleThreadId && (result.output || result.runId !== previousThreadRunId)) {
+      this.#rememberThreadStreamPubSubForTarget(
+        {
+          runId: result.runId,
+          resourceId: idleResourceId,
+          threadId: idleThreadId,
+        },
+        pubsub,
+      );
+      void result.output?.catch(forgetAcceptedIdleRunPubSub);
+    }
+    return result;
   }
 
   async stream<
@@ -6390,110 +6911,361 @@ export class Agent<
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
 
-    // Validate request context if schema is provided
-    await this.#validateRequestContext(streamOptions?.requestContext);
-
-    const defaultOptions = await this.getDefaultOptions({
-      requestContext: streamOptions?.requestContext,
-    });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
-
-    await this.#requireAgentExecutionFGA(mergedOptions);
-
-    const llm = await this.getLLM({
-      requestContext: mergedOptions.requestContext,
-      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
-    });
-
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-
-      throw new MastraError({
-        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
-
-    const threadStreamPubSub = this.getPubSub();
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      mergedOptions,
-      threadStreamPubSub,
+    const pubsub =
+      ((streamOptions as any)?._pubsub as PubSub | undefined) ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+    const streamOptionsBase = { ...(streamOptions ?? {}) };
+    const skipThreadRunReservation = Boolean(
+      (streamOptionsBase as AgentExecutionOptionsBase<OUTPUT> & { _skipThreadRunReservation?: unknown })
+        ._skipThreadRunReservation,
     );
+    const initialThreadTarget = this.#getThreadTarget(streamOptionsBase);
+    const canReserveBeforeDefaults = !skipThreadRunReservation && this.#hasExplicitThreadMemory(streamOptionsBase);
+    const callerProvidedRunId = Boolean(streamOptionsBase.runId);
+    const requestContextToUse = streamOptionsBase.requestContext;
+    const hasExecutionPreflight = Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga);
+    const skipExecutionPreflight = Boolean(
+      (streamOptionsBase as AgentExecutionPreflightOptions)[SKIP_AGENT_EXECUTION_PREFLIGHT],
+    );
+    const preflightedDefaultOptions = (streamOptionsBase as AgentExecutionPreflightOptions)[
+      STREAM_UNTIL_IDLE_DEFAULT_OPTIONS
+    ] as AgentExecutionOptions<OUTPUT> | undefined;
+    const needsDefaultRequestContextPreflight = !requestContextToUse && hasExecutionPreflight;
+    const staticDefaultOptions =
+      !skipExecutionPreflight && needsDefaultRequestContextPreflight && typeof this.#defaultOptions !== 'function'
+        ? (this.#defaultOptions as unknown as AgentExecutionOptions<OUTPUT>)
+        : undefined;
+    const streamOptionsWithRunId = {
+      ...streamOptionsBase,
+      runId:
+        streamOptionsBase.runId ??
+        (canReserveBeforeDefaults ? this.#generateStreamRunId(initialThreadTarget) : undefined),
+    };
+    const ownsExternalReservation = Boolean((streamOptionsWithRunId as any)._threadRunReservationOwner);
+    const canReserveBeforePreflight = canReserveBeforeDefaults && !hasExecutionPreflight;
+    let releaseReservedRun = canReserveBeforePreflight
+      ? agentThreadStreamRuntime.reserveRun(streamOptionsWithRunId as AgentExecutionOptions<OUTPUT>, pubsub, this.id)
+      : undefined;
+    let reservedThreadTarget = releaseReservedRun ? initialThreadTarget : undefined;
+    let ownsReservation = Boolean(releaseReservedRun) || ownsExternalReservation;
+    let trackedThreadStreamPubSubTarget: { runId?: string; resourceId?: string; threadId?: string } | undefined;
+    let attemptedRunId = streamOptionsWithRunId.runId;
+    if (ownsReservation) {
+      this.#rememberThreadStreamPubSub(streamOptionsWithRunId, pubsub);
+      trackedThreadStreamPubSubTarget = {
+        runId: streamOptionsWithRunId.runId,
+        resourceId: initialThreadTarget.resourceId,
+        threadId: initialThreadTarget.threadId,
+      };
+    } else if (hasExecutionPreflight && streamOptionsWithRunId.runId) {
+      this.#threadStreamPubSubsByRunId.set(streamOptionsWithRunId.runId, pubsub);
+      trackedThreadStreamPubSubTarget = { runId: streamOptionsWithRunId.runId };
+    }
+    let preparedOptionsWithPubSub: (AgentExecutionOptionsBase<any> & { runId?: string; _pubsub: PubSub }) | undefined;
+    let preflightedRequestContext: RequestContext | undefined = skipExecutionPreflight
+      ? (preflightedDefaultOptions?.requestContext ?? requestContextToUse)
+      : undefined;
+    let hasPreflightedRequestContext = skipExecutionPreflight;
+    const reserveAdmittedRun = () => {
+      if (ownsReservation || !canReserveBeforeDefaults) return;
+      releaseReservedRun = agentThreadStreamRuntime.reserveRun(
+        streamOptionsWithRunId as AgentExecutionOptions<OUTPUT>,
+        pubsub,
+        this.id,
+      );
+      ownsReservation = Boolean(releaseReservedRun);
+      if (!ownsReservation) return;
+      reservedThreadTarget = initialThreadTarget;
+      this.#rememberThreadStreamPubSub(streamOptionsWithRunId, pubsub);
+      trackedThreadStreamPubSubTarget = {
+        runId: streamOptionsWithRunId.runId,
+        resourceId: initialThreadTarget.resourceId,
+        threadId: initialThreadTarget.threadId,
+      };
+    };
 
-    mergedOptions.runId ??=
-      this.#mastra?.generateId({
-        idType: 'run',
-        source: 'agent',
-        entityId: this.id,
-      }) ?? randomUUID();
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, threadStreamPubSub);
+    try {
+      if (!skipExecutionPreflight && requestContextToUse) {
+        await this.#assertAgentExecutionPreflight(requestContextToUse, {
+          memory: streamOptionsWithRunId.memory,
+          runId: streamOptionsWithRunId.runId,
+        });
+        preflightedRequestContext = requestContextToUse;
+        hasPreflightedRequestContext = true;
+        reserveAdmittedRun();
+      } else if (!skipExecutionPreflight && staticDefaultOptions) {
+        await this.#assertAgentExecutionPreflight(staticDefaultOptions.requestContext, {
+          memory: staticDefaultOptions.memory,
+          runId: streamOptionsWithRunId.runId,
+        });
+        preflightedRequestContext = staticDefaultOptions.requestContext;
+        hasPreflightedRequestContext = true;
+        reserveAdmittedRun();
+      }
+      const defaultOptions =
+        preflightedDefaultOptions ??
+        staticDefaultOptions ??
+        (await this.getDefaultOptions({
+          requestContext: requestContextToUse,
+        }));
+      const mergedOptions = deepMerge(
+        defaultOptions as Record<string, unknown>,
+        streamOptionsWithRunId as Record<string, unknown>,
+      ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+      if (requestContextToUse) {
+        mergedOptions.requestContext = requestContextToUse;
+      } else if (
+        hasExecutionPreflight &&
+        (!hasPreflightedRequestContext || mergedOptions.requestContext !== preflightedRequestContext)
+      ) {
+        await this.#assertAgentExecutionPreflight(mergedOptions.requestContext, {
+          memory: mergedOptions.memory,
+          runId: mergedOptions.runId,
+        });
+      }
 
-    const executeOptions = {
-      ...preparedOptions,
-      structuredOutput: mergedOptions.structuredOutput
-        ? {
-            ...mergedOptions.structuredOutput,
-            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
-            // This follows the same pattern as Tool/Workflow constructors
-            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+      const mergedThreadTarget = this.#getThreadTarget(mergedOptions);
+      if (!mergedOptions.runId) {
+        mergedOptions.runId = this.#generateStreamRunId(mergedThreadTarget);
+      }
+      attemptedRunId = mergedOptions.runId;
+      if (ownsReservation && reservedThreadTarget) {
+        if (!this.#sameThreadTarget(reservedThreadTarget, mergedThreadTarget)) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            streamOptionsWithRunId.runId,
+            reservedThreadTarget,
+            mergedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (retargetedReservation) {
+            this.#forgetThreadStreamPubSubForTarget({
+              runId: streamOptionsWithRunId.runId,
+              resourceId: reservedThreadTarget.resourceId,
+              threadId: reservedThreadTarget.threadId,
+            });
+            releaseReservedRun = () =>
+              agentThreadStreamRuntime.releaseRunReservation(mergedOptions.runId, pubsub, {
+                cleanupPrepared: true,
+                clearAbort: true,
+                rejectOutputWaiters: true,
+              });
+            reservedThreadTarget = mergedThreadTarget;
+            this.#rememberThreadStreamPubSubForTarget(
+              {
+                runId: mergedOptions.runId,
+                resourceId: mergedThreadTarget.resourceId,
+                threadId: mergedThreadTarget.threadId,
+              },
+              pubsub,
+            );
+            trackedThreadStreamPubSubTarget = {
+              runId: mergedOptions.runId,
+              resourceId: mergedThreadTarget.resourceId,
+              threadId: mergedThreadTarget.threadId,
+            };
+          } else if (!callerProvidedRunId) {
+            this.#forgetThreadStreamPubSubForTarget({
+              runId: streamOptionsWithRunId.runId,
+              resourceId: reservedThreadTarget.resourceId,
+              threadId: reservedThreadTarget.threadId,
+            });
+            releaseReservedRun?.();
+            releaseReservedRun = undefined;
+            ownsReservation = false;
+            reservedThreadTarget = undefined;
+            trackedThreadStreamPubSubTarget = undefined;
+            mergedOptions.runId = this.#generateStreamRunId(mergedThreadTarget);
           }
-        : undefined,
-      messages,
-      methodType: 'stream',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
+        }
+      }
+      if (!ownsReservation) {
+        releaseReservedRun = agentThreadStreamRuntime.reserveRun(mergedOptions, pubsub, this.id);
+        ownsReservation = Boolean(releaseReservedRun);
+        if (ownsReservation) {
+          reservedThreadTarget = this.#getThreadTarget(mergedOptions);
+          this.#rememberThreadStreamPubSub(mergedOptions, pubsub);
+          trackedThreadStreamPubSubTarget = {
+            runId: mergedOptions.runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          };
+        }
+      }
 
-    const result = await this.#execute(executeOptions);
+      const llm = await this.getLLM({
+        requestContext: mergedOptions.requestContext,
+        model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+      });
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_STREAM_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
+      const modelInfo = llm.getModel();
+
+      if (!isSupportedLanguageModel(modelInfo)) {
+        const modelId = modelInfo.modelId || 'unknown';
+        const provider = modelInfo.provider || 'unknown';
+        const specVersion = modelInfo.specificationVersion;
+
+        throw new MastraError({
+          id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            specVersion === 'v1'
+              ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+              : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+          details: {
+            agentName: this.name,
+            modelId,
+            provider,
+            specificationVersion: specVersion,
           },
-          // pass original error to preserve stack trace
-          result.error,
+        });
+      }
+
+      if (!skipThreadRunReservation) {
+        await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          this as Agent<any, any, any, any>,
+          mergedOptions,
+          pubsub,
+          ownsReservation,
         );
       }
-      throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
+      while (!skipThreadRunReservation && !ownsReservation && this.#getThreadTarget(mergedOptions).threadId) {
+        releaseReservedRun = agentThreadStreamRuntime.reserveRun(mergedOptions, pubsub, this.id);
+        ownsReservation = Boolean(releaseReservedRun);
+        if (ownsReservation) {
+          reservedThreadTarget = this.#getThreadTarget(mergedOptions);
+          this.#rememberThreadStreamPubSub(mergedOptions, pubsub);
+          trackedThreadStreamPubSubTarget = {
+            runId: mergedOptions.runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          };
+          break;
+        }
+        await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          this as Agent<any, any, any, any>,
+          mergedOptions,
+          pubsub,
+          ownsReservation,
+        );
+      }
+      if (ownsReservation && reservedThreadTarget) {
+        const preparedThreadTarget = this.#getThreadTarget(mergedOptions);
+        if (!this.#sameThreadTarget(reservedThreadTarget, preparedThreadTarget)) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            mergedOptions.runId,
+            reservedThreadTarget,
+            preparedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (!retargetedReservation) {
+            throw new Error(`Agent thread run id "${mergedOptions.runId}" could not be retargeted`);
+          }
+          this.#forgetThreadStreamPubSubForTarget({
+            runId: mergedOptions.runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          });
+          releaseReservedRun = () =>
+            agentThreadStreamRuntime.releaseRunReservation(mergedOptions.runId, pubsub, {
+              cleanupPrepared: true,
+              clearAbort: true,
+              rejectOutputWaiters: true,
+            });
+          reservedThreadTarget = preparedThreadTarget;
+          this.#rememberThreadStreamPubSubForTarget(
+            {
+              runId: mergedOptions.runId,
+              resourceId: preparedThreadTarget.resourceId,
+              threadId: preparedThreadTarget.threadId,
+            },
+            pubsub,
+          );
+          trackedThreadStreamPubSubTarget = {
+            runId: mergedOptions.runId,
+            resourceId: preparedThreadTarget.resourceId,
+            threadId: preparedThreadTarget.threadId,
+          };
+        }
+      }
+      const preparedOptions = await agentThreadStreamRuntime.prepareRunOptions(mergedOptions, pubsub);
+      preparedOptionsWithPubSub = { ...preparedOptions, _pubsub: pubsub };
+      this.#rememberThreadStreamPubSub(preparedOptionsWithPubSub, pubsub);
+      trackedThreadStreamPubSubTarget = {
+        runId: preparedOptionsWithPubSub.runId,
+        ...this.#getThreadTarget(preparedOptionsWithPubSub),
+      };
+
+      const executeOptions = {
+        ...preparedOptionsWithPubSub,
+        structuredOutput: mergedOptions.structuredOutput
+          ? {
+              ...mergedOptions.structuredOutput,
+              // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+              // This follows the same pattern as Tool/Workflow constructors
+              schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+            }
+          : undefined,
+        messages,
+        methodType: 'stream',
+        _pubsub: pubsub,
+        // Use agent's maxProcessorRetries as default, allow options to override
+        maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      } as unknown as InnerAgentExecutionOptions<OUTPUT>;
+
+      const result = await this.#execute(executeOptions);
+
+      if (result.status !== 'success') {
+        this.#forgetThreadStreamPubSub(preparedOptionsWithPubSub);
+        releaseReservedRun?.();
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
+      }
+
+      const output = result.result as MastraModelOutput<OUTPUT>;
+
+      if (!skipThreadRunReservation) {
+        const completion = agentThreadStreamRuntime.registerRun(
+          this as Agent<any, any, any, any>,
+          output,
+          preparedOptionsWithPubSub as unknown as AgentExecutionOptions<OUTPUT>,
+          pubsub,
+        );
+        this.#trackThreadStreamPubSub(output, preparedOptionsWithPubSub, completion);
+      }
+
+      return output;
+    } catch (error) {
+      if (preparedOptionsWithPubSub) {
+        this.#forgetThreadStreamPubSub(preparedOptionsWithPubSub);
+      } else if (trackedThreadStreamPubSubTarget) {
+        this.#forgetThreadStreamPubSubForTarget(trackedThreadStreamPubSubTarget);
+      } else {
+        this.#forgetThreadStreamPubSub(streamOptionsWithRunId);
+      }
+      if (releaseReservedRun) {
+        releaseReservedRun();
+      } else if (!skipThreadRunReservation) {
+        agentThreadStreamRuntime.rejectUnregisteredRun(attemptedRunId, pubsub);
+      }
+      throw error;
     }
-
-    agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
-      result.result,
-      preparedOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    return result.result;
   }
 
   /**
@@ -6567,7 +7339,40 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
+    const pubsub =
+      (streamOptions as { _pubsub?: PubSub } | undefined)?._pubsub ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+    let streamOptionsWithPubSub: Record<string | symbol, any> & { maxIdleMs?: number; _pubsub: PubSub } = {
+      ...(streamOptions ?? {}),
+      _pubsub: pubsub,
+    };
+    if (streamOptionsWithPubSub.requestContext) {
+      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext, {
+        memory: streamOptionsWithPubSub.memory,
+        runId: streamOptionsWithPubSub.runId,
+      });
+      streamOptionsWithPubSub = {
+        ...streamOptionsWithPubSub,
+        [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
+      };
+    } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
+      const defaultOptions = await this.getDefaultOptions({
+        requestContext: streamOptionsWithPubSub.requestContext,
+      });
+      const preflightOptions = deepMerge(
+        defaultOptions as Record<string, unknown>,
+        streamOptionsWithPubSub as Record<string, unknown>,
+      ) as AgentExecutionOptionsBase<any> & { requestContext?: RequestContext; runId?: string };
+      await this.#assertAgentExecutionPreflight(preflightOptions.requestContext, {
+        memory: preflightOptions.memory,
+        runId: preflightOptions.runId,
+      });
+      streamOptionsWithPubSub = {
+        ...streamOptionsWithPubSub,
+        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: preflightOptions as AgentExecutionOptions<any>,
+        [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
+      };
+    }
+    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptionsWithPubSub, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
     });
@@ -6632,7 +7437,46 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    return runResumeStreamUntilIdle<OUTPUT>(this, resumeData, streamOptions, {
+    const pubsub =
+      (streamOptions as { _pubsub?: PubSub } | undefined)?._pubsub ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+    let streamOptionsWithPubSub: AgentExecutionOptionsBase<any> & {
+      toolCallId?: string;
+      maxIdleMs?: number;
+      model?: DynamicArgument<MastraModelConfig>;
+      _pubsub: PubSub;
+      [SKIP_AGENT_EXECUTION_PREFLIGHT]: true;
+      [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]?: AgentExecutionOptions<TOutput>;
+    } = {
+      ...(streamOptions ?? {}),
+      _pubsub: pubsub,
+      [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
+    };
+    if (streamOptionsWithPubSub.requestContext) {
+      // Preflight before idle-wrapper setup, which can resolve defaults and memory before delegating to resumeStream().
+      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext, {
+        memory: streamOptionsWithPubSub.memory,
+        runId: streamOptionsWithPubSub.runId,
+      });
+    } else {
+      const defaultOptions = await this.getDefaultOptions({
+        requestContext: streamOptionsWithPubSub.requestContext,
+      });
+      const preflightOptions = deepMerge(
+        defaultOptions as Record<string, unknown>,
+        streamOptionsWithPubSub as Record<string, unknown>,
+      ) as AgentExecutionOptionsBase<any> & { requestContext?: RequestContext; runId?: string };
+      await this.#assertAgentExecutionPreflight(preflightOptions.requestContext, {
+        memory: preflightOptions.memory,
+        runId: preflightOptions.runId,
+      });
+      streamOptionsWithPubSub = {
+        ...streamOptionsWithPubSub,
+        _pubsub: pubsub,
+        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: preflightOptions as AgentExecutionOptions<TOutput>,
+        [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
+      };
+    }
+    return runResumeStreamUntilIdle<OUTPUT>(this, resumeData, streamOptionsWithPubSub, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
     });
@@ -6682,107 +7526,339 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    const defaultOptions = await this.getDefaultOptions({
-      requestContext: streamOptions?.requestContext,
+    const pubsub =
+      ((streamOptions as any)?._pubsub as PubSub | undefined) ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+    const streamOptionsWithPubSub: ResumeStreamInternalOptions | undefined = streamOptions
+      ? {
+          ...streamOptions,
+          _pubsub: pubsub,
+        }
+      : undefined;
+    const runId = streamOptionsWithPubSub?.runId ?? '';
+    const requestContextToUse = streamOptionsWithPubSub?.requestContext;
+    const preflightedDefaultOptions = streamOptionsWithPubSub?.[STREAM_UNTIL_IDLE_DEFAULT_OPTIONS] as
+      | AgentExecutionOptions<TOutput>
+      | undefined;
+    let defaultOptions: AgentExecutionOptions<TOutput> | undefined = preflightedDefaultOptions;
+    if (!streamOptionsWithPubSub?.[SKIP_AGENT_EXECUTION_PREFLIGHT]) {
+      if (requestContextToUse) {
+        // Keep explicit-context resume preflight before snapshot loading/reservation so denied callers cannot touch persisted runs.
+        await this.#assertAgentExecutionPreflight(requestContextToUse, {
+          memory: streamOptionsWithPubSub.memory,
+          runId,
+        });
+      } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
+        defaultOptions = (await this.getDefaultOptions({
+          requestContext: requestContextToUse,
+        })) as AgentExecutionOptions<TOutput>;
+        await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, {
+          memory: defaultOptions.memory,
+          runId,
+        });
+      }
+    }
+    const { resourceId: runResourceId, snapshot: existingSnapshot } = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeStream',
     });
-
-    const mergedStreamOptions = deepMerge(
+    defaultOptions ??= (await this.getDefaultOptions({
+      requestContext: requestContextToUse,
+    })) as AgentExecutionOptions<TOutput>;
+    const ownershipOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
+      (streamOptionsWithPubSub ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
-
-    const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
-    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
-    await this.#requireAgentExecutionFGA({
-      requestContext: mergedStreamOptions.requestContext,
-      memory: mergedStreamOptions.memory,
-      runId: mergedStreamOptions.runId,
-      snapshotMemoryInfo,
-    });
-
-    const llm = await this.getLLM({
-      requestContext: mergedStreamOptions.requestContext,
-      model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
-    });
-
-    if (!isSupportedLanguageModel(llm.getModel())) {
-      const modelInfo = llm.getModel();
-      const specVersion = modelInfo.specificationVersion;
-      throw new MastraError({
-        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
-            : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          modelId: modelInfo.modelId,
-          provider: modelInfo.provider,
-          specificationVersion: specVersion,
-        },
+    if (requestContextToUse) {
+      ownershipOptions.requestContext = requestContextToUse;
+    }
+    if (
+      streamOptionsWithPubSub?.[SKIP_AGENT_EXECUTION_PREFLIGHT] &&
+      !requestContextToUse &&
+      !preflightedDefaultOptions &&
+      (this.#requestContextSchema || this.#mastra?.getServer()?.fga)
+    ) {
+      await this.#assertAgentExecutionPreflight(ownershipOptions.requestContext, {
+        memory: ownershipOptions.memory,
+        runId,
       });
     }
-
-    const threadStreamPubSub = this.getPubSub();
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
+    this.#assertAgenticLoopResumeOwnership({
+      method: 'resumeStream',
+      runId,
+      runResourceId,
+      requestContext: ownershipOptions.requestContext,
+      options: ownershipOptions,
+    });
+    const streamOptionsWithSnapshotTarget = this.#withSnapshotThreadTarget(
+      streamOptionsWithPubSub,
+      this.#getAgenticLoopSnapshotMemoryInfo(existingSnapshot),
     );
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
+    const initialThreadTarget = this.#getThreadTarget(streamOptionsWithSnapshotTarget);
+    const canReserveBeforeDefaults = this.#hasExplicitThreadMemory(streamOptionsWithSnapshotTarget);
+    let releaseReservedRun =
+      streamOptionsWithPubSub && canReserveBeforeDefaults
+        ? agentThreadStreamRuntime.reserveRun(
+            streamOptionsWithSnapshotTarget as unknown as AgentExecutionOptions<OUTPUT>,
+            pubsub,
+            this.id,
+          )
+        : undefined;
+    let reservedThreadTarget = releaseReservedRun ? initialThreadTarget : undefined;
+    let ownsReservation =
+      Boolean(releaseReservedRun) || Boolean((streamOptionsWithPubSub as any)?._threadRunReservationOwner);
+    let trackedThreadStreamPubSubTarget: { runId?: string; resourceId?: string; threadId?: string } | undefined;
+    if (streamOptionsWithSnapshotTarget && ownsReservation) {
+      this.#rememberThreadStreamPubSub(streamOptionsWithSnapshotTarget, pubsub);
+      trackedThreadStreamPubSubTarget = {
+        runId: streamOptionsWithSnapshotTarget.runId,
+        resourceId: initialThreadTarget.resourceId,
+        threadId: initialThreadTarget.threadId,
+      };
+    }
+    let preparedOptionsWithPubSub: (AgentExecutionOptionsBase<any> & { runId?: string; _pubsub: PubSub }) | undefined;
 
-    const result = await this.#execute({
-      ...preparedOptions,
-      structuredOutput: mergedStreamOptions.structuredOutput
-        ? {
-            ...mergedStreamOptions.structuredOutput,
-            schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
+    try {
+      let mergedStreamOptions = deepMerge(
+        defaultOptions as Record<string, unknown>,
+        (streamOptionsWithSnapshotTarget ?? {}) as Record<string, unknown>,
+      ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+      if (requestContextToUse) {
+        mergedStreamOptions.requestContext = requestContextToUse;
+      }
+
+      if (ownsReservation && reservedThreadTarget) {
+        const mergedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
+        if (!this.#sameThreadTarget(reservedThreadTarget, mergedThreadTarget)) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            streamOptionsWithSnapshotTarget?.runId,
+            reservedThreadTarget,
+            mergedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (retargetedReservation) {
+            this.#forgetThreadStreamPubSubForTarget({
+              runId: streamOptionsWithSnapshotTarget?.runId,
+              resourceId: reservedThreadTarget.resourceId,
+              threadId: reservedThreadTarget.threadId,
+            });
+            releaseReservedRun = () =>
+              agentThreadStreamRuntime.releaseRunReservation(
+                (mergedStreamOptions as { runId?: string }).runId,
+                pubsub,
+                {
+                  cleanupPrepared: true,
+                  clearAbort: true,
+                  rejectOutputWaiters: true,
+                },
+              );
+            reservedThreadTarget = mergedThreadTarget;
+            this.#rememberThreadStreamPubSubForTarget(
+              {
+                runId: (mergedStreamOptions as { runId?: string }).runId,
+                resourceId: mergedThreadTarget.resourceId,
+                threadId: mergedThreadTarget.threadId,
+              },
+              pubsub,
+            );
+            trackedThreadStreamPubSubTarget = {
+              runId: (mergedStreamOptions as { runId?: string }).runId,
+              resourceId: mergedThreadTarget.resourceId,
+              threadId: mergedThreadTarget.threadId,
+            };
           }
-        : undefined,
-      messages: [],
-      resumeContext: {
-        resumeData,
-        snapshot: existingSnapshot,
-      },
-      methodType: 'stream',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+        }
+      }
+      if (!ownsReservation) {
+        releaseReservedRun = agentThreadStreamRuntime.reserveRun(
+          mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+          pubsub,
+          this.id,
+        );
+        ownsReservation = Boolean(releaseReservedRun);
+        if (ownsReservation) {
+          reservedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
+          this.#rememberThreadStreamPubSub(mergedStreamOptions, pubsub);
+          trackedThreadStreamPubSubTarget = {
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          };
+        }
+      }
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_STREAM_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
+      const llm = await this.getLLM({
+        requestContext: mergedStreamOptions.requestContext,
+        model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+      });
+
+      if (!isSupportedLanguageModel(llm.getModel())) {
+        const modelInfo = llm.getModel();
+        const specVersion = modelInfo.specificationVersion;
+        throw new MastraError({
+          id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            specVersion === 'v1'
+              ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
+              : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+          details: {
+            modelId: modelInfo.modelId,
+            provider: modelInfo.provider,
+            specificationVersion: specVersion,
           },
-          // pass original error to preserve stack trace
-          result.error,
+        });
+      }
+
+      await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as Agent<any, any, any, any>,
+        mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+        pubsub,
+        ownsReservation,
+      );
+      while (!ownsReservation && this.#getThreadTarget(mergedStreamOptions).threadId) {
+        releaseReservedRun = agentThreadStreamRuntime.reserveRun(
+          mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+          pubsub,
+          this.id,
+        );
+        ownsReservation = Boolean(releaseReservedRun);
+        if (ownsReservation) {
+          reservedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
+          this.#rememberThreadStreamPubSub(mergedStreamOptions, pubsub);
+          trackedThreadStreamPubSubTarget = {
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          };
+          break;
+        }
+        await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          this as Agent<any, any, any, any>,
+          mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+          pubsub,
+          ownsReservation,
         );
       }
-      throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
+      if (ownsReservation && reservedThreadTarget) {
+        const preparedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
+        if (!this.#sameThreadTarget(reservedThreadTarget, preparedThreadTarget)) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            (mergedStreamOptions as { runId?: string }).runId,
+            reservedThreadTarget,
+            preparedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (!retargetedReservation) {
+            throw new Error(
+              `Agent thread run id "${(mergedStreamOptions as { runId?: string }).runId}" could not be retargeted`,
+            );
+          }
+          this.#forgetThreadStreamPubSubForTarget({
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          });
+          releaseReservedRun = () =>
+            agentThreadStreamRuntime.releaseRunReservation((mergedStreamOptions as { runId?: string }).runId, pubsub, {
+              cleanupPrepared: true,
+              clearAbort: true,
+              rejectOutputWaiters: true,
+            });
+          reservedThreadTarget = preparedThreadTarget;
+          this.#rememberThreadStreamPubSubForTarget(
+            {
+              runId: (mergedStreamOptions as { runId?: string }).runId,
+              resourceId: preparedThreadTarget.resourceId,
+              threadId: preparedThreadTarget.threadId,
+            },
+            pubsub,
+          );
+          trackedThreadStreamPubSubTarget = {
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: preparedThreadTarget.resourceId,
+            threadId: preparedThreadTarget.threadId,
+          };
+        }
+      }
+      const preparedOptions = await agentThreadStreamRuntime.prepareRunOptions(
+        mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+        pubsub,
+      );
+      preparedOptionsWithPubSub = { ...preparedOptions, _pubsub: pubsub };
+      this.#rememberThreadStreamPubSub(preparedOptionsWithPubSub, pubsub);
+      trackedThreadStreamPubSubTarget = {
+        runId: preparedOptionsWithPubSub.runId,
+        ...this.#getThreadTarget(preparedOptionsWithPubSub),
+      };
+
+      const result = await this.#execute({
+        ...preparedOptionsWithPubSub,
+        structuredOutput: mergedStreamOptions.structuredOutput
+          ? {
+              ...mergedStreamOptions.structuredOutput,
+              schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
+            }
+          : undefined,
+        messages: [],
+        resumeContext: {
+          resumeData,
+          snapshot: existingSnapshot,
+        },
+        methodType: 'stream',
+        _pubsub: pubsub,
+        // Use agent's maxProcessorRetries as default, allow options to override
+        maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+
+      if (result.status !== 'success') {
+        this.#forgetThreadStreamPubSub(preparedOptionsWithPubSub);
+        releaseReservedRun?.();
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
+      }
+
+      const completion = agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result as unknown as MastraModelOutput<OUTPUT>,
+        preparedOptionsWithPubSub as unknown as AgentExecutionOptions<OUTPUT>,
+        pubsub,
+      );
+      this.#trackThreadStreamPubSub(
+        result.result as unknown as MastraModelOutput<OUTPUT>,
+        preparedOptionsWithPubSub,
+        completion,
+      );
+
+      return result.result as unknown as MastraModelOutput<OUTPUT>;
+    } catch (error) {
+      if (preparedOptionsWithPubSub) {
+        this.#forgetThreadStreamPubSub(preparedOptionsWithPubSub);
+      } else if (trackedThreadStreamPubSubTarget) {
+        this.#forgetThreadStreamPubSubForTarget(trackedThreadStreamPubSubTarget);
+      } else {
+        this.#forgetThreadStreamPubSub(streamOptionsWithSnapshotTarget ?? {});
+      }
+      releaseReservedRun?.();
+      throw error;
     }
-
-    agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
-      result.result as unknown as MastraModelOutput<OUTPUT>,
-      preparedOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    return result.result as unknown as MastraModelOutput<OUTPUT>;
   }
 
   /**
@@ -6829,17 +7905,49 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
-    const defaultOptions = await this.getDefaultOptions({
-      requestContext: options?.requestContext,
+    const requestContextToUse = options?.requestContext;
+    let defaultOptions: AgentExecutionOptions<TOutput> | undefined;
+    if (requestContextToUse) {
+      // Keep explicit-context resume preflight before snapshot loading/model resolution so denied callers cannot touch persisted runs.
+      await this.#assertAgentExecutionPreflight(requestContextToUse, {
+        memory: options?.memory,
+        runId: options?.runId,
+      });
+    } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
+      defaultOptions = (await this.getDefaultOptions({
+        requestContext: requestContextToUse,
+      })) as AgentExecutionOptions<TOutput>;
+      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, {
+        memory: defaultOptions.memory,
+        runId: options?.runId,
+      });
+    }
+
+    const runId = options?.runId ?? '';
+    const { resourceId: runResourceId, snapshot: existingSnapshot } = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeGenerate',
     });
+
+    defaultOptions ??= (await this.getDefaultOptions({
+      requestContext: requestContextToUse,
+    })) as AgentExecutionOptions<TOutput>;
 
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    if (requestContextToUse) {
+      mergedOptions.requestContext = requestContextToUse;
+    }
+    this.#assertAgenticLoopResumeOwnership({
+      method: 'resumeGenerate',
+      runId,
+      runResourceId,
+      requestContext: mergedOptions.requestContext,
+      options: mergedOptions,
+    });
 
-    const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
     await this.#requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
@@ -6913,7 +8021,8 @@ export class Agent<
       });
     }
 
-    const fullOutput = (await result.result.getFullOutput()) as Awaited<
+    const output = result.result as MastraModelOutput<OUTPUT>;
+    const fullOutput = (await output.getFullOutput()) as Awaited<
       ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
     >;
 

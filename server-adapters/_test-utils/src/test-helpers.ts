@@ -9,6 +9,7 @@ import { CompositeVoice } from '@mastra/core/voice';
 import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
+import { Harness } from '@mastra/core/harness/v1';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
@@ -495,6 +496,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
+    server: {
+      auth: {
+        protected: [],
+        authenticateToken: async () => ({ id: 'test-resource' }),
+        mapUserToResourceId: () => 'test-resource',
+      },
+    },
     storage: new InMemoryStore(),
     agents: {
       'test-agent': agent,
@@ -515,9 +523,22 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     backgroundTasks: {
       enabled: true,
     },
+    harnesses: {
+      default: new Harness({
+        modes: [{ id: 'default', agentId: 'test-agent' }],
+        defaultModeId: 'default',
+        goals: { defaultJudgeModel: 'default' },
+      }),
+    },
     channels: {
       'test-platform': mockChannelProvider as any,
     },
+  });
+
+  await mastra.getHarness('default').session({
+    sessionId: 'test-session',
+    resourceId: 'test-resource',
+    threadId: 'test-thread',
   });
 
   // Mock getEditor to return an object with namespaced methods for stored agents routes
@@ -1283,6 +1304,40 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
   // Index/unindex operations
   if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
     return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
+  }
+
+  if (routePath === '/agents/:agentId/generate-legacy' || routePath === '/agents/:agentId/stream-legacy') {
+    return { body: { threadId: 'test-thread', resourceId: 'test-resource' } };
+  }
+
+  if (routePath.startsWith('/harness/')) {
+    if (routePath.endsWith('/attachments') && route.method === 'POST') {
+      return { body: { kind: 'file', name: 'test.txt', mimeType: 'text/plain', dataBase64: 'aGVsbG8=' } };
+    }
+    if (routePath.endsWith('/messages') && route.method === 'POST') {
+      return { body: { content: 'test message content', admissionId: 'test-admission-message' } };
+    }
+    if (routePath.endsWith('/queue') && route.method === 'POST') {
+      return { body: { content: 'test queued content', admissionId: 'test-admission-queue' } };
+    }
+    if (routePath.endsWith('/state') && route.method === 'PATCH') {
+      return { body: { key: 'test-value' } };
+    }
+    if (routePath.endsWith('/mode') && route.method === 'PATCH') {
+      return { body: { mode: 'default' } };
+    }
+    if (routePath.endsWith('/model') && route.method === 'PATCH') {
+      return { body: { model: 'default' } };
+    }
+    if (routePath.endsWith('/permissions') && route.method === 'PATCH') {
+      return { body: { action: 'grantCategory', category: 'read' } };
+    }
+    if (routePath.endsWith('/goal') && route.method === 'PUT') {
+      return { body: { objective: 'Reach the test goal', maxTurns: 1, kickoff: false } };
+    }
+    if (routePath.endsWith('/sessions') && route.method === 'POST') {
+      return { body: { sessionId: 'test-session-create', threadId: { fresh: true }, modeId: 'default' } };
+    }
   }
 
   return {};

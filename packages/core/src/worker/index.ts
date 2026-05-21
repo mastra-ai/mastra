@@ -5,6 +5,8 @@ export type { OrchestrationWorkerConfig } from './workers/orchestration-worker';
 export { SchedulerWorker } from './workers/scheduler-worker';
 export { BackgroundTaskWorker } from './workers/background-task-worker';
 export type { BackgroundTaskWorkerConfig } from './workers/background-task-worker';
+export { HarnessWakeupWorker } from './workers/harness-wakeup-worker';
+export type { HarnessWakeupWorkerConfig } from './workers/harness-wakeup-worker';
 export type { StepExecutionStrategy, StepExecutionParams } from './types';
 export { InProcessStrategy } from './strategies/in-process-strategy';
 export { HttpRemoteStrategy, StepExecutionError } from './strategies/http-remote-strategy';

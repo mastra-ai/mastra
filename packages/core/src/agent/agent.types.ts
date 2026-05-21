@@ -1,5 +1,6 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
@@ -12,6 +13,7 @@ import type { RequestContext } from '../request-context';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { CreatedAgentSignal } from './signals';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -633,6 +635,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * `agent.streamUntilIdle`, which drives continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * Bypass agent thread run reservation/registration for nested, read-only
+   * streams that must inspect the current thread while its parent run is still
+   * active.
+   */
+  _skipThreadRunReservation?: boolean;
+
+  /**
+   * @internal
+   * Signal inputs that are already present in the initial message list and still
+   * need to be echoed as data parts to stream subscribers. Public callers should
+   * pass the signal as `agent.stream(signal, options)` instead of setting this.
+   */
+  _initialSignalEchoes?: CreatedAgentSignal[];
 } & Partial<ObservabilityContext>;
 
 /**
@@ -660,5 +678,7 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     resumeData: any;
     snapshot: any;
   };
+  /** Internal: PubSub captured by the public execution path for this run */
+  _pubsub?: PubSub;
   toolCallId?: string;
 } & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

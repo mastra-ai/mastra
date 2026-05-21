@@ -76,6 +76,13 @@ export interface AgentLegacyCapabilities {
   getDefaultStreamOptionsLegacy(options: {
     requestContext?: RequestContext;
   }): AgentStreamOptions | Promise<AgentStreamOptions>;
+  /**
+   * Enforce request-context schema validation and FGA before legacy execution.
+   * Throws when FGA is configured and requestContext has no user.
+   */
+  assertAgentExecutionPreflight(requestContext?: RequestContext): Promise<void>;
+  /** Whether legacy execution needs request-context schema or FGA preflight. */
+  needsAgentExecutionPreflight(): boolean;
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
   /** Get instructions */
@@ -926,18 +933,32 @@ export class AgentLegacyHandler {
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    if ('structuredOutput' in generateOptions && generateOptions.structuredOutput) {
+    const requestContextToUse = generateOptions.requestContext;
+    if (requestContextToUse) {
+      await this.capabilities.assertAgentExecutionPreflight(requestContextToUse);
+    }
+
+    const needsExecutionPreflight = this.capabilities.needsAgentExecutionPreflight();
+    const hasStructuredOutput = 'structuredOutput' in generateOptions && generateOptions.structuredOutput;
+    const rejectLegacyStructuredOutput = () => {
       throw new MastraError({
         id: 'AGENT_GENERATE_LEGACY_STRUCTURED_OUTPUT_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'This method does not support structured output. Please use generate() instead.',
       });
+    };
+
+    if (hasStructuredOutput) {
+      if (!requestContextToUse && needsExecutionPreflight) {
+        await this.capabilities.assertAgentExecutionPreflight(undefined);
+      }
+      rejectLegacyStructuredOutput();
     }
 
     const defaultGenerateOptionsLegacy = await Promise.resolve(
       this.capabilities.getDefaultGenerateOptionsLegacy({
-        requestContext: generateOptions.requestContext,
+        requestContext: requestContextToUse,
       }),
     );
 
@@ -948,6 +969,12 @@ export class AgentLegacyHandler {
         defaultGenerateOptionsLegacy.experimental_generateMessageId ||
         this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
     };
+
+    if (requestContextToUse) {
+      mergedGenerateOptions.requestContext = requestContextToUse;
+    } else {
+      await this.capabilities.assertAgentExecutionPreflight(mergedGenerateOptions.requestContext);
+    }
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions as any, 'generate');
 
@@ -1276,9 +1303,14 @@ export class AgentLegacyHandler {
     | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
     | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
+    const requestContextToUse = streamOptions.requestContext;
+    if (requestContextToUse) {
+      await this.capabilities.assertAgentExecutionPreflight(requestContextToUse);
+    }
+
     const defaultStreamOptionsLegacy = await Promise.resolve(
       this.capabilities.getDefaultStreamOptionsLegacy({
-        requestContext: streamOptions.requestContext,
+        requestContext: requestContextToUse,
       }),
     );
 
@@ -1289,6 +1321,12 @@ export class AgentLegacyHandler {
         defaultStreamOptionsLegacy.experimental_generateMessageId ||
         this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
     };
+
+    if (requestContextToUse) {
+      mergedStreamOptions.requestContext = requestContextToUse;
+    } else {
+      await this.capabilities.assertAgentExecutionPreflight(mergedStreamOptions.requestContext);
+    }
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions as any, 'stream');
 

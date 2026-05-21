@@ -22,6 +22,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
+import { HarnessPG } from './domains/harness';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -53,6 +54,8 @@ const ALL_DOMAINS = [
   WorkflowsPG,
   DatasetsPG,
   ExperimentsPG,
+  FavoritesPG,
+  HarnessPG,
   BackgroundTasksPG,
   FavoritesPG,
   ChannelsPG,
@@ -87,6 +90,7 @@ export {
   ChannelsPG,
   DatasetsPG,
   ExperimentsPG,
+  HarnessPG,
   MCPClientsPG,
   MCPServersPG,
   MemoryPG,
@@ -176,6 +180,7 @@ export class PostgresStore extends MastraCompositeStore {
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),
+        harness: new HarnessPG(domainConfig),
         backgroundTasks: new BackgroundTasksPG(domainConfig),
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),

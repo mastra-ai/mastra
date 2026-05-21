@@ -2,9 +2,7 @@ import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thr
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
-import type { MastraProviderMetadata } from '../agent/message-list/state/types';
-import type { AgentSignalContents } from '../agent/signals';
-import type { AgentThreadSubscription } from '../agent/types';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -12,7 +10,7 @@ import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute, CorsOptions } from '../server/types';
-import type { AgentChunkType } from '../stream/types';
+import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools/tool';
 import { getChatModule } from './chat-lazy';
 
@@ -29,8 +27,6 @@ import {
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext, ThreadHistoryMessage } from './types';
-
-const DEFAULT_INLINE_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
 /** Message content that can be posted to a channel. */
 export type PostableMessage = string | CardElement;
@@ -153,10 +149,10 @@ export interface ChannelConfig {
    * Everything else is described as text metadata so the agent knows about the
    * file without crashing models that reject unsupported types.
    *
-   * - **Array of globs** — e.g. `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']` (default), `['image/*', 'video/*']`
+   * - **Array of globs** — e.g. `['image/*']` (default), `['image/*', 'video/*']`
    * - **Function** — `(mimeType: string) => boolean`
    *
-   * @default `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`
+   * @default `['image/*']`
    *
    * @example
    * ```ts
@@ -262,11 +258,11 @@ export interface ChannelConfig {
 /**
  * Build a predicate from the `inlineMedia` config option.
  * Supports glob patterns (e.g. `'image/*'`) and custom functions.
- * Default: see `DEFAULT_INLINE_MEDIA_TYPES`.
+ * Default: only `image/*` is sent inline.
  */
 function buildInlineMediaCheck(config?: string[] | ((mimeType: string) => boolean)): (mimeType: string) => boolean {
   if (typeof config === 'function') return config;
-  const patterns = config ?? DEFAULT_INLINE_MEDIA_TYPES;
+  const patterns = config ?? ['image/*'];
   return (mimeType: string) => {
     return patterns.some(pattern => {
       if (pattern === '*' || pattern === '*/*') return true;
@@ -350,9 +346,16 @@ async function headContentType(url: string, logger?: IMastraLogger): Promise<str
  */
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
+  /**
+   * The original channel configuration. Channel providers use this to rebuild
+   * an AgentChannels instance without dropping author-configured adapters.
+   */
+  public readonly channelConfig: ChannelConfig;
   private chat: Chat | null = null;
   /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
   private initPromise: Promise<void> | null = null;
+  /** Incremented when the lifecycle is closed so stale async initialization cannot resurrect chat. */
+  private lifecycleGeneration = 0;
   private agent!: Agent<any, any, any, any>;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
@@ -372,55 +375,10 @@ export class AgentChannels {
   private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
-  /**
-   * The original `ChannelConfig` passed to the constructor.
-   *
-   * Useful for rebuilding `AgentChannels` while preserving existing adapters/handlers,
-   * e.g. when a `ChannelProvider` wants to inject its own adapter without clobbering
-   * adapters configured by the agent author:
-   *
-   * @example
-   * ```ts
-   * const existing = agent.getChannels();
-   * existing?.close();
-   * const next = new AgentChannels({
-   *   ...existing?.channelConfig,
-   *   adapters: { ...existing?.channelConfig.adapters, slack: slackAdapter },
-   * });
-   * agent.setChannels(next);
-   * ```
-   */
-  public readonly channelConfig: ChannelConfig;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
   /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
   private externallyManagedPlatforms: Set<string> = new Set();
-  /**
-   * Per-Mastra-thread subscriptions. We lazily open one `agent.subscribeToThread()` per channel
-   * thread on the first message we route through it, so any signals we send (and any signals
-   * other callers send to the same thread) are rendered exactly once to the platform. The
-   * subscription stays open until `close()` is called or the consumer errors out — we don't
-   * eagerly subscribe at startup because the per-thread chunk consumer needs the `sdkThread`
-   * handle, which only exists after a platform event arrives.
-   */
-  private threadSubscriptions = new Map<
-    string,
-    {
-      subscription: AgentThreadSubscription<any>;
-      consumer: Promise<void>;
-    }
-  >();
-  /**
-   * Tool-approval cards that have been clicked and are about to be resumed via `approveToolCall` /
-   * `declineToolCall`. The resumed run's `tool-result` chunks arrive through the thread
-   * subscription consumer rather than the click handler, so we stash the approval card's
-   * platform `messageId` (plus the tool's display metadata) here for the consumer to pick up
-   * when it renders the result. Entries are removed as soon as the consumer consumes them.
-   */
-  private pendingApprovalCards = new Map<
-    string,
-    { messageId?: string; displayName: string; argsSummary: string; startedAt: number }
-  >();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -527,6 +485,7 @@ export class AgentChannels {
       return this.initPromise;
     }
 
+    const generation = this.lifecycleGeneration;
     this.initPromise = (async () => {
       // Resolve state adapter: custom > Mastra storage > in-memory fallback
       if (this.customState) {
@@ -675,48 +634,6 @@ export class AgentChannels {
             } catch (err) {
               this.log('debug', 'Failed to edit denied card', err);
             }
-
-            // Resume the suspended run with a denial so the agent can produce a follow-up
-            // message (e.g. acknowledging the rejection). Without this, the run stays
-            // suspended forever and the user gets no feedback from the model.
-            const { channelContext } = this.buildEventContext({
-              sdkThread,
-              platform,
-              eventType: 'action',
-              messageId,
-              actor: event.user,
-            });
-            const requestContext = new RequestContext();
-            requestContext.set('channel', channelContext);
-
-            this.ensureThreadSubscription({
-              mastraThreadId: mastraThread.id,
-              resourceId: mastraThread.resourceId,
-              sdkThread,
-              platform,
-            });
-
-            try {
-              const resumed = await this.agent.declineToolCall({
-                runId,
-                toolCallId,
-                requestContext,
-                memory: {
-                  thread: mastraThread.id,
-                  resource: mastraThread.resourceId,
-                },
-              });
-              void resumed.consumeStream().catch(err => {
-                this.log('error', 'Error consuming resumed decline stream', err);
-              });
-            } catch (err) {
-              const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
-              if (isStaleApproval) {
-                this.log('info', `Ignoring stale tool denial action (runId already consumed)`);
-              } else {
-                throw err;
-              }
-            }
             return;
           }
 
@@ -727,54 +644,38 @@ export class AgentChannels {
             this.log('debug', 'Failed to edit approved card', err);
           }
 
-          // Build request context for the resumed stream.
-          const { channelContext } = this.buildEventContext({
-            sdkThread,
+          // Build request context for the resumed stream
+          const actionAdapter = this.adapters[platform]!;
+          const actionBotUserId = actionAdapter.botUserId;
+          const actionBotMention = actionBotUserId ? sdkThread.mentionUser(actionBotUserId) : undefined;
+          const requestContext = new RequestContext();
+          requestContext.set('channel', {
             platform,
             eventType: 'action',
+            isDM: sdkThread.isDM,
+            threadId: sdkThread.id,
+            channelId: sdkThread.channelId,
             messageId,
-            actor: event.user,
-          });
-          const requestContext = new RequestContext();
-          requestContext.set('channel', channelContext);
-
-          // The resumed run fans into the thread subscription, so the consumer running there
-          // will render the tool-result and any follow-up output. Ensure the subscription
-          // is live (e.g. if the bot restarted between the approval card being posted and
-          // the user clicking it) and stash the approval card's message id so the consumer
-          // can edit it in place when the tool-result chunk arrives.
-          this.ensureThreadSubscription({
-            mastraThreadId: mastraThread.id,
-            resourceId: mastraThread.resourceId,
-            sdkThread,
-            platform,
-          });
-          if (toolCallId) {
-            this.pendingApprovalCards.set(toolCallId, {
-              messageId,
-              displayName,
-              argsSummary,
-              startedAt: Date.now(),
-            });
-          }
-
-          // approveToolCall returns a MastraModelOutput whose stream must be drained for
-          // the resumed run to actually execute. The chunks fan into the thread
-          // subscription via the pubsub keyed by resourceId+threadId, so the existing
-          // consumer renders the tool result and follow-up output; we just need to pump
-          // the stream forward here.
-          const resumed = await this.agent.approveToolCall({
+            userId: event.user.userId,
+            userName: event.user.fullName || event.user.userName,
+            botUserId: actionBotUserId,
+            botUserName: actionAdapter.userName,
+            botMention: actionBotMention,
+          } satisfies ChannelContext);
+          // Resume the agent stream BEFORE editing the card —
+          // if the snapshot is gone (e.g. duplicate click), we bail without mangling the card
+          const resumedStream = await this.agent.approveToolCall({
             runId,
             toolCallId,
             requestContext,
-            memory: {
-              thread: mastraThread.id,
-              resource: mastraThread.resourceId,
-            },
           });
-          void resumed.consumeStream().catch(err => {
-            this.log('error', 'Error consuming resumed approval stream', err);
-          });
+
+          await this.consumeAgentStream(
+            resumedStream,
+            sdkThread,
+            platform,
+            toolCallId ? { toolCallId, messageId } : undefined,
+          );
         } catch (err) {
           const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
           if (isStaleApproval) {
@@ -798,6 +699,9 @@ export class AgentChannels {
         }
       });
       await chat.initialize();
+      if (generation !== this.lifecycleGeneration) {
+        return;
+      }
       this.chat = chat;
 
       // Start gateway listeners for adapters that support it (e.g. Discord)
@@ -811,7 +715,7 @@ export class AgentChannels {
             durationMs?: number,
           ) => Promise<Response>;
 
-          this.startGatewayLoop(name, startGateway);
+          this.startGatewayLoop(name, startGateway, generation);
         }
       }
     })();
@@ -819,7 +723,9 @@ export class AgentChannels {
     try {
       await this.initPromise;
     } catch (error) {
-      this.initPromise = null;
+      if (generation === this.lifecycleGeneration) {
+        this.initPromise = null;
+      }
       throw error;
     }
   }
@@ -955,21 +861,14 @@ export class AgentChannels {
   }
 
   /**
-   * Tear down all live thread subscriptions opened by this AgentChannels. Safe to call
-   * multiple times. Useful for tests and for graceful shutdown of long-lived processes —
-   * each cached subscription holds a handler in the agent's thread-stream runtime that
-   * would otherwise stay registered for the lifetime of the process.
+   * Close resources owned by AgentChannels. The fork's channel runtime does not
+   * currently hold long-lived subscriptions here, but providers still call this
+   * before replacing an instance.
    */
   close(): void {
-    for (const entry of this.threadSubscriptions.values()) {
-      try {
-        entry.subscription.unsubscribe();
-      } catch (err) {
-        this.log('debug', 'Failed to unsubscribe thread subscription', err);
-      }
-    }
-    this.threadSubscriptions.clear();
-    this.pendingApprovalCards.clear();
+    this.lifecycleGeneration += 1;
+    this.initPromise = null;
+    this.chat = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -989,84 +888,6 @@ export class AgentChannels {
       throw new Error(`No adapter registered for platform "${channel.platform}"`);
     }
     return { adapter, threadId: channel.threadId };
-  }
-
-  /**
-   * Derive the three per-event shapes we hand off to downstream systems from one set of
-   * inputs. Keeping this in one place ensures the LLM (`attributes`), input processors
-   * (`requestContext`), and memory (`metadata`) all see consistent author / thread facts.
-   *
-   *   - `channelContext` — goes on `requestContext` under the 'channel' key, consumed by
-   *     `ChatChannelProcessor` and other input processors.
-   *   - `attributes` — serialized as XML on the signal element the LLM sees (e.g. on
-   *     `<user-message messageId=... authorId=... />`). Strings only.
-   *   - `providerOptions` — written to the stored message's `content.providerMetadata`
-   *     under `mastra.channels.<platform>` so UI/query callers can read author/channel
-   *     facts off the message (e.g. show a Slack icon + author name) without unpacking
-   *     the signal envelope. The LLM ignores `providerOptions.mastra.*` since only
-   *     provider-keyed entries (openai, anthropic, …) are forwarded to the model.
-   */
-  private buildEventContext(params: {
-    sdkThread: Thread;
-    platform: string;
-    eventType: string;
-    messageId: string | undefined;
-    actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
-  }): {
-    channelContext: ChannelContext;
-    attributes: Record<string, string | undefined>;
-    providerOptions: MastraProviderMetadata;
-  } {
-    const { sdkThread, platform, eventType, messageId, actor } = params;
-    const adapter = this.adapters[platform]!;
-    const botUserId = adapter.botUserId;
-    const botMention = botUserId ? sdkThread.mentionUser(botUserId) : undefined;
-    const actorName = actor.fullName || actor.userName;
-    const actorMention = actor.userId ? sdkThread.mentionUser(actor.userId) : undefined;
-
-    const channelContext: ChannelContext = {
-      platform,
-      eventType,
-      isDM: sdkThread.isDM,
-      threadId: sdkThread.id,
-      channelId: sdkThread.channelId,
-      messageId,
-      userId: actor.userId,
-      userName: actorName,
-      botUserId,
-      botUserName: adapter.userName,
-      botMention,
-    };
-
-    // Attributes: short, flat, strings only — they're rendered as XML attrs on the signal.
-    // In DMs the author is stable for the whole conversation (already in the system message),
-    // so we keep this minimal to avoid noise on every turn.
-    const attributes: Record<string, string | undefined> = { messageId };
-    if (!sdkThread.isDM) {
-      attributes.authorName = actorName;
-      attributes.authorId = actor.userId;
-      attributes.authorMention = actorMention;
-      if (actor.isBot) attributes.isBot = 'true';
-    }
-
-    const providerOptions: MastraProviderMetadata = {
-      mastra: {
-        channels: {
-          [platform]: {
-            ...(messageId !== undefined ? { messageId } : {}),
-            author: {
-              userId: actor.userId,
-              ...(actor.userName !== undefined ? { userName: actor.userName } : {}),
-              ...(actor.fullName !== undefined ? { fullName: actor.fullName } : {}),
-              ...(actorMention !== undefined ? { mention: actorMention } : {}),
-              ...(actor.isBot !== undefined ? { isBot: actor.isBot } : {}),
-            },
-          },
-        },
-      },
-    };
-
-    return { channelContext, attributes, providerOptions };
   }
 
   /**
@@ -1097,6 +918,7 @@ export class AgentChannels {
   }
 
   private async processChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+    const agent = this.agent;
     const platform = sdkThread.adapter.name;
 
     // Map to a Mastra thread for memory/history
@@ -1120,7 +942,7 @@ export class AgentChannels {
     // the agent already has history via Mastra's memory system.
     // History is prepended to the user message text (not as a separate message)
     // to avoid consecutive user messages which some providers reject (e.g. DeepSeek).
-    let historyBlock: string | undefined; // TODO: convert platform thread chat history into Mastra messages instead of one big text block
+    let historyBlock: string | undefined;
     const maxMessages = this.threadContext.maxMessages ?? 10;
     if (maxMessages > 0 && !sdkThread.isDM) {
       const alreadySubscribed = await sdkThread.isSubscribed();
@@ -1143,34 +965,95 @@ export class AgentChannels {
       }
     }
 
-    const text = [historyBlock, message.text].filter(Boolean).join('\n\n');
-    const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
-    const attachments = message.attachments.filter(a => a.url || a.fetchData);
+    // Extract author info for metadata and display
+    const authorName = message.author.fullName || message.author.userName;
+    const authorId = message.author.userId;
+    const authorMention = authorId ? sdkThread.mentionUser(authorId) : undefined;
 
-    // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
+    // Bot identity — so the LLM can recognise self-mentions in raw message text
+    const adapter = this.adapters[platform]!;
+    const botUserId = adapter.botUserId;
+    const botMention = botUserId ? sdkThread.mentionUser(botUserId) : undefined;
+
+    // Build request context with channel info.
+    const requestContext = new RequestContext();
+    requestContext.set('channel', {
+      platform,
+      eventType: sdkThread.isDM ? 'message' : 'mention',
+      isDM: sdkThread.isDM,
+      threadId: sdkThread.id,
+      channelId: sdkThread.channelId,
+      messageId: message.id,
+      userId: authorId,
+      userName: authorName,
+      botUserId,
+      botUserName: adapter.userName,
+      botMention,
+    } satisfies ChannelContext);
+
+    // Build message text.
+    // If thread history was fetched, prepend it so it's part of the same user message
+    // (avoids consecutive user messages which some providers reject).
+    const textSegments: string[] = [];
+
+    if (historyBlock) {
+      textSegments.push(historyBlock);
+    }
+
+    if (sdkThread.isDM) {
+      // DMs: just the message text — system message already covers identity
+      textSegments.push(message.text);
+    } else {
+      // Non-DM: prepend metadata and author prefix for multi-user context
+      const reminderLines = [`Event: mention`, `Message ID: ${message.id}`];
+      reminderLines.push('You were mentioned in this message. Respond to the user.');
+      textSegments.push(`<system-reminder>\n${reminderLines.join('\n')}\n</system-reminder>`);
+
+      let authorPrefix = '';
+      if (authorMention) {
+        authorPrefix = authorName ? `${authorName} (${authorMention})` : authorMention;
+      } else if (authorName) {
+        authorPrefix = authorName;
+      }
+      if (authorPrefix) {
+        if (message.author.isBot) authorPrefix += ' (bot)';
+        textSegments.push(`[${authorPrefix}]: ${message.text}`);
+      } else {
+        textSegments.push(message.text);
+      }
+    }
+
+    const rawText = textSegments.join('\n\n');
+
+    // Build the message content with channel metadata.
+    // We construct a MastraDBMessage to preserve the platform message ID in metadata.
+    const usableAttachments = message.attachments.filter(a => a.url || a.fetchData);
+
+    type MastraPart = { type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string };
+    const parts: MastraPart[] = [{ type: 'text', text: rawText }];
+
+    // Route attachments based on `inlineMedia` config (default: only image/*).
     // Inline types are sent as file parts (the LLM adapter converts image/* to
     // image content automatically). Non-inline types are described as text
     // metadata so the agent is aware of them without crashing models that
     // reject unsupported media (e.g. OpenAI rejects video/mp4).
     this.logger?.debug('[CHANNEL] Attachments', {
-      count: attachments.length,
-      attachments: attachments.map(a => ({
+      count: usableAttachments.length,
+      attachments: usableAttachments.map(a => ({
         type: a.type,
         mimeType: a.mimeType,
         url: a.url,
         hasData: !!a.fetchData,
       })),
     });
-    for (const att of attachments) {
+    for (const att of usableAttachments) {
       if (!att.url && !att.fetchData) continue;
       const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
       if (!mimeType) continue;
 
       const inline = this.shouldInline(mimeType);
-      const filename = att.name || att.url?.split('/').pop() || 'file';
       if (inline) {
         let data: string | undefined;
-        let fetchFailed = false;
         if (att.fetchData) {
           // Prefer authenticated fetch (e.g. Slack CDN requires auth)
           try {
@@ -1178,8 +1061,8 @@ export class AgentChannels {
             const base64 = Buffer.from(buf).toString('base64');
             data = `data:${mimeType};base64,${base64}`;
           } catch (err) {
-            this.logger?.warn('[CHANNEL] fetchData failed', { mimeType, error: String(err) });
-            fetchFailed = true;
+            this.logger?.warn('[CHANNEL] fetchData failed, falling back to URL', { mimeType, error: String(err) });
+            data = att.url;
           }
         } else {
           // Public URL (e.g. Discord CDN) — let the provider fetch directly
@@ -1187,117 +1070,83 @@ export class AgentChannels {
         }
         if (data) {
           parts.push({
-            type: 'text',
-            text: `[Attached ${mimeType} file${att.name ? `: ${att.name}` : ''}]`,
-          });
-          parts.push({
             type: 'file',
             data,
-            mediaType: mimeType,
-            ...(att.name ? { filename: att.name } : {}),
-          });
-        } else if (fetchFailed) {
-          parts.push({
-            type: 'text',
-            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
+            mimeType,
           });
         }
       } else {
-        parts.push({
-          type: 'text',
-          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
-        });
+        const filename = att.name || att.url?.split('/').pop() || 'file';
+        const description = `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`;
+        parts.push({ type: 'text', text: `\n${description}` });
       }
     }
 
     // Promote URLs in message text to file parts based on `inlineLinks` config.
-    if (this.inlineLinkRules && text) {
-      const urls = extractUrls(text);
+    if (this.inlineLinkRules && rawText) {
+      const urls = extractUrls(rawText);
       for (const url of urls) {
         const rule = findInlineLinkRule(url, this.inlineLinkRules);
         if (!rule) continue;
 
         if (rule.forcedMimeType) {
           // Object entry with forced mime type — skip HEAD, always promote.
-          parts.push({ type: 'file', data: url, mediaType: rule.forcedMimeType });
+          parts.push({ type: 'file', data: url, mimeType: rule.forcedMimeType });
         } else {
           // String entry — HEAD to determine Content-Type, then check inlineMedia.
           const contentType = await headContentType(url, this.logger);
           if (contentType && this.shouldInline(contentType)) {
-            parts.push({ type: 'file', data: url, mediaType: contentType });
+            parts.push({ type: 'file', data: url, mimeType: contentType });
           }
         }
       }
     }
 
-    // Route the message through the agent's signal pipeline. The subscription is opened
-    // lazily on first message per Mastra thread so any signals — ours or others sent to the
-    // same thread — render through a single consumer. sendSignal then either delivers the
-    // message into an already-running agent loop or wakes the thread with an idle stream
-    // using the same options we used to pass to agent.stream().
-    const adapterConfig = this.adapterConfigs[platform];
-    const useCards = adapterConfig?.cards !== false;
-
-    const { channelContext, attributes, providerOptions } = this.buildEventContext({
-      sdkThread,
-      platform,
-      eventType: sdkThread.isDM ? 'message' : 'mention',
-      messageId: message.id,
-      actor: message.author,
-    });
-
-    const requestContext = new RequestContext();
-    requestContext.set('channel', channelContext);
-
-    this.ensureThreadSubscription({
-      mastraThreadId: mastraThread.id,
-      resourceId: threadResourceId,
-      sdkThread,
-      platform,
-    });
-
-    // Subscribe BEFORE sending the signal so the subscription metadata write
-    // happens before the agent run loads the thread snapshot. Otherwise the
-    // in-flight agent run can read the thread pre-subscribe and later
-    // overwrite the `channel_subscribed` field via its own thread persistence.
-    await sdkThread.subscribe();
-
-    // Refresh the thread snapshot so the agent run sees the post-subscribe
-    // metadata. Without this, `prepareMemoryStep`'s deepEqual would detect a
-    // metadata mismatch and overwrite the freshly-written `channel_subscribed`
-    // with the stale pre-subscribe value.
-    const memoryStore = await mastra.getStorage()?.getStore('memory');
-    const refreshedThread = memoryStore ? await memoryStore.getThreadById({ threadId: mastraThread.id }) : null;
-    const threadForRun = refreshedThread ?? mastraThread;
-
-    // When the message is text-only, pass the bare string to the signal pipeline.
-    // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
-    const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
-
-    this.agent.sendSignal(
-      {
-        type: 'user-message',
-        contents: signalContents,
-        attributes,
-        providerOptions,
-      },
-      {
-        resourceId: threadResourceId,
-        threadId: mastraThread.id,
-        ifIdle: {
-          behavior: 'wake',
-          streamOptions: {
-            requestContext,
-            memory: {
-              thread: threadForRun,
-              resource: threadResourceId,
+    // Build a MastraDBMessage with channel metadata so the platform message ID and author are tracked.
+    const streamInput: MastraDBMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: parts as MastraMessagePart[],
+        metadata: {
+          mastra: {
+            channels: {
+              [platform]: {
+                messageId: message.id,
+                author: {
+                  userId: authorId,
+                  userName: message.author.userName,
+                  fullName: message.author.fullName,
+                  mention: authorMention,
+                  isBot: message.author.isBot,
+                },
+              },
             },
-            // Without cards, we can't show approval buttons — auto-approve tools instead
-            autoResumeSuspendedTools: useCards ? undefined : true,
           },
         },
       },
-    );
+    };
+
+    // Stream the agent response.
+
+    const adapterConfig = this.adapterConfigs[platform];
+    const useCards = adapterConfig?.cards !== false;
+    const stream = await agent.stream(streamInput, {
+      requestContext,
+      memory: {
+        thread: mastraThread,
+        resource: threadResourceId,
+      },
+      // Without cards, we can't show approval buttons — auto-approve tools instead
+      autoResumeSuspendedTools: useCards ? undefined : true,
+    });
+
+    await this.consumeAgentStream(stream, sdkThread, platform);
+
+    // Subscribe so follow-up messages also get handled
+    await sdkThread.subscribe();
   }
 
   /**
@@ -1364,74 +1213,8 @@ export class AgentChannels {
     }
   }
 
-  /**
-   * Lazily open (and cache) an `agent.subscribeToThread()` for a Mastra thread, attaching a
-   * background chunk consumer that renders run output to the originating chat platform. We
-   * cache by `mastraThreadId` so multiple incoming messages on the same thread share one
-   * subscription and run output is never rendered twice.
-   *
-   * If the underlying consumer throws (e.g. the platform `sdkThread` becomes unusable), we
-   * tear down the cache entry so the next message can reopen a fresh subscription.
-   */
-  private ensureThreadSubscription(params: {
-    mastraThreadId: string;
-    resourceId: string;
-    sdkThread: Thread;
-    platform: string;
-  }): AgentThreadSubscription<any> {
-    const { mastraThreadId, resourceId, sdkThread, platform } = params;
-    const existing = this.threadSubscriptions.get(mastraThreadId);
-    if (existing) return existing.subscription;
-
-    // subscribeToThread() is synchronous-ish (returns a Promise that resolves on the next
-    // microtask); kicking it off here keeps the cache slot reserved so concurrent callers
-    // for the same thread don't race to create duplicate subscriptions.
-    const subscriptionPromise = this.agent.subscribeToThread({ resourceId, threadId: mastraThreadId });
-
-    // Wrap the eventual async iterator in a passthrough so we can hand callers a synchronous
-    // subscription record while the underlying handle is still resolving.
-    const stream: AsyncIterable<AgentChunkType<any>> = {
-      [Symbol.asyncIterator]: async function* () {
-        const sub = await subscriptionPromise;
-        for await (const chunk of sub.stream) {
-          yield chunk;
-        }
-      },
-    };
-
-    const placeholder: AgentThreadSubscription<any> = {
-      stream,
-      activeRunId: () => null,
-      abort: () => false,
-      unsubscribe: () => {
-        void subscriptionPromise.then(sub => sub.unsubscribe()).catch(() => {});
-      },
-    };
-
-    const consumer = this.consumeAgentStream(stream, sdkThread, platform).catch(err => {
-      this.log('error', `[${platform}] Thread subscription consumer failed`, { error: err });
-      // Drop the cache entry so subsequent messages reopen a fresh subscription.
-      const entry = this.threadSubscriptions.get(mastraThreadId);
-      if (entry?.subscription === placeholder) {
-        this.threadSubscriptions.delete(mastraThreadId);
-      }
-      void subscriptionPromise.then(sub => sub.unsubscribe()).catch(() => {});
-    });
-
-    this.threadSubscriptions.set(mastraThreadId, { subscription: placeholder, consumer });
-    // Update the placeholder with the real activeRunId/abort once the handle resolves so
-    // callers that need them after the first tick get accurate values.
-    void subscriptionPromise
-      .then(sub => {
-        placeholder.activeRunId = sub.activeRunId;
-        placeholder.abort = sub.abort;
-      })
-      .catch(() => {});
-    return placeholder;
-  }
-
   private async consumeAgentStream(
-    stream: AsyncIterable<AgentChunkType<any>>,
+    stream: MastraModelOutput,
     sdkThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
@@ -1440,262 +1223,233 @@ export class AgentChannels {
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
 
+    // Per-stream rendering state
+    let textBuffer = '';
+    let typingStarted = false;
     interface TrackedTool {
       displayName: string;
       argsSummary: string;
       startedAt: number;
       messageId?: string; // platform message ID for editing
     }
+    const toolCalls = new Map<string, TrackedTool>();
 
-    // Per-run rendering state. A single subscription stream can carry many runs back-to-back,
-    // so we reset on every run boundary (finish / error / abort) to avoid leaking tool cards
-    // or pending text from one run into the next.
-    let textBuffer = '';
-    let toolCalls = new Map<string, TrackedTool>();
-
-    // Typing indicator: refresh on each generation chunk, debounced to avoid
-    // hammering the platform API. Slack/Discord auto-expire the indicator
-    // after ~5-10s, so when generation stops the indicator clears naturally.
-    let lastTypingAt = 0;
-    const refreshTyping = () => {
-      const now = Date.now();
-      if (now - lastTypingAt < 5_000) return;
-      lastTypingAt = now;
-      sdkThread.startTyping().catch(e => {
-        this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+    // Pre-seed the approved tool so its result can edit the approval card
+    if (approvalContext) {
+      toolCalls.set(approvalContext.toolCallId, {
+        displayName: '',
+        argsSummary: '',
+        startedAt: Date.now(),
+        messageId: approvalContext.messageId,
       });
-    };
+    }
 
-    const seedApprovalContext = () => {
-      if (approvalContext) {
-        toolCalls.set(approvalContext.toolCallId, {
-          displayName: '',
-          argsSummary: '',
-          startedAt: Date.now(),
-          messageId: approvalContext.messageId,
-        });
+    let typingInterval: ReturnType<typeof setInterval> | undefined;
+
+    const ensureTyping = async () => {
+      if (!typingStarted) {
+        typingStarted = true;
+        try {
+          await sdkThread.startTyping();
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+        }
       }
     };
-    seedApprovalContext();
+
+    // Keep the typing indicator alive for slow generation (e.g. image models).
+    // Discord's indicator expires after ~10s, so we re-fire every 8s.
+    const startTypingKeepalive = () => {
+      if (typingInterval) return;
+      typingInterval = setInterval(async () => {
+        try {
+          await sdkThread.startTyping();
+        } catch {
+          // best-effort
+        }
+      }, 8_000);
+    };
+
+    const stopTypingKeepalive = () => {
+      if (typingInterval) {
+        clearInterval(typingInterval);
+        typingInterval = undefined;
+      }
+    };
 
     const flushText = async () => {
       // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
       if (cleanedText) {
-        this.log('debug', `[${platform}] flushText posting`, {
-          sdkThreadId: sdkThread.id,
-          isDM: (sdkThread as any).isDM,
-          textLength: cleanedText.length,
-        });
         await sdkThread.post(cleanedText);
         textBuffer = '';
       }
     };
 
-    const resetRunState = () => {
-      textBuffer = '';
-      toolCalls = new Map();
-      seedApprovalContext();
-      // Reset the debounce so the next run's first generation chunk fires
-      // startTyping() immediately rather than being suppressed.
-      lastTypingAt = 0;
-    };
-
-    for await (const chunk of stream) {
-      // --- Signal echo: subscription streams replay user-message / system-reminder /
-      // custom data parts that callers wrote via sendSignal(). The platform already
-      // rendered the user's message, so we drop the echo to avoid double-posting.
-      if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
-        continue;
+    // If nothing triggers typing within 3s, start it anyway and keep it
+    // alive — covers slow generation (e.g. image models) where no text/tool
+    // chunks arrive for a long time.
+    const typingFallbackTimer = setTimeout(async () => {
+      if (!typingStarted) {
+        await ensureTyping();
+        startTypingKeepalive();
       }
+    }, 3_000);
 
-      // --- Text accumulation ---
-      if (chunk.type === 'text-delta') {
-        if (chunk.payload.text) {
-          refreshTyping();
-        }
-        textBuffer += chunk.payload.text;
-        continue;
-      }
-
-      if (chunk.type === 'reasoning-delta') {
-        refreshTyping();
-        continue;
-      }
-
-      // --- File (e.g. model-generated image): post as attachment ---
-      if (chunk.type === 'file') {
-        await flushText();
-        const { data, mimeType } = chunk.payload;
-        this.logger?.debug('[CHANNEL] Received file chunk', {
-          mimeType,
-          dataType: typeof data,
-          size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
-        });
-        const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
-        const filename = `generated.${ext}`;
-        const binary =
-          typeof data === 'string'
-            ? Buffer.from(data, 'base64')
-            : data instanceof Uint8Array
-              ? Buffer.from(data)
-              : data;
-        try {
-          await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
-        }
-        continue;
-      }
-
-      // --- Text flush triggers ---
-      if (chunk.type === 'step-finish') {
-        await flushText();
-        continue;
-      }
-
-      // --- Run boundary: a single subscription stream carries many runs back-to-back,
-      // so we flush whatever's pending and reset per-run state before the next run starts.
-      if (chunk.type === 'finish') {
-        await flushText();
-        resetRunState();
-        continue;
-      }
-
-      // --- Errors / aborts surface in-stream now that we no longer have access to a
-      // MastraModelOutput.error field. Post the failure to the channel and reset state
-      // so a follow-up run on the same subscription starts clean.
-      if (chunk.type === 'error') {
-        await flushText();
-        const errPayload = chunk.payload as { error?: unknown };
-        const rawError = errPayload.error;
-        const message =
-          rawError instanceof Error
-            ? rawError.message
-            : typeof rawError === 'string'
-              ? rawError
-              : rawError != null
-                ? String(rawError)
-                : 'Unknown error';
-        const display = message.length > 500 ? message.slice(0, 500) + '…' : message;
-        this.log('error', `[${platform}] Stream completed with error`, { error: display });
-        try {
-          await sdkThread.post(`❌ Error: ${display}`);
-        } catch (postErr) {
-          this.logger?.debug('[CHANNEL] Failed to post error message', { error: postErr });
-        }
-        resetRunState();
-        continue;
-      }
-
-      if (chunk.type === 'abort') {
-        await flushText();
-        resetRunState();
-        continue;
-      }
-
-      // --- Tool call: post eager "Running…" card ---
-      if (chunk.type === 'tool-call') {
-        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-        refreshTyping();
-        await flushText();
-
-        const displayName = stripToolPrefix(chunk.payload.toolName);
-        const rawArgs = (
-          typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
-        ) as Record<string, unknown>;
-        const argsSummary = formatArgsSummary(rawArgs);
-
-        let messageId: string | undefined;
-        if (!adapterConfig?.formatToolCall) {
-          const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
-          messageId = sentMessage?.id;
-        }
-
-        toolCalls.set(chunk.payload.toolCallId, {
-          displayName,
-          argsSummary,
-          startedAt: Date.now(),
-          messageId,
-        });
-        continue;
-      }
-
-      // --- Tool result: edit the "Running…" card with the outcome ---
-      if (chunk.type === 'tool-result') {
-        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-        // Look in the per-run tracked tools first; fall back to any approval card that was
-        // posted by the click handler (the resumed run's tool-result arrives via the thread
-        // subscription, which doesn't see the pre-suspension `tool-call` chunk).
-        let tracked = toolCalls.get(chunk.payload.toolCallId);
-        if (!tracked) {
-          const pending = this.pendingApprovalCards.get(chunk.payload.toolCallId);
-          if (pending) {
-            tracked = pending;
-            this.pendingApprovalCards.delete(chunk.payload.toolCallId);
+    try {
+      for await (const chunk of stream.fullStream) {
+        // --- Text accumulation ---
+        if (chunk.type === 'text-delta') {
+          if (chunk.payload.text) {
+            await ensureTyping();
+            startTypingKeepalive();
           }
+          textBuffer += chunk.payload.text;
+          continue;
         }
-        const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
-        const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
-        const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-        const channelMsgId = tracked?.messageId;
-        const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
 
-        if (adapterConfig?.formatToolCall) {
-          const custom = adapterConfig.formatToolCall({
-            toolName: displayName,
-            args: (chunk.payload.args ?? {}) as Record<string, unknown>,
-            result: chunk.payload.result,
-            isError: chunk.payload.isError,
+        if (chunk.type === 'reasoning-delta') {
+          await ensureTyping();
+          startTypingKeepalive();
+          continue;
+        }
+
+        // --- File (e.g. model-generated image): post as attachment ---
+        if (chunk.type === 'file') {
+          await flushText();
+          const { data, mimeType } = chunk.payload;
+          this.logger?.debug('[CHANNEL] Received file chunk', {
+            mimeType,
+            dataType: typeof data,
+            size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
           });
-          if (custom != null) {
-            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
+          const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
+          const filename = `generated.${ext}`;
+          const binary =
+            typeof data === 'string'
+              ? Buffer.from(data, 'base64')
+              : data instanceof Uint8Array
+                ? Buffer.from(data)
+                : data;
+          try {
+            await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
+          } catch (e) {
+            this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
           }
-        } else {
-          const resultMessage = formatToolResult(
+          continue;
+        }
+
+        // --- Text flush triggers ---
+        if (chunk.type === 'step-finish' || chunk.type === 'finish') {
+          await flushText();
+          continue;
+        }
+
+        // --- Tool call: post eager "Running…" card ---
+        if (chunk.type === 'tool-call') {
+          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+          await ensureTyping();
+          startTypingKeepalive();
+          await flushText();
+
+          const displayName = stripToolPrefix(chunk.payload.toolName);
+          const rawArgs = (
+            typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
+          ) as Record<string, unknown>;
+          const argsSummary = formatArgsSummary(rawArgs);
+
+          let messageId: string | undefined;
+          if (!adapterConfig?.formatToolCall) {
+            const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
+            messageId = sentMessage?.id;
+          }
+
+          toolCalls.set(chunk.payload.toolCallId, {
             displayName,
             argsSummary,
-            resultText,
-            !!chunk.payload.isError,
-            durationMs,
-            useCards,
-          );
-          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
+            startedAt: Date.now(),
+            messageId,
+          });
+          continue;
         }
-        continue;
+
+        // --- Tool result: edit the "Running…" card with the outcome ---
+        if (chunk.type === 'tool-result') {
+          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+
+          const tracked = toolCalls.get(chunk.payload.toolCallId);
+          const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
+          const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
+          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+          const channelMsgId = tracked?.messageId;
+          const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
+
+          if (adapterConfig?.formatToolCall) {
+            const custom = adapterConfig.formatToolCall({
+              toolName: displayName,
+              args: (chunk.payload.args ?? {}) as Record<string, unknown>,
+              result: chunk.payload.result,
+              isError: chunk.payload.isError,
+            });
+            if (custom != null) {
+              await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
+            }
+          } else {
+            const resultMessage = formatToolResult(
+              displayName,
+              argsSummary,
+              resultText,
+              !!chunk.payload.isError,
+              durationMs,
+              useCards,
+            );
+            await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
+          }
+          continue;
+        }
+
+        // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
+        if (chunk.type === 'tool-call-approval') {
+          const { toolCallId, toolName, args: toolArgs } = chunk.payload;
+          const tracked = toolCalls.get(toolCallId);
+          const displayName = tracked?.displayName || stripToolPrefix(toolName);
+          const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
+          const channelMsgId = tracked?.messageId;
+
+          const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
+
+          await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
+          continue;
+        }
+
+        // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
+        // Without this branch the chunk is skipped, stream.error stays unset, and the
+        // user sees silence (see #15344).
+        if (chunk.type === 'tripwire') {
+          // retry=true means the agent will retry internally with the tripwire reason as
+          // feedback and produce a new response on this same stream, so nothing to post yet.
+          if (chunk.payload.retry) continue;
+
+          await flushText();
+          const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
+          const display = chunk.payload.processorId
+            ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
+            : `🛡️ ${reason}`;
+          await sdkThread.post(display);
+          continue;
+        }
       }
+    } finally {
+      clearTimeout(typingFallbackTimer);
+      stopTypingKeepalive();
+    }
 
-      // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
-      if (chunk.type === 'tool-call-approval') {
-        const { toolCallId, toolName, args: toolArgs } = chunk.payload;
-        const tracked = toolCalls.get(toolCallId);
-        const displayName = tracked?.displayName || stripToolPrefix(toolName);
-        const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
-        const channelMsgId = tracked?.messageId;
-
-        const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
-
-        await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
-        continue;
-      }
-
-      // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
-      // Without this branch the chunk is skipped, stream.error stays unset, and the
-      // user sees silence (see #15344).
-      if (chunk.type === 'tripwire') {
-        // retry=true means the agent will retry internally with the tripwire reason as
-        // feedback and produce a new response on this same stream, so nothing to post yet.
-        if (chunk.payload.retry) continue;
-
-        await flushText();
-        const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
-        const display = chunk.payload.processorId
-          ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
-          : `🛡️ ${reason}`;
-        await sdkThread.post(display);
-        continue;
-      }
+    // Check for errors that occurred during streaming
+    if (stream.error) {
+      const msg = stream.error.message;
+      const display = msg.length > 500 ? msg.slice(0, 500) + '…' : msg;
+      this.log('error', `[${platform}] Stream completed with error`, { error: display });
+      await sdkThread.post(`❌ Error: ${display}`);
     }
   }
 
@@ -1796,12 +1550,13 @@ export class AgentChannels {
   private startGatewayLoop(
     name: string,
     startGateway: (options: { waitUntil: (p: Promise<unknown>) => void }, durationMs?: number) => Promise<Response>,
+    generation: number,
   ): void {
     const DURATION = 24 * 60 * 60 * 1000;
     const RETRY_DELAY = 5000;
 
     const reconnect = async () => {
-      while (true) {
+      while (generation === this.lifecycleGeneration) {
         try {
           let resolve: () => void;
           let reject: (err: unknown) => void;
@@ -1821,8 +1576,14 @@ export class AgentChannels {
             DURATION,
           );
           await done;
+          if (generation !== this.lifecycleGeneration) {
+            break;
+          }
           this.log('info', `[${name}] Gateway session ended, reconnecting...`);
         } catch (err) {
+          if (generation !== this.lifecycleGeneration) {
+            break;
+          }
           this.log('error', `[${name}] Gateway error, retrying in ${RETRY_DELAY / 1000}s`, err);
           await new Promise(r => setTimeout(r, RETRY_DELAY));
         }

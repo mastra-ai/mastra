@@ -15,6 +15,7 @@ export * from './observability';
 export * from './operations';
 export * from './workflows';
 export * from './memory';
+export * from './harness';
 export * from './inmemory-db';
 export * from './shared';
 export * from './datasets';

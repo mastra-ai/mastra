@@ -46,6 +46,19 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_schedule_triggers: new Map(),
       mastra_channel_installations: new Map(),
       mastra_channel_config: new Map(),
+      mastra_harness_sessions: new Map(),
+      mastra_harness_attachments: new Map(),
+      mastra_harness_attachment_references: new Map(),
+      mastra_harness_message_results: new Map(),
+      mastra_harness_operation_tombstones: new Map(),
+      mastra_harness_session_events: new Map(),
+      mastra_harness_thread_delete_fences: new Map(),
+      mastra_harness_channel_inbox: new Map(),
+      mastra_harness_channel_action_tokens: new Map(),
+      mastra_harness_channel_action_receipts: new Map(),
+      mastra_harness_channel_outbox: new Map(),
+      mastra_harness_provider_callback_bindings: new Map(),
+      mastra_harness_wakeups: new Map(),
     };
   }
 

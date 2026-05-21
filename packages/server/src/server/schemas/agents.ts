@@ -28,32 +28,26 @@ const baseSignalSchema = z.object({
   attributes: signalAttributesSchema.optional(),
 });
 
-const partProviderOptionsSchema = z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional();
-
-const signalTextPartSchema = z.object({
-  type: z.literal('text'),
-  text: z.string(),
-  providerOptions: partProviderOptionsSchema,
-});
-
-const signalFilePartSchema = z.object({
-  type: z.literal('file'),
-  data: z.string(),
-  mediaType: z.string(),
-  filename: z.string().optional(),
-  providerOptions: partProviderOptionsSchema,
-});
-
+const signalMessageInputSchema = z.object({ role: z.string() }).passthrough();
 const userMessageSignalContentsSchema = z.union([
   z.string(),
-  z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
+  signalMessageInputSchema,
+  z.array(z.union([z.string(), signalMessageInputSchema])),
 ]);
 
-const agentSignalSchema = baseSignalSchema.extend({
-  type: z.string(),
+const userMessageAgentSignalSchema = baseSignalSchema.extend({
+  type: z.literal('user-message'),
   contents: userMessageSignalContentsSchema,
-  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
 });
+
+const contextAgentSignalSchema = baseSignalSchema.extend({
+  type: z.string().refine(type => type !== 'user-message', {
+    message: 'non-user signal types must not be user-message',
+  }),
+  contents: z.string(),
+});
+
+const agentSignalSchema = z.union([userMessageAgentSignalSchema, contextAgentSignalSchema]);
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({

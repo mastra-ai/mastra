@@ -134,6 +134,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
       return def.defaultValue();
     }
   }
+  if (typeName === 'ZodLazy') return 'test-value';
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
   if (typeName === 'ZodNumber') {
@@ -296,7 +297,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodRecord') {
-    return { key: generateValidDataFromSchema(def.valueType, fieldName) };
+    const valueSchema = def.valueType ?? def.value;
+    return { key: valueSchema ? generateValidDataFromSchema(valueSchema, fieldName) : 'test-value' };
   }
 
   if (typeName === 'ZodUnion') {
@@ -433,6 +435,16 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
 
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';
+
+  // Harness route params
+  if (route.path.startsWith('/harness/')) {
+    if (route.path.includes(':name')) params.name = 'default';
+    if (route.path.includes(':sessionId')) params.sessionId = 'test-session';
+    if (route.path.includes(':attachmentId')) params.attachmentId = 'test-attachment';
+    if (route.path.includes(':signalId')) params.signalId = 'test-signal';
+    if (route.path.includes(':queuedItemId')) params.queuedItemId = 'test-queued-item';
+    if (route.path.includes(':itemId')) params.itemId = 'test-item';
+  }
 
   // Builder registry route params
   if (route.path.includes(':registryId')) params.registryId = 'skills-sh';

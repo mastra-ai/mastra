@@ -18,6 +18,94 @@ import { parse } from './path-pattern';
 // auth state without importing internal paths.
 export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
 
+export const HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM = 'subscriptionToken';
+
+const HARNESS_ROUTE_PREFIX = '/harness/';
+const HARNESS_SESSION_EVENTS_ROUTE_PATTERN = /^\/harness\/:[^/]+\/sessions\/:sessionId\/events$/;
+
+const BEARER_EQUIVALENT_QUERY_PARAM_NAMES = [
+  'apiKey',
+  'access_token',
+  'accessToken',
+  'authToken',
+  'authorization',
+  'bearer',
+  'token',
+] as const;
+
+export interface HarnessRouteAuthConfig {
+  /**
+   * Marks a route as part of the client-facing Harness wire surface. Routes
+   * whose path starts with `/harness/` are treated as client routes even when
+   * this flag is omitted.
+   */
+  clientRoute?: boolean;
+  /**
+   * Allows the EventSource fallback token only for the per-session events SSE
+   * route. The token remains in the raw request for the deployment auth
+   * provider to validate and is never copied into MASTRA_AUTH_TOKEN_KEY.
+   */
+  allowSseSubscriptionToken?: boolean;
+}
+
+export interface HarnessRouteAuthShape {
+  path?: string;
+  harnessAuth?: HarnessRouteAuthConfig;
+}
+
+function getQueryValue(getQuery: (name: string) => unknown, name: string): string | undefined {
+  const value = getQuery(name);
+  if (typeof value === 'string') {
+    return value.trim() ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.find((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+  return undefined;
+}
+
+export function isHarnessClientRoute(route: HarnessRouteAuthShape): boolean {
+  if (route.harnessAuth?.clientRoute === true) {
+    return true;
+  }
+
+  return typeof route.path === 'string' && route.path.startsWith(HARNESS_ROUTE_PREFIX);
+}
+
+export function findBearerEquivalentHarnessQueryParam(getQuery: (name: string) => unknown): string | null {
+  const names = new Set<string>();
+  for (const name of BEARER_EQUIVALENT_QUERY_PARAM_NAMES) {
+    names.add(name);
+    names.add(name.toLowerCase());
+  }
+
+  for (const name of names) {
+    if (getQueryValue(getQuery, name)) {
+      return name;
+    }
+  }
+
+  return null;
+}
+
+export function getHarnessSseSubscriptionTokenQueryParam(_route: HarnessRouteAuthShape): string {
+  return HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM;
+}
+
+export function hasHarnessSseSubscriptionToken(
+  route: HarnessRouteAuthShape,
+  getQuery: (name: string) => unknown,
+): boolean {
+  return Boolean(getQueryValue(getQuery, getHarnessSseSubscriptionTokenQueryParam(route)));
+}
+
+export function allowsHarnessSseSubscriptionToken(route: HarnessRouteAuthShape): boolean {
+  return (
+    route.harnessAuth?.allowSseSubscriptionToken === true ||
+    (typeof route.path === 'string' && HARNESS_SESSION_EVENTS_ROUTE_PATTERN.test(route.path))
+  );
+}
+
 /**
  * Check if a route is a registered custom route that requires authentication.
  * Returns true only if the route is explicitly registered with requiresAuth: true.
@@ -278,6 +366,7 @@ export interface AuthMiddlewareContext {
   requestContext: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
   rawRequest: unknown;
   token: string | null;
+  forceAuth?: boolean;
   buildAuthorizeContext: () => unknown;
   /** When true, force authentication even if the path matches a public pattern. */
   requiresAuth?: boolean;
@@ -343,8 +432,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     requestContext,
     rawRequest,
     token,
+    forceAuth,
     requiresAuth,
   } = ctx;
+  const forceRouteAuth = forceAuth || requiresAuth === true;
 
   // ── Skip checks (evaluated once) ──
 
@@ -352,18 +443,22 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   // When auth IS configured (has authenticateToken), we need the full auth flow
   // so user/roles/permissions are set in requestContext.
   const hasAuthProvider = typeof authConfig.authenticateToken === 'function';
-  if (!hasAuthProvider && isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
+  if (
+    !forceRouteAuth &&
+    !hasAuthProvider &&
+    isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)
+  ) {
     return pass;
   }
 
-  if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
+  if (!forceRouteAuth && !isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
     return pass;
   }
 
   // When a route explicitly requires auth (requiresAuth: true), skip the
   // public-path bypass so the user is still authenticated and permissions
   // are injected into the request context.
-  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
+  if (!forceRouteAuth && canAccessPublicly(path, method, authConfig)) {
     return pass;
   }
 

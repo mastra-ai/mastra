@@ -133,6 +133,18 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
+      // Generic route data cannot create the suspended agent-network run
+      // required by these resume endpoints.
+      '/agents/:agentId/approve-network-tool-call',
+      '/agents/:agentId/decline-network-tool-call',
+      '/harness/:name/sessions/:sessionId/events',
+      // Requires a current session ETag in If-Match; covered by Harness route
+      // handler tests where the versioned state transition is asserted.
+      '/harness/:name/sessions/:sessionId/state',
+      // Requires a live pending inbox item. Handler behavior is covered by
+      // package-level Harness route tests; the generic route sweep only has
+      // static path defaults.
+      '/harness/:name/sessions/:sessionId/inbox/:itemId',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = ['/datasets'];
@@ -416,7 +428,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
 
             // RequestContext tests - test for POST/PUT routes that accept body
-            if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
+            if (['POST', 'PUT'].includes(route.method) && route.bodySchema && !route.path.startsWith('/harness/')) {
               it('should accept requestContext in body', async () => {
                 const request = buildRouteRequest(route);
 
@@ -438,7 +450,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
 
             // Body field spreading test - for POST/PUT routes with body
-            if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
+            if (['POST', 'PUT'].includes(route.method) && route.bodySchema && !route.path.startsWith('/harness/')) {
               it('should spread body fields to handler params', async () => {
                 const request = buildRouteRequest(route);
 

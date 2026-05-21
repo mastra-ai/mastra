@@ -154,6 +154,57 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     });
   }
 
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const setClauses: string[] = [];
+    const params: InValue[] = [];
+
+    if ('status' in update) {
+      setClauses.push('status = ?');
+      params.push(update.status as string);
+    }
+    if ('result' in update) {
+      setClauses.push('result = jsonb(?)');
+      params.push(serializeJson(update.result));
+    }
+    if ('error' in update) {
+      setClauses.push('error = jsonb(?)');
+      params.push(serializeJson(update.error));
+    }
+    if ('suspendPayload' in update) {
+      setClauses.push('suspend_payload = jsonb(?)');
+      params.push(serializeJson(update.suspendPayload));
+    }
+    if ('retryCount' in update) {
+      setClauses.push('retry_count = ?');
+      params.push(update.retryCount as number);
+    }
+    if ('startedAt' in update) {
+      setClauses.push('startedAt = ?');
+      params.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      setClauses.push('suspendedAt = ?');
+      params.push(update.suspendedAt?.toISOString() ?? null);
+    }
+    if ('completedAt' in update) {
+      setClauses.push('completedAt = ?');
+      params.push(update.completedAt?.toISOString() ?? null);
+    }
+
+    if (setClauses.length === 0) return false;
+
+    params.push(taskId, expectedStatus);
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE id = ? AND status = ?`,
+      args: params,
+    });
+    return Number(result.rowsAffected ?? 0) > 0;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const result = await this.#client.execute({
       sql: `SELECT ${buildSelectColumns(TABLE_BACKGROUND_TASKS)} FROM ${TABLE_BACKGROUND_TASKS} WHERE id = ?`,

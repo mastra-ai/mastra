@@ -7,7 +7,7 @@ import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
-import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } from './types';
+import type { HarnessQuestionAnswer, HarnessQuestionOption, HarnessRequestContext, HarnessSubagent } from './types';
 
 let questionCounter = 0;
 let planCounter = 0;
@@ -83,7 +83,7 @@ export const askUserTool = createTool({
       if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
         return {
           content: `[Question for user]: ${question}${
-            options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+            options?.length ? '\nOptions: ' + options.map((o: HarnessQuestionOption) => o.label).join(', ') : ''
           }${resolvedSelectionMode ? '\nSelection mode: ' + resolvedSelectionMode : ''}`,
           isError: false,
         };
@@ -452,27 +452,12 @@ function hasMultipleInProgress(tasks: TaskItemSnapshot[]): boolean {
   return tasks.filter(task => task.status === 'in_progress').length > 1;
 }
 
-function multipleInProgressError(tasks: TaskItemSnapshot[]): TaskToolResult {
+function multipleInProgressError(tasks: TaskItemSnapshot[]) {
   return {
     content: 'Only one task can be in_progress at a time.',
     tasks,
     isError: true,
   };
-}
-
-function demoteExtraInProgress(tasks: TaskItemSnapshot[], preferredIndex?: number): TaskItemSnapshot[] {
-  const inProgressIndices = tasks.reduce<number[]>((acc, t, i) => {
-    if (t.status === 'in_progress') acc.push(i);
-    return acc;
-  }, []);
-  if (inProgressIndices.length <= 1) return tasks;
-  const keepIndex =
-    preferredIndex !== undefined && inProgressIndices.includes(preferredIndex)
-      ? preferredIndex
-      : inProgressIndices[inProgressIndices.length - 1]!;
-  return tasks.map((t, i) =>
-    t.status === 'in_progress' && i !== keepIndex ? { ...t, status: 'pending' as const } : t,
-  );
 }
 
 async function writeTasks(
@@ -637,19 +622,19 @@ Usage:
           };
         }
 
-        const updatedTasks = demoteExtraInProgress(
-          tasks.map((task, index) =>
-            index === taskIndex
-              ? {
-                  ...task,
-                  ...(content !== undefined ? { content } : {}),
-                  ...(status !== undefined ? { status } : {}),
-                  ...(activeForm !== undefined ? { activeForm } : {}),
-                }
-              : task,
-          ),
-          taskIndex,
+        const updatedTasks = tasks.map((task, index) =>
+          index === taskIndex
+            ? {
+                ...task,
+                ...(content !== undefined ? { content } : {}),
+                ...(status !== undefined ? { status } : {}),
+                ...(activeForm !== undefined ? { activeForm } : {}),
+              }
+            : task,
         );
+        if (hasMultipleInProgress(updatedTasks)) {
+          return multipleInProgressError(tasks);
+        }
 
         return {
           content: formatTaskListResult(updatedTasks),

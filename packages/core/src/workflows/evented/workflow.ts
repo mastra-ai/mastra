@@ -1885,7 +1885,7 @@ export class EventedRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+        const unwatch = await self.watchAsync((event: WorkflowStreamEvent) => {
           const { type, payload } = event;
           controller.enqueue({
             type,
@@ -1899,7 +1899,7 @@ export class EventedRun<
         });
 
         self.closeStreamAction = async () => {
-          unwatch();
+          await unwatch();
           try {
             if (controller.desiredSize !== null) {
               controller.close();
@@ -1975,7 +1975,7 @@ export class EventedRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+        const unwatch = await self.watchAsync((event: WorkflowStreamEvent) => {
           const { type, payload } = event;
           controller.enqueue({
             type,
@@ -1989,7 +1989,7 @@ export class EventedRun<
         });
 
         self.closeStreamAction = async () => {
-          unwatch();
+          await unwatch();
           try {
             if (controller.desiredSize !== null) {
               controller.close();
@@ -2221,7 +2221,7 @@ export class EventedRun<
     };
   }
 
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => Promise<void>> {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;

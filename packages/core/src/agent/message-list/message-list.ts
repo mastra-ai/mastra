@@ -183,10 +183,9 @@ export class MessageList {
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
-      providerOptions: signal.providerOptions,
       createdAt,
       acceptedAt,
-    });
+    } as Parameters<typeof createSignal>[0]);
 
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;
@@ -317,16 +316,49 @@ export class MessageList {
     // Model providers only understand normal prompt messages, so project the signal into
     // its LLM-facing UserModelMessage. Preserve the original id/createdAt so MessageList's
     // timestamp/ordering bookkeeping stays anchored to the persisted signal row.
-    const signalMessage = mastraDBMessageToSignal(message).toLLMMessage();
+    const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
     const createdAt = message.createdAt;
-    const promptMessage = {
-      ...signalMessage,
-      id: message.id,
-      metadata: { createdAt },
-    };
+    const promptMessages = (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map(
+      (signalMessage, index): MessageInput => {
+        const id = index === 0 ? message.id : `${message.id}-${index}`;
+        const metadata = { createdAt };
 
-    return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+        if (typeof signalMessage === 'string') {
+          return {
+            id,
+            role: 'user',
+            content: signalMessage,
+            metadata,
+          };
+        }
+
+        if (signalMessage && typeof signalMessage === 'object' && !Array.isArray(signalMessage)) {
+          const existingMetadata =
+            'metadata' in signalMessage && signalMessage.metadata && typeof signalMessage.metadata === 'object'
+              ? signalMessage.metadata
+              : {};
+
+          return {
+            ...signalMessage,
+            id: 'id' in signalMessage && typeof signalMessage.id === 'string' ? signalMessage.id : id,
+            metadata: {
+              ...existingMetadata,
+              createdAt,
+            },
+          } as MessageInput;
+        }
+
+        return {
+          id,
+          role: 'user',
+          content: String(signalMessage),
+          metadata,
+        };
+      },
+    );
+
+    return promptMessages.map(promptMessage =>
+      convertInputToMastraDBMessage(promptMessage, 'input', {
         memoryInfo: this.memoryInfo,
         newMessageId: () => message.id,
         generateCreatedAt: (_messageSource, start) => {
@@ -336,7 +368,7 @@ export class MessageList {
         },
         dbMessages: this.messages,
       }),
-    ];
+    );
   }
 
   public makeMessageSourceChecker(): {

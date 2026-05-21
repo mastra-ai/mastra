@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { HarnessWakeupItem } from '../storage/domains/harness';
 import { MastraWorker } from './worker';
 import type { WorkerDeps } from './worker';
 import { BackgroundTaskWorker } from './workers/background-task-worker';
+import { HarnessWakeupWorker } from './workers/harness-wakeup-worker';
 import { OrchestrationWorker } from './workers/orchestration-worker';
 import { SchedulerWorker } from './workers/scheduler-worker';
 
@@ -171,3 +173,1035 @@ describe('BackgroundTaskWorker', () => {
     await expect(worker.start()).rejects.toThrow('call init() before start()');
   });
 });
+
+describe('HarnessWakeupWorker', () => {
+  it('rejects non-positive numeric configuration values', () => {
+    const cases: Array<[string, ConstructorParameters<typeof HarnessWakeupWorker>[0]]> = [
+      ['maxAttempts', { maxAttempts: 0 }],
+      ['claimTtlMs', { claimTtlMs: 0 }],
+      ['claimRenewMs', { claimRenewMs: 0 }],
+      ['batchSize', { batchSize: 0 }],
+      ['pollIntervalMs', { pollIntervalMs: 0 }],
+      ['pollIntervalMs', { pollIntervalMs: Number.POSITIVE_INFINITY }],
+      ['batchSize', { batchSize: 1.5 }],
+    ];
+
+    for (const [name, config] of cases) {
+      expect(() => new HarnessWakeupWorker(config)).toThrow(`${name} must be a positive integer`);
+    }
+    expect(() => new HarnessWakeupWorker({ claimTtlMs: 10, claimRenewMs: 10 })).toThrow(
+      'claimRenewMs must be less than claimTtlMs',
+    );
+    expect(() => new HarnessWakeupWorker({ claimTtlMs: 500 })).not.toThrow();
+  });
+
+  it('rejects invalid custom retry backoff results before persisting retry metadata', async () => {
+    const item = sampleWakeup({ attempts: 2 });
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker({ retryBackoffMs: () => Number.POSITIVE_INFINITY });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: vi
+              .fn()
+              .mockRejectedValue(Object.assign(new Error('locked'), { name: 'HarnessSessionLockedError' })),
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'unknown', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('claims wakeups and marks them queued after durable queue admission', async () => {
+    const item = sampleWakeup({
+      failedAt: 100,
+      deadAt: 101,
+      nextAttemptAt: 102,
+      lastError: { code: 'session_locked', message: 'locked', retryable: true },
+    });
+    const storage = createWakeupStorage([item]);
+    const admit = vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-1', duplicate: false });
+    const worker = new HarnessWakeupWorker({ pollIntervalMs: 60_000 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(1);
+
+    expect(storage.claimHarnessWakeupItems).toHaveBeenCalledWith(
+      expect.objectContaining({ harnessName: 'default', statuses: ['due', 'failed', 'claimed'] }),
+    );
+    expect(admit).toHaveBeenCalledWith(expect.objectContaining({ admissionId: item.admissionId }));
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'queued',
+        queuedItemId: 'queued-1',
+        failedAt: undefined,
+        deadAt: undefined,
+        nextAttemptAt: undefined,
+        lastError: undefined,
+        claimId: undefined,
+        claimExpiresAt: undefined,
+        claimedAt: undefined,
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('resolves wakeup sessions with both session and thread identity when available', async () => {
+    const item = sampleWakeup();
+    const storage = createWakeupStorage([item]);
+    const session = vi.fn().mockResolvedValue({
+      resourceId: item.resourceId,
+      threadId: item.threadId,
+      _admitWakeupQueue: vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-1', duplicate: false }),
+    });
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.loadSessionByThread).toHaveBeenCalledWith({
+      harnessName: item.harnessName,
+      threadId: item.threadId,
+      resourceId: item.resourceId,
+    });
+    expect(session).toHaveBeenCalledWith({
+      sessionId: item.sessionId,
+      resourceId: item.resourceId,
+    });
+  });
+
+  it('does not create sessions when stale wakeups have no active thread record', async () => {
+    const item = sampleWakeup({ sessionId: 'stale-session' });
+    const storage = createWakeupStorage([item]);
+    storage.loadSessionByThread.mockResolvedValueOnce(null);
+    const session = vi.fn();
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'worker_unavailable', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a wakeup session resolves to a different thread', async () => {
+    const item = sampleWakeup();
+    const storage = createWakeupStorage([item]);
+    const admit = vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-1', duplicate: false });
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: 'other-thread',
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(admit).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'worker_unavailable', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('does not retry wakeups that reference missing sessions', async () => {
+    const item = sampleWakeup();
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi
+            .fn()
+            .mockRejectedValue(Object.assign(new Error('missing session'), { name: 'HarnessSessionNotFoundError' })),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'worker_unavailable', retryable: false }),
+        nextAttemptAt: undefined,
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('does not create sessions for wakeups without a session id', async () => {
+    const item = sampleWakeup({ sessionId: undefined });
+    const storage = createWakeupStorage([item]);
+    const session = vi.fn();
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'worker_unavailable', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('does not retry invalid persisted wakeup payloads', async () => {
+    const item = sampleWakeup();
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: vi
+              .fn()
+              .mockRejectedValue(
+                Object.assign(new Error('invalid wakeup payload'), { name: 'HarnessValidationError' }),
+              ),
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'provider_payload_invalid', retryable: false }),
+        nextAttemptAt: undefined,
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('does not retry wakeups with unavailable attachment references', async () => {
+    const item = sampleWakeup();
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: vi
+              .fn()
+              .mockRejectedValue(
+                Object.assign(new Error('attachment missing'), { name: 'HarnessAttachmentUnavailableError' }),
+              ),
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'provider_payload_invalid', retryable: false }),
+        nextAttemptAt: undefined,
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('continues processing later harnesses when one harness claim fails', async () => {
+    const item = sampleWakeup({ harnessName: 'good' });
+    const badStorage = createWakeupStorage([]);
+    badStorage.claimHarnessWakeupItems.mockRejectedValueOnce(new Error('bad storage unavailable'));
+    const goodStorage = createWakeupStorage([item]);
+    const admit = vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-good', duplicate: false });
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        bad: {
+          _internalGetSessionStorage: () => badStorage,
+          session: vi.fn(),
+        },
+        good: {
+          _internalGetSessionStorage: () => goodStorage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(1);
+
+    expect(deps._logger.error).toHaveBeenCalledWith(
+      'HarnessWakeupWorker: failed to process harness wakeups',
+      expect.objectContaining({ harnessName: 'bad' }),
+    );
+    expect(goodStorage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: item.id, status: 'queued', queuedItemId: 'queued-good' }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when the internal wakeup admission path is unavailable', async () => {
+    const item = sampleWakeup({
+      attachments: [{ kind: 'url', name: 'remote.txt', mimeType: 'text/plain', url: 'https://example.test/a.txt' }],
+    });
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({ resourceId: item.resourceId, threadId: item.threadId }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        deadAt: expect.any(Number),
+        lastError: expect.objectContaining({ code: 'worker_unavailable', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('admits channel wakeups when the registered binding matches the persisted snapshot', async () => {
+    const item = sampleWakeup({ requestContext: sampleWakeupChannelContext() });
+    const storage = createWakeupStorage([item]);
+    const admit = vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-channel', duplicate: false });
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding: vi.fn().mockReturnValue(sampleWakeupChannelBinding()),
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(admit).toHaveBeenCalledWith(item);
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: item.id, status: 'queued', queuedItemId: 'queued-channel' }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a channel wakeup binding is missing', async () => {
+    const item = sampleWakeup({ requestContext: sampleWakeupChannelContext() });
+    const storage = createWakeupStorage([item]);
+    const session = vi.fn().mockResolvedValue({
+      resourceId: item.resourceId,
+      threadId: item.threadId,
+      _admitWakeupQueue: vi.fn(),
+    });
+    const getChannelBinding = vi.fn().mockReturnValue(undefined);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(getChannelBinding).toHaveBeenCalledWith('support');
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'channel_binding_closed', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a channel wakeup lacks a binding snapshot', async () => {
+    const item = sampleWakeup({
+      requestContext: sampleWakeupChannelContext({
+        bindingId: undefined,
+      }),
+    });
+    const storage = createWakeupStorage([item]);
+    const session = vi.fn().mockResolvedValue({
+      resourceId: item.resourceId,
+      threadId: item.threadId,
+      _admitWakeupQueue: vi.fn(),
+    });
+    const getChannelBinding = vi.fn().mockReturnValue(sampleWakeupChannelBinding());
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(getChannelBinding).not.toHaveBeenCalled();
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'channel_binding_closed', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('fails closed when a channel wakeup binding snapshot is stale', async () => {
+    const item = sampleWakeup({ requestContext: sampleWakeupChannelContext() });
+    const storage = createWakeupStorage([item]);
+    const admit = vi.fn();
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          getChannelBinding: vi.fn().mockReturnValue(sampleWakeupChannelBinding({ bindingId: 'support-binding-2' })),
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(admit).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({ code: 'channel_binding_closed', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('marks retryable failures failed with a later retry time', async () => {
+    const item = sampleWakeup({ attempts: 2 });
+    const storage = createWakeupStorage([item]);
+    const retryBackoffMs = vi.fn(() => 1234);
+    const worker = new HarnessWakeupWorker({ retryBackoffMs, maxAttempts: 5 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: vi
+              .fn()
+              .mockRejectedValue(Object.assign(new Error('locked'), { name: 'HarnessSessionLockedError' })),
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'failed',
+        attempts: 2,
+        nextAttemptAt: expect.any(Number),
+        lastError: expect.objectContaining({ code: 'session_locked', retryable: true }),
+        claimId: undefined,
+      }),
+      { claimId: item.claimId },
+    );
+    // Storage increments attempts when the row is claimed; the worker must
+    // persist the claimed attempt count instead of double-counting failures.
+    expect(retryBackoffMs).toHaveBeenCalledWith(2);
+  });
+
+  it('renews ownership before admitting a claimed wakeup', async () => {
+    const item = sampleWakeup();
+    const storage = createWakeupStorage([item]);
+    storage.renewHarnessWakeupClaim.mockRejectedValueOnce(new Error('expired claim'));
+    const admit = vi.fn().mockResolvedValue({ accepted: true, queuedItemId: 'queued-late', duplicate: false });
+    const worker = new HarnessWakeupWorker({ retryBackoffMs: () => 1234, maxAttempts: 5 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.renewHarnessWakeupClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ wakeupItemId: item.id, claimId: item.claimId }),
+    );
+    expect(admit).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'failed',
+        lastError: expect.objectContaining({ code: 'unknown', retryable: true }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('does not mark a wakeup failed after queue admission succeeds', async () => {
+    const item = sampleWakeup({ attempts: 10 });
+    const storage = createWakeupStorage([item]);
+    storage.updateHarnessWakeupItem.mockRejectedValueOnce(new Error('lost claim after admission'));
+    const admit = vi
+      .fn()
+      .mockResolvedValue({ accepted: true, queuedItemId: 'queued-after-update-loss', duplicate: false });
+    const worker = new HarnessWakeupWorker({ maxAttempts: 10 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: admit,
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledTimes(1);
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: item.id, status: 'queued', queuedItemId: 'queued-after-update-loss' }),
+      { claimId: item.claimId },
+    );
+    expect(deps._logger.error).toHaveBeenCalledWith(
+      'HarnessWakeupWorker: failed to mark admitted wakeup queued',
+      expect.objectContaining({ wakeupItemId: item.id, queuedItemId: 'queued-after-update-loss' }),
+    );
+  });
+
+  it('reconciles existing durable queue admission before hydrating a session', async () => {
+    const item = sampleWakeup({ admissionHash: 'admission-hash-1', attempts: 2 });
+    const storage = createWakeupStorage([item]);
+    storage.resolveOperationAdmissionEvidence.mockResolvedValueOnce({
+      status: 'duplicate',
+      storedAdmissionHash: item.admissionHash,
+      evidence: {
+        admissionId: item.admissionId,
+        admissionHash: item.admissionHash,
+        queuedItemId: 'queued-existing',
+      },
+    });
+    const session = vi.fn().mockRejectedValue(new Error('session should not be hydrated for duplicate evidence'));
+    const worker = new HarnessWakeupWorker({ maxAttempts: 10 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session,
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(session).not.toHaveBeenCalled();
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: item.id, status: 'queued', queuedItemId: 'queued-existing' }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('dead-letters duplicate queue evidence that has no queued item id', async () => {
+    const item = sampleWakeup({ admissionHash: 'admission-hash-1' });
+    const storage = createWakeupStorage([item]);
+    storage.resolveOperationAdmissionEvidence.mockResolvedValueOnce({
+      status: 'duplicate',
+      storedAdmissionHash: item.admissionHash,
+      evidence: {
+        admissionId: item.admissionId,
+        admissionHash: item.admissionHash,
+      },
+    });
+    const worker = new HarnessWakeupWorker({ maxAttempts: 10 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn(),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        lastError: expect.objectContaining({
+          code: 'provider_payload_invalid',
+          retryable: false,
+        }),
+      }),
+      { claimId: item.claimId },
+    );
+    expect(storage.updateHarnessWakeupItem.mock.calls[0]?.[0].queuedItemId).toBeUndefined();
+  });
+
+  it('renews unprocessed wakeups while a claimed batch is waiting', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = sampleWakeup();
+      const second = sampleWakeup({
+        id: 'wakeup-2',
+        sourceId: 'source-2',
+        fireId: 'fire-2',
+        idempotencyKey: 'wake-key-2',
+        payloadHash: 'payload-hash-2',
+        admissionId: 'wake-admission-2',
+      });
+      const storage = createWakeupStorage([first, second]);
+      const admit = vi.fn().mockImplementation(async (item: HarnessWakeupItem) => {
+        if (item.id === first.id) {
+          await vi.advanceTimersByTimeAsync(2);
+        }
+        return { accepted: true, queuedItemId: `queued-${item.id}`, duplicate: false };
+      });
+      const worker = new HarnessWakeupWorker({ claimRenewMs: 1 });
+      const deps = createMockDeps();
+      deps._storage.getStore.mockResolvedValue(storage);
+      deps.mastra = {
+        getHarnesses: () => ({
+          default: {
+            _internalGetSessionStorage: () => storage,
+            session: vi.fn().mockResolvedValue({
+              resourceId: first.resourceId,
+              threadId: first.threadId,
+              _admitWakeupQueue: admit,
+            }),
+          },
+        }),
+      } as any;
+
+      await worker.init(deps);
+      await worker.runOnce();
+
+      expect(storage.renewHarnessWakeupClaim).toHaveBeenCalledWith(
+        expect.objectContaining({ wakeupItemId: second.id, claimId: second.claimId }),
+      );
+      expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+        expect.objectContaining({ id: second.id, status: 'queued', queuedItemId: 'queued-wakeup-2' }),
+        { claimId: second.claimId },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('logs claim renewal loss after queue admission instead of failing admitted work', async () => {
+    vi.useFakeTimers();
+    try {
+      const item = sampleWakeup();
+      const storage = createWakeupStorage([item]);
+      storage.renewHarnessWakeupClaim
+        .mockResolvedValueOnce({ claimExpiresAt: Date.now() + 30_000, storageNow: Date.now() })
+        .mockRejectedValueOnce(new Error('lost during admission'));
+      const admit = vi.fn().mockImplementation(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+        return { accepted: true, queuedItemId: 'queued-renewal-lost', duplicate: false };
+      });
+      const worker = new HarnessWakeupWorker({ claimRenewMs: 1 });
+      const deps = createMockDeps();
+      deps._storage.getStore.mockResolvedValue(storage);
+      deps.mastra = {
+        getHarnesses: () => ({
+          default: {
+            _internalGetSessionStorage: () => storage,
+            session: vi.fn().mockResolvedValue({
+              resourceId: item.resourceId,
+              threadId: item.threadId,
+              _admitWakeupQueue: admit,
+            }),
+          },
+        }),
+      } as any;
+
+      await worker.init(deps);
+      await worker.runOnce();
+
+      expect(admit).toHaveBeenCalledTimes(1);
+      expect(deps._logger.warn).toHaveBeenCalledWith(
+        'HarnessWakeupWorker: wakeup claim renewal failed after queue admission',
+        expect.objectContaining({ wakeupItemId: item.id, queuedItemId: 'queued-renewal-lost' }),
+      );
+      expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+        expect.objectContaining({ id: item.id, status: 'queued', queuedItemId: 'queued-renewal-lost' }),
+        { claimId: item.claimId },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks exhausted or non-recoverable wakeups dead', async () => {
+    const item = sampleWakeup({ attempts: 10 });
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker({ maxAttempts: 10 });
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: vi
+              .fn()
+              .mockRejectedValue(Object.assign(new Error('closed'), { name: 'HarnessSessionClosedError' })),
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'dead',
+        deadAt: expect.any(Number),
+        lastError: expect.objectContaining({ code: 'session_closed', retryable: false }),
+        nextAttemptAt: undefined,
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('start and stop manage polling without running before init', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new HarnessWakeupWorker({ pollIntervalMs: 10 });
+      await expect(worker.start()).rejects.toThrow('call init() before start()');
+      const deps = createMockDeps();
+      deps.mastra = { getHarnesses: () => ({}) } as any;
+      await worker.init(deps);
+      await worker.start();
+      expect(worker.isRunning).toBe(true);
+      await worker.stop();
+      expect(worker.isRunning).toBe(false);
+      vi.advanceTimersByTime(20);
+      expect(deps._storage.getStore).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not keep an old polling loop alive across stop and restart', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveClaim!: (items: HarnessWakeupItem[]) => void;
+      const firstClaim = new Promise<HarnessWakeupItem[]>(resolve => {
+        resolveClaim = resolve;
+      });
+      const storage = createWakeupStorage([]);
+      storage.claimHarnessWakeupItems.mockReturnValueOnce(firstClaim).mockResolvedValue([]);
+      const worker = new HarnessWakeupWorker({ pollIntervalMs: 1_000 });
+      const deps = createMockDeps();
+      deps._storage.getStore.mockResolvedValue(storage);
+      deps.mastra = {
+        getHarnesses: () => ({
+          default: {
+            _internalGetSessionStorage: () => storage,
+            session: vi.fn(),
+          },
+        }),
+      } as any;
+
+      await worker.init(deps);
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(storage.claimHarnessWakeupItems).toHaveBeenCalledTimes(1);
+
+      await worker.stop();
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      resolveClaim([]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await worker.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+function createWakeupStorage(items: HarnessWakeupItem[]) {
+  return {
+    claimHarnessWakeupItems: vi.fn().mockResolvedValue(items),
+    renewHarnessWakeupClaim: vi.fn().mockResolvedValue({ claimExpiresAt: Date.now() + 30_000, storageNow: Date.now() }),
+    resolveOperationAdmissionEvidence: vi.fn().mockResolvedValue({ status: 'none' }),
+    loadSessionByThread: vi
+      .fn()
+      .mockImplementation(
+        async ({ threadId, resourceId }: { harnessName?: string; threadId: string; resourceId: string }) => {
+          const item = items.find(candidate => candidate.threadId === threadId && candidate.resourceId === resourceId);
+          return item?.sessionId ? { id: item.sessionId, threadId, resourceId } : null;
+        },
+      ),
+    updateHarnessWakeupItem: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function sampleWakeup(overrides: Partial<HarnessWakeupItem> = {}): HarnessWakeupItem {
+  const now = Date.now();
+  return {
+    id: 'wakeup-1',
+    harnessName: 'default',
+    source: 'proactive',
+    sourceId: 'source-1',
+    fireId: 'fire-1',
+    idempotencyKey: 'wake-key-1',
+    payloadHash: 'payload-hash-1',
+    admissionId: 'wake-admission-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionId: 'session-1',
+    dueAt: now - 1,
+    createdAt: now - 10,
+    updatedAt: now,
+    claimedAt: now,
+    status: 'claimed',
+    mode: 'default',
+    attempts: 1,
+    claimId: 'claim-1',
+    claimExpiresAt: now + 30_000,
+    requestContext: { metadata: { source: 'test' } },
+    content: 'scheduled work',
+    attachments: [],
+    ...overrides,
+  };
+}
+
+function sampleWakeupChannelContext(
+  overrides: Partial<{
+    origin: 'inbound' | 'binding';
+    harnessName: string;
+    channelId: string;
+    providerId: string;
+    platform: string;
+    externalThreadId: string;
+    externalMessageId: string;
+    bindingId: string;
+  }> = {},
+) {
+  return {
+    channel: {
+      origin: 'inbound' as const,
+      harnessName: 'default',
+      channelId: 'support',
+      providerId: 'slack-provider',
+      platform: 'slack',
+      externalThreadId: 'thread-ext-1',
+      externalMessageId: 'message-ext-1',
+      bindingId: 'support-binding',
+      ...overrides,
+    },
+  };
+}
+
+function sampleWakeupChannelBinding(
+  overrides: Partial<{
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    providerId: string;
+    platform: string;
+    callbackTarget: string;
+    durableId: string;
+  }> = {},
+) {
+  return {
+    harnessName: 'default',
+    channelId: 'support',
+    bindingId: 'support-binding',
+    providerId: 'slack-provider',
+    platform: 'slack',
+    callbackTarget: 'https://channels.example.test/slack',
+    durableId: 'default:support:support-binding',
+    ...overrides,
+  };
+}

@@ -451,11 +451,12 @@ export class CoreToolBuilder extends MastraBase {
             // Nest agent-specific properties under 'agent' key
             // Do NOT include workflow context even if workflow properties exist
             // (agents use workflows internally but tools should see agent context)
-            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, runId, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               agent: {
                 agentId: options.agentId || '',
+                runId,
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,
@@ -797,14 +798,16 @@ export class CoreToolBuilder extends MastraBase {
     // Map AI SDK's needsApproval to our requireApproval
     // needsApproval can be boolean or a function that takes input and returns boolean
     let requireApproval = false;
-    let needsApprovalFn: ((input: any) => boolean | Promise<boolean>) | undefined;
+    let needsApprovalFn: ((input: any, ctx?: any) => boolean | Promise<boolean>) | undefined =
+      typeof (this.originalTool as any).needsApprovalFn === 'function'
+        ? (this.originalTool as any).needsApprovalFn
+        : undefined;
 
     if (typeof this.options.requireApproval === 'function') {
-      requireApproval = true;
+      // Dynamic approval is evaluated per call via needsApprovalFn.
       needsApprovalFn = this.options.requireApproval;
     } else if (typeof this.options.requireApproval === 'boolean') {
       requireApproval = this.options.requireApproval;
-      needsApprovalFn = undefined;
     }
 
     if (isVercelTool(this.originalTool) && 'needsApproval' in this.originalTool) {
@@ -815,8 +818,6 @@ export class CoreToolBuilder extends MastraBase {
       } else if (typeof needsApproval === 'function') {
         // Store the function to evaluate it per-call
         needsApprovalFn = needsApproval;
-        // Set requireApproval to true so the tool-call-step knows to check the function
-        requireApproval = true;
       }
     }
 

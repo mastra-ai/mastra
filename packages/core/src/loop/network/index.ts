@@ -20,6 +20,7 @@ import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
+import { resolveToolRequiresApproval } from '../../tools/approval';
 import type { IdGeneratorContext } from '../../types';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep, createWorkflow } from '../../workflows/workflow';
@@ -1557,6 +1558,118 @@ export async function createNetworkLoop({
         stepType: 'tool-execution',
       });
 
+      const returnApprovalRejection = async () => {
+        const rejectionResult = 'Tool call was not approved by the user';
+        await saveMessagesWithProcessors(
+          memory,
+          [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify({
+                      isNetwork: true,
+                      selectionReason: inputData.selectionReason,
+                      primitiveType: inputData.primitiveType,
+                      primitiveId: toolId,
+                      finalResult: { result: rejectionResult, toolCallId },
+                      input: inputDataToUse,
+                    }),
+                  },
+                ],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                },
+              },
+              createdAt: new Date(),
+              threadId: initData?.threadId || runId,
+              resourceId: initData?.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+
+        const endPayload = {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: rejectionResult,
+          isComplete: false,
+          iteration: inputData.iteration,
+          toolCallId,
+          toolName: toolId,
+        };
+
+        await writer?.write({
+          type: 'tool-execution-end',
+          payload: endPayload,
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+
+        return endPayload;
+      };
+
+      const getStoredResumeMetadata = async () => {
+        if (!resumeData || !memory) {
+          return undefined;
+        }
+
+        let recalled: Awaited<ReturnType<typeof memory.recall>> | undefined;
+        try {
+          recalled = await memory.recall({
+            threadId: initData?.threadId || runId,
+            resourceId: initData?.threadResourceId || networkName,
+          });
+        } catch (error) {
+          logger?.error('Error recalling network resume metadata:', error);
+        }
+
+        const assistantMessages = [...(recalled?.messages ?? [])]
+          .reverse()
+          .filter(message => message.role === 'assistant');
+
+        for (const message of assistantMessages) {
+          const metadata =
+            typeof message.content?.metadata === 'object' && message.content.metadata !== null
+              ? (message.content.metadata as Record<string, any>)
+              : undefined;
+          const approvalMetadata = metadata?.requireApprovalMetadata?.[inputData.primitiveId];
+          if (approvalMetadata) {
+            return approvalMetadata;
+          }
+
+          const suspensionMetadata = metadata?.suspendedTools?.[inputData.primitiveId];
+          if (suspensionMetadata) {
+            return suspensionMetadata;
+          }
+        }
+
+        return undefined;
+      };
+
+      const storedResumeMetadata = resumeData ? await getStoredResumeMetadata() : undefined;
+      const hasApprovalResumeShape =
+        resumeData &&
+        typeof resumeData === 'object' &&
+        'approved' in resumeData &&
+        typeof resumeData.approved === 'boolean';
+      const isKnownApprovalResume = storedResumeMetadata?.type === 'approval';
+      const isKnownSuspensionResume = storedResumeMetadata?.type === 'suspension';
+      const isApprovalResumeData = hasApprovalResumeShape && isKnownApprovalResume;
+      const isMalformedStoredApprovalResumeData = Boolean(resumeData) && isKnownApprovalResume && !isApprovalResumeData;
+      const isExplicitApprovalResume =
+        hasApprovalResumeShape && requestContext.get('__mastra_networkToolApprovalResume') === true;
+      if (isExplicitApprovalResume) {
+        requestContext.delete('__mastra_networkToolApprovalResume');
+      }
+
       await writer?.write({
         type: 'tool-execution-start',
         payload: {
@@ -1572,26 +1685,26 @@ export async function createNetworkLoop({
         runId,
       });
 
+      if (isMalformedStoredApprovalResumeData) {
+        return returnApprovalRejection();
+      }
+
       // Check if approval is required
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
       // - undefined (no approval needed)
       // If needsApprovalFn exists, evaluate it with the tool args
-      let toolRequiresApproval = (tool as any).requireApproval;
-      if ((tool as any).needsApprovalFn) {
-        // Evaluate the function with the parsed args
-        try {
-          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
-          toolRequiresApproval = needsApprovalResult;
-        } catch (error) {
-          // Log error to help developers debug faulty needsApprovalFn implementations
-          logger?.error(`Error evaluating needsApprovalFn for tool ${toolId}:`, error);
-          // On error, default to requiring approval to be safe
-          toolRequiresApproval = true;
-        }
-      }
+      const toolRequiresApproval = await resolveToolRequiresApproval({
+        tool,
+        args: inputDataToUse as Record<string, unknown>,
+        requestContext,
+        logger,
+        toolName: toolId,
+      });
+      const shouldHandleAsApprovalResume =
+        toolRequiresApproval || isKnownApprovalResume || (isExplicitApprovalResume && !isKnownSuspensionResume);
 
-      if (toolRequiresApproval) {
+      if (shouldHandleAsApprovalResume) {
         // Check if abort fired before writing approval metadata or suspending
         if (abortSignal?.aborted) {
           return handleAbort({
@@ -1629,7 +1742,7 @@ export async function createNetworkLoop({
                         isNetwork: true,
                         selectionReason: inputData.selectionReason,
                         primitiveType: inputData.primitiveType,
-                        primitiveId: inputData.primitiveId,
+                        primitiveId: toolId,
                         finalResult: { result: '', toolCallId },
                         input: inputDataToUse,
                       }),
@@ -1639,15 +1752,16 @@ export async function createNetworkLoop({
                   metadata: {
                     mode: 'network',
                     requireApprovalMetadata: {
+                      // Keep the lookup key on the registry primitive id so in-flight resumes stay compatible.
                       [inputData.primitiveId]: {
                         toolCallId,
-                        toolName: inputData.primitiveId,
+                        toolName: toolId,
                         args: inputDataToUse,
                         type: 'approval',
                         resumeSchema: requireApprovalResumeSchema,
                         runId,
                         primitiveType: 'tool',
-                        primitiveId: inputData.primitiveId,
+                        primitiveId: toolId,
                       },
                     },
                   },
@@ -1663,7 +1777,7 @@ export async function createNetworkLoop({
           await writer?.write({
             type: 'tool-execution-approval',
             payload: {
-              toolName: inputData.primitiveId,
+              toolName: toolId,
               toolCallId,
               args: inputDataToUse,
               selectionReason: inputData.selectionReason,
@@ -1674,68 +1788,14 @@ export async function createNetworkLoop({
 
           return suspend({
             requireToolApproval: {
-              toolName: inputData.primitiveId,
+              toolName: toolId,
               args: inputDataToUse,
               toolCallId,
             },
           });
-        } else {
-          if (!resumeData.approved) {
-            const rejectionResult = 'Tool call was not approved by the user';
-            await saveMessagesWithProcessors(
-              memory,
-              [
-                {
-                  id: generateId(),
-                  type: 'text',
-                  role: 'assistant',
-                  content: {
-                    parts: [
-                      {
-                        type: 'text',
-                        text: JSON.stringify({
-                          isNetwork: true,
-                          selectionReason: inputData.selectionReason,
-                          primitiveType: inputData.primitiveType,
-                          primitiveId: inputData.primitiveId,
-                          finalResult: { result: rejectionResult, toolCallId },
-                          input: inputDataToUse,
-                        }),
-                      },
-                    ],
-                    format: 2,
-                    metadata: {
-                      mode: 'network',
-                    },
-                  },
-                  createdAt: new Date(),
-                  threadId: initData.threadId || runId,
-                  resourceId: initData.threadResourceId || networkName,
-                },
-              ] as MastraDBMessage[],
-              processorRunner,
-              { requestContext },
-            );
-
-            const endPayload = {
-              task: inputData.task,
-              primitiveId: inputData.primitiveId,
-              primitiveType: inputData.primitiveType,
-              result: rejectionResult,
-              isComplete: false,
-              iteration: inputData.iteration,
-              toolCallId,
-              toolName: toolId,
-            };
-
-            await writer?.write({
-              type: 'tool-execution-end',
-              payload: endPayload,
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
-
-            return endPayload;
+        } else if (!isKnownSuspensionResume) {
+          if (!hasApprovalResumeShape || !resumeData.approved) {
+            return returnApprovalRejection();
           }
         }
       }
@@ -1791,9 +1851,10 @@ export async function createNetworkLoop({
                       metadata: {
                         mode: 'network',
                         suspendedTools: {
+                          // Keep the lookup key on the registry primitive id so in-flight resumes stay compatible.
                           [inputData.primitiveId]: {
                             toolCallId,
-                            toolName: inputData.primitiveId,
+                            toolName: toolId,
                             args: inputDataToUse,
                             suspendPayload,
                             type: 'suspension',
@@ -1802,7 +1863,7 @@ export async function createNetworkLoop({
                               JSON.stringify(schemaToJsonSchema((tool as any).resumeSchema)),
                             runId,
                             primitiveType: 'tool',
-                            primitiveId: inputData.primitiveId,
+                            primitiveId: toolId,
                           },
                         },
                       },
@@ -1818,7 +1879,7 @@ export async function createNetworkLoop({
               await writer?.write({
                 type: 'tool-execution-suspended',
                 payload: {
-                  toolName: inputData.primitiveId,
+                  toolName: toolId,
                   toolCallId,
                   args: inputDataToUse,
                   resumeSchema:
@@ -1846,7 +1907,7 @@ export async function createNetworkLoop({
       if (toolSuspendPayload) {
         return await suspend({
           toolCallSuspended: toolSuspendPayload,
-          toolName: inputData.primitiveId,
+          toolName: toolId,
           args: inputDataToUse,
           toolCallId,
         });
@@ -2658,6 +2719,7 @@ export async function networkLoop<OUTPUT = undefined>({
 
   const run = await mainWorkflow.createRun({
     runId: runIdToUse,
+    resourceId,
   });
 
   const { thread } = await prepareMemoryStep({

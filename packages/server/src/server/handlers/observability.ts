@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { extractTrajectoryFromTrace, listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
-import type { ScoresStorage } from '@mastra/core/storage';
+import type { ScoresStorage, StoragePagination } from '@mastra/core/storage';
 import {
   tracesFilterSchema,
   tracesOrderBySchema,
@@ -439,7 +439,7 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
-      const pagination = pickParams(paginationArgsSchema, params);
+      const pagination = pickParams(paginationArgsSchema, params) as StoragePagination;
       const spanIds = pickParams(spanIdsSchema, params);
 
       const scoresStore = await getScoresStore(mastra);

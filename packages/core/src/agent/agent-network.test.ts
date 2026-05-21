@@ -3980,6 +3980,30 @@ describe('Agent - network - tool approval and suspension', () => {
     },
   });
 
+  const createMemoryCapture = () => {
+    const capturedMemory = new MockMemory();
+    const savedMessages: any[] = [];
+    const originalSaveMessages = capturedMemory.saveMessages.bind(capturedMemory);
+    capturedMemory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+    return { memory: capturedMemory, savedMessages };
+  };
+
+  const getParsedNetworkMessages = (savedMessages: any[]) => {
+    return savedMessages.flatMap(message => {
+      const text = message.content?.parts?.[0]?.text;
+      if (typeof text !== 'string') return [];
+      try {
+        const parsed = JSON.parse(text);
+        return parsed?.isNetwork ? [{ message, parsed }] : [];
+      } catch {
+        return [];
+      }
+    });
+  };
+
   describe('approveNetworkToolCall', () => {
     it('should approve a direct network tool call', async () => {
       mockToolExecute.mockClear();
@@ -4048,6 +4072,77 @@ describe('Agent - network - tool approval and suspension', () => {
 
       expect(toolExecutionEnded).toBe(true);
       expect(mockToolExecute).toHaveBeenCalled();
+    });
+
+    it('uses the declared tool id for direct approval events and metadata when registered by alias', async () => {
+      const { memory: capturedMemory, savedMessages } = createMemoryCapture();
+      const aliasToolExecute = vi.fn().mockResolvedValue({ result: 'Processed: aliased approval' });
+      const aliasApprovalTool = createTool({
+        id: 'approval-real-tool',
+        description: 'A tool registered under an alias that requires approval.',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: true,
+        execute: aliasToolExecute,
+      });
+      const mockModel = createRoutingMockModel('approvalAlias', 'tool', JSON.stringify({ query: 'aliased approval' }));
+      const networkAgent = new Agent({
+        id: 'alias-approval-network-agent',
+        name: 'Alias Approval Network Agent',
+        instructions: 'Use the aliased approval tool.',
+        model: mockModel,
+        tools: { approvalAlias: aliasApprovalTool },
+        memory: capturedMemory,
+      });
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the aliased approval query', {
+        memory: {
+          thread: 'test-thread-approve-alias',
+          resource: 'test-resource-approve-alias',
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+
+      const start = chunks.find(chunk => chunk.type === 'tool-execution-start');
+      const approval = chunks.find(chunk => chunk.type === 'tool-execution-approval');
+      expect(start?.payload?.args?.toolName).toBe('approval-real-tool');
+      expect(approval?.payload?.toolName).toBe('approval-real-tool');
+
+      const approvalNetworkMessage = getParsedNetworkMessages(savedMessages).find(({ message }) => {
+        return message.content?.metadata?.requireApprovalMetadata?.approvalAlias;
+      });
+      expect(approvalNetworkMessage?.parsed.primitiveId).toBe('approval-real-tool');
+      expect(approvalNetworkMessage?.message.content.metadata.requireApprovalMetadata.approvalAlias).toMatchObject({
+        toolName: 'approval-real-tool',
+        primitiveId: 'approval-real-tool',
+      });
+
+      const resumeStream = await registeredAgent.approveNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-approve-alias',
+          resource: 'test-resource-approve-alias',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+      }
+
+      const end = resumeChunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(end?.payload?.toolName).toBe('approval-real-tool');
+      expect(end?.payload?.result).toMatchObject({ result: 'Processed: aliased approval' });
+      expect(aliasToolExecute).toHaveBeenCalled();
     });
 
     it('should approve a nested agent tool call', async () => {
@@ -4199,6 +4294,215 @@ describe('Agent - network - tool approval and suspension', () => {
 
       expect(rejectionFound).toBe(true);
       expect(mockToolExecute).not.toHaveBeenCalled();
+    });
+
+    it('uses the declared tool id when declining an aliased direct approval', async () => {
+      const { memory: capturedMemory, savedMessages } = createMemoryCapture();
+      const aliasToolExecute = vi.fn().mockResolvedValue({ result: 'should not run' });
+      const aliasApprovalTool = createTool({
+        id: 'decline-real-tool',
+        description: 'A tool registered under an alias that can be declined.',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: true,
+        execute: aliasToolExecute,
+      });
+      const mockModel = createRoutingMockModel('declineAlias', 'tool', JSON.stringify({ query: 'aliased decline' }));
+      const networkAgent = new Agent({
+        id: 'alias-decline-network-agent',
+        name: 'Alias Decline Network Agent',
+        instructions: 'Use the aliased decline tool.',
+        model: mockModel,
+        tools: { declineAlias: aliasApprovalTool },
+        memory: capturedMemory,
+      });
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the aliased decline query', {
+        memory: {
+          thread: 'test-thread-decline-alias',
+          resource: 'test-resource-decline-alias',
+        },
+      });
+
+      for await (const _chunk of anStream) {
+        // Consume the approval stream.
+      }
+
+      const savedBeforeDecline = savedMessages.length;
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-decline-alias',
+          resource: 'test-resource-decline-alias',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+      }
+
+      const end = resumeChunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(end?.payload?.toolName).toBe('decline-real-tool');
+      expect(end?.payload?.result).toBe('Tool call was not approved by the user');
+
+      const rejectionNetworkMessage = getParsedNetworkMessages(savedMessages.slice(savedBeforeDecline)).find(
+        ({ parsed }) => parsed.finalResult?.result === 'Tool call was not approved by the user',
+      );
+      expect(rejectionNetworkMessage?.parsed.primitiveId).toBe('decline-real-tool');
+      expect(aliasToolExecute).not.toHaveBeenCalled();
+    });
+
+    it('should honor declined dynamic network tool calls even if approval later returns false', async () => {
+      const dynamicToolExecute = vi.fn().mockResolvedValue({ result: 'should not run' });
+      const needsApprovalFn = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+      const dynamicApprovalTool = createTool({
+        id: 'dynamicApprovalTool',
+        description: 'A tool with dynamic approval.',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: needsApprovalFn,
+        execute: dynamicToolExecute,
+      });
+
+      const mockModel = createRoutingMockModel(
+        'dynamicApprovalTool',
+        'tool',
+        JSON.stringify({ query: 'dynamic decline' }),
+      );
+
+      const networkAgent = new Agent({
+        id: 'dynamic-decline-network-agent',
+        name: 'Dynamic Decline Network Agent',
+        instructions: 'Use dynamic-approval-tool when asked to process something.',
+        model: mockModel,
+        tools: { dynamicApprovalTool },
+        memory,
+      });
+
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "dynamic decline"', {
+        memory: {
+          thread: 'test-thread-decline-dynamic',
+          resource: 'test-resource-decline-dynamic',
+        },
+      });
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
+
+      let rejectionFound = false;
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-decline-dynamic',
+          resource: 'test-resource-decline-dynamic',
+        },
+      });
+
+      for await (const chunk of resumeStream) {
+        if (chunk.type === 'tool-execution-end') {
+          rejectionFound = chunk.payload?.result === 'Tool call was not approved by the user';
+        }
+      }
+
+      expect(rejectionFound).toBe(true);
+      expect(needsApprovalFn).toHaveBeenCalledTimes(2);
+      expect(dynamicToolExecute).not.toHaveBeenCalled();
+    });
+
+    it('should honor explicit declined dynamic network resumes even if approval later returns false', async () => {
+      const dynamicToolExecute = vi.fn().mockResolvedValue({ result: 'should not run' });
+      const needsApprovalFn = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+      const dynamicApprovalTool = createTool({
+        id: 'directDynamicApprovalTool',
+        description: 'A tool with dynamic approval.',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: needsApprovalFn,
+        execute: dynamicToolExecute,
+      });
+
+      const mockModel = createRoutingMockModel(
+        'directDynamicApprovalTool',
+        'tool',
+        JSON.stringify({ query: 'direct dynamic decline' }),
+      );
+
+      const networkAgent = new Agent({
+        id: 'direct-dynamic-decline-network-agent',
+        name: 'Direct Dynamic Decline Network Agent',
+        instructions: 'Use direct-dynamic-approval-tool when asked to process something.',
+        model: mockModel,
+        tools: { directDynamicApprovalTool: dynamicApprovalTool },
+        memory,
+      });
+
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "direct dynamic decline"', {
+        memory: {
+          thread: 'test-thread-decline-dynamic-direct-resume',
+          resource: 'test-resource-decline-dynamic-direct-resume',
+        },
+      });
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
+
+      let rejectionFound = false;
+      const recallSpy = vi.spyOn(memory, 'recall').mockResolvedValue({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: false,
+        hasMore: false,
+      });
+      try {
+        const resumeStream = await registeredAgent.declineNetworkToolCall({
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-decline-dynamic-direct-resume',
+            resource: 'test-resource-decline-dynamic-direct-resume',
+          },
+        });
+
+        for await (const chunk of resumeStream) {
+          if (chunk.type === 'tool-execution-end') {
+            rejectionFound = chunk.payload?.result === 'Tool call was not approved by the user';
+          }
+        }
+      } finally {
+        recallSpy.mockRestore();
+      }
+
+      expect(rejectionFound).toBe(true);
+      expect(needsApprovalFn).toHaveBeenCalledTimes(2);
+      expect(dynamicToolExecute).not.toHaveBeenCalled();
     });
 
     it('should decline a nested agent tool call', async () => {
@@ -4358,6 +4662,178 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
       expect(toolResult).toBeDefined();
       expect(toolResult?.result).toContain('my additional info');
+    });
+
+    it('uses the declared tool id for direct suspension events and metadata when registered by alias', async () => {
+      const { memory: capturedMemory, savedMessages } = createMemoryCapture();
+      const aliasSuspendingTool = createTool({
+        id: 'suspend-real-tool',
+        description: 'A tool registered under an alias that suspends.',
+        inputSchema: z.object({ initialQuery: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ userResponse: z.string() }),
+        execute: async (input, context) => {
+          if (!context?.agent?.resumeData) {
+            return await context?.agent?.suspend({ message: 'Need aliased resume data' });
+          }
+          return { result: `Received: ${input.initialQuery} and ${context.agent.resumeData.userResponse}` };
+        },
+      });
+      const mockModel = createRoutingMockModel(
+        'suspendAlias',
+        'tool',
+        JSON.stringify({ initialQuery: 'aliased suspension' }),
+      );
+      const networkAgent = new Agent({
+        id: 'alias-suspend-network-agent',
+        name: 'Alias Suspend Network Agent',
+        instructions: 'Use the aliased suspending tool.',
+        model: mockModel,
+        tools: { suspendAlias: aliasSuspendingTool },
+        memory: capturedMemory,
+      });
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with the aliased suspending tool', {
+        memory: {
+          thread: 'test-thread-suspend-alias',
+          resource: 'test-resource-suspend-alias',
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+
+      const start = chunks.find(chunk => chunk.type === 'tool-execution-start');
+      const suspended = chunks.find(chunk => chunk.type === 'tool-execution-suspended');
+      expect(start?.payload?.args?.toolName).toBe('suspend-real-tool');
+      expect(suspended?.payload?.toolName).toBe('suspend-real-tool');
+
+      const suspensionNetworkMessage = getParsedNetworkMessages(savedMessages).find(({ message }) => {
+        return message.content?.metadata?.suspendedTools?.suspendAlias;
+      });
+      expect(suspensionNetworkMessage?.parsed.primitiveId).toBe('suspend-real-tool');
+      expect(suspensionNetworkMessage?.message.content.metadata.suspendedTools.suspendAlias).toMatchObject({
+        toolName: 'suspend-real-tool',
+        primitiveId: 'suspend-real-tool',
+      });
+
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'aliased resume' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-suspend-alias',
+            resource: 'test-resource-suspend-alias',
+          },
+        },
+      );
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+      }
+
+      const end = resumeChunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(end?.payload?.toolName).toBe('suspend-real-tool');
+      expect(end?.payload?.result?.result).toContain('aliased resume');
+    });
+
+    it('should pass approved-shaped resume data to suspended dynamic-approval-capable direct network tools', async () => {
+      const approvedShapeToolExecute = vi.fn().mockImplementation(async (_input, context) => {
+        if (!context?.agent?.resumeData) {
+          return await context?.agent?.suspend({ message: 'Please approve or decline' });
+        }
+        return { result: `Approved value: ${context.agent.resumeData.approved}` };
+      });
+      const needsApprovalFn = vi.fn().mockReturnValue(false);
+      const approvedShapeSuspendingTool = createTool({
+        id: 'approvedShapeSuspendingTool',
+        description: 'A tool that resumes with an approved-shaped payload.',
+        inputSchema: z.object({ initialQuery: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        requireApproval: needsApprovalFn,
+        execute: approvedShapeToolExecute,
+      });
+
+      const mockModel = createRoutingMockModel(
+        'approvedShapeSuspendingTool',
+        'tool',
+        JSON.stringify({ initialQuery: 'starting data' }),
+      );
+
+      const networkAgent = new Agent({
+        id: 'approved-shape-suspend-network-agent',
+        name: 'Approved Shape Suspend Network Agent',
+        instructions: 'Use the approved-shape-suspending-tool when asked to collect info.',
+        model: mockModel,
+        tools: { approvedShapeSuspendingTool },
+        memory,
+      });
+
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "starting data"', {
+        memory: {
+          thread: 'test-thread-suspend-approved-shape',
+          resource: 'test-resource-suspend-approved-shape',
+        },
+      });
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-suspended');
+
+      const recallSpy = vi.spyOn(memory, 'recall').mockResolvedValue({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: false,
+        hasMore: false,
+      });
+
+      let toolResult: any = null;
+      try {
+        const resumeStream = await registeredAgent.resumeNetwork(
+          { approved: false },
+          {
+            runId: anStream.runId,
+            memory: {
+              thread: 'test-thread-suspend-approved-shape',
+              resource: 'test-resource-suspend-approved-shape',
+            },
+          },
+        );
+
+        for await (const chunk of resumeStream) {
+          if (chunk.type === 'tool-execution-end') {
+            toolResult = chunk.payload?.result;
+          }
+        }
+      } finally {
+        recallSpy.mockRestore();
+      }
+
+      expect(toolResult?.result).toBe('Approved value: false');
+      expect(approvedShapeToolExecute).toHaveBeenCalledTimes(2);
+      expect(needsApprovalFn).toHaveBeenCalledTimes(2);
     });
 
     it('should resume suspended nested agent tool', async () => {

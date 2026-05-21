@@ -10,6 +10,7 @@ import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { FavoritesLibSQL } from './domains/favorites';
+import { HarnessLibSQL } from './domains/harness';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
@@ -30,6 +31,7 @@ export {
   ChannelsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
+  HarnessLibSQL,
   MCPClientsLibSQL,
   MCPServersLibSQL,
   MemoryLibSQL,
@@ -200,6 +202,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
+    const harness = new HarnessLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -220,6 +223,7 @@ export class LibSQLStore extends MastraCompositeStore {
       blobs,
       backgroundTasks,
       schedules,
+      harness,
     };
   }
 

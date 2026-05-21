@@ -111,6 +111,7 @@ export const noopObserve: ToolObserve = {
 export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
   agentId: string;
+  runId?: string;
   toolCallId: string;
   messages: any[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
@@ -169,6 +170,7 @@ export interface MCPToolExecutionContext {
 export type MastraToolInvocationOptions = ToolInvocationOptions &
   Partial<ObservabilityContext> & {
     suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
+    runId?: string;
     resumeData?: any;
     outputWriter?: OutputWriter;
     /**

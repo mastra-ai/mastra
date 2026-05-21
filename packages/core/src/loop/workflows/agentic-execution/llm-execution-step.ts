@@ -5,6 +5,7 @@ import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import type { CreatedAgentSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -84,6 +85,7 @@ function getRequestInputProcessors({
 
 type ProcessOutputStreamResult = {
   collectedChunks: CollectedChunk[];
+  interjectedSignals: CreatedAgentSignal[];
 };
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
@@ -102,6 +104,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     rawResponse: any;
   };
   logger?: IMastraLogger;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
   toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
@@ -322,6 +325,8 @@ async function processOutputStream<OUTPUT = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
+  runId,
+  drainPendingSignals,
   transportRef,
   transportResolver,
   toolPayloadTransform,
@@ -368,6 +373,17 @@ async function processOutputStream<OUTPUT = undefined>({
     } catch {
       return undefined;
     }
+  };
+
+  const closePendingClientToolObservability = (): void => {
+    for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
+      if (!entry.ended) {
+        const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
+        entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
+        entry.ended = true;
+      }
+    }
+    clientToolArgsTextByToolCallId.clear();
   };
 
   const injectClientToolObservability = ({
@@ -465,6 +481,14 @@ async function processOutputStream<OUTPUT = undefined>({
     if (chunk.type == 'object' || chunk.type == 'object-result') {
       controller.enqueue(chunk);
       continue;
+    }
+
+    if (['tool-call', 'tool-call-input-streaming-start'].includes(chunk.type)) {
+      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interjectedSignals.length > 0) {
+        closePendingClientToolObservability();
+        return { collectedChunks, interjectedSignals };
+      }
     }
 
     chunk = await addToolPayloadTransformToChunk(chunk, {
@@ -665,18 +689,21 @@ async function processOutputStream<OUTPUT = undefined>({
     if (runState.state.hasErrored) {
       break;
     }
-  }
 
-  for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
-    if (!entry.ended) {
-      const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
-      entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
-      entry.ended = true;
+    // Drain signals only at stream boundaries so follow-ups do not split visible assistant text
+    // or separate a tool call from its result. Tool calls are handled before enqueueing so
+    // an interjection can cancel a not-yet-visible tool call from the current step.
+    if (['text-end', 'reasoning-end', 'tool-result', 'finish'].includes(chunk.type)) {
+      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interjectedSignals.length > 0) {
+        closePendingClientToolObservability();
+        return { collectedChunks, interjectedSignals };
+      }
     }
   }
-  clientToolArgsTextByToolCallId.clear();
 
-  return { collectedChunks };
+  closePendingClientToolObservability();
+  return { collectedChunks, interjectedSignals: [] };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -839,16 +866,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             safeEnqueue(controller, initialSignal.toDataPart());
           }
 
-          const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
-          if (shouldDrainBeforeFirstModelRequest) {
-            const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
-            if (pendingSignals.length > 0) {
-              currentMessageId = _internal?.generateId?.() ?? generateId();
-            }
-            for (const pendingSignal of pendingSignals) {
-              const signalForTranscript = messageList.addSignal(pendingSignal);
-              safeEnqueue(controller, signalForTranscript.toDataPart());
-            }
+          const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
+          if (pendingSignals.length > 0) {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+          }
+          for (const pendingSignal of pendingSignals) {
+            messageList.add(pendingSignal, 'input');
+            safeEnqueue(controller, pendingSignal.toDataPart());
           }
 
           const currentStep: {
@@ -1233,7 +1257,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...currentStep.modelSettings,
                 ...modelConfig.modelSettings,
               } as Record<string, unknown> | undefined,
-              providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
+              providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions) as
+                | Record<string, unknown>
+                | undefined,
               availableTools: getStepAvailableToolNames(
                 currentStep.tools as Record<string, unknown> | undefined,
                 currentStep.activeTools as readonly string[] | undefined,
@@ -1346,7 +1372,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            const { collectedChunks } = await processOutputStream({
+            const { collectedChunks, interjectedSignals } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
@@ -1362,6 +1388,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 rawResponse,
               },
               logger,
+              drainPendingSignals: _internal?.drainPendingSignals,
               transportRef: _internal?.transportRef,
               transportResolver,
               toolPayloadTransform: _internal?.toolPayloadTransform,
@@ -1381,6 +1408,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');
+            }
+
+            if (interjectedSignals.length > 0) {
+              messageList.markResponseMessageBoundary(currentStep.messageId);
+              outputStream.messageId = rotateResponseMessageId();
+              for (const signal of interjectedSignals) {
+                messageList.add(signal, 'input');
+                safeEnqueue(controller, signal.toDataPart());
+              }
+              runState.setState({
+                stepResult: {
+                  reason: 'other',
+                  messageId: currentMessageId,
+                  isContinued: true,
+                },
+              });
             }
 
             // Apply structuredOutput metadata to the assistant message.

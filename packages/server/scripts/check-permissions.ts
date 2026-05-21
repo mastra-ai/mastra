@@ -3,7 +3,7 @@
  *
  * This script:
  * 1. Generates permissions and compares with existing file
- * 2. Verifies generator output matches getEffectivePermission for each route
+ * 2. Verifies generator output includes getEffectivePermission for each route
  *
  * Usage: pnpm check:permissions (from packages/server)
  */
@@ -17,9 +17,10 @@ import { OUTPUT_PATH, derivePermissionData, generatePermissionFileContent } from
 const data = derivePermissionData();
 const generatedContent = generatePermissionFileContent(data);
 
-// Verify generator matches getEffectivePermission for each route
+// Verify generator includes getEffectivePermission for each route. The generator
+// also keeps compatibility permissions that are public RBAC surface but are not
+// represented in SERVER_ROUTES at runtime.
 const generatedPermissions = new Set(data.permissions);
-const runtimePermissions = new Set<string>();
 const mismatches: string[] = [];
 
 for (const route of SERVER_ROUTES) {
@@ -29,7 +30,6 @@ for (const route of SERVER_ROUTES) {
   if (runtimePerm) {
     const perms = Array.isArray(runtimePerm) ? runtimePerm : [runtimePerm];
     for (const perm of perms) {
-      runtimePermissions.add(perm);
       if (!generatedPermissions.has(perm)) {
         mismatches.push(`Missing: ${perm} (from ${route.method} ${route.path})`);
       }
@@ -37,15 +37,8 @@ for (const route of SERVER_ROUTES) {
   }
 }
 
-// Check for permissions in generated that aren't from routes
-for (const perm of generatedPermissions) {
-  if (!runtimePermissions.has(perm)) {
-    mismatches.push(`Extra: ${perm} (not from any route)`);
-  }
-}
-
 if (mismatches.length > 0) {
-  console.error('✗ Generator output does not match getEffectivePermission:');
+  console.error('✗ Generator output is missing route permissions:');
   for (const m of mismatches) {
     console.error(`  - ${m}`);
   }
@@ -68,7 +61,7 @@ if (generatedContent === existingContent) {
   console.info(`  - ${data.resources.length} resources`);
   console.info(`  - ${data.actions.length} actions`);
   console.info(`  - ${data.permissions.length} permission combinations`);
-  console.info('✓ Generator matches getEffectivePermission for all routes');
+  console.info('✓ Generator includes getEffectivePermission for all routes');
   process.exit(0);
 } else {
   console.error('✗ permissions.generated.ts is stale');

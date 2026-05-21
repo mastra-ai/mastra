@@ -25,6 +25,8 @@ import { deepMerge } from '../utils';
 import type { Agent } from './agent';
 import type { MessageListInput } from './message-list';
 
+export const STREAM_UNTIL_IDLE_DEFAULT_OPTIONS = Symbol('streamUntilIdleDefaultOptions');
+
 /**
  * Dependencies the extracted function needs access to that it can't reach
  * through the public `Agent` surface (e.g. private fields).
@@ -193,15 +195,19 @@ type FirstTurnRunner<OUTPUT> = (opts: Record<string, any>) => Promise<MastraMode
  */
 async function runWithIdleWrapper<OUTPUT>(
   agent: Agent<any, any, any, any>,
-  streamOptions: (Record<string, any> & { maxIdleMs?: number }) | undefined,
+  streamOptions:
+    | (Record<string, any> & { maxIdleMs?: number; [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]?: Record<string, any> })
+    | undefined,
   deps: StreamUntilIdleDeps,
   firstTurn: FirstTurnRunner<OUTPUT>,
 ): Promise<MastraModelOutput<OUTPUT>> {
   const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
 
-  const defaultOptions = await agent.getDefaultOptions({
-    requestContext: streamOptions?.requestContext,
-  });
+  const defaultOptions =
+    streamOptions?.[STREAM_UNTIL_IDLE_DEFAULT_OPTIONS] ??
+    (await agent.getDefaultOptions({
+      requestContext: streamOptions?.requestContext,
+    }));
   const mergedOptions = deepMerge(
     defaultOptions as Record<string, unknown>,
     (restStreamOptions ?? {}) as Record<string, unknown>,

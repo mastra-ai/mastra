@@ -54,18 +54,10 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
-    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
-    startedAt: row.startedAt ? (row.startedAt instanceof Date ? row.startedAt : new Date(row.startedAt)) : undefined,
-    suspendedAt: row.suspendedAt
-      ? row.suspendedAt instanceof Date
-        ? row.suspendedAt
-        : new Date(row.suspendedAt)
-      : undefined,
-    completedAt: row.completedAt
-      ? row.completedAt instanceof Date
-        ? row.completedAt
-        : new Date(row.completedAt)
-      : undefined,
+    createdAt: row.createdAtZ instanceof Date ? row.createdAtZ : new Date(row.createdAtZ || row.createdAt),
+    startedAt: row.startedAt || row.startedAtZ ? new Date(row.startedAtZ || row.startedAt) : undefined,
+    suspendedAt: row.suspendedAt || row.suspendedAtZ ? new Date(row.suspendedAtZ || row.suspendedAt) : undefined,
+    completedAt: row.completedAt || row.completedAtZ ? new Date(row.completedAtZ || row.completedAt) : undefined,
   };
 }
 
@@ -198,9 +190,13 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
         createdAt: task.createdAt.toISOString(),
+        createdAtZ: task.createdAt.toISOString(),
         startedAt: task.startedAt?.toISOString() ?? null,
+        startedAtZ: task.startedAt?.toISOString() ?? null,
         suspendedAt: task.suspendedAt?.toISOString() ?? null,
+        suspendedAtZ: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
+        completedAtZ: task.completedAt?.toISOString() ?? null,
       },
     });
   }
@@ -233,13 +229,19 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     if ('startedAt' in update) {
       setClauses.push(`"startedAt" = $${paramIdx++}`);
       params.push(update.startedAt?.toISOString() ?? null);
+      setClauses.push(`"startedAtZ" = $${paramIdx++}`);
+      params.push(update.startedAt?.toISOString() ?? null);
     }
     if ('suspendedAt' in update) {
       setClauses.push(`"suspendedAt" = $${paramIdx++}`);
       params.push(update.suspendedAt?.toISOString() ?? null);
+      setClauses.push(`"suspendedAtZ" = $${paramIdx++}`);
+      params.push(update.suspendedAt?.toISOString() ?? null);
     }
     if ('completedAt' in update) {
       setClauses.push(`"completedAt" = $${paramIdx++}`);
+      params.push(update.completedAt?.toISOString() ?? null);
+      setClauses.push(`"completedAtZ" = $${paramIdx++}`);
       params.push(update.completedAt?.toISOString() ?? null);
     }
 
@@ -248,6 +250,65 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     const table = getTableName(getSchemaName(this.#schema));
     params.push(taskId);
     await this.#db.client.none(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE "id" = $${paramIdx}`, params);
+  }
+
+  async updateTaskIfStatus(
+    taskId: string,
+    expectedStatus: BackgroundTaskStatus,
+    update: UpdateBackgroundTask,
+  ): Promise<boolean> {
+    const setClauses: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if ('status' in update) {
+      setClauses.push(`"status" = $${paramIdx++}`);
+      params.push(update.status);
+    }
+    if ('result' in update) {
+      setClauses.push(`"result" = $${paramIdx++}`);
+      params.push(serializeJson(update.result));
+    }
+    if ('error' in update) {
+      setClauses.push(`"error" = $${paramIdx++}`);
+      params.push(serializeJson(update.error));
+    }
+    if ('suspendPayload' in update) {
+      setClauses.push(`"suspend_payload" = $${paramIdx++}`);
+      params.push(serializeJson(update.suspendPayload));
+    }
+    if ('retryCount' in update) {
+      setClauses.push(`"retry_count" = $${paramIdx++}`);
+      params.push(update.retryCount);
+    }
+    if ('startedAt' in update) {
+      setClauses.push(`"startedAt" = $${paramIdx++}`);
+      params.push(update.startedAt?.toISOString() ?? null);
+      setClauses.push(`"startedAtZ" = $${paramIdx++}`);
+      params.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      setClauses.push(`"suspendedAt" = $${paramIdx++}`);
+      params.push(update.suspendedAt?.toISOString() ?? null);
+      setClauses.push(`"suspendedAtZ" = $${paramIdx++}`);
+      params.push(update.suspendedAt?.toISOString() ?? null);
+    }
+    if ('completedAt' in update) {
+      setClauses.push(`"completedAt" = $${paramIdx++}`);
+      params.push(update.completedAt?.toISOString() ?? null);
+      setClauses.push(`"completedAtZ" = $${paramIdx++}`);
+      params.push(update.completedAt?.toISOString() ?? null);
+    }
+
+    if (setClauses.length === 0) return false;
+
+    const table = getTableName(getSchemaName(this.#schema));
+    params.push(taskId, expectedStatus);
+    const result = await this.#db.client.query(
+      `UPDATE ${table} SET ${setClauses.join(', ')} WHERE "id" = $${paramIdx++} AND "status" = $${paramIdx}`,
+      params,
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

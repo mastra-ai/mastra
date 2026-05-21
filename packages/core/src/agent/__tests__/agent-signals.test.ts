@@ -1,14 +1,15 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
+import { PubSub } from '../../events/pubsub';
+import type { EventCallback, SubscribeOptions } from '../../events/types';
+import { buildFakeOutput } from '../../harness/v1/__test-utils__/fake-output';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import {
   createSignal,
@@ -44,29 +45,62 @@ function nextTick() {
   return new Promise(resolve => setTimeout(resolve, 0));
 }
 
-async function readNextRun(iterator: AsyncIterator<any>) {
-  const nextRun = await readNextRunWithParts(iterator);
-  if (nextRun.done) return nextRun;
-  return { value: { runId: nextRun.value.runId, text: nextRun.value.text, part: nextRun.value.part }, done: false };
+class AsyncFanoutPubSub extends PubSub {
+  #inner = new EventEmitterPubSub();
+
+  async publish(topic: string, event: Parameters<PubSub['publish']>[1]): Promise<void> {
+    await nextTick();
+    await this.#inner.publish(topic, event);
+  }
+
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    await this.#inner.subscribe(topic, cb, options);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    await this.#inner.unsubscribe(topic, cb);
+  }
+
+  async flush(): Promise<void> {
+    await this.#inner.flush();
+  }
 }
 
-async function readNextRunWithParts(iterator: AsyncIterator<any>) {
+class BlockingRunCompletedPubSub extends EventEmitterPubSub {
+  #unblockRunCompleted!: () => void;
+  readonly blockedRunCompleted = new Promise<void>(resolve => {
+    this.#unblockRunCompleted = resolve;
+  });
+  sawRunCompleted = false;
+
+  override async publish(topic: string, event: Parameters<PubSub['publish']>[1]): Promise<void> {
+    if ((event as { data?: { type?: string } }).data?.type === 'run-completed') {
+      this.sawRunCompleted = true;
+      await this.blockedRunCompleted;
+    }
+    await super.publish(topic, event);
+  }
+
+  unblockRunCompleted() {
+    this.#unblockRunCompleted();
+  }
+}
+
+async function readNextRun(iterator: AsyncIterator<any>) {
   let runId: string | undefined;
   let text = '';
-  const parts: any[] = [];
 
   while (true) {
     const next = await iterator.next();
     if (next.done) return next;
 
     const part = next.value;
-    parts.push(part);
     runId ??= part.runId;
     if (part.type === 'text-delta') {
       text += part.payload.text;
     }
     if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') {
-      return { value: { runId, text, part, parts }, done: false };
+      return { value: { runId, text, part }, done: false };
     }
   }
 }
@@ -105,7 +139,7 @@ describe('Agent signals', () => {
       type: 'user-message',
       contents: 'Signal contents',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
-      acceptedAt: new Date('2026-01-01T00:00:01.000Z'),
+      acceptedAt: new Date('2026-01-01T00:00:00.000Z'),
       attributes: { priority: 'high' },
       metadata: { source: 'test', signal: { userProvided: true } },
     });
@@ -121,7 +155,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'Signal contents',
         createdAt: '2026-01-01T00:00:00.000Z',
-        acceptedAt: '2026-01-01T00:00:01.000Z',
+        acceptedAt: '2026-01-01T00:00:00.000Z',
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
@@ -129,40 +163,22 @@ describe('Agent signals', () => {
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
     expect(dbMessage.role).toBe('signal');
-    expect(dbMessage.createdAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
     expect(dbMessage.content.metadata).toEqual({
       signal: {
         id: 'signal-1',
         type: 'user-message',
         createdAt: '2026-01-01T00:00:00.000Z',
-        acceptedAt: '2026-01-01T00:00:01.000Z',
+        acceptedAt: '2026-01-01T00:00:00.000Z',
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
     });
     expect(signalToMastraDBMessage(signal).role).toBe('signal');
     expect(mastraDBMessageToSignal(dbMessage).contents).toBe('Signal contents');
-    expect(mastraDBMessageToSignal(dbMessage).createdAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
-    expect(mastraDBMessageToSignal(dbMessage).acceptedAt).toEqual(new Date('2026-01-01T00:00:01.000Z'));
+    expect(mastraDBMessageToSignal(dbMessage).acceptedAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
     expect(mastraDBMessageToSignal(dbMessage).attributes).toEqual({ priority: 'high' });
     expect(mastraDBMessageToSignal(dbMessage).metadata).toEqual({ source: 'test', signal: { userProvided: true } });
-
-    const legacyDbMessage = {
-      ...dbMessage,
-      content: {
-        ...dbMessage.content,
-        metadata: {
-          signal: {
-            ...(dbMessage.content.metadata!.signal as Record<string, unknown>),
-            acceptedAt: undefined,
-          },
-        },
-      },
-    };
-    expect(mastraDBMessageToSignal(legacyDbMessage).acceptedAt).toBeUndefined();
-
     expect(dataPartToSignal(signalToDataPartFormat(signal)).contents).toBe('Signal contents');
-    expect(dataPartToSignal(signalToDataPartFormat(signal)).acceptedAt).toEqual(new Date('2026-01-01T00:00:01.000Z'));
 
     const reminderSignal = createSignal({
       id: 'signal-2',
@@ -206,409 +222,9 @@ describe('Agent signals', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
-    // toLLMMessage emits the v5 UserModelMessage shape (uses mediaType for FilePart).
-    expect(fileSignal.toLLMMessage()).toEqual({
-      role: 'user',
-      content: [
-        { type: 'text', text: 'Review this file' },
-        {
-          type: 'file',
-          data: 'data:text/plain;base64,aGVsbG8=',
-          mediaType: 'text/plain',
-          filename: 'note.txt',
-        },
-      ],
-    });
+    expect(fileSignal.toLLMMessage()).toEqual({ role: 'user', content: fileContents });
     expect(fileSignal.toDataPart().data.contents).toEqual(fileContents);
     expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
-  });
-
-  it('renders user-message attributes inline-wrapped for text and multimodal contents', () => {
-    const stringSignal = createSignal({
-      type: 'user-message',
-      contents: 'Hello',
-      attributes: { messageId: 'm-1', userId: 'u-1' },
-    });
-    expect(stringSignal.toLLMMessage()).toEqual({
-      role: 'user',
-      content: '<user-message messageId="m-1" userId="u-1">Hello</user-message>',
-    });
-
-    const partsTextSignal = createSignal({
-      type: 'user-message',
-      contents: [{ type: 'text', text: 'Hello again' }],
-      attributes: { messageId: 'm-1b' },
-    });
-    expect(partsTextSignal.toLLMMessage()).toEqual({
-      role: 'user',
-      content: '<user-message messageId="m-1b">Hello again</user-message>',
-    });
-
-    const fileContents = [
-      { type: 'text' as const, text: 'Look at this' },
-      {
-        type: 'file' as const,
-        data: 'data:image/png;base64,aGVsbG8=',
-        mediaType: 'image/png',
-      },
-    ];
-    const multimodalSignal = createSignal({
-      type: 'user-message',
-      contents: fileContents,
-      attributes: { messageId: 'm-2' },
-    });
-    // Multimodal: text part is inline-wrapped, file part is preserved.
-    const multimodalResult = multimodalSignal.toLLMMessage();
-    expect(multimodalResult.role).toBe('user');
-    expect(multimodalResult.content).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'text',
-          text: '<user-message messageId="m-2">Look at this</user-message>',
-        }),
-        expect.objectContaining({
-          type: 'file',
-          data: 'data:image/png;base64,aGVsbG8=',
-        }),
-      ]),
-    );
-
-    // file-only: no text part exists, so the marker is prepended as a synthetic text part on
-    // the same message so the attributes still surface alongside the file payload.
-    const fileOnlyContents = [
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
-    ];
-    const fileOnlySignal = createSignal({
-      type: 'user-message',
-      contents: fileOnlyContents,
-      attributes: { messageId: 'm-2d' },
-    });
-    const fileOnlyResult = fileOnlySignal.toLLMMessage();
-    expect(fileOnlyResult.role).toBe('user');
-    expect(fileOnlyResult.content).toEqual([
-      expect.objectContaining({ type: 'text', text: '<user-message messageId="m-2d" />' }),
-      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
-    ]);
-
-    const noAttributeSignal = createSignal({
-      type: 'user-message',
-      contents: 'Plain message',
-    });
-    expect(noAttributeSignal.toLLMMessage()).toEqual({ role: 'user', content: 'Plain message' });
-
-    const onlyNullAttributesSignal = createSignal({
-      type: 'user-message',
-      contents: 'Plain message',
-      attributes: { ignored: null, alsoIgnored: undefined },
-    });
-    expect(onlyNullAttributesSignal.toLLMMessage()).toEqual({ role: 'user', content: 'Plain message' });
-  });
-
-  it('renders system-reminder signals with multimodal contents the same way as user-message attributes', () => {
-    // Text-only system-reminder still wraps even without attributes (the wrapper is the signal).
-    const plainReminder = createSignal({
-      type: 'system-reminder',
-      contents: 'Be concise.',
-    });
-    expect(plainReminder.toLLMMessage()).toEqual({
-      role: 'user',
-      content: '<system-reminder>Be concise.</system-reminder>',
-    });
-
-    // System-reminder with multimodal contents: text part is inline-wrapped with the marker,
-    // file part is preserved alongside it on the same logical turn.
-    const screenshotContents = [
-      { type: 'text' as const, text: 'The user is looking at this screen.' },
-      {
-        type: 'file' as const,
-        data: 'data:image/png;base64,aGVsbG8=',
-        mediaType: 'image/png',
-      },
-    ];
-    const screenshotReminder = createSignal({
-      type: 'system-reminder',
-      contents: screenshotContents,
-      attributes: { kind: 'screenshot' },
-    });
-    const screenshotResult = screenshotReminder.toLLMMessage();
-    expect(screenshotResult.role).toBe('user');
-    expect(screenshotResult.content).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'text',
-          text: '<system-reminder kind="screenshot">The user is looking at this screen.</system-reminder>',
-        }),
-        expect.objectContaining({
-          type: 'file',
-          data: 'data:image/png;base64,aGVsbG8=',
-        }),
-      ]),
-    );
-
-    // System-reminder with only file parts has no text to inline-wrap, so the marker is
-    // prepended as a synthetic text part on the same message.
-    const fileOnlyReminderContents = [
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
-    ];
-    const fileOnlyReminder = createSignal({
-      type: 'system-reminder',
-      contents: fileOnlyReminderContents,
-      attributes: { kind: 'reference-image' },
-    });
-    const fileOnlyResult = fileOnlyReminder.toLLMMessage();
-    expect(fileOnlyResult.role).toBe('user');
-    expect(fileOnlyResult.content).toEqual([
-      expect.objectContaining({ type: 'text', text: '<system-reminder kind="reference-image" />' }),
-      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
-    ]);
-
-    // System-reminder with mixed text + file parts: the marker is inlined into the very first
-    // text part, subsequent parts pass through untouched on the same logical turn.
-    const mixedReminderContents = [
-      { type: 'text' as const, text: 'Step one of the screen.' },
-      { type: 'text' as const, text: 'Step two has this attachment.' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
-    ];
-    const mixedReminder = createSignal({
-      type: 'system-reminder',
-      contents: mixedReminderContents,
-      attributes: { kind: 'walkthrough' },
-    });
-    const mixedResult = mixedReminder.toLLMMessage();
-    expect(mixedResult.content).toEqual([
-      expect.objectContaining({
-        type: 'text',
-        text: '<system-reminder kind="walkthrough">Step one of the screen.</system-reminder>',
-      }),
-      expect.objectContaining({ type: 'text', text: 'Step two has this attachment.' }),
-      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
-    ]);
-  });
-
-  it('persists multimodal signal contents as faithful DB parts so UIs can render them', () => {
-    const fileContents = [
-      { type: 'text' as const, text: 'Look at this' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
-    ];
-
-    const userMessage = createSignal({
-      type: 'user-message',
-      contents: fileContents,
-      attributes: { messageId: 'm-1' },
-    });
-    const userDb = userMessage.toDBMessage();
-    expect(userDb.content.parts).toEqual([
-      expect.objectContaining({ type: 'text', text: 'Look at this' }),
-      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
-    ]);
-    // Stash is dropped — metadata.signal carries only envelope fields (id/type/attributes/createdAt).
-    const signalMeta = (userDb.content.metadata as { signal: Record<string, unknown> }).signal;
-    expect(signalMeta).not.toHaveProperty('contents');
-    expect(signalMeta).toMatchObject({ type: 'user-message', attributes: { messageId: 'm-1' } });
-
-    const reminder = createSignal({
-      type: 'system-reminder',
-      contents: fileContents,
-      attributes: { kind: 'screenshot' },
-    });
-    const reminderDb = reminder.toDBMessage();
-    expect(reminderDb.content.parts).toEqual([
-      expect.objectContaining({ type: 'text', text: 'Look at this' }),
-      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
-    ]);
-
-    // Empty contents still produce a single empty text part so consumers that assume non-empty parts stay happy.
-    const emptyReminder = createSignal({ type: 'system-reminder', contents: '' });
-    expect(emptyReminder.toDBMessage().content.parts).toEqual([{ type: 'text', text: '' }]);
-  });
-
-  it('round-trips multimodal non-user-message signals through DB without dropping file parts', () => {
-    const screenshotContents = [
-      { type: 'text' as const, text: 'The user is looking at this screen.' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
-    ];
-    const reminder = createSignal({
-      type: 'system-reminder',
-      contents: screenshotContents,
-      attributes: { kind: 'screenshot' },
-    });
-    const rehydrated = mastraDBMessageToSignal(reminder.toDBMessage());
-    expect(rehydrated.type).toBe('system-reminder');
-    expect(rehydrated.contents).toEqual(screenshotContents);
-    expect(rehydrated.attributes).toEqual({ kind: 'screenshot' });
-
-    // dataPart round-trip preserves the multimodal shape too.
-    const fromDataPart = dataPartToSignal(reminder.toDataPart());
-    expect(fromDataPart.contents).toEqual(screenshotContents);
-  });
-
-  it('threads providerOptions through LLM message, DB storage, and rehydration', () => {
-    const providerOptions = {
-      openai: { reasoningEffort: 'high' },
-      anthropic: { cacheControl: { type: 'ephemeral' } },
-    };
-    const signal = createSignal({
-      type: 'user-message',
-      contents: 'hello',
-      providerOptions,
-    });
-
-    // LLM message: providerOptions on the CoreMessage so it flows to the model.
-    const llmMessage = signal.toLLMMessage();
-    expect(llmMessage).toMatchObject({ role: 'user', content: 'hello', providerOptions });
-
-    // DB storage: content.providerMetadata (canonical location, also surfaces to useChat).
-    const db = signal.toDBMessage();
-    expect(db.content.providerMetadata).toEqual(providerOptions);
-
-    // Round-trip: rehydrated signal carries providerOptions and re-emits it.
-    const rehydrated = mastraDBMessageToSignal(db);
-    expect(rehydrated.providerOptions).toEqual(providerOptions);
-    expect(rehydrated.toLLMMessage()).toMatchObject({ providerOptions });
-  });
-
-  it('omits providerOptions on LLM / DB output when not provided', () => {
-    const signal = createSignal({ type: 'user-message', contents: 'hi' });
-    const llmMessage = signal.toLLMMessage();
-    expect((llmMessage as { providerOptions?: unknown }).providerOptions).toBeUndefined();
-    expect(signal.toDBMessage().content.providerMetadata).toBeUndefined();
-  });
-
-  it('threads per-part providerOptions through LLM, DB, and rehydration', () => {
-    const partProviderOptions = { anthropic: { cacheControl: { type: 'ephemeral' } } };
-    const signal = createSignal({
-      type: 'user-message',
-      contents: [
-        { type: 'text', text: 'hello', providerOptions: partProviderOptions },
-        { type: 'file', data: 'AAA=', mediaType: 'image/png' },
-      ],
-    });
-
-    // LLM: parts array carries per-part providerOptions (not collapsed to bare string).
-    const llmMessage = signal.toLLMMessage();
-    expect(llmMessage.role).toBe('user');
-    expect(Array.isArray(llmMessage.content)).toBe(true);
-    const llmParts = llmMessage.content as Array<{ type: string; providerOptions?: unknown }>;
-    expect(llmParts[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
-    expect(llmParts[1]).toMatchObject({ type: 'file', data: 'AAA=', mediaType: 'image/png' });
-
-    // DB: per-part providerMetadata persisted alongside the storage part.
-    const db = signal.toDBMessage();
-    const textPart = db.content.parts[0] as { type: string; providerMetadata?: unknown };
-    expect(textPart).toMatchObject({ type: 'text', text: 'hello', providerMetadata: partProviderOptions });
-
-    // Round-trip: rehydrated signal restores per-part providerOptions.
-    const rehydrated = mastraDBMessageToSignal(db);
-    const rehydratedContents = rehydrated.contents as Array<{ type: string; providerOptions?: unknown }>;
-    expect(rehydratedContents[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
-  });
-
-  it('preserves per-part providerOptions on a single-text user-message (no bare-string collapse)', () => {
-    const partProviderOptions = { anthropic: { cacheControl: { type: 'ephemeral' } } };
-    const signal = createSignal({
-      type: 'user-message',
-      contents: [{ type: 'text', text: 'hello', providerOptions: partProviderOptions }],
-    });
-
-    const llmMessage = signal.toLLMMessage();
-    // Must keep parts array — collapsing to a bare string would drop providerOptions.
-    expect(Array.isArray(llmMessage.content)).toBe(true);
-    const llmParts = llmMessage.content as Array<{ type: string; providerOptions?: unknown }>;
-    expect(llmParts[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
-  });
-
-  describe('legacy metadata.signal.contents rehydration', () => {
-    function buildLegacyDBRow(legacyContents: unknown) {
-      const row = createSignal({
-        id: 'signal-legacy',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        type: 'user-message',
-        contents: 'placeholder',
-      }).toDBMessage();
-      row.content.metadata = {
-        ...row.content.metadata,
-        signal: {
-          ...(row.content.metadata?.signal as Record<string, unknown>),
-          contents: legacyContents,
-        },
-      };
-      return row;
-    }
-
-    it('recovers a bare string stash', () => {
-      const rehydrated = mastraDBMessageToSignal(buildLegacyDBRow('hello world'));
-      expect(rehydrated.contents).toBe('hello world');
-    });
-
-    it('recovers an Array<TextPart | FilePart> stash with mediaType', () => {
-      const rehydrated = mastraDBMessageToSignal(
-        buildLegacyDBRow([
-          { type: 'text', text: 'caption' },
-          { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
-        ]),
-      );
-      expect(rehydrated.contents).toEqual([
-        { type: 'text', text: 'caption' },
-        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
-      ]);
-    });
-
-    it('recovers a CoreUserMessage wrapper with text-only content', () => {
-      const rehydrated = mastraDBMessageToSignal(buildLegacyDBRow({ role: 'user', content: 'hello world' }));
-      expect(rehydrated.contents).toBe('hello world');
-    });
-
-    it('recovers a CoreUserMessage wrapper with mixed text + image parts', () => {
-      const rehydrated = mastraDBMessageToSignal(
-        buildLegacyDBRow({
-          role: 'user',
-          content: [
-            { type: 'text', text: 'what is this?' },
-            { type: 'image', image: 'BASE64', mediaType: 'image/png' },
-          ],
-        }),
-      );
-      expect(rehydrated.contents).toEqual([
-        { type: 'text', text: 'what is this?' },
-        { type: 'file', data: 'BASE64', mediaType: 'image/png' },
-      ]);
-    });
-
-    it('recovers a CoreUserMessage[] stash from the React hook', () => {
-      const rehydrated = mastraDBMessageToSignal(
-        buildLegacyDBRow([
-          { role: 'user', content: 'first' },
-          { role: 'user', content: [{ type: 'text', text: 'second' }] },
-        ]),
-      );
-      expect(rehydrated.contents).toEqual([
-        { type: 'text', text: 'first' },
-        { type: 'text', text: 'second' },
-      ]);
-    });
-
-    it('falls back to canonical content.parts when the stash is unrecognisable', () => {
-      const row = buildLegacyDBRow({ totally: 'unrelated' });
-      row.content.parts = [{ type: 'text', text: 'from canonical parts' }];
-      const rehydrated = mastraDBMessageToSignal(row);
-      expect(rehydrated.contents).toBe('from canonical parts');
-    });
-
-    it('prefers a valid multimodal stash over flattened-text content.parts (main-era rows)', () => {
-      // Main wrote the full original input to metadata.signal.contents and a flattened text
-      // projection to content.parts. If we preferred parts here we'd silently drop the file
-      // payload on rehydrate.
-      const row = buildLegacyDBRow([
-        { type: 'text', text: 'caption' },
-        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
-      ]);
-      row.content.parts = [{ type: 'text', text: 'caption' }];
-      const rehydrated = mastraDBMessageToSignal(row);
-      expect(rehydrated.contents).toEqual([
-        { type: 'text', text: 'caption' },
-        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
-      ]);
-    });
   });
 
   it('rejects invalid XML names for contextual signal markup', () => {
@@ -665,7 +281,7 @@ describe('Agent signals', () => {
       threadId: 'idle-thread',
       resourceId: 'idle-user',
     });
-    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
 
     const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Hello from signal' },
@@ -679,15 +295,7 @@ describe('Agent signals', () => {
     const subscribedRun = await nextRun;
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
     expect(signalResult.signal.id).toBeDefined();
-    expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
-    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
-    expect(signalPart?.data).toMatchObject({
-      id: signalResult.signal.id,
-      contents: 'Hello from signal',
-      acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
-    });
-    expect(signalPart?.data.createdAt).toBeDefined();
 
     subscription.unsubscribe();
   });
@@ -738,7 +346,6 @@ describe('Agent signals', () => {
     const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
     expect(streamCount).toBe(0);
     expect(recalled.messages).toHaveLength(1);
-    // Stash dropped; payload lives in content.parts now.
     expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user-message' });
     expect(recalled.messages[0]?.content.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
@@ -855,24 +462,6 @@ describe('Agent signals', () => {
     );
     await waitForCondition(() => senderSubscription.activeRunId() === 'remote-run-1');
 
-    let waitResolved = false;
-    const waitForRemoteRun = senderRuntime
-      .waitForCrossAgentThreadRun(
-        new Agent({
-          id: 'remote-other-agent',
-          name: 'Remote Other Agent',
-          instructions: 'Test',
-          model: createTextStreamModel('other response'),
-        }),
-        { memory: { resource: 'remote-resource', thread: 'remote-thread' } },
-        pubsub,
-      )
-      .then(() => {
-        waitResolved = true;
-      });
-    await nextTick();
-    expect(waitResolved).toBe(false);
-
     const result = senderRuntime.sendSignal(
       sender,
       { type: 'user-message', contents: [{ role: 'user', content: 'remote follow-up' }] },
@@ -884,74 +473,9 @@ describe('Agent signals', () => {
     await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
 
     finishRun();
-    await waitForRemoteRun;
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
   });
-
-  it.runIf(process.platform !== 'win32')(
-    'broadcasts subscribed thread stream parts across UnixSocketPubSub runtime instances',
-    async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-signals-'));
-      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
-      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
-      const ownerRuntime = new AgentThreadStreamRuntime();
-      const followerRuntime = new AgentThreadStreamRuntime();
-      const owner = new Agent({
-        id: 'unix-stream-agent',
-        name: 'Unix Stream Owner Agent',
-        instructions: 'Test',
-        model: createTextStreamModel('owner response'),
-      });
-      const follower = new Agent({
-        id: 'unix-stream-agent',
-        name: 'Unix Stream Follower Agent',
-        instructions: 'Test',
-        model: createTextStreamModel('follower response'),
-      });
-      let finishRun!: () => void;
-      const output = {
-        runId: 'unix-run-1',
-        status: 'running',
-        fullStream: (async function* () {
-          yield { type: 'text-delta', runId: 'unix-run-1', payload: { text: 'hello over uds' } };
-          yield { type: 'finish', runId: 'unix-run-1', payload: {} };
-        })(),
-        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
-      } as any;
-
-      try {
-        const ownerSubscription = await ownerRuntime.subscribeToThread(
-          owner,
-          { resourceId: 'unix-resource', threadId: 'unix-thread' },
-          ownerPubSub,
-        );
-        const followerSubscription = await followerRuntime.subscribeToThread(
-          follower,
-          { resourceId: 'unix-resource', threadId: 'unix-thread' },
-          followerPubSub,
-        );
-        const ownerRun = readNextRunWithParts(ownerSubscription.stream[Symbol.asyncIterator]());
-        const followerRun = readNextRunWithParts(followerSubscription.stream[Symbol.asyncIterator]());
-
-        ownerRuntime.registerRun(
-          owner,
-          output,
-          { runId: 'unix-run-1', memory: { resource: 'unix-resource', thread: 'unix-thread' } } as any,
-          ownerPubSub,
-        );
-
-        await expect(ownerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
-        await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
-        finishRun();
-        ownerSubscription.unsubscribe();
-        followerSubscription.unsubscribe();
-      } finally {
-        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
-        await rm(tempDir, { recursive: true, force: true });
-      }
-    },
-  );
 
   it('supports cross-instance thread subscriptions through an injected PubSub without Mastra', async () => {
     const pubsub = new EventEmitterPubSub();
@@ -1004,40 +528,104 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('propagates standalone parent pubsub to child agents without their own pubsub', async () => {
-    const pubsub = new EventEmitterPubSub();
-    const child = new Agent({
-      id: 'standalone-child-agent',
-      name: 'Standalone Child Agent',
+  it('broadcasts through async PubSub without consuming the caller fullStream', async () => {
+    const pubsub = new AsyncFanoutPubSub();
+    const runner = new Agent({
+      id: 'async-shared-agent',
+      name: 'Async Shared Runner Agent',
       instructions: 'Test',
-      model: createTextStreamModel('child response'),
-    });
-    const parent = new Agent({
-      id: 'standalone-parent-agent',
-      name: 'Standalone Parent Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('parent response'),
+      model: createTextStreamModel('async shared response'),
       pubsub,
-      agents: { child },
     });
-
-    await parent.listAgents();
-
-    expect(child.getPubSub()).toBe(pubsub);
-
-    const secondPubSub = new EventEmitterPubSub();
-    const secondParent = new Agent({
-      id: 'second-standalone-parent-agent',
-      name: 'Second Standalone Parent Agent',
+    const observer = new Agent({
+      id: 'async-shared-agent',
+      name: 'Async Shared Observer Agent',
       instructions: 'Test',
-      model: createTextStreamModel('second parent response'),
-      pubsub: secondPubSub,
-      agents: { child },
+      model: createTextStreamModel('async observer response'),
+      pubsub,
+    });
+    const subscription = await observer.subscribeToThread({
+      resourceId: 'async-user',
+      threadId: 'async-thread',
     });
 
-    await secondParent.listAgents();
+    const stream = await runner.stream('Hello', {
+      memory: { resource: 'async-user', thread: 'async-thread' },
+    });
 
-    expect(child.getPubSub()).toBe(secondPubSub);
+    await expect(readNextRun(stream.fullStream[Symbol.asyncIterator]())).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'async shared response' },
+      done: false,
+    });
+    await expect(readNextRun(subscription.stream[Symbol.asyncIterator]())).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'async shared response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('broadcasts async PubSub stream parts across runtime instances in order', async () => {
+    const pubsub = new AsyncFanoutPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const observerRuntime = new AgentThreadStreamRuntime();
+    const runId = 'async-remote-run';
+    const chunks = [
+      { type: 'stream-start', runId, from: 'AGENT', payload: { warnings: [] } },
+      { type: 'text-start', runId, from: 'AGENT', payload: { id: 'text-1' } },
+      { type: 'text-delta', runId, from: 'AGENT', payload: { id: 'text-1', text: 'remote async response' } },
+      { type: 'text-end', runId, from: 'AGENT', payload: { id: 'text-1' } },
+      { type: 'finish', runId, from: 'AGENT', payload: {} },
+    ];
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+
+    const subscription = await observerRuntime.subscribeToThread(
+      { id: 'async-remote-observer' } as any,
+      {
+        resourceId: 'async-remote-user',
+        threadId: 'async-remote-thread',
+      },
+      pubsub,
+    );
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const output = {
+      runId,
+      status: 'running',
+      fullStream: new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          finish();
+          controller.close();
+        },
+      }),
+      _waitUntilFinished: () => finished,
+    };
+
+    ownerRuntime.registerRun(
+      { id: 'async-remote-owner' } as any,
+      output as any,
+      {
+        runId,
+        memory: { resource: 'async-remote-user', thread: 'async-remote-thread' },
+      } as any,
+      pubsub,
+    );
+    await expect(
+      readNextRun((output.fullStream as ReadableStream<unknown>)[Symbol.asyncIterator]()),
+    ).resolves.toMatchObject({
+      value: { runId, text: 'remote async response' },
+      done: false,
+    });
+
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId, text: 'remote async response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
   });
 
   it('isolates standalone agents that use different injected pubsubs', async () => {
@@ -1067,15 +655,1232 @@ describe('Agent signals', () => {
       memory: { thread: 'standalone-isolated-thread', resource: 'standalone-isolated-user' },
     });
 
-    await runner.getPubSub()?.flush?.();
     const result = await Promise.race([
       nextRunPromise.then(() => 'delivered'),
-      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 100)),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 20)),
     ]);
     expect(result).toBe('timeout');
 
     subscription.unsubscribe();
     await nextRunPromise;
+  });
+
+  it('passes parent PubSub to child agent execution without mutating shared child agents', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const childCalls: Array<{ _pubsub?: PubSub }> = [];
+    const createDelegatingModel = () => {
+      let callCount = 0;
+      return new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'agent-child',
+                  input: JSON.stringify({ prompt: 'ask child' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            text: 'parent response',
+            content: [{ type: 'text' as const, text: 'parent response' }],
+            warnings: [],
+          };
+        },
+      });
+    };
+
+    class CapturingChildAgent extends Agent {
+      override async generate(_messages: any, options?: any) {
+        childCalls.push(options ?? {});
+        return {
+          text: 'child response',
+          finishReason: 'stop',
+          runId: 'child-run',
+          response: { dbMessages: [] },
+        } as any;
+      }
+
+      override async stream(_messages: any, options?: any) {
+        childCalls.push(options ?? {});
+        const output = buildFakeOutput({
+          runId: options?.runId ?? 'child-stream-run',
+          fullOutput: {
+            text: 'child response',
+            finishReason: 'stop',
+            response: { dbMessages: [] },
+          },
+        }) as any;
+        return {
+          ...output,
+          messageList: {
+            get: {
+              response: {
+                db: () => [],
+              },
+            },
+          },
+          toolResults: Promise.resolve([]),
+        } as any;
+      }
+    }
+
+    const child = new CapturingChildAgent({
+      id: 'standalone-child-agent',
+      name: 'Standalone Child Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('child response'),
+    });
+    const parent = new Agent({
+      id: 'standalone-parent-agent',
+      name: 'Standalone Parent Agent',
+      instructions: 'Test',
+      model: createDelegatingModel(),
+      pubsub,
+      agents: { child },
+    });
+
+    await parent.generate('delegate to child', {
+      runId: 'parent-run',
+      maxSteps: 3,
+    });
+
+    expect(childCalls.at(-1)?._pubsub).toBe(pubsub);
+    expect(child.getPubSub()).toBeUndefined();
+
+    const secondPubSub = new EventEmitterPubSub();
+    const secondParent = new Agent({
+      id: 'second-standalone-parent-agent',
+      name: 'Second Standalone Parent Agent',
+      instructions: 'Test',
+      model: createDelegatingModel(),
+      pubsub: secondPubSub,
+      agents: { child },
+    });
+
+    await secondParent.generate('delegate to child again', {
+      runId: 'second-parent-run',
+      maxSteps: 3,
+    });
+
+    expect(childCalls.at(-1)?._pubsub).toBe(secondPubSub);
+    expect(child.getPubSub()).toBeUndefined();
+    expect(child.hasOwnPubSub()).toBe(false);
+  });
+
+  it('preserves an injected PubSub when forking an agent', () => {
+    const pubsub = new AsyncFanoutPubSub();
+    const agent = new Agent({
+      id: 'forked-agent-pubsub',
+      name: 'Forked Agent PubSub',
+      instructions: 'Test',
+      model: createTextStreamModel('forked response'),
+    });
+
+    agent.__setPubSub(pubsub);
+    const fork = agent.__fork();
+
+    expect(fork.getPubSub()).toBe(pubsub);
+    expect(fork.hasOwnPubSub()).toBe(false);
+  });
+
+  it('keeps one PubSub for a stream run when the agent gets a PubSub during execution setup', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+
+    const runner = new Agent({
+      id: 'pubsub-snapshot-agent',
+      name: 'PubSub Snapshot Runner',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          streamCount += 1;
+          const callIndex = streamCount;
+          prompts.push(prompt);
+          const responseText = callIndex === 1 ? 'first response' : 'signal response';
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: `id-${callIndex}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                if (callIndex === 1) {
+                  await firstFinished;
+                }
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const initialObserver = new Agent({
+      id: 'pubsub-snapshot-agent',
+      name: 'Initial PubSub Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('initial observer response'),
+    });
+    const initialSubscription = await initialObserver.subscribeToThread({
+      threadId: 'pubsub-snapshot-thread',
+      resourceId: 'pubsub-snapshot-user',
+    });
+    const initialIterator = initialSubscription.stream[Symbol.asyncIterator]();
+    const initialNextRun = readNextRun(initialIterator);
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { thread: 'pubsub-snapshot-thread', resource: 'pubsub-snapshot-user' },
+    });
+    await defaultOptionsStarted;
+    runner.__setPubSub(swappedPubSub);
+    const signalResult = await runner.sendSignal(
+      { type: 'user-message', contents: 'Hello while running' },
+      { resourceId: 'pubsub-snapshot-user', threadId: 'pubsub-snapshot-thread' },
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true }));
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    await expect(waitForActiveRun(initialSubscription)).resolves.toBe(stream.runId);
+    expect(runner.getRunOutput(stream.runId)).toBe(stream);
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+
+    releaseFirst();
+    const initialRun = await Promise.race([
+      initialNextRun,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(initialRun).not.toBe('timeout');
+    expect(initialRun).toMatchObject({
+      value: { runId: stream.runId, text: 'first response' },
+      done: false,
+    });
+    await expect(stream.text).resolves.toBe('first response');
+    expect(JSON.stringify(prompts)).toContain('Hello while running');
+
+    initialSubscription.unsubscribe();
+  });
+
+  it('keeps one PubSub for a default idle wake signal when ifIdle options are omitted', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'default-idle-wake-pubsub-agent',
+      name: 'Default Idle Wake PubSub Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('default idle wake response'),
+    });
+    const initialObserver = new Agent({
+      id: 'default-idle-wake-pubsub-agent',
+      name: 'Default Idle Wake Initial Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    const initialSubscription = await initialObserver.subscribeToThread({
+      threadId: 'default-idle-wake-thread',
+      resourceId: 'default-idle-wake-user',
+    });
+    const initialNextRun = readNextRun(initialSubscription.stream[Symbol.asyncIterator]());
+
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Wake without explicit ifIdle' },
+      { resourceId: 'default-idle-wake-user', threadId: 'default-idle-wake-thread' },
+    );
+    expect(signalResult.output).toBeDefined();
+    await defaultOptionsStarted;
+    runner.__setPubSub(swappedPubSub);
+    releaseDefaultOptions();
+
+    await expect(signalResult.output).resolves.toMatchObject({ runId: signalResult.runId });
+    const initialRun = await Promise.race([
+      initialNextRun,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(initialRun).not.toBe('timeout');
+    expect(initialRun).toMatchObject({
+      value: { runId: signalResult.runId, text: 'default idle wake response' },
+      done: false,
+    });
+
+    initialSubscription.unsubscribe();
+  });
+
+  it('tracks idle wake PubSub from ifIdle streamOptions memory when top-level thread target is omitted', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'stream-options-idle-wake-pubsub-agent',
+      name: 'Stream Options Idle Wake PubSub Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('stream options idle wake response'),
+    });
+
+    const signalResult = runner.sendSignal({ type: 'user-message', contents: 'Wake from streamOptions target' }, {
+      ifIdle: {
+        streamOptions: {
+          memory: { resource: 'stream-options-idle-wake-user', thread: 'stream-options-idle-wake-thread' },
+        },
+      },
+    } as any);
+    expect(signalResult.output).toBeDefined();
+    await defaultOptionsStarted;
+    runner.__setPubSub(swappedPubSub);
+    releaseDefaultOptions();
+
+    const output = await signalResult.output;
+    expect(output).toMatchObject({ runId: signalResult.runId });
+    expect(runner.getRunOutput(signalResult.runId!)).toBe(output);
+  });
+
+  it('honors an injected PubSub for streamUntilIdle when the agent PubSub changes', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    const runner = new Agent({
+      id: 'stream-until-idle-pubsub-agent',
+      name: 'Stream Until Idle PubSub Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('stream until idle response'),
+    });
+    runner.__setPubSub(swappedPubSub);
+
+    const observer = new Agent({
+      id: 'stream-until-idle-pubsub-agent',
+      name: 'Stream Until Idle PubSub Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    observer.__setPubSub(initialPubSub);
+    const subscription = await observer.subscribeToThread({
+      threadId: 'stream-until-idle-thread',
+      resourceId: 'stream-until-idle-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+
+    const stream = await runner.streamUntilIdle('Hello', {
+      memory: { thread: 'stream-until-idle-thread', resource: 'stream-until-idle-user' },
+      _pubsub: initialPubSub,
+    } as any);
+
+    await expect(stream.text).resolves.toBe('stream until idle response');
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'stream until idle response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('honors an injected PubSub when test agents register streams through the internal hook', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'internal-register-pubsub-agent',
+      name: 'Internal Register PubSub Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+    });
+    agent.__setPubSub(swappedPubSub);
+    const observer = new Agent({
+      id: 'internal-register-pubsub-agent',
+      name: 'Internal Register Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    observer.__setPubSub(initialPubSub);
+    const subscription = await observer.subscribeToThread({
+      threadId: 'internal-register-thread',
+      resourceId: 'internal-register-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const output = buildFakeOutput({
+      runId: 'internal-register-run',
+      fullOutput: { text: 'internal response', finishReason: 'stop', usage: {} },
+      chunks: [
+        { runId: 'internal-register-run', type: 'text-delta', payload: { text: 'internal response' } },
+        { runId: 'internal-register-run', type: 'finish', payload: {} },
+      ],
+    });
+
+    agent._internalRegisterStreamRun(output, {
+      runId: 'internal-register-run',
+      memory: { resource: 'internal-register-user', thread: 'internal-register-thread' },
+      _pubsub: initialPubSub,
+    } as any);
+    expect(agent.getRunOutput('internal-register-run')).toBe(output);
+
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId: 'internal-register-run', text: 'internal response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('re-reserves a pre-default stream when default options change the request-context thread target', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'default-context-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'default-context-thread');
+
+    const runner = new Agent({
+      id: 'default-context-reservation-agent',
+      name: 'Default Context Reservation Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: createTextStreamModel('default context response'),
+    });
+    const observer = new Agent({
+      id: 'default-context-reservation-agent',
+      name: 'Default Context Reservation Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    const subscription = await observer.subscribeToThread({
+      threadId: 'default-context-thread',
+      resourceId: 'default-context-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { thread: 'explicit-before-default-thread', resource: 'explicit-before-default-user' },
+    });
+    await defaultOptionsStarted;
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'default context response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('preserves accepted setup signals when default options retarget a reserved stream', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'retarget-signal-context-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'retarget-signal-context-thread');
+    const prompts: any[][] = [];
+
+    const runner = new Agent({
+      id: 'retarget-preserve-signal-agent',
+      name: 'Retarget Preserve Signal Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'retarget response' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+    });
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { thread: 'retarget-signal-original-thread', resource: 'retarget-signal-original-user' },
+    });
+    await defaultOptionsStarted;
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'accepted before retarget' },
+      { resourceId: 'retarget-signal-original-user', threadId: 'retarget-signal-original-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    expect(signalResult.runId).toBe(stream.runId);
+    await expect(stream.text).resolves.toBe('retarget response');
+    expect(JSON.stringify(prompts)).toContain('accepted before retarget');
+  });
+
+  it('forgets a re-reserved PubSub mapping when stream setup fails before preparation', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let useUnsupportedModel = true;
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'failed-rereserve-context-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'failed-rereserve-context-thread');
+    const unsupportedModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+        text: 'unsupported',
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: convertArrayToReadableStream([]),
+      }),
+    });
+    const supportedModel = createTextStreamModel('post failure response');
+
+    const runner = new Agent({
+      id: 'failed-rereserve-pubsub-agent',
+      name: 'Failed Rereserve PubSub Agent',
+      instructions: 'Test',
+      defaultOptions: async () => ({ requestContext }),
+      model: () => (useUnsupportedModel ? unsupportedModel : supportedModel),
+    });
+
+    await expect(
+      runner.stream('Hello', {
+        runId: 'failed-rereserve-explicit-run',
+        memory: { thread: 'failed-rereserve-original-thread', resource: 'failed-rereserve-original-user' },
+      }),
+    ).rejects.toThrow('not compatible with stream()');
+
+    useUnsupportedModel = false;
+    runner.__setPubSub(swappedPubSub);
+    const subscription = await runner.subscribeToThread({
+      threadId: 'failed-rereserve-context-thread',
+      resourceId: 'failed-rereserve-context-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const stream = await runner.stream('Hello again', {
+      runId: 'failed-rereserve-explicit-run',
+      memory: { thread: 'failed-rereserve-context-thread', resource: 'failed-rereserve-context-user' },
+    });
+
+    expect(stream.runId).toBe('failed-rereserve-explicit-run');
+    await expect(stream.text).resolves.toBe('post failure response');
+    const observedRun = await Promise.race([
+      nextRun,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(observedRun).not.toBe('timeout');
+    expect(observedRun).toMatchObject({
+      value: { runId: stream.runId, text: 'post failure response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('reserves request-context scoped streams while default options are pending', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'request-context-reserved-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'request-context-reserved-thread');
+
+    const runner = new Agent({
+      id: 'request-context-reserved-agent',
+      name: 'Request Context Reserved Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('request context reserved response'),
+    });
+
+    const streamPromise = runner.stream('Hello', { requestContext });
+    await defaultOptionsStarted;
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello while request-context stream is starting' },
+      { resourceId: 'request-context-reserved-user', threadId: 'request-context-reserved-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+  });
+
+  it('does not expose explicit thread streams when request context preflight fails', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', false);
+
+    const runner = new Agent({
+      id: 'preflight-denied-reservation-agent',
+      name: 'Preflight Denied Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      model: createTextStreamModel('unused denied response'),
+    });
+
+    await expect(
+      runner.stream('Hello', {
+        runId: 'preflight-denied-run',
+        memory: { resource: 'preflight-denied-user', thread: 'preflight-denied-thread' },
+        requestContext,
+      }),
+    ).rejects.toThrow('Request context validation failed');
+
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach to denied setup run' },
+      {
+        resourceId: 'preflight-denied-user',
+        threadId: 'preflight-denied-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+
+    expect(signalResult.runId).not.toBe('preflight-denied-run');
+  });
+
+  it('does not attach idle signals to explicit-context streams before preflight passes', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', false);
+
+    const runner = new Agent({
+      id: 'explicit-preflight-denied-reservation-agent',
+      name: 'Explicit Preflight Denied Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      model: createTextStreamModel('unused denied explicit idle response'),
+    });
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start denied explicit-context idle stream' },
+      {
+        resourceId: 'explicit-preflight-denied-user',
+        threadId: 'explicit-preflight-denied-thread',
+        ifIdle: { behavior: 'wake', streamOptions: { requestContext } },
+      },
+    );
+    void wake.output?.catch(() => {});
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before explicit preflight passes' },
+      {
+        resourceId: 'explicit-preflight-denied-user',
+        threadId: 'explicit-preflight-denied-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+
+    expect(followUp.runId).not.toBe(wake.runId);
+    await expect(wake.output).rejects.toThrow('Request context validation failed');
+  });
+
+  it('does not reserve explicit-context streams before preflight passes', async () => {
+    let markPreflightStarted!: () => void;
+    let releasePreflight!: () => void;
+    const preflightStarted = new Promise<void>(resolve => {
+      markPreflightStarted = resolve;
+    });
+    const preflightReleased = new Promise<void>(resolve => {
+      releasePreflight = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'explicit-preflight-allowed-reservation-agent',
+      name: 'Explicit Preflight Allowed Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }).superRefine(async () => {
+        markPreflightStarted();
+        await preflightReleased;
+      }),
+      model: createTextStreamModel('allowed explicit preflight response'),
+    });
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { resource: 'explicit-preflight-allowed-user', thread: 'explicit-preflight-allowed-thread' },
+      requestContext,
+    });
+    await preflightStarted;
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before explicit preflight passes' },
+      {
+        resourceId: 'explicit-preflight-allowed-user',
+        threadId: 'explicit-preflight-allowed-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    expect(() =>
+      runner.sendSignal(
+        { type: 'user-message', contents: 'Thread-only signal should not see a pending reservation' },
+        {
+          threadId: 'explicit-preflight-allowed-thread',
+        },
+      ),
+    ).toThrow('No active agent run found for signal target');
+    const explicitActivePolicyFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Explicit active-deliver signal should not attach before preflight passes' },
+      {
+        resourceId: 'explicit-preflight-allowed-user',
+        threadId: 'explicit-preflight-allowed-thread',
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    releasePreflight();
+
+    const stream = await streamPromise;
+    expect(followUp.runId).not.toBe(stream.runId);
+    expect(explicitActivePolicyFollowUp.runId).not.toBe(stream.runId);
+    await expect(stream.text).resolves.toBe('allowed explicit preflight response');
+  });
+
+  it('reserves explicit-context streams after preflight passes before defaults finish', async () => {
+    let markPreflightStarted!: () => void;
+    let releasePreflight!: () => void;
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const preflightStarted = new Promise<void>(resolve => {
+      markPreflightStarted = resolve;
+    });
+    const preflightReleased = new Promise<void>(resolve => {
+      releasePreflight = resolve;
+    });
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'explicit-preflight-defaults-pending-agent',
+      name: 'Explicit Preflight Defaults Pending Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }).superRefine(async () => {
+        markPreflightStarted();
+        await preflightReleased;
+      }),
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('allowed explicit preflight defaults response'),
+    });
+
+    const streamPromise = runner.stream('Hello', {
+      runId: 'explicit-preflight-defaults-run',
+      memory: { resource: 'explicit-preflight-defaults-user', thread: 'explicit-preflight-defaults-thread' },
+      requestContext,
+    });
+    await preflightStarted;
+
+    const beforePreflightFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before preflight passes' },
+      {
+        resourceId: 'explicit-preflight-defaults-user',
+        threadId: 'explicit-preflight-defaults-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    expect(beforePreflightFollowUp.runId).not.toBe('explicit-preflight-defaults-run');
+
+    releasePreflight();
+    await defaultOptionsStarted;
+
+    const afterPreflightFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should attach after preflight passes while defaults are pending' },
+      {
+        resourceId: 'explicit-preflight-defaults-user',
+        threadId: 'explicit-preflight-defaults-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    releaseDefaultOptions();
+
+    expect(afterPreflightFollowUp.runId).toBe('explicit-preflight-defaults-run');
+    const stream = await streamPromise;
+    expect(stream.runId).toBe('explicit-preflight-defaults-run');
+    await expect(stream.text).resolves.toBe('allowed explicit preflight defaults response');
+  });
+
+  it('keeps direct preflight stream output waiters on the captured PubSub', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    let markPreflightStarted!: () => void;
+    let releasePreflight!: () => void;
+    const preflightStarted = new Promise<void>(resolve => {
+      markPreflightStarted = resolve;
+    });
+    const preflightReleased = new Promise<void>(resolve => {
+      releasePreflight = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'direct-preflight-pubsub-agent',
+      name: 'Direct Preflight PubSub Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }).superRefine(async () => {
+        markPreflightStarted();
+        await preflightReleased;
+      }),
+      model: createTextStreamModel('direct preflight pubsub response'),
+    });
+    runner.__setPubSub(initialPubSub);
+
+    const streamPromise = runner.stream('Hello', {
+      runId: 'direct-preflight-pubsub-run',
+      memory: { resource: 'direct-preflight-pubsub-user', thread: 'direct-preflight-pubsub-thread' },
+      requestContext,
+    });
+    await preflightStarted;
+
+    runner.__setPubSub(swappedPubSub);
+    const outputPromise = runner.waitForRunOutput('direct-preflight-pubsub-run');
+    releasePreflight();
+
+    const output = await Promise.race([
+      outputPromise,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(output).not.toBe('timeout');
+    if (output === 'timeout') return;
+    expect(output.runId).toBe('direct-preflight-pubsub-run');
+    await expect(output.text).resolves.toBe('direct preflight pubsub response');
+    await expect(streamPromise).resolves.toBe(output);
+  });
+
+  it('does not tombstone an admitted stream when a duplicate explicit run id is rejected', async () => {
+    let markModelStarted!: () => void;
+    let releaseModel!: () => void;
+    const modelStarted = new Promise<void>(resolve => {
+      markModelStarted = resolve;
+    });
+    const modelReleased = new Promise<void>(resolve => {
+      releaseModel = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'duplicate-preflight-run-id-agent',
+      name: 'Duplicate Preflight Run Id Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          markModelStarted();
+          await modelReleased;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'duplicate-preflight',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'first admitted response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      }),
+    });
+
+    const firstStreamPromise = runner.stream('First', {
+      runId: 'duplicate-preflight-run',
+      memory: { resource: 'duplicate-preflight-user', thread: 'duplicate-preflight-thread' },
+      requestContext,
+    });
+    await modelStarted;
+
+    await expect(
+      runner.stream('Duplicate', {
+        runId: 'duplicate-preflight-run',
+        memory: { resource: 'duplicate-preflight-user', thread: 'duplicate-preflight-thread' },
+        requestContext,
+      }),
+    ).rejects.toThrow('already reserved');
+
+    releaseModel();
+    const firstStream = await firstStreamPromise;
+    expect(firstStream.runId).toBe('duplicate-preflight-run');
+    await expect(firstStream.text).resolves.toBe('first admitted response');
+  });
+
+  it('keeps explicit-context idle reservations when no preflight boundary is configured', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+
+    const runner = new Agent({
+      id: 'explicit-context-no-preflight-agent',
+      name: 'Explicit Context No Preflight Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('explicit context no preflight response'),
+    });
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start explicit-context idle stream' },
+      {
+        resourceId: 'explicit-context-no-preflight-user',
+        threadId: 'explicit-context-no-preflight-thread',
+        ifIdle: { behavior: 'wake', streamOptions: { requestContext } },
+      },
+    );
+    await defaultOptionsStarted;
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should attach when preflight cannot reject' },
+      {
+        resourceId: 'explicit-context-no-preflight-user',
+        threadId: 'explicit-context-no-preflight-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    releaseDefaultOptions();
+
+    expect(followUp.runId).toBe(wake.runId);
+    await expect(wake.output).resolves.toMatchObject({ runId: wake.runId });
+  });
+
+  it('does not attach idle signals to default-context streams before preflight passes', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', false);
+
+    const runner = new Agent({
+      id: 'default-preflight-denied-reservation-agent',
+      name: 'Default Preflight Denied Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: createTextStreamModel('unused denied idle response'),
+    });
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start denied idle stream' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+      },
+    );
+    await defaultOptionsStarted;
+    const outputPromise = runner.waitForRunOutput(wake.runId);
+    void wake.output?.catch(() => {});
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before preflight passes' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    const activePolicyResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not treat preflight-pending run as active' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+        ifActive: { behavior: 'discard' },
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    const plainFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Plain signal should not attach before preflight passes' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+      },
+    );
+    void plainFollowUp.output?.catch(() => {});
+    releaseDefaultOptions();
+
+    expect(followUp.runId).not.toBe(wake.runId);
+    expect(activePolicyResult.runId).not.toBe(wake.runId);
+    expect(plainFollowUp.runId).not.toBe(wake.runId);
+    await expect(outputPromise).rejects.toThrow(`Agent thread run id "${wake.runId}" was rejected`);
+    await expect(wake.output).rejects.toThrow('Request context validation failed');
+  });
+
+  it('keeps idle wake output waiters pending while default-context preflight is pending', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'default-preflight-valid-waiter-agent',
+      name: 'Default Preflight Valid Waiter Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: createTextStreamModel('valid default preflight response'),
+    });
+    runner.__setPubSub(initialPubSub);
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start valid idle stream' },
+      {
+        resourceId: 'default-preflight-valid-user',
+        threadId: 'default-preflight-valid-thread',
+      },
+    );
+    await defaultOptionsStarted;
+
+    runner.__setPubSub(swappedPubSub);
+    const outputPromise = runner.waitForRunOutput(wake.runId);
+    releaseDefaultOptions();
+
+    const output = await Promise.race([
+      outputPromise,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(output).not.toBe('timeout');
+    if (output === 'timeout') return;
+    expect(output.runId).toBe(wake.runId);
+    await expect(output.text).resolves.toBe('valid default preflight response');
+  });
+
+  it('reserves thread-only streams while default options are pending', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'thread-only-reserved-agent',
+      name: 'Thread Only Reserved Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('thread only reserved response'),
+    });
+
+    const streamPromise = runner.stream('Hello', { memory: { thread: 'thread-only-reserved-thread' } });
+    await defaultOptionsStarted;
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello while thread-only stream is starting' },
+      { threadId: 'thread-only-reserved-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+  });
+
+  it('routes thread-only signals after default options add a resource target', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    let releaseStream!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const streamReleased = new Promise<void>(resolve => {
+      releaseStream = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'thread-only-retargeted-agent',
+      name: 'Thread Only Retargeted Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { memory: { resource: 'thread-only-retargeted-user' } };
+      },
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'thread-only-retargeted-id',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'thread only retargeted response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              await streamReleased;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        }),
+      }),
+    });
+
+    const streamPromise = runner.stream('Hello', { memory: { thread: 'thread-only-retargeted-thread' } });
+    await defaultOptionsStarted;
+    const earlySignal = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello before retarget' },
+      { threadId: 'thread-only-retargeted-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    const lateSignal = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello after retarget' },
+      { threadId: 'thread-only-retargeted-thread' },
+    );
+
+    expect(earlySignal).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    expect(lateSignal).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    releaseStream();
+    await expect(stream.text).resolves.toBe('thread only retargeted response');
   });
 
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
@@ -1128,14 +1933,10 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('drains multiple user-message signals into an active same-agent thread run without merging them into users', async () => {
+  it('drains a user-message signal into the active same-agent thread run', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
       releaseFirst = resolve;
-    });
-    let releaseSecond!: () => void;
-    const secondFinished = new Promise<void>(resolve => {
-      releaseSecond = resolve;
     });
     let streamCount = 0;
     const prompts: any[][] = [];
@@ -1143,10 +1944,8 @@ describe('Agent signals', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         streamCount += 1;
-        const callIndex = streamCount;
         prompts.push(prompt);
-        const responseText =
-          callIndex === 1 ? 'first response' : callIndex === 2 ? 'first signal response' : 'second signal response';
+        const responseText = streamCount === 1 ? 'first response' : 'signal response';
 
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1156,18 +1955,15 @@ describe('Agent signals', () => {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               controller.enqueue({
                 type: 'response-metadata',
-                id: `id-${callIndex}`,
+                id: `id-${streamCount}`,
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               });
-              controller.enqueue({ type: 'text-start', id: `text-${callIndex}` });
-              controller.enqueue({ type: 'text-delta', id: `text-${callIndex}`, delta: responseText });
-              controller.enqueue({ type: 'text-end', id: `text-${callIndex}` });
-              if (callIndex === 1) {
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (streamCount === 1) {
                 await firstFinished;
-              }
-              if (callIndex === 2) {
-                await secondFinished;
               }
               controller.enqueue({
                 type: 'finish',
@@ -1202,46 +1998,23 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    const firstSignalResult = await agent.sendSignal(
-      { type: 'user-message', contents: 'First signal while running' },
+    const signalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'Hello while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(firstSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
-    expect(firstSignalResult.signal.id).toBeDefined();
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    expect(signalResult.signal.id).toBeDefined();
 
     releaseFirst();
-    await waitForCondition(() => streamCount === 2);
-
-    const secondSignalResult = await agent.sendSignal(
-      { type: 'user-message', contents: 'Second signal while running' },
-      { resourceId: 'active-user', threadId: 'active-thread' },
-    );
-    expect(secondSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
-    expect(secondSignalResult.signal.id).toBeDefined();
-    expect(secondSignalResult.signal.id).not.toBe(firstSignalResult.signal.id);
-
-    releaseSecond();
     const firstRun = await firstRunPromise;
-    expect(firstRun.value.text).toBe('first responsefirst signal responsesecond signal response');
-    expect(streamCount).toBe(3);
-    expect(JSON.stringify(prompts[1])).toContain('First signal while running');
-    expect(JSON.stringify(prompts[1])).not.toContain('Second signal while running');
-    expect(JSON.stringify(prompts[2])).toContain('First signal while running');
-    expect(JSON.stringify(prompts[2])).toContain('Second signal while running');
+    expect(firstRun.value.text).toBe('first responsesignal response');
+    expect(streamCount).toBe(2);
+    expect(JSON.stringify(prompts[1])).toContain('Hello while running');
 
     await stream.consumeStream();
     const recalled = await memory.recall({ threadId: 'active-thread', resourceId: 'active-user' });
-    expect(recalled.messages.map(message => message.role)).toEqual([
-      'user',
-      'assistant',
-      'signal',
-      'assistant',
-      'signal',
-      'assistant',
-    ]);
+    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant', 'signal', 'assistant']);
     expect(recalled.messages.map(message => message.content.parts.map(part => part.type))).toEqual([
-      ['text'],
-      ['text'],
       ['text'],
       ['text'],
       ['text'],
@@ -1251,49 +2024,12 @@ describe('Agent signals', () => {
       recalled.messages.map(message =>
         message.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
       ),
-    ).toEqual([
-      'Hello',
-      'first response',
-      'First signal while running',
-      'first signal response',
-      'Second signal while running',
-      'second signal response',
-    ]);
-
-    const [userMessage, firstAssistant, firstSignal, secondAssistant, secondSignal, thirdAssistant] = recalled.messages;
-    expect(firstSignal.id).toBe(firstSignalResult.signal.id);
-    expect(secondSignal.id).toBe(secondSignalResult.signal.id);
-    expect(firstSignal.id).not.toBe(userMessage.id);
-    expect(secondSignal.id).not.toBe(userMessage.id);
-    expect(firstSignal.createdAt.getTime()).toBeGreaterThan(firstAssistant.createdAt.getTime());
-    expect(firstSignal.createdAt.getTime()).toBeLessThanOrEqual(secondAssistant.createdAt.getTime());
-    expect(secondSignal.createdAt.getTime()).toBeGreaterThan(secondAssistant.createdAt.getTime());
-    expect(secondSignal.createdAt.getTime()).toBeLessThanOrEqual(thirdAssistant.createdAt.getTime());
-
-    const firstRecalledSignal = mastraDBMessageToSignal(firstSignal);
-    const secondRecalledSignal = mastraDBMessageToSignal(secondSignal);
-    expect(firstRecalledSignal.createdAt).toEqual(firstSignal.createdAt);
-    expect(secondRecalledSignal.createdAt).toEqual(secondSignal.createdAt);
-    expect(firstRecalledSignal.acceptedAt).toEqual(firstSignalResult.signal.acceptedAt);
-    expect(secondRecalledSignal.acceptedAt).toEqual(secondSignalResult.signal.acceptedAt);
-
-    const firstSignalMetadata = firstSignal.content.metadata?.signal as { createdAt?: string; acceptedAt?: string };
-    const secondSignalMetadata = secondSignal.content.metadata?.signal as { createdAt?: string; acceptedAt?: string };
-    expect(firstSignalMetadata).toMatchObject({
-      createdAt: firstSignal.createdAt.toISOString(),
-      acceptedAt: firstSignalResult.signal.acceptedAt?.toISOString(),
-    });
-    expect(secondSignalMetadata).toMatchObject({
-      createdAt: secondSignal.createdAt.toISOString(),
-      acceptedAt: secondSignalResult.signal.acceptedAt?.toISOString(),
-    });
-    expect(firstAssistant.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
-    expect(secondAssistant.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
+    ).toEqual(['Hello', 'first response', 'Hello while running', 'signal response']);
 
     subscription.unsubscribe();
   });
 
-  it('preserves current-step tool calls before draining a follow-up signal', async () => {
+  it('drops a not-yet-visible current-step tool call when draining a follow-up signal', async () => {
     const prompts: any[][] = [];
     let callCount = 0;
     let continueToToolCall!: () => void;
@@ -1397,9 +2133,9 @@ describe('Agent signals', () => {
     await waitForCondition(() => callCount === 2);
     await runPromise;
 
-    expect(chunks.map(chunk => chunk.type)).toContain('tool-call');
+    expect(chunks.map(chunk => chunk.type)).not.toContain('tool-call');
     expect(JSON.stringify(prompts[1])).toContain('Actually stop and answer this instead');
-    expect(JSON.stringify(prompts[1])).toContain('stale-tool-call');
+    expect(JSON.stringify(prompts[1])).not.toContain('stale-tool-call');
 
     subscription.unsubscribe();
   });
@@ -1775,6 +2511,1776 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('preserves caller-provided runId for idle wake signals', async () => {
+    const agent = new Agent({
+      id: 'caller-run-id-agent',
+      name: 'Caller Run Id Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('caller run response'),
+    });
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'caller-run-user',
+      threadId: 'caller-run-thread',
+    });
+
+    const signalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake with caller id' },
+      {
+        runId: 'caller-provided-run',
+        resourceId: 'caller-run-user',
+        threadId: 'caller-run-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'caller-run-user', thread: 'caller-run-thread' } } },
+      },
+    );
+
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: 'caller-provided-run' }));
+    await expect(readNextRun(subscription.stream[Symbol.asyncIterator]())).resolves.toMatchObject({
+      value: { runId: 'caller-provided-run', text: 'caller run response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('runs idle wake rejection cleanup when a queued idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-failure-user', thread: 'queued-failure-thread' },
+      } as any,
+    );
+    const cleanup = vi.fn();
+    const stream = vi.fn(async () => {
+      throw new Error('queued idle stream failed');
+    });
+
+    const result = runtime.sendSignal(
+      { id: 'queued-idle-agent', stream } as any,
+      { type: 'user-message', contents: 'queued wake' },
+      {
+        resourceId: 'queued-failure-user',
+        threadId: 'queued-failure-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'queued-failure-user', thread: 'queued-failure-thread' } },
+          _onThreadStreamRunRejected: cleanup,
+        } as any,
+      },
+    );
+
+    expect(result.output).toBeUndefined();
+    expect(cleanup).not.toHaveBeenCalled();
+
+    finishActive();
+    await completion;
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued wake' }),
+      expect.objectContaining({
+        runId: result.runId,
+        memory: { resource: 'queued-failure-user', thread: 'queued-failure-thread' },
+      }),
+    );
+  });
+
+  it('wakes reservation waiters when a queued idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let rejectStream!: (error: Error) => void;
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-waiter-user', thread: 'queued-waiter-thread' },
+      } as any,
+    );
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    runtime.sendSignal(
+      { id: 'queued-idle-agent', stream } as any,
+      { type: 'user-message', contents: 'queued wake' },
+      {
+        resourceId: 'queued-waiter-user',
+        threadId: 'queued-waiter-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'queued-waiter-user', thread: 'queued-waiter-thread' } },
+        } as any,
+      },
+    );
+
+    finishActive();
+    await nextTick();
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'queued-waiter-user', thread: 'queued-waiter-thread' },
+        } as any,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    rejectStream(new Error('queued idle stream failed'));
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('does not reserve queued idle streams before preflight when reservation is deferred', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let rejectFirstStream!: (error: Error) => void;
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' },
+      } as any,
+    );
+    const stream = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirstStream = reject;
+          }),
+      )
+      .mockResolvedValueOnce({ runId: 'queued-deferred-second-run' })
+      .mockResolvedValueOnce({ runId: 'queued-deferred-retry-run' });
+
+    const firstResult = runtime.sendSignal(
+      { id: 'queued-deferred-agent', stream } as any,
+      { id: 'queued-deferred-signal', type: 'user-message', contents: 'queued deferred wake' },
+      {
+        resourceId: 'queued-deferred-user',
+        threadId: 'queued-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' } },
+        } as any,
+      },
+    );
+    runtime.sendSignal(
+      { id: 'queued-deferred-agent', stream } as any,
+      { type: 'user-message', contents: 'queued second deferred wake' },
+      {
+        resourceId: 'queued-deferred-user',
+        threadId: 'queued-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' } },
+        } as any,
+      },
+    );
+
+    finishActive();
+    await nextTick();
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued deferred wake' }),
+      expect.not.objectContaining({ _threadRunReservationOwner: true }),
+    );
+
+    let waiterResolved = false;
+    await runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' },
+        } as any,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    expect(waiterResolved).toBe(true);
+
+    rejectFirstStream(new Error('queued deferred idle stream failed'));
+    await completion;
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued second deferred wake' }),
+      expect.not.objectContaining({ _threadRunReservationOwner: true }),
+    );
+    expect(stream).toHaveBeenCalledTimes(2);
+
+    const retryResult = runtime.sendSignal(
+      { id: 'queued-deferred-agent', stream } as any,
+      { id: 'queued-deferred-signal', type: 'user-message', contents: 'queued deferred wake' },
+      {
+        resourceId: 'queued-deferred-user',
+        threadId: 'queued-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' } },
+        } as any,
+      },
+    );
+    expect(retryResult.runId).not.toBe(firstResult.runId);
+    expect(stream).toHaveBeenCalledTimes(3);
+  });
+
+  it('aborts queued deferred idle streams after they start preflight without reservation', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let rejectStream!: (error: Error) => void;
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-deferred-abort-user', thread: 'queued-deferred-abort-thread' },
+      } as any,
+    );
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'queued-deferred-abort-agent', stream } as any,
+      { type: 'user-message', contents: 'queued deferred abort wake' },
+      {
+        resourceId: 'queued-deferred-abort-user',
+        threadId: 'queued-deferred-abort-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-abort-user', thread: 'queued-deferred-abort-thread' } },
+        } as any,
+      },
+    );
+
+    finishActive();
+    await nextTick();
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    const waiter = runtime.waitForRunOutput(result.runId);
+    expect(runtime.abortRun(result.runId)).toBe(true);
+    await expect(waiter).rejects.toThrow('has been aborted');
+
+    rejectStream(new Error('queued deferred abort stream stopped'));
+    await completion;
+  });
+
+  it('aborts immediate deferred idle streams while preflight is pending', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'immediate-deferred-abort-agent', stream } as any,
+      { type: 'user-message', contents: 'immediate deferred abort wake' },
+      {
+        resourceId: 'immediate-deferred-abort-user',
+        threadId: 'immediate-deferred-abort-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: {
+            memory: { resource: 'immediate-deferred-abort-user', thread: 'immediate-deferred-abort-thread' },
+          },
+        } as any,
+      },
+    );
+    void result.output?.catch(() => {});
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    const waiter = runtime.waitForRunOutput(result.runId);
+    expect(runtime.abortRun(result.runId)).toBe(true);
+    await expect(waiter).rejects.toThrow('has been aborted');
+
+    rejectStream(new Error('immediate deferred abort stream stopped'));
+    await expect(result.output).rejects.toThrow('immediate deferred abort stream stopped');
+  });
+
+  it('blocks direct reservations while a deferred idle run id is inflight', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'inflight-deferred-owner-agent', stream } as any,
+      { type: 'user-message', contents: 'inflight deferred wake' },
+      {
+        runId: 'inflight-deferred-run',
+        resourceId: 'inflight-deferred-user',
+        threadId: 'inflight-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'inflight-deferred-user', thread: 'inflight-deferred-thread' } },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'inflight-deferred-run',
+          memory: { resource: 'inflight-deferred-user', thread: 'inflight-deferred-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+
+    const duplicateOutput = buildFakeOutput({
+      runId: 'inflight-deferred-run',
+      fullOutput: { text: 'duplicate response', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'inflight-deferred-run', type: 'finish', payload: {} }],
+    });
+    expect(() =>
+      runtime.registerRun(
+        { id: 'duplicate-inflight-agent' } as any,
+        duplicateOutput,
+        {
+          runId: 'inflight-deferred-run',
+          memory: { resource: 'inflight-deferred-user', thread: 'inflight-deferred-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+
+    rejectStream(new Error('inflight deferred stream stopped'));
+    await expect(result.output).rejects.toThrow('inflight deferred stream stopped');
+  });
+
+  it('keeps deferred idle run ids inflight when owner reservation waits for an active thread', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi.fn((_signal, options) => {
+      runtime.registerRun(
+        { id: 'inflight-owner-blocking-agent' } as any,
+        {
+          runId: 'inflight-owner-blocking-active-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        {
+          runId: 'inflight-owner-blocking-active-run',
+          memory: { resource: 'inflight-owner-blocked-user', thread: 'inflight-owner-blocked-thread' },
+        } as any,
+        pubsub,
+      );
+      expect(runtime.reserveRun(options as any, pubsub, 'inflight-owner-blocked-agent')).toBeUndefined();
+      return new Promise((_resolve, reject) => {
+        rejectStream = reject;
+      });
+    });
+
+    const result = runtime.sendSignal(
+      { id: 'inflight-owner-blocked-agent', stream } as any,
+      { type: 'user-message', contents: 'inflight owner blocked wake' },
+      {
+        runId: 'inflight-owner-blocked-run',
+        resourceId: 'inflight-owner-blocked-user',
+        threadId: 'inflight-owner-blocked-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: {
+            memory: { resource: 'inflight-owner-blocked-user', thread: 'inflight-owner-blocked-thread' },
+          },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'inflight-owner-blocked-run',
+          memory: { resource: 'inflight-owner-blocked-user', thread: 'inflight-owner-blocked-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(runtime.abortRun(result.runId, pubsub)).toBe(true);
+
+    rejectStream(new Error('inflight owner blocked stream stopped'));
+    await expect(result.output).rejects.toThrow('inflight owner blocked stream stopped');
+  });
+
+  it('wakes reservation waiters when an immediate idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectStream = reject;
+          }),
+      )
+      .mockResolvedValueOnce({ runId: 'immediate-retry-run' });
+
+    const result = runtime.sendSignal(
+      { id: 'immediate-idle-agent', stream } as any,
+      { id: 'immediate-wake-signal', type: 'user-message', contents: 'immediate wake' },
+      {
+        resourceId: 'immediate-waiter-user',
+        threadId: 'immediate-waiter-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'immediate-waiter-user', thread: 'immediate-waiter-thread' } },
+        } as any,
+      },
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'immediate-waiter-user', thread: 'immediate-waiter-thread' },
+        } as any,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    rejectStream(new Error('immediate idle stream failed'));
+    await expect(result.output).rejects.toThrow('immediate idle stream failed');
+    await expect(runtime.waitForRunOutput(result.runId)).rejects.toThrow('was rejected');
+    await waiter;
+    expect(waiterResolved).toBe(true);
+
+    const retryResult = runtime.sendSignal(
+      { id: 'immediate-idle-agent', stream } as any,
+      { id: 'immediate-wake-signal', type: 'user-message', contents: 'immediate wake' },
+      {
+        resourceId: 'immediate-waiter-user',
+        threadId: 'immediate-waiter-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'immediate-waiter-user', thread: 'immediate-waiter-thread' } },
+        } as any,
+      },
+    );
+    expect(retryResult.runId).not.toBe(result.runId);
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('wakes waiters and drops queued signals when a reserved setup run is released', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const streamOptions = {
+      runId: 'reserved-setup-run',
+      memory: { resource: 'reserved-setup-user', thread: 'reserved-setup-thread' },
+    } as any;
+    const release = runtime.reserveRun(streamOptions, pubsub);
+    expect(release).toBeDefined();
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'reserved-setup-run',
+          memory: { resource: 'reserved-setup-user', thread: 'reserved-setup-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    const signalResult = runtime.sendSignal(
+      { id: 'reserved-agent' } as any,
+      { type: 'user-message', contents: 'stale setup signal' },
+      {
+        resourceId: 'reserved-setup-user',
+        threadId: 'reserved-setup-thread',
+      },
+      pubsub,
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ runId: 'reserved-setup-run' }));
+
+    release!();
+    await waiter;
+    expect(waiterResolved).toBe(true);
+
+    const laterRelease = runtime.reserveRun(
+      {
+        runId: 'later-run',
+        memory: { resource: 'reserved-setup-user', thread: 'reserved-setup-thread' },
+      } as any,
+      pubsub,
+    );
+    expect(laterRelease).toBeDefined();
+    expect(runtime.drainPendingSignals('later-run', pubsub)).toEqual([]);
+    const laterSignal = runtime.sendSignal(
+      { id: 'reserved-agent' } as any,
+      { type: 'user-message', contents: 'successor signal' },
+      {
+        resourceId: 'reserved-setup-user',
+        threadId: 'reserved-setup-thread',
+      },
+      pubsub,
+    );
+    expect(laterSignal).toEqual(expect.objectContaining({ runId: 'later-run' }));
+    expect(runtime.drainPendingSignals('later-run', pubsub)).toHaveLength(1);
+    laterRelease!();
+  });
+
+  it('does not overwrite an existing run reservation with a reused run id', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const release = runtime.reserveRun(
+      {
+        runId: 'reused-reserved-run',
+        memory: { resource: 'first-reservation-user', thread: 'first-reservation-thread' },
+      } as any,
+      pubsub,
+    );
+
+    expect(release).toBeDefined();
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'reused-reserved-run',
+          memory: { resource: 'first-reservation-user', thread: 'first-reservation-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'reused-reserved-run',
+          memory: { resource: 'second-reservation-user', thread: 'second-reservation-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved for another thread');
+    expect(
+      runtime.abortThread({ resourceId: 'second-reservation-user', threadId: 'second-reservation-thread' }, pubsub),
+    ).toBe(false);
+    expect(
+      runtime.abortThread({ resourceId: 'first-reservation-user', threadId: 'first-reservation-thread' }, pubsub),
+    ).toBe(true);
+  });
+
+  it('rejects duplicate queued idle run ids before either idle wake starts', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const stream = vi.fn(async () => ({
+      runId: 'queued-duplicate-idle-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-before-queued-duplicate',
+        status: 'running',
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      {
+        runId: 'active-before-queued-duplicate',
+        memory: { resource: 'queued-duplicate-user', thread: 'queued-duplicate-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const target = {
+      runId: 'queued-duplicate-idle-run',
+      resourceId: 'queued-duplicate-user',
+      threadId: 'queued-duplicate-thread',
+      ifIdle: {
+        streamOptions: { memory: { resource: 'queued-duplicate-user', thread: 'queued-duplicate-thread' } },
+      },
+    } as any;
+
+    expect(
+      runtime.sendSignal(
+        { id: 'queued-duplicate-agent', stream } as any,
+        { type: 'user-message', contents: 'first queued idle' },
+        target,
+        pubsub,
+      ),
+    ).toEqual(expect.objectContaining({ accepted: true, runId: 'queued-duplicate-idle-run' }));
+    expect(() =>
+      runtime.sendSignal(
+        { id: 'queued-duplicate-agent', stream } as any,
+        { type: 'user-message', contents: 'second queued idle' },
+        target,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'queued-duplicate-idle-run',
+          memory: { resource: 'queued-duplicate-user', thread: 'queued-duplicate-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it('clears caller-signal idempotency when a queued idle run is aborted', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const stream = vi.fn(async () => ({
+      runId: 'unused-queued-idempotency-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-before-queued-idempotency',
+        status: 'running',
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      {
+        runId: 'active-before-queued-idempotency',
+        memory: { resource: 'queued-idempotency-user', thread: 'queued-idempotency-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const target = {
+      resourceId: 'queued-idempotency-user',
+      threadId: 'queued-idempotency-thread',
+      ifIdle: {
+        streamOptions: { memory: { resource: 'queued-idempotency-user', thread: 'queued-idempotency-thread' } },
+      },
+    } as any;
+    const signal = { id: 'caller-signal-id', type: 'user-message', contents: 'retry queued idle' } as any;
+
+    const first = runtime.sendSignal({ id: 'queued-idempotency-agent', stream } as any, signal, target, pubsub);
+    expect(runtime.abortRun(first.runId, pubsub)).toBe(true);
+    const second = runtime.sendSignal({ id: 'queued-idempotency-agent', stream } as any, signal, target, pubsub);
+
+    expect(second.runId).not.toBe(first.runId);
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it('rejects run-output waiters when a queued idle run is aborted before it starts', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-before-waiter-abort',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      {
+        runId: 'active-before-waiter-abort',
+        memory: { resource: 'queued-waiter-abort-user', thread: 'queued-waiter-abort-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'queued-waiter-abort-agent', stream: vi.fn() } as any,
+      { type: 'user-message', contents: 'queued waiter abort' },
+      {
+        resourceId: 'queued-waiter-abort-user',
+        threadId: 'queued-waiter-abort-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'queued-waiter-abort-user', thread: 'queued-waiter-abort-thread' } },
+        } as any,
+      },
+      pubsub,
+    );
+    const waiter = runtime.waitForRunOutput(result.runId, pubsub);
+
+    expect(runtime.abortRun(result.runId, pubsub)).toBe(true);
+    await expect(waiter).rejects.toThrow('has been aborted');
+  });
+
+  it('does not tombstone unknown run ids when abort returns false', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+
+    expect(runtime.abortRun('unknown-abort-run', pubsub)).toBe(false);
+    const output = buildFakeOutput({
+      runId: 'unknown-abort-run',
+      fullOutput: { text: 'not aborted', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'unknown-abort-run', type: 'finish', payload: {} }],
+    });
+    expect(() =>
+      runtime.registerRun(
+        { id: 'unknown-abort-agent' } as any,
+        output,
+        {
+          runId: 'unknown-abort-run',
+          memory: { resource: 'unknown-abort-user', thread: 'unknown-abort-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).not.toThrow();
+  });
+
+  it('aborts a reserved setup run before stream preparation', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-abort-run',
+        memory: { resource: 'reserved-abort-user', thread: 'reserved-abort-thread' },
+      } as any,
+      pubsub,
+    );
+
+    expect(runtime.abortRun('reserved-abort-run', pubsub)).toBe(true);
+    await expect(
+      runtime.prepareRunOptions(
+        {
+          runId: 'reserved-abort-run',
+          memory: { resource: 'reserved-abort-user', thread: 'reserved-abort-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).rejects.toThrow('Agent thread run id "reserved-abort-run" has been aborted');
+  });
+
+  it('rejects run-output waiters and releases a prepared setup run on abort before registration', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'prepared-setup-abort-run',
+        memory: { resource: 'prepared-setup-abort-user', thread: 'prepared-setup-abort-thread' },
+      } as any,
+      pubsub,
+    );
+    await runtime.prepareRunOptions(
+      {
+        runId: 'prepared-setup-abort-run',
+        memory: { resource: 'prepared-setup-abort-user', thread: 'prepared-setup-abort-thread' },
+      } as any,
+      pubsub,
+    );
+    const waiter = runtime.waitForRunOutput('prepared-setup-abort-run', pubsub);
+
+    expect(runtime.abortRun('prepared-setup-abort-run', pubsub)).toBe(true);
+    await expect(waiter).rejects.toThrow('has been aborted');
+    const successorRelease = runtime.reserveRun(
+      {
+        runId: 'prepared-setup-successor-run',
+        memory: { resource: 'prepared-setup-abort-user', thread: 'prepared-setup-abort-thread' },
+      } as any,
+      pubsub,
+    );
+    expect(successorRelease).toBeDefined();
+    const lateOutput = buildFakeOutput({
+      runId: 'prepared-setup-abort-run',
+      fullOutput: { text: 'late aborted response', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'prepared-setup-abort-run', type: 'finish', payload: {} }],
+    });
+    expect(() =>
+      runtime.registerRun(
+        { id: 'prepared-setup-abort-agent' } as any,
+        lateOutput,
+        {
+          runId: 'prepared-setup-abort-run',
+          memory: { resource: 'prepared-setup-abort-user', thread: 'prepared-setup-abort-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('has been aborted');
+  });
+
+  it('keeps run-output waiters when a reservation is released for non-terminal retargeting', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'retarget-waiter-run',
+        memory: { resource: 'retarget-waiter-old-user', thread: 'retarget-waiter-old-thread' },
+      } as any,
+      pubsub,
+    );
+    const waiter = runtime.waitForRunOutput('retarget-waiter-run', pubsub);
+    let waiterRejected = false;
+    void waiter.catch(() => {
+      waiterRejected = true;
+    });
+
+    expect(
+      runtime.releaseRunReservation('retarget-waiter-run', pubsub, { cleanupPrepared: true, clearAbort: true }),
+    ).toBe(true);
+    await nextTick();
+    expect(waiterRejected).toBe(false);
+
+    runtime.reserveRun(
+      {
+        runId: 'retarget-waiter-run',
+        memory: { resource: 'retarget-waiter-new-user', thread: 'retarget-waiter-new-thread' },
+      } as any,
+      pubsub,
+    );
+    const output = buildFakeOutput({
+      runId: 'retarget-waiter-run',
+      fullOutput: { text: 'retarget waiter response', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'retarget-waiter-run', type: 'finish', payload: {} }],
+    });
+    runtime.registerRun(
+      { id: 'retarget-waiter-agent' } as any,
+      output,
+      {
+        runId: 'retarget-waiter-run',
+        memory: { resource: 'retarget-waiter-new-user', thread: 'retarget-waiter-new-thread' },
+      } as any,
+      pubsub,
+    );
+
+    await expect(waiter).resolves.toBe(output);
+  });
+
+  it('cancels run-output waiters without poisoning a later registration', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'abortable-waiter-run',
+        memory: { resource: 'abortable-waiter-user', thread: 'abortable-waiter-thread' },
+      } as any,
+      pubsub,
+    );
+    const waitAbortController = new AbortController();
+    const waiter = runtime.waitForRunOutput('abortable-waiter-run', pubsub, waitAbortController.signal);
+
+    waitAbortController.abort(new Error('stop waiting'));
+    await expect(waiter).rejects.toThrow('stop waiting');
+
+    const output = buildFakeOutput({
+      runId: 'abortable-waiter-run',
+      fullOutput: { text: 'abortable waiter response', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'abortable-waiter-run', type: 'finish', payload: {} }],
+    });
+    runtime.registerRun(
+      { id: 'abortable-waiter-agent' } as any,
+      output,
+      {
+        runId: 'abortable-waiter-run',
+        memory: { resource: 'abortable-waiter-user', thread: 'abortable-waiter-thread' },
+      } as any,
+      pubsub,
+    );
+
+    await expect(runtime.waitForRunOutput('abortable-waiter-run', pubsub)).resolves.toBe(output);
+  });
+
+  it('keeps rejected run ids tombstoned when retry cannot reserve an active thread', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const releaseRejected = runtime.reserveRun(
+      {
+        runId: 'rejected-retry-run',
+        memory: { resource: 'rejected-retry-user', thread: 'rejected-retry-thread' },
+      } as any,
+      pubsub,
+    );
+    const rejectedWaiter = runtime.waitForRunOutput('rejected-retry-run', pubsub);
+    releaseRejected!();
+    await expect(rejectedWaiter).rejects.toThrow('was rejected');
+    runtime.registerRun(
+      { id: 'active-retry-agent' } as any,
+      {
+        runId: 'active-retry-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      {
+        runId: 'active-retry-run',
+        memory: { resource: 'rejected-retry-user', thread: 'rejected-retry-thread' },
+      } as any,
+      pubsub,
+    );
+
+    expect(
+      runtime.reserveRun(
+        {
+          runId: 'rejected-retry-run',
+          memory: { resource: 'rejected-retry-user', thread: 'rejected-retry-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toBeUndefined();
+
+    const staleOutput = buildFakeOutput({
+      runId: 'rejected-retry-run',
+      fullOutput: { text: 'stale rejected response', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'rejected-retry-run', type: 'finish', payload: {} }],
+    });
+    expect(() =>
+      runtime.registerRun(
+        { id: 'stale-retry-agent' } as any,
+        staleOutput,
+        {
+          runId: 'rejected-retry-run',
+          memory: { resource: 'rejected-retry-user', thread: 'rejected-retry-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('was rejected');
+  });
+
+  it('starts queued idle wakes left behind when a reservation is retargeted', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'retarget-with-idle-run',
+        memory: { resource: 'retarget-idle-old-user', thread: 'retarget-idle-old-thread' },
+      } as any,
+      pubsub,
+      'retarget-owner-agent',
+    );
+    const stream = vi.fn(async () => ({
+      runId: 'retarget-queued-idle-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    const result = runtime.sendSignal(
+      { id: 'retarget-queued-idle-agent', stream } as any,
+      { type: 'user-message', contents: 'wake after retarget' },
+      {
+        resourceId: 'retarget-idle-old-user',
+        threadId: 'retarget-idle-old-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'retarget-idle-old-user', thread: 'retarget-idle-old-thread' } },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(stream).not.toHaveBeenCalled();
+
+    expect(
+      runtime.retargetReservedRun(
+        'retarget-with-idle-run',
+        { resourceId: 'retarget-idle-old-user', threadId: 'retarget-idle-old-thread' },
+        { resourceId: 'retarget-idle-new-user', threadId: 'retarget-idle-new-thread' },
+        pubsub,
+        'retarget-owner-agent',
+      ),
+    ).toBe(true);
+    await waitForCondition(() => stream.mock.calls.length > 0);
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'wake after retarget' }),
+      expect.objectContaining({
+        runId: result.runId,
+        memory: { resource: 'retarget-idle-old-user', thread: 'retarget-idle-old-thread' },
+      }),
+    );
+  });
+
+  it('wakes waiters parked on the old thread when a reservation is retargeted', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'retarget-wakes-old-thread-run',
+        memory: { resource: 'retarget-wakes-old-user', thread: 'retarget-wakes-old-thread' },
+      } as any,
+      pubsub,
+      'retarget-wakes-owner',
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'retarget-wakes-waiter' } as any,
+        {
+          runId: 'retarget-wakes-waiter-run',
+          memory: { resource: 'retarget-wakes-old-user', thread: 'retarget-wakes-old-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    expect(
+      runtime.retargetReservedRun(
+        'retarget-wakes-old-thread-run',
+        { resourceId: 'retarget-wakes-old-user', threadId: 'retarget-wakes-old-thread' },
+        { resourceId: 'retarget-wakes-new-user', threadId: 'retarget-wakes-new-thread' },
+        pubsub,
+        'retarget-wakes-owner',
+      ),
+    ).toBe(true);
+
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('starts a queued idle wake when a reserved setup run is aborted', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-abort-with-idle-run',
+        memory: { resource: 'reserved-abort-idle-user', thread: 'reserved-abort-idle-thread' },
+      } as any,
+      pubsub,
+      'reserved-agent',
+    );
+    const stream = vi.fn(async () => ({
+      runId: 'queued-idle-after-abort-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    const result = runtime.sendSignal(
+      { id: 'queued-idle-after-abort-agent', stream } as any,
+      { type: 'user-message', contents: 'wake after abort' },
+      {
+        resourceId: 'reserved-abort-idle-user',
+        threadId: 'reserved-abort-idle-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'reserved-abort-idle-user', thread: 'reserved-abort-idle-thread' } },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(result).toEqual(expect.objectContaining({ runId: expect.any(String) }));
+    expect(stream).not.toHaveBeenCalled();
+
+    expect(runtime.abortRun('reserved-abort-with-idle-run', pubsub)).toBe(true);
+    await nextTick();
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'wake after abort' }),
+      expect.objectContaining({
+        runId: result.runId,
+        memory: { resource: 'reserved-abort-idle-user', thread: 'reserved-abort-idle-thread' },
+      }),
+    );
+  });
+
+  it('releases waiters when draining a queued active signal fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    const stream = vi.fn(async () => {
+      throw new Error('queued active setup failed');
+    });
+    const owner = { id: 'queued-active-failure-agent', stream };
+    const completion = runtime.registerRun(
+      owner as any,
+      {
+        runId: 'queued-active-failure-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'queued-active-failure-run',
+        memory: { resource: 'queued-active-failure-user', thread: 'queued-active-failure-thread' },
+      } as any,
+      pubsub,
+    );
+    const signalResult = runtime.sendSignal(
+      owner as any,
+      { type: 'user-message', contents: 'queued active failure' },
+      { resourceId: 'queued-active-failure-user', threadId: 'queued-active-failure-thread' },
+      pubsub,
+    );
+    expect(signalResult.accepted).toBe(true);
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'queued-active-failure-waiter' } as any,
+        {
+          runId: 'queued-active-failure-next-run',
+          memory: { resource: 'queued-active-failure-user', thread: 'queued-active-failure-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await expect(completion).rejects.toThrow('queued active setup failed');
+    await waiter;
+    expect(waiterResolved).toBe(true);
+    expect(
+      runtime.reserveRun(
+        {
+          runId: 'queued-active-failure-next-run',
+          memory: { resource: 'queued-active-failure-user', thread: 'queued-active-failure-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toEqual(expect.any(Function));
+  });
+
+  it('drops queued signals when a prepared run is aborted', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'prepared-abort-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'prepared-abort-run',
+        memory: { resource: 'prepared-abort-user', thread: 'prepared-abort-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const signalResult = runtime.sendSignal(
+      { id: 'active-agent' } as any,
+      { type: 'user-message', contents: 'stale prepared signal' },
+      {
+        runId: 'prepared-abort-run',
+      },
+      pubsub,
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ runId: 'prepared-abort-run' }));
+
+    expect(runtime.abortRun('prepared-abort-run', pubsub)).toBe(true);
+    expect(() =>
+      runtime.sendSignal(
+        { id: 'active-agent' } as any,
+        { type: 'user-message', contents: 'post-abort stale signal' },
+        {
+          runId: 'prepared-abort-run',
+        },
+        pubsub,
+      ),
+    ).toThrow('has been aborted');
+    finishActive();
+    await completion;
+
+    runtime.reserveRun(
+      {
+        runId: 'prepared-abort-successor-run',
+        memory: { resource: 'prepared-abort-user', thread: 'prepared-abort-thread' },
+      } as any,
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals('prepared-abort-successor-run', pubsub)).toEqual([]);
+  });
+
+  it('rejects duplicate registered run ids on the same thread', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const streamOptions = {
+      runId: 'duplicate-registered-run',
+      memory: { resource: 'duplicate-registered-user', thread: 'duplicate-registered-thread' },
+    } as any;
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'duplicate-registered-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      streamOptions,
+      pubsub,
+    );
+
+    expect(() =>
+      runtime.registerRun(
+        { id: 'active-agent' } as any,
+        {
+          runId: 'duplicate-registered-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        streamOptions,
+        pubsub,
+      ),
+    ).toThrow('already registered');
+  });
+
+  it('rejects same-agent registration when another run is active on the thread', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const streamOptions = {
+      memory: { resource: 'same-agent-active-user', thread: 'same-agent-active-thread' },
+    } as any;
+
+    runtime.registerRun(
+      { id: 'same-active-agent' } as any,
+      {
+        runId: 'same-active-first-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      { ...streamOptions, runId: 'same-active-first-run' },
+      pubsub,
+    );
+
+    expect(() =>
+      runtime.registerRun(
+        { id: 'same-active-agent' } as any,
+        {
+          runId: 'same-active-second-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        { ...streamOptions, runId: 'same-active-second-run' },
+        pubsub,
+      ),
+    ).toThrow('already active for this thread');
+  });
+
+  it('waits for same-agent active runs before allowing another stream on the thread', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    const completion = runtime.registerRun(
+      { id: 'same-wait-agent' } as any,
+      {
+        runId: 'same-wait-active-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'same-wait-active-run',
+        memory: { resource: 'same-wait-user', thread: 'same-wait-thread' },
+      } as any,
+      pubsub,
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'same-wait-agent' } as any,
+        {
+          runId: 'same-wait-next-run',
+          memory: { resource: 'same-wait-user', thread: 'same-wait-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('waits for completed active records to clear before allowing another stream on the thread', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    const completion = runtime.registerRun(
+      { id: 'completed-window-agent' } as any,
+      {
+        runId: 'completed-window-active-run',
+        status: 'success',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'completed-window-active-run',
+        memory: { resource: 'completed-window-user', thread: 'completed-window-thread' },
+      } as any,
+      pubsub,
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'completed-window-agent' } as any,
+        {
+          runId: 'completed-window-next-run',
+          memory: { resource: 'completed-window-user', thread: 'completed-window-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('reserves the thread after waiting so concurrent stream callers do not overlap execution', async () => {
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let finishFirstWaiter!: () => void;
+    const firstWaiterFinished = new Promise<void>(resolve => {
+      finishFirstWaiter = resolve;
+    });
+    let streamCalls = 0;
+    const runner = new Agent({
+      id: 'post-wait-reservation-agent',
+      name: 'Post Wait Reservation Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCalls += 1;
+          const call = streamCalls;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: `id-${call}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: `text-${call}` });
+                controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `response ${call}` });
+                if (call === 1) await firstWaiterFinished;
+                controller.enqueue({ type: 'text-end', id: `text-${call}` });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const activeCompletion = agentThreadStreamRuntime.registerRun(
+      runner as any,
+      {
+        runId: 'post-wait-active-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'post-wait-active-run',
+        memory: { resource: 'post-wait-user', thread: 'post-wait-thread' },
+      } as any,
+    );
+
+    const first = runner.stream('first', {
+      memory: { resource: 'post-wait-user', thread: 'post-wait-thread' },
+    });
+    const second = runner.stream('second', {
+      memory: { resource: 'post-wait-user', thread: 'post-wait-thread' },
+    });
+    await nextTick();
+    expect(streamCalls).toBe(0);
+
+    finishActive();
+    await activeCompletion;
+    await waitForCondition(() => streamCalls === 1);
+    await nextTick();
+    expect(streamCalls).toBe(1);
+
+    const firstOutput = await first;
+    const firstText = firstOutput.text;
+    finishFirstWaiter();
+    await expect(firstText).resolves.toBe('response 1');
+    await waitForCondition(() => streamCalls === 2);
+
+    const secondOutput = await second;
+    await expect(secondOutput.text).resolves.toBe('response 2');
+  });
+
+  it('drains accepted queued signals before releasing waiters after async completion publish', async () => {
+    const runtime = agentThreadStreamRuntime;
+    const pubsub = new BlockingRunCompletedPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let finishQueued!: () => void;
+    const queuedFinished = new Promise<void>(resolve => {
+      finishQueued = resolve;
+    });
+    const ownerCalls: string[] = [];
+    const competitorCalls: string[] = [];
+    const callOrder: string[] = [];
+    const owner = new Agent({
+      id: 'completion-drain-agent',
+      name: 'Completion Drain Owner',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          callOrder.push('queued');
+          ownerCalls.push(JSON.stringify(prompt));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: 'queued-id',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'queued-text' });
+                controller.enqueue({ type: 'text-delta', id: 'queued-text', delta: 'queued response' });
+                await queuedFinished;
+                controller.enqueue({ type: 'text-end', id: 'queued-text' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const competitor = new Agent({
+      id: 'completion-drain-agent',
+      name: 'Completion Drain Competitor',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          callOrder.push('competitor');
+          competitorCalls.push(JSON.stringify(prompt));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'competitor-id', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'competitor-text' },
+              { type: 'text-delta', id: 'competitor-text', delta: 'competitor response' },
+              { type: 'text-end', id: 'competitor-text' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      }),
+    });
+
+    const completion = runtime.registerRun(
+      owner as any,
+      {
+        runId: 'completion-drain-active-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'completion-drain-active-run',
+        memory: { resource: 'completion-drain-user', thread: 'completion-drain-thread' },
+      } as any,
+      pubsub,
+    );
+    const queuedSignal = runtime.sendSignal(
+      owner as any,
+      { type: 'user-message', contents: 'queued signal' },
+      { resourceId: 'completion-drain-user', threadId: 'completion-drain-thread' },
+      pubsub,
+    );
+    expect(queuedSignal.accepted).toBe(true);
+
+    finishActive();
+    await waitForCondition(() => pubsub.sawRunCompleted);
+    const competitorStream = competitor.stream('competing stream', {
+      memory: { resource: 'completion-drain-user', thread: 'completion-drain-thread' },
+      _pubsub: pubsub,
+    } as any);
+    await nextTick();
+    expect(ownerCalls).toHaveLength(0);
+    expect(competitorCalls).toHaveLength(0);
+
+    pubsub.unblockRunCompleted();
+    await waitForCondition(() => ownerCalls.length === 1);
+    expect(JSON.stringify(ownerCalls)).toContain('queued signal');
+    expect(callOrder[0]).toBe('queued');
+
+    finishQueued();
+    await completion;
+    await expect(competitorStream.then(stream => stream.text)).resolves.toBe('competitor response');
+    expect(competitorCalls).toHaveLength(1);
+    expect(callOrder).toEqual(['queued', 'competitor']);
+  });
+
+  it('moves reservation waiters onto the registered run on setup success', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-success-run',
+        memory: { resource: 'reserved-success-user', thread: 'reserved-success-thread' },
+      } as any,
+      pubsub,
+      'owner-agent',
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'reserved-success-user', thread: 'reserved-success-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    const completion = runtime.registerRun(
+      { id: 'owner-agent' } as any,
+      {
+        runId: 'reserved-success-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'reserved-success-run',
+        memory: { resource: 'reserved-success-user', thread: 'reserved-success-thread' },
+      } as any,
+      pubsub,
+    );
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('does not treat matching run ids from another agent as its own reservation', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+
+    const completion = runtime.registerRun(
+      { id: 'owner-agent' } as any,
+      {
+        runId: 'shared-run-id',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'shared-run-id',
+        memory: { resource: 'run-id-collision-user', thread: 'run-id-collision-thread' },
+      } as any,
+      pubsub,
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'different-agent' } as any,
+        {
+          runId: 'shared-run-id',
+          memory: { resource: 'run-id-collision-user', thread: 'run-id-collision-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('does not treat matching run ids from the same agent as its own reservation without ownership', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const release = runtime.reserveRun(
+      {
+        runId: 'same-agent-shared-run-id',
+        memory: { resource: 'same-agent-collision-user', thread: 'same-agent-collision-thread' },
+      } as any,
+      pubsub,
+      'owner-agent',
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'owner-agent' } as any,
+        {
+          runId: 'same-agent-shared-run-id',
+          memory: { resource: 'same-agent-collision-user', thread: 'same-agent-collision-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    release?.();
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('rejects registration when another agent owns the reservation', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-owner-register-run',
+        memory: { resource: 'reserved-owner-register-user', thread: 'reserved-owner-register-thread' },
+      } as any,
+      pubsub,
+      'owner-agent',
+    );
+
+    expect(() =>
+      runtime.registerRun(
+        { id: 'different-agent' } as any,
+        {
+          runId: 'reserved-owner-register-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        {
+          runId: 'reserved-owner-register-run',
+          memory: { resource: 'reserved-owner-register-user', thread: 'reserved-owner-register-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('reserved by another agent');
+  });
+
   it('cleans up a thread subscription and completes the iterator', async () => {
     const agent = new Agent({
       id: 'cleanup-signal-agent',
@@ -1793,9 +4299,9 @@ describe('Agent signals', () => {
     await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
   });
 
-  it('allows a thread follower to abort the active run controller', () => {
+  it('allows a thread follower to abort the active run controller', async () => {
     const runtime = new AgentThreadStreamRuntime();
-    const options = runtime.prepareRunOptions({
+    const options = await runtime.prepareRunOptions({
       runId: 'abort-run',
       memory: { thread: 'abort-thread', resource: 'abort-user' },
     } as any);

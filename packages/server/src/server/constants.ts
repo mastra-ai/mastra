@@ -32,6 +32,9 @@ const RESERVED_CONTEXT_KEYS = new Set([
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_IS_STUDIO_KEY,
+  'user',
+  'userPermissions',
+  'userRoles',
 ]);
 
 export function isReservedRequestContextKey(key: string): boolean {
