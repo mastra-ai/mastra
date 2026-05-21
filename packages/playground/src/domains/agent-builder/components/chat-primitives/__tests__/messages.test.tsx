@@ -268,6 +268,51 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('Weather Lookup');
   });
 
+  it('MessageSetAgentTools reflects entries enabled under agents/workflows form fields', () => {
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-tools-agent',
+          toolName: SET_AGENT_TOOLS_TOOL_NAME,
+          state: 'output-available',
+          input: {
+            tools: [
+              { id: 'my-agent', name: 'My Agent' },
+              { id: 'my-workflow', name: 'My Workflow' },
+            ],
+          },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      {
+        tools: {},
+        agents: { 'my-agent': true },
+        workflows: { 'my-workflow': true },
+      } as Partial<AgentBuilderEditFormValues>,
+    );
+    expect(container.textContent).toContain('Enabling tools: My Agent, My Workflow');
+  });
+
+  it('MessageSetAgentTools renders "none" when no streamed ids are enabled in form', () => {
+    const { container } = renderRow(
+      [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-tools-none',
+          toolName: SET_AGENT_TOOLS_TOOL_NAME,
+          state: 'output-available',
+          input: {
+            tools: [{ id: 'web-search', name: 'Web Search' }],
+          },
+          output: { success: true },
+        } as ToolPart,
+      ],
+      { tools: {}, agents: {}, workflows: {} } as Partial<AgentBuilderEditFormValues>,
+    );
+    expect(container.textContent).toContain('Enabling tools: none');
+  });
+
   it('renders MessageSetAgentSkills for streaming dynamic-tool', () => {
     const { container } = renderRow([
       {

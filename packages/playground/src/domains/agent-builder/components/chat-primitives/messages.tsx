@@ -22,10 +22,9 @@ import {
   Building,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import { Controller, useFormContext } from 'react-hook-form';
-import { CONNECT_CHANNEL_TOOL_NAME } from '../../hooks/use-connect-channel-tool';
-import { ConnectChannelMessage } from '../agent-edit/connect-channel-message';
+import { useFormContext } from 'react-hook-form';
+import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
+import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
@@ -42,10 +41,9 @@ import { ProviderLogo } from '@/domains/llm';
 
 interface MessageRowProps {
   message: MastraUIMessage;
-  agentId?: string;
 }
 
-export const MessageRow = ({ message, agentId }: MessageRowProps) => {
+export const MessageRow = ({ message }: MessageRowProps) => {
   return (
     <>
       {message.parts.map((part, index) => {
@@ -62,14 +60,6 @@ export const MessageRow = ({ message, agentId }: MessageRowProps) => {
 
           case 'dynamic-tool': {
             switch (part.toolName) {
-              case CONNECT_CHANNEL_TOOL_NAME: {
-                const platform = (part.input as { platform?: string } | undefined)?.platform ?? 'slack';
-                return (
-                  <ToolCard key={key}>
-                    <ConnectChannelMessage platformId={platform} agentId={agentId} />
-                  </ToolCard>
-                );
-              }
               case SET_AGENT_NAME_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
                 return <MessageSetAgentName key={key} />;
@@ -86,28 +76,24 @@ export const MessageRow = ({ message, agentId }: MessageRowProps) => {
 
               case SET_AGENT_TOOLS_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
-                const input = (part.input as { tools?: { id: string; name: string }[] } | undefined) ?? {};
-                return <MessageSetAgentTools key={key} tools={input.tools ?? []} />;
+
+                return <MessageSetAgentTools key={key} />;
               }
               case SET_AGENT_SKILLS_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
-                const input = (part.input as { skills?: { id: string; name: string }[] } | undefined) ?? {};
-                return <MessageSetAgentSkills key={key} skills={input.skills ?? []} />;
+                return <MessageSetAgentSkills key={key} />;
               }
               case SET_AGENT_MODEL_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
-                const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
-                return <MessageSetAgentModel key={key} model={input.model ?? { provider: '', name: '' }} />;
+                return <MessageSetAgentModel key={key} />;
               }
               case SET_AGENT_BROWSER_ENABLED_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
-                const input = (part.input as { browserEnabled?: boolean } | undefined) ?? {};
-                return <MessageSetAgentBrowserEnabled key={key} browserEnabled={input.browserEnabled ?? false} />;
+                return <MessageSetAgentBrowserEnabled key={key} />;
               }
               case SET_AGENT_WORKSPACE_ID_TOOL_NAME: {
                 if (part?.state !== 'output-available') return null;
-                const input = (part.input as { workspaceId?: string } | undefined) ?? {};
-                return <MessageSetAgentWorkspaceId key={key} workspaceId={input.workspaceId ?? ''} />;
+                return <MessageSetAgentWorkspaceId key={key} />;
               }
               default: {
                 if (part?.state !== 'output-available') return null;
@@ -120,15 +106,6 @@ export const MessageRow = ({ message, agentId }: MessageRowProps) => {
                 return <GenericTool key={key} toolName={part.toolName} input={extra.input} output={extra.output} />;
               }
             }
-          }
-
-          case `tool-${CONNECT_CHANNEL_TOOL_NAME}`: {
-            const platform = (part.input as { platform?: string } | undefined)?.platform ?? 'slack';
-            return (
-              <ToolCard key={key}>
-                <ConnectChannelMessage platformId={platform} agentId={agentId} />
-              </ToolCard>
-            );
           }
 
           case `tool-${SET_AGENT_NAME_TOOL_NAME}`: {
@@ -151,32 +128,27 @@ export const MessageRow = ({ message, agentId }: MessageRowProps) => {
           case `tool-${SET_AGENT_TOOLS_TOOL_NAME}`: {
             if (part?.state !== 'output-available') return null;
 
-            const input = (part.input as { tools?: { id: string; name: string }[] } | undefined) ?? {};
-            return <MessageSetAgentTools key={key} tools={input.tools ?? []} />;
+            return <MessageSetAgentTools key={key} />;
           }
           case `tool-${SET_AGENT_SKILLS_TOOL_NAME}`: {
             if (part?.state !== 'output-available') return null;
 
-            const input = (part.input as { skills?: { id: string; name: string }[] } | undefined) ?? {};
-            return <MessageSetAgentSkills key={key} skills={input.skills ?? []} />;
+            return <MessageSetAgentSkills key={key} />;
           }
           case `tool-${SET_AGENT_MODEL_TOOL_NAME}`: {
             if (part?.state !== 'output-available') return null;
 
-            const input = (part.input as { model?: { provider: string; name: string } } | undefined) ?? {};
-            return <MessageSetAgentModel key={key} model={input.model ?? { provider: '', name: '' }} />;
+            return <MessageSetAgentModel key={key} />;
           }
           case `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`: {
             if (part?.state !== 'output-available') return null;
 
-            const input = (part.input as { browserEnabled?: boolean } | undefined) ?? {};
-            return <MessageSetAgentBrowserEnabled key={key} browserEnabled={input.browserEnabled ?? false} />;
+            return <MessageSetAgentBrowserEnabled key={key} />;
           }
           case `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`: {
             if (part?.state !== 'output-available') return null;
 
-            const input = (part.input as { workspaceId?: string } | undefined) ?? {};
-            return <MessageSetAgentWorkspaceId key={key} workspaceId={input.workspaceId ?? ''} />;
+            return <MessageSetAgentWorkspaceId key={key} />;
           }
 
           default: {
@@ -267,59 +239,6 @@ export const ReasoningMessage = ({ text, streaming = false }: { text: string; st
   );
 };
 
-const words = [
-  'loading',
-  'cooking',
-  'processing',
-  'preparing',
-  'building',
-  'rendering',
-  'fetching',
-  'compiling',
-  'generating',
-  'brewing',
-  'mixing',
-  'heating',
-  'baking',
-  'roasting',
-  'simmering',
-  'boiling',
-  'frying',
-  'grilling',
-  'steaming',
-  'toasting',
-  'melting',
-  'blending',
-  'stirring',
-  'whisking',
-  'kneading',
-  'assembling',
-  'crafting',
-  'forging',
-  'shaping',
-  'forming',
-  'spinning',
-  'warming',
-  'igniting',
-  'starting',
-  'booting',
-  'charging',
-  'spooling',
-  'buffering',
-  'calculating',
-  'computing',
-  'decoding',
-  'encoding',
-  'hydrating',
-  'marinating',
-  'infusing',
-  'curing',
-  'plating',
-  'serving',
-  'finishing',
-  'settling',
-];
-
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
     <div className="flex flex-col gap-6" data-testid={testId}>
@@ -336,15 +255,6 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   );
 };
 
-export const ToolExecutionMessage = () => {
-  const [randomWord] = useState(() => words[Math.floor(Math.random() * words.length)]);
-  return (
-    <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {randomWord.charAt(0).toUpperCase() + randomWord.slice(1)}...
-    </Txt>
-  );
-};
-
 const safeStringify = (value: unknown): string => {
   if (value === undefined) return '';
   try {
@@ -354,7 +264,7 @@ const safeStringify = (value: unknown): string => {
   }
 };
 
-export const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
+const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
   const inputJson = safeStringify(input);
   const outputJson = safeStringify(output);
   const hasOutput = outputJson.length > 0;
@@ -421,149 +331,108 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
   <div className="flex items-start gap-2 min-w-0 max-w-full">
     <Icon>{icon}</Icon>
     <Txt variant="ui-md" className="text-neutral3 min-w-0 flex-1 truncate" as="div">
-      {label}{' '}
-      <strong className="font-semibold text-neutral6">{value}</strong>
+      {label} <strong className="font-semibold text-neutral6">{value}</strong>
     </Txt>
   </div>
 );
 
-export const MessageSetAgentName = () => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
+const MessageSetAgentName = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const name = watch('name');
+
+  if (!name) return null;
+
+  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent name:" value={name} />;
+};
+
+const MessageSetAgentDescription = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const description = watch('description');
+
+  if (!description) return null;
+
+  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent description:" value={description} />;
+};
+
+const MessageSetAgentInstructions = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const instructions = watch('instructions');
+
+  if (!instructions) return null;
+
+  return <SkillToolLine icon={<FileText />} label="Setting the agent instructions:" value={instructions} />;
+};
+
+const MessageSetAgentTools = () => {
+  const { agentId, toolsData, agentsData, workflowsData } = useAgentPrimitives();
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const selectedTools = watch('tools');
+  const selectedAgents = watch('agents');
+  const selectedWorkflows = watch('workflows');
+
+  const availableAgentTools = useAvailableAgentTools({
+    toolsData,
+    agentsData,
+    workflowsData,
+    selectedTools,
+    selectedAgents,
+    selectedWorkflows,
+    excludeAgentId: agentId,
+  });
+
+  if (availableAgentTools.length === 0) return null;
 
   return (
-    <Controller
-      control={control}
-      name="name"
-      render={({ field }) => (
-        <SkillToolLine icon={<AlignLeft />} label="Setting the agent name:" value={field.value ?? ''} />
-      )}
+    <SkillToolLine icon={<Wrench />} label="Enabling tools:" value={availableAgentTools.map(t => t.name).join(', ')} />
+  );
+};
+
+const MessageSetAgentSkills = () => {
+  const { availableSkills } = useAgentPrimitives();
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const skillsField = watch('skills') as Record<string, boolean> | undefined;
+  const enabled = skillsField ? availableSkills.filter(s => skillsField[s.id] === true) : [];
+
+  if (enabled.length === 0) return null;
+
+  return <SkillToolLine icon={<Zap />} label="Enabling skills:" value={enabled.map(s => s.name).join(', ')} />;
+};
+
+const MessageSetAgentModel = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const model = watch('model');
+
+  if (!model) return null;
+
+  return (
+    <SkillToolLine
+      icon={<ProviderLogo providerId={model.provider} size={16} />}
+      label="Setting agent model to"
+      value={`${model.provider}/${model.name}`}
     />
   );
 };
 
-export const MessageSetAgentDescription = () => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
+const MessageSetAgentBrowserEnabled = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const browserEnabled = watch('browserEnabled');
 
   return (
-    <Controller
-      control={control}
-      name="description"
-      render={({ field }) => (
-        <SkillToolLine icon={<AlignLeft />} label="Setting the agent description:" value={field.value ?? ''} />
-      )}
+    <SkillToolLine
+      icon={browserEnabled ? <Globe /> : <GlobeLockIcon />}
+      label="Browser access"
+      value={browserEnabled ? 'enabled' : 'disabled'}
     />
   );
 };
 
-export const MessageSetAgentInstructions = () => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
+const MessageSetAgentWorkspaceId = () => {
+  const { watch } = useFormContext<AgentBuilderEditFormValues>();
+  const workspaceId = watch('workspaceId');
 
-  return (
-    <Controller
-      control={control}
-      name="instructions"
-      render={({ field }) => {
-        const text = field.value ?? '';
-        const snippet = text.length > 60 ? `${text.slice(0, 60)}…` : text;
-        return (
-          <SkillToolLine icon={<FileText />} label="Setting the agent instructions:" value={snippet} />
-        );
-      }}
-    />
-  );
-};
+  if (!workspaceId) return null;
 
-export const MessageSetAgentTools = ({ tools }: { tools: { id: string; name: string }[] }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-
-  return (
-    <Controller
-      control={control}
-      name="tools"
-      render={({ field }) => {
-        const enabled = field.value
-          ? tools.filter(t => field.value?.[t.id])
-          : tools;
-        const value = enabled.length === 0 ? 'none' : enabled.map(t => t.name).join(', ');
-        return <SkillToolLine icon={<Wrench />} label="Enabling tools:" value={value} />;
-      }}
-    />
-  );
-};
-
-export const MessageSetAgentSkills = ({ skills }: { skills: { id: string; name: string }[] }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-
-  return (
-    <Controller
-      control={control}
-      name="skills"
-      render={({ field }) => {
-        const enabled = field.value
-          ? skills.filter(s => field.value?.[s.id])
-          : skills;
-        const value = enabled.length === 0 ? 'none' : enabled.map(s => s.name).join(', ');
-        return <SkillToolLine icon={<Zap />} label="Enabling skills:" value={value} />;
-      }}
-    />
-  );
-};
-
-export const MessageSetAgentModel = ({ model }: { model: { provider: string; name: string } }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-
-  return (
-    <Controller
-      control={control}
-      name="model"
-      render={({ field }) => {
-        const value = field.value ?? model;
-        return (
-          <SkillToolLine
-            icon={<ProviderLogo providerId={value.provider} size={16} />}
-            label="Setting agent model to"
-            value={`${value.provider}/${value.name}`}
-          />
-        );
-      }}
-    />
-  );
-};
-
-export const MessageSetAgentBrowserEnabled = ({ browserEnabled }: { browserEnabled: boolean }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-
-  return (
-    <Controller
-      control={control}
-      name="browserEnabled"
-      render={({ field }) => {
-        const enabled = field.value ?? browserEnabled;
-        return (
-          <SkillToolLine
-            icon={enabled ? <Globe /> : <GlobeLockIcon />}
-            label="Browser access"
-            value={enabled ? 'enabled' : 'disabled'}
-          />
-        );
-      }}
-    />
-  );
-};
-
-export const MessageSetAgentWorkspaceId = ({ workspaceId }: { workspaceId: string }) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-
-  return (
-    <Controller
-      control={control}
-      name="workspaceId"
-      render={({ field }) => {
-        const value = field.value ?? workspaceId;
-        return <SkillToolLine icon={<Building />} label="Setting workspace to" value={value} />;
-      }}
-    />
-  );
+  return <SkillToolLine icon={<Building />} label="Setting workspace to" value={workspaceId} />;
 };
 
 interface SkillToolProps {
