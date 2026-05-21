@@ -11,6 +11,7 @@ import {
   convertZodSchemaToAISDKSchema,
   jsonSchema,
 } from '@mastra/schema-compat';
+import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
 import { backgroundOverrideJsonSchema } from '../../background-tasks';
@@ -102,13 +103,11 @@ export class CoreToolBuilder extends MastraBase {
         // splicing a Zod v4 ZodOptional into a Zod v3 ZodObject's shape, which
         // would crash later in `ZodObject._parse` with
         // `keyValidator._parse is not a function`.
-        const standardSchema = isStandardSchemaWithJSON(schema as any)
-          ? (schema as any)
-          : toStandardSchema(schema as any);
+        const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
         const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
 
         if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-          const properties = { ...(jsonSchema.properties ?? {}) };
+          const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
 
           if (isBackgroundEligible) {
             properties._background = backgroundOverrideJsonSchema;
@@ -123,7 +122,7 @@ export class CoreToolBuilder extends MastraBase {
             };
           }
 
-          this.originalTool.inputSchema = toStandardSchema({ ...jsonSchema, properties }) as any;
+          this.originalTool.inputSchema = toStandardSchema({ ...jsonSchema, properties });
         }
       }
     }
