@@ -8,6 +8,7 @@
  */
 
 import type { MastraUnion } from '../../action';
+import type { AgentSignalInput } from '../../agent/signals';
 import type { WorkspaceToolName, WORKSPACE_TOOLS } from '../constants';
 
 // =============================================================================
@@ -159,6 +160,25 @@ export interface BackgroundProcessConfig {
    *   Use this for cloud sandboxes (e.g. E2B) where processes should survive agent shutdown.
    */
   abortSignal?: AbortSignal | null | false;
+  /**
+   * When a background process exits, send an `agent.sendSignal` to the
+   * invoking agent's thread (waking it if idle). Defaults to `true`.
+   *
+   * - `true` (default): fires a built-in `system-reminder` signal containing
+   *   the exit code and (truncated) stdout/stderr.
+   * - `false`: do not fire any signal automatically — useful if you handle
+   *   exit notification yourself in `onExit`.
+   * - function: build a custom signal payload. Return `undefined` to skip
+   *   firing for this exit (e.g. only signal on non-zero exit codes).
+   *
+   * The signal only fires when the tool was invoked from an agent run
+   * (i.e. `mastra`, `agentId`, `threadId`, and `resourceId` are all
+   * available on the exit meta). It uses the default `ifIdle: 'wake'`
+   * behavior of `agent.sendSignal`.
+   *
+   * @experimental — depends on the experimental agent-signals API.
+   */
+  signalOnExit?: boolean | ((exit: BackgroundProcessExitMeta) => AgentSignalInput | undefined | void);
 }
 
 // =============================================================================
@@ -264,22 +284,18 @@ export interface ReadFileToolConfig extends WorkspaceToolConfig {
  *       requireApproval: true,
  *       backgroundProcesses: {
  *         onStdout: (data, { pid }) => console.log(`[PID ${pid}]`, data),
- *         // Wake the agent with a system-reminder when a long-running
- *         // background process exits. `agentId`, `threadId`, `resourceId`,
- *         // and `mastra` are present when the tool was invoked from an
- *         // agent run; null-check them so the callback also handles
- *         // workflow/CLI invocations safely.
- *         onExit: ({ pid, exitCode, stdout, stderr, mastra, agentId, threadId, resourceId }) => {
- *           if (!mastra || !agentId || !threadId || !resourceId) return;
- *           mastra.getAgentById(agentId).sendSignal(
- *             {
- *               type: 'system-reminder',
- *               contents: `Background process ${pid} exited with code ${exitCode}.\n\nstdout:\n${stdout}\n\nstderr:\n${stderr}`,
- *               attributes: { pid, exitCode },
- *             },
- *             { resourceId, threadId }, // default ifIdle: 'wake'
- *           );
- *         },
+ *         // By default, when a background process exits the invoking agent
+ *         // is woken with a `system-reminder` signal describing the exit.
+ *         // Pass `signalOnExit: false` to opt out, or a function to build a
+ *         // custom payload (return `undefined` to skip firing for this exit).
+ *         signalOnExit: (exit) =>
+ *           exit.exitCode === 0
+ *             ? undefined
+ *             : {
+ *                 type: 'system-reminder',
+ *                 contents: `pid ${exit.pid} failed (${exit.exitCode}): ${exit.stderr}`,
+ *                 attributes: { pid: exit.pid, exitCode: exit.exitCode },
+ *               },
  *       },
  *     },
  *   },

@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import type { AgentSignalInput } from '../../agent/signals';
 import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -6,6 +7,7 @@ import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
+import type { BackgroundProcessExitMeta } from './types';
 
 const NUMERIC_TIMEOUT_STRING_REGEX = /^\d+(?:\.\d+)?$/;
 
@@ -67,6 +69,23 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
     }
   }
   return { command };
+}
+
+/**
+ * Build the default `system-reminder` signal fired when a background process
+ * exits. Surfaced via `BackgroundProcessConfig.signalOnExit` defaulting to true.
+ */
+function buildDefaultExitSignal(exit: BackgroundProcessExitMeta): AgentSignalInput {
+  const stdoutNote = exit.stdoutTruncated ? `\n[stdout truncated, ${exit.stdoutDroppedBytes ?? 0} bytes dropped]` : '';
+  const stderrNote = exit.stderrTruncated ? `\n[stderr truncated, ${exit.stderrDroppedBytes ?? 0} bytes dropped]` : '';
+  return {
+    type: 'system-reminder',
+    contents:
+      `Background process ${exit.pid} exited with code ${exit.exitCode}.` +
+      `\n\nstdout:\n${exit.stdout}${stdoutNote}` +
+      `\n\nstderr:\n${exit.stderr}${stderrNote}`,
+    attributes: { pid: exit.pid, exitCode: exit.exitCode },
+  };
 }
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
@@ -185,10 +204,15 @@ async function executeCommand(input: Record<string, any>, context: any) {
         : undefined,
     });
 
-    // Wire exit callback (fire-and-forget)
-    if (bgConfig?.onExit) {
-      void handle.wait().then(result => {
-        bgConfig.onExit!({
+    // Wire exit callback + declarative signal dispatch (fire-and-forget).
+    // `signalOnExit` defaults to true: when the bg process exits we wake the
+    // invoking agent thread with a system-reminder. Users can pass `false` to
+    // opt out, or a function to build a custom payload (return `undefined`
+    // from the function to skip firing for this exit).
+    const signalOnExit = bgConfig?.signalOnExit ?? true;
+    if (bgConfig?.onExit || signalOnExit !== false) {
+      void handle.wait().then(async result => {
+        const meta: BackgroundProcessExitMeta = {
           pid: handle.pid,
           exitCode: result.exitCode,
           stdout: result.stdout,
@@ -199,7 +223,47 @@ async function executeCommand(input: Record<string, any>, context: any) {
           stderrDroppedBytes: result.stderrDroppedBytes,
           toolCallId,
           ...agentMeta,
-        });
+        };
+
+        if (bgConfig?.onExit) {
+          try {
+            bgConfig.onExit(meta);
+          } catch (err) {
+            agentMeta.mastra
+              ?.getLogger?.()
+              ?.error?.('Background process onExit callback threw', { pid: meta.pid, error: err });
+          }
+        }
+
+        if (
+          signalOnExit !== false &&
+          agentMeta.mastra &&
+          agentMeta.agentId &&
+          agentMeta.threadId &&
+          agentMeta.resourceId
+        ) {
+          let signal: AgentSignalInput | undefined | void;
+          try {
+            signal = typeof signalOnExit === 'function' ? signalOnExit(meta) : buildDefaultExitSignal(meta);
+          } catch (err) {
+            agentMeta.mastra
+              ?.getLogger?.()
+              ?.error?.('Background process signalOnExit builder threw', { pid: meta.pid, error: err });
+            return;
+          }
+          if (!signal) return;
+          try {
+            await agentMeta.mastra
+              .getAgentById(agentMeta.agentId)
+              .sendSignal(signal, { resourceId: agentMeta.resourceId, threadId: agentMeta.threadId });
+          } catch (err) {
+            agentMeta.mastra?.getLogger?.()?.error?.('Background process signalOnExit dispatch failed', {
+              pid: meta.pid,
+              exitCode: meta.exitCode,
+              error: err,
+            });
+          }
+        }
       });
     }
 
