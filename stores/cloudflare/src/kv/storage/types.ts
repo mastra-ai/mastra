@@ -47,6 +47,7 @@ import type {
   TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
   TABLE_HARNESS_CHANNEL_OUTBOX,
   TABLE_HARNESS_WAKEUPS,
+  TABLE_HARNESS_WORKSPACE_ACTIONS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -197,6 +198,7 @@ export type RecordTypes = {
   [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: Record<string, any>;
   [TABLE_HARNESS_CHANNEL_OUTBOX]: Record<string, any>;
   [TABLE_HARNESS_WAKEUPS]: Record<string, any>;
+  [TABLE_HARNESS_WORKSPACE_ACTIONS]: Record<string, any>;
 };
 
 export type ListOptions = {

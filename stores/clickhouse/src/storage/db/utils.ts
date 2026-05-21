@@ -43,6 +43,7 @@ import {
   TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
   TABLE_HARNESS_CHANNEL_OUTBOX,
   TABLE_HARNESS_WAKEUPS,
+  TABLE_HARNESS_WORKSPACE_ACTIONS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -95,6 +96,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: `ReplacingMergeTree()`,
   [TABLE_HARNESS_CHANNEL_OUTBOX]: `ReplacingMergeTree()`,
   [TABLE_HARNESS_WAKEUPS]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_WORKSPACE_ACTIONS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
