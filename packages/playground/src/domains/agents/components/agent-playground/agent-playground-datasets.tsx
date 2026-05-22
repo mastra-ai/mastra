@@ -82,7 +82,12 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
         </div>
       </ScrollArea>
 
-      <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
+      <CreateDatasetDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        targetType="agent"
+        targetIds={[agentId]}
+      />
 
       {generateDatasetId && (
         <GenerateItemsDialog datasetId={generateDatasetId} onDismiss={() => setGenerateDatasetId(null)} />
