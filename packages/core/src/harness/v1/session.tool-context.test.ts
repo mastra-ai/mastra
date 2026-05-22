@@ -35,12 +35,13 @@ describe('HarnessRequestContext — identity fields', () => {
     expect(slot.threadId).toBe(session.threadId);
     expect(slot.resourceId).toBe('u1');
     expect(slot.modeId).toBe('default');
+    expect(slot.modelId).toBeUndefined();
     expect(slot.source).toBe('parent');
     expect(slot.subagentDepth).toBe(0);
     expect(slot.parentSessionId).toBeUndefined();
   });
 
-  it('reflects per-turn mode override on modeId', async () => {
+  it('reflects per-turn mode and model overrides', async () => {
     const { harness, agent } = setupHarness({
       modes: [
         { id: 'modeA', agentId: 'default' },
@@ -49,8 +50,10 @@ describe('HarnessRequestContext — identity fields', () => {
       defaultModeId: 'modeA',
     });
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.message({ content: 'hi', mode: 'modeB' });
-    expect(getHarnessSlot(agent.streamCalls).modeId).toBe('modeB');
+    await session.message({ content: 'hi', mode: 'modeB', model: 'openai/gpt-5.5' });
+    const slot = getHarnessSlot(agent.streamCalls);
+    expect(slot.modeId).toBe('modeB');
+    expect(slot.modelId).toBe('openai/gpt-5.5');
   });
 });
 

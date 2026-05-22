@@ -7604,6 +7604,7 @@ export class Session {
       threadId: this.threadId,
       resourceId: this.resourceId,
       modeId: turn.modeId,
+      ...(turn.modelId ? { modelId: turn.modelId } : {}),
       ...(persistedRequestContext?.metadata ? { app: persistedRequestContext.metadata } : {}),
       ...(persistedRequestContext?.channel ? { channel: persistedRequestContext.channel } : {}),
       state: stateSnapshot,

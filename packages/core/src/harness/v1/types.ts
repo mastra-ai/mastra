@@ -1811,6 +1811,8 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Resolved mode id for this turn (with any per-turn overrides applied). */
   modeId: string;
+  /** Effective model id for this turn, when one has been selected. */
+  modelId?: string;
 
   /** Caller-provided application metadata after durable JSON normalization. */
   app?: Readonly<Record<string, JsonValue>>;
