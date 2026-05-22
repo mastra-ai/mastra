@@ -168,7 +168,9 @@ describe('GithubNotificationStore', () => {
       failedChecks: [{ name: 'test', status: 'failure', url: 'https://github.com/checks/test' }],
       reviews: [{ id: 'r1', author: 'coderabbitai[bot]', state: 'COMMENTED', submittedAt: '2026-01-01T00:01:00.000Z' }],
       checkedAt: '2026-01-01T00:02:00.000Z',
-      updatedAt: '2026-01-01T00:02:00.000Z',
+      checksCheckedAt: '2026-01-01T00:03:00.000Z',
+      heavyCheckedAt: '2026-01-01T00:04:00.000Z',
+      updatedAt: '2026-01-01T00:04:00.000Z',
     });
 
     await expect(store.readPrSnapshot('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject({
@@ -182,8 +184,35 @@ describe('GithubNotificationStore', () => {
       reviews: [{ id: 'r1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
     });
     await expect(
-      store.readFreshPrSnapshot('account-1', 'mastra-ai/mastra', 123, '2026-01-01T00:01:59.000Z'),
+      store.readFreshPrSnapshot(
+        'account-1',
+        'mastra-ai/mastra',
+        123,
+        '2026-01-01T00:01:59.000Z',
+        '2026-01-01T00:02:59.000Z',
+        '2026-01-01T00:03:59.000Z',
+      ),
     ).resolves.toMatchObject({ headSha: 'sha-1' });
+    await expect(
+      store.readFreshPrSnapshot(
+        'account-1',
+        'mastra-ai/mastra',
+        123,
+        '2026-01-01T00:01:59.000Z',
+        '2026-01-01T00:03:01.000Z',
+        '2026-01-01T00:03:59.000Z',
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.readFreshPrSnapshot(
+        'account-1',
+        'mastra-ai/mastra',
+        123,
+        '2026-01-01T00:01:59.000Z',
+        '2026-01-01T00:02:59.000Z',
+        '2026-01-01T00:04:01.000Z',
+      ),
+    ).resolves.toBeUndefined();
     await expect(
       store.readFreshPrSnapshot('account-1', 'mastra-ai/mastra', 123, '2026-01-01T00:02:01.000Z'),
     ).resolves.toBeUndefined();

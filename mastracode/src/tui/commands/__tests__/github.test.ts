@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { defaultGithubCommandRunnerMock } = vi.hoisted(() => ({
+const { defaultGithubCommandRunnerMock, getCurrentGitBranchAsyncMock } = vi.hoisted(() => ({
   defaultGithubCommandRunnerMock: vi.fn(),
+  getCurrentGitBranchAsyncMock: vi.fn(),
 }));
 
 vi.mock('../../../github-signals/index.js', () => ({
@@ -14,6 +15,11 @@ vi.mock('../../../github-signals/index.js', () => ({
       metadata: input,
     }),
   },
+}));
+
+vi.mock('../../../utils/project.js', async importOriginal => ({
+  ...(await importOriginal()),
+  getCurrentGitBranchAsync: getCurrentGitBranchAsyncMock,
 }));
 
 import { handleGithubCommand } from '../github.js';
@@ -34,14 +40,24 @@ function createCtx(
     getMastra: vi.fn(() => ({ getStorage: () => ({ getStore: vi.fn(async () => memory) }) })),
     sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
   };
-  const githubSignals = options.githubSignals ?? {
+  const githubSignals = {
     subscribeThread: vi.fn(),
     unsubscribeThread: vi.fn(),
     init: vi.fn(),
     syncThread: vi.fn(),
+    getSubscribeSummary: vi.fn(async () => undefined),
+    ...(options.githubSignals ?? {}),
   };
   const ctx = {
-    state: { activeGithubPrSubscriptions: [], githubSyncingPrSubscriptions: [] },
+    state: {
+      activeGithubPrSubscriptions: [],
+      githubSyncingPrSubscriptions: [],
+      projectInfo: {
+        rootPath: '/repo',
+        gitUrl: 'https://github.com/mastra-ai/mastra.git',
+        gitBranch: 'feat/github-signals',
+      },
+    },
     harness,
     githubSignals,
     showInfo: vi.fn((message: string) => infoMessages.push(message)),
@@ -55,7 +71,9 @@ function createCtx(
 describe('handleGithubCommand', () => {
   beforeEach(() => {
     defaultGithubCommandRunnerMock.mockReset();
+    getCurrentGitBranchAsyncMock.mockReset();
     defaultGithubCommandRunnerMock.mockResolvedValue({ stdout: '' });
+    getCurrentGitBranchAsyncMock.mockResolvedValue('feat/github-signals');
   });
 
   it('shows usage for invalid args', async () => {
@@ -107,50 +125,33 @@ describe('handleGithubCommand', () => {
     expect(infoMessages[0]).toContain('Subscribed to GitHub PR #123');
   });
 
-  it('includes latest review and CI status in the subscribe signal when available', async () => {
-    defaultGithubCommandRunnerMock.mockResolvedValueOnce({ stdout: '' }).mockResolvedValueOnce({
-      stdout: JSON.stringify({
-        title: 'Fix task contrast',
-        state: 'OPEN',
-        reviewDecision: 'APPROVED',
-        latestReviews: [
-          {
-            state: 'APPROVED',
-            submittedAt: '2026-05-20T17:25:20Z',
-            author: { login: 'TylerBarnes' },
-          },
-        ],
-        statusCheckRollup: [
-          { name: 'lint', conclusion: 'SUCCESS' },
-          { name: 'e2e', conclusion: 'FAILURE' },
-        ],
-      }),
-    });
+  it('includes the shared REST snapshot summary in the subscribe signal when available', async () => {
     const subscribeThread = vi.fn(async () => ({ repo: 'mastra-ai/mastra', prNumber: 123 }));
-    const { ctx } = createCtx({ githubSignals: { subscribeThread } });
+    const getSubscribeSummary = vi.fn(async () =>
+      [
+        'Current PR snapshot:',
+        '- State: OPEN — Fix task contrast',
+        '- Latest review: APPROVED by TylerBarnes at 2026-05-20T17:25:20Z',
+        '- CI: 1 failed: e2e',
+      ].join('\n'),
+    );
+    const { ctx } = createCtx({ githubSignals: { subscribeThread, getSubscribeSummary } });
 
     await handleGithubCommand(ctx, ['subscribe', '123', 'mastra-ai/mastra']);
 
-    expect(defaultGithubCommandRunnerMock).toHaveBeenNthCalledWith(2, [
-      'pr',
-      'view',
-      '123',
-      '--json',
-      'title,state,mergedAt,reviewDecision,latestReviews,statusCheckRollup,url',
-      '--repo',
-      'mastra-ai/mastra',
-    ]);
+    expect(defaultGithubCommandRunnerMock).toHaveBeenCalledTimes(1);
+    expect(getSubscribeSummary).toHaveBeenCalledWith({ repo: 'mastra-ai/mastra', prNumber: 123 });
     expect(ctx.harness.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         contents: expect.stringContaining('Latest review: APPROVED by TylerBarnes'),
-        metadata: expect.objectContaining({ summary: expect.stringContaining('CI: 1 passed, 0 pending, 1 failed') }),
+        metadata: expect.objectContaining({ summary: expect.stringContaining('CI: 1 failed: e2e') }),
       }),
     );
   });
 
-  it('discovers the current branch PR when subscribing without a PR number', async () => {
+  it('discovers the current branch PR with REST when subscribing without a PR number', async () => {
     defaultGithubCommandRunnerMock.mockResolvedValueOnce({ stdout: '' }).mockResolvedValueOnce({
-      stdout: JSON.stringify({ number: 456, url: 'https://github.com/mastra-ai/mastra/pull/456' }),
+      stdout: JSON.stringify([{ number: 456, html_url: 'https://github.com/mastra-ai/mastra/pull/456' }]),
     });
     const subscribeThread = vi.fn(async () => ({ repo: 'mastra-ai/mastra', prNumber: 456 }));
     const { ctx, memory, infoMessages } = createCtx({ githubSignals: { subscribeThread } });
@@ -158,7 +159,16 @@ describe('handleGithubCommand', () => {
     await handleGithubCommand(ctx, ['subscribe']);
 
     expect(defaultGithubCommandRunnerMock).toHaveBeenNthCalledWith(1, ['auth', 'status']);
-    expect(defaultGithubCommandRunnerMock).toHaveBeenNthCalledWith(2, ['pr', 'view', '--json', 'number,url']);
+    expect(defaultGithubCommandRunnerMock).toHaveBeenNthCalledWith(2, [
+      'api',
+      'repos/mastra-ai/mastra/pulls',
+      '-F',
+      'head=mastra-ai:feat/github-signals',
+      '-F',
+      'state=open',
+      '-F',
+      'per_page=1',
+    ]);
     expect(subscribeThread).toHaveBeenCalledWith({
       memory,
       resourceId: 'resource-1',

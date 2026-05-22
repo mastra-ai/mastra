@@ -160,7 +160,14 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     const checksStaleBefore = options.checksStaleBefore ?? staleBefore;
     const heavyStaleBefore = options.heavyStaleBefore ?? checksStaleBefore;
     if (!options.force) {
-      const freshSnapshot = await this.store.readFreshPrSnapshot(this.accountKey, repo, prNumber, staleBefore);
+      const freshSnapshot = await this.store.readFreshPrSnapshot(
+        this.accountKey,
+        repo,
+        prNumber,
+        staleBefore,
+        checksStaleBefore,
+        heavyStaleBefore,
+      );
       if (freshSnapshot) return freshSnapshot;
     }
 
@@ -171,7 +178,14 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       return await this.#withMasterHeartbeat(async () => {
         await this.#heartbeatOrAbort();
         if (!options.force) {
-          const freshSnapshot = await this.store.readFreshPrSnapshot(this.accountKey, repo, prNumber, staleBefore);
+          const freshSnapshot = await this.store.readFreshPrSnapshot(
+            this.accountKey,
+            repo,
+            prNumber,
+            staleBefore,
+            checksStaleBefore,
+            heavyStaleBefore,
+          );
           if (freshSnapshot) return freshSnapshot;
         }
 

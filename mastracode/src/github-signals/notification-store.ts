@@ -427,10 +427,19 @@ export class GithubNotificationStore {
     repo: string,
     prNumber: number,
     staleBefore: string,
+    checksStaleBefore = staleBefore,
+    heavyStaleBefore = checksStaleBefore,
   ): Promise<GithubPrSnapshotCache | undefined> {
     const snapshot = await this.readPrSnapshot(accountKey, repo, prNumber);
     if (!snapshot) return undefined;
-    return Date.parse(snapshot.checkedAt) > Date.parse(staleBefore) ? snapshot : undefined;
+    const checkedAt = Date.parse(snapshot.checkedAt);
+    const checksCheckedAt = Date.parse(snapshot.checksCheckedAt ?? snapshot.heavyCheckedAt ?? snapshot.checkedAt);
+    const heavyCheckedAt = Date.parse(snapshot.heavyCheckedAt ?? snapshot.checkedAt);
+    return checkedAt > Date.parse(staleBefore) &&
+      checksCheckedAt > Date.parse(checksStaleBefore) &&
+      heavyCheckedAt > Date.parse(heavyStaleBefore)
+      ? snapshot
+      : undefined;
   }
 
   async upsertPrSnapshot(accountKey: string, snapshot: GithubPrSnapshotCache): Promise<void> {

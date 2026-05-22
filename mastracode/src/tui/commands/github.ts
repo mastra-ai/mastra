@@ -1,4 +1,5 @@
 import { defaultGithubCommandRunner, ghSignals } from '../../github-signals/index.js';
+import { getCurrentGitBranchAsync } from '../../utils/project.js';
 import { addGithubPrSubscriptionBadge, removeGithubPrSubscriptionBadge } from '../state.js';
 import type { GithubPrSubscriptionBadge } from '../state.js';
 import type { SlashCommandContext } from './types.js';
@@ -14,10 +15,13 @@ function parsePrNumber(value: string | undefined): number | undefined {
   return Number.isInteger(prNumber) && prNumber > 0 ? prNumber : undefined;
 }
 
-function parseRepoFromPullRequestUrl(url: string | undefined): string | undefined {
+function parseRepoFromGithubUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
-  const match = /^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/.exec(url);
-  return match?.[1];
+  const normalized = url.trim().replace(/\.git$/, '');
+  const httpsMatch = /^https?:\/\/github\.com\/([^/]+\/[^/]+)(?:\/.*)?$/.exec(normalized);
+  if (httpsMatch) return httpsMatch[1];
+  const sshMatch = /^(?:ssh:\/\/)?git@github\.com[:/]([^/]+\/[^/]+)$/.exec(normalized);
+  return sshMatch?.[1];
 }
 
 function getGithubCommandErrorMessage(error: unknown) {
@@ -40,64 +44,41 @@ export async function ensureGithubCliAuthenticated(): Promise<string | undefined
   }
 }
 
-async function discoverCurrentPullRequest(): Promise<{ prNumber: number; repo?: string } | undefined> {
+async function discoverCurrentPullRequest(
+  ctx: SlashCommandContext,
+): Promise<{ prNumber: number; repo?: string } | undefined> {
+  const repo = parseRepoFromGithubUrl(ctx.state.projectInfo.gitUrl);
+  if (!repo) return undefined;
+
+  const branch = (await getCurrentGitBranchAsync(ctx.state.projectInfo.rootPath)) ?? ctx.state.projectInfo.gitBranch;
+  if (!branch || branch === 'HEAD') return undefined;
+
   try {
-    const result = await defaultGithubCommandRunner(['pr', 'view', '--json', 'number,url']);
-    const parsed = JSON.parse(result.stdout) as { number?: unknown; url?: unknown };
-    const prNumber = typeof parsed.number === 'number' ? parsed.number : undefined;
+    const [owner] = repo.split('/');
+    const result = await defaultGithubCommandRunner([
+      'api',
+      `repos/${repo}/pulls`,
+      '-F',
+      `head=${owner}:${branch}`,
+      '-F',
+      'state=open',
+      '-F',
+      'per_page=1',
+    ]);
+    const parsed = JSON.parse(result.stdout) as unknown;
+    const pullRequest = Array.isArray(parsed) ? parsed[0] : undefined;
+    if (!pullRequest || typeof pullRequest !== 'object') return undefined;
+    const record = pullRequest as Record<string, unknown>;
+    const prNumber = typeof record.number === 'number' ? record.number : undefined;
     if (!prNumber || !Number.isInteger(prNumber) || prNumber <= 0) return undefined;
 
     return {
       prNumber,
-      ...(typeof parsed.url === 'string' ? { repo: parseRepoFromPullRequestUrl(parsed.url) } : {}),
+      ...(typeof record.html_url === 'string' ? { repo: parseRepoFromGithubUrl(record.html_url) ?? repo } : { repo }),
     };
   } catch {
     return undefined;
   }
-}
-
-async function getSubscribeSummary(prNumber: number, repo: string | undefined): Promise<string | undefined> {
-  try {
-    const args = [
-      'pr',
-      'view',
-      String(prNumber),
-      '--json',
-      'title,state,mergedAt,reviewDecision,latestReviews,statusCheckRollup,url',
-    ];
-    if (repo) args.push('--repo', repo);
-    const result = await defaultGithubCommandRunner(args);
-    const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
-    return formatSubscribeSummary(parsed);
-  } catch {
-    return undefined;
-  }
-}
-
-function formatSubscribeSummary(pr: Record<string, unknown>): string {
-  const lines = ['Current PR snapshot:'];
-  const title = typeof pr.title === 'string' ? pr.title : undefined;
-  const state = typeof pr.state === 'string' ? pr.state : undefined;
-  const mergedAt = typeof pr.mergedAt === 'string' ? pr.mergedAt : undefined;
-  lines.push(`- State: ${state ?? 'unknown'}${mergedAt ? ` at ${mergedAt}` : ''}${title ? ` — ${title}` : ''}`);
-
-  const latestReview = Array.isArray(pr.latestReviews) ? pr.latestReviews.at(-1) : undefined;
-  if (latestReview && typeof latestReview === 'object') {
-    const review = latestReview as Record<string, unknown>;
-    const author =
-      review.author && typeof review.author === 'object' ? (review.author as Record<string, unknown>).login : undefined;
-    const reviewState = typeof review.state === 'string' ? review.state : undefined;
-    const submittedAt = typeof review.submittedAt === 'string' ? review.submittedAt : undefined;
-    lines.push(
-      `- Latest review: ${reviewState ?? 'unknown'}${author ? ` by ${author}` : ''}${submittedAt ? ` at ${submittedAt}` : ''}`,
-    );
-  } else {
-    const reviewDecision = typeof pr.reviewDecision === 'string' ? pr.reviewDecision : undefined;
-    lines.push(`- Review: ${reviewDecision ?? 'none yet'}`);
-  }
-
-  lines.push(`- CI: ${formatStatusCheckSummary(pr.statusCheckRollup)}`);
-  return lines.join('\n');
 }
 
 function resolveRepoFromActiveBadges(
@@ -112,30 +93,6 @@ function resolveRepoFromActiveBadges(
     return { error: `Multiple active GitHub PR #${prNumber} subscriptions exist. Pass the repo explicitly.` };
   }
   return {};
-}
-
-function formatStatusCheckSummary(statusCheckRollup: unknown): string {
-  if (!Array.isArray(statusCheckRollup) || statusCheckRollup.length === 0) return 'no checks reported';
-  const counts = { failed: 0, pending: 0, passed: 0 };
-  const failedNames: string[] = [];
-  for (const check of statusCheckRollup) {
-    if (!check || typeof check !== 'object') continue;
-    const record = check as Record<string, unknown>;
-    const state = typeof record.state === 'string' ? record.state.toLowerCase() : undefined;
-    const conclusion = typeof record.conclusion === 'string' ? record.conclusion.toLowerCase() : undefined;
-    const name = typeof record.name === 'string' ? record.name : undefined;
-    if (state === 'failure' || conclusion === 'failure' || conclusion === 'timed_out' || conclusion === 'cancelled') {
-      counts.failed += 1;
-      if (name) failedNames.push(name);
-    } else if (state === 'pending' || state === 'queued' || state === 'in_progress' || !conclusion) {
-      counts.pending += 1;
-    } else if (state === 'success' || conclusion === 'success') {
-      counts.passed += 1;
-    }
-  }
-  const parts = [`${counts.passed} passed`, `${counts.pending} pending`, `${counts.failed} failed`];
-  if (failedNames.length > 0) parts.push(`failed: ${failedNames.slice(0, 3).join(', ')}`);
-  return parts.join(', ');
 }
 
 async function getGithubMemory(ctx: SlashCommandContext) {
@@ -194,7 +151,7 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
   }
 
   if (action === 'subscribe' && !prNumber) {
-    const discovered = await discoverCurrentPullRequest();
+    const discovered = await discoverCurrentPullRequest(ctx);
     if (!discovered) {
       ctx.showError('Could not find a GitHub PR for the current branch. Pass a PR number explicitly.');
       return;
@@ -234,7 +191,7 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
       ...(subscription.repo ? { repo: subscription.repo } : {}),
     });
     ctx.updateStatusLine();
-    const summary = await getSubscribeSummary(subscription.prNumber, subscription.repo);
+    const summary = await ctx.githubSignals.getSubscribeSummary(subscription);
     const signal = ctx.harness.sendSignal(
       ghSignals.prSubscribe({
         prNumber: subscription.prNumber,

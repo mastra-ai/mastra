@@ -1219,6 +1219,16 @@ export class GithubSignals {
 
   async getSubscribeSummary(subscription: GithubPRSubscriptionMetadata): Promise<string | undefined> {
     try {
+      if (this.#notificationPoller && subscription.repo) {
+        const snapshot = await this.#notificationPoller.refreshPullRequestSnapshot(
+          subscription.repo,
+          subscription.prNumber,
+          {
+            force: true,
+          },
+        );
+        if (snapshot) return formatSubscribeSnapshotSummary(prSnapshotCacheToSnapshot(snapshot));
+      }
       return formatSubscribeSnapshotSummary(await this.#loadPullRequestSnapshot(subscription));
     } catch {
       return undefined;
