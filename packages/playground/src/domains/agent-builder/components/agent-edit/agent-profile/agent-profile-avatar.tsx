@@ -20,8 +20,8 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   const agentColor = useAgentColor();
 
   const interactive = !disabled && features.avatarUpload;
-  const avatarColor = agentColor?.background;
-  const avatarTextColor = agentColor?.foreground;
+  const avatarColor = agentColor.background;
+  const avatarTextColor = agentColor.foreground;
 
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

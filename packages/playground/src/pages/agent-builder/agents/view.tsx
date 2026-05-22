@@ -63,7 +63,7 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
   if (hasBrowser) {
     return (
       <FormProvider {...formMethods}>
-        <AgentColorProvider>
+        <AgentColorProvider agentId={agentId}>
           <BrowserToolCallsProvider>
             <BrowserSessionProvider agentId={agentId} threadId={threadId}>
               {body}
@@ -76,7 +76,7 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
 
   return (
     <FormProvider {...formMethods}>
-      <AgentColorProvider>{body}</AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>{body}</AgentColorProvider>
     </FormProvider>
   );
 };

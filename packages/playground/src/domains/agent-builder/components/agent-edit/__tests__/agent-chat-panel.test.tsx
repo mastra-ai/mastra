@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentColorProvider } from '../../../contexts/agent-color-context';
 import { AgentChatPanel } from '../agent-chat-panel';
 
 const sentMessages: Array<{ message: string; threadId?: string }> = [];
@@ -37,7 +38,9 @@ const renderPanel = () =>
   render(
     <TooltipProvider>
       <MemoryRouter>
-        <AgentChatPanel agentId="agent-test" agentName="My Agent" agentDescription="It does things" />
+        <AgentColorProvider agentId="agent-test">
+          <AgentChatPanel agentId="agent-test" agentName="My Agent" agentDescription="It does things" />
+        </AgentColorProvider>
       </MemoryRouter>
     </TooltipProvider>,
   );

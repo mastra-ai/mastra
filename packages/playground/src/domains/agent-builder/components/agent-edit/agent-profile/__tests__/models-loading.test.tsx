@@ -32,7 +32,7 @@ const FormHarness = ({ children }: { children: ReactNode }) => {
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
     </FormProvider>
   );
 };

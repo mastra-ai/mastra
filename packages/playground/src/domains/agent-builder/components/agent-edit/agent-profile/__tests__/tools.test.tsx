@@ -8,10 +8,15 @@ import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
 import { Tools } from '../tools';
 
-const FormHarness = ({ agentName = '', children }: { agentName?: string; children: ReactNode }) => {
+const FormHarness = ({
+  agentId = 'agent_test',
+  children,
+}: {
+  agentId?: string;
+  children: ReactNode;
+}) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
-      name: agentName,
       tools: {},
       agents: {},
       workflows: {},
@@ -19,7 +24,7 @@ const FormHarness = ({ agentName = '', children }: { agentName?: string; childre
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
     </FormProvider>
   );
 };
@@ -34,9 +39,9 @@ describe('Tools', () => {
     cleanup();
   });
 
-  it('paints the selected tool container and check cell with border-based HSL when a name is set', () => {
+  it('paints the selected tool container and check cell with border-based HSL when an agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness agentName="Support agent">
+      <FormHarness>
         <Tools availableAgentTools={availableTools} />
       </FormHarness>,
     );
@@ -57,28 +62,9 @@ describe('Tools', () => {
     expect(check.className).not.toContain('bg-accent1');
   });
 
-  it('falls back to accent classes for selected tiles when no agent name is set', () => {
+  it('leaves unselected tile borders untouched while using agent color for focus when an agentId is provided', () => {
     const { getByTestId } = render(
       <FormHarness>
-        <Tools availableAgentTools={availableTools} />
-      </FormHarness>,
-    );
-
-    const container = getByTestId('tool-card-tool-checked-tool') as HTMLButtonElement;
-    const check = getByTestId('tool-card-check-tool-checked-tool') as HTMLSpanElement;
-
-    expect(container.getAttribute('style')).toBeNull();
-    expect(container.className).toContain('border-accent1');
-    expect(container.className).toContain('ring-accent1');
-
-    expect(check.getAttribute('style')).toBeNull();
-    expect(check.className).toContain('border-accent1');
-    expect(check.className).toContain('bg-accent1');
-  });
-
-  it('leaves unselected tile borders untouched while using agent color for focus when a name is set', () => {
-    const { getByTestId } = render(
-      <FormHarness agentName="Support agent">
         <Tools availableAgentTools={availableTools} />
       </FormHarness>,
     );
@@ -178,9 +164,9 @@ describe('Tools', () => {
     expect(checkbox.className).toContain('[&_svg]:h-2.5');
   });
 
-  it('paints the filter checkbox with the agent color when checked and a name is set', () => {
+  it('paints the filter checkbox with the agent color only when the filter is checked', () => {
     const { getByTestId } = render(
-      <FormHarness agentName="Support agent">
+      <FormHarness>
         <Tools availableAgentTools={availableTools} />
       </FormHarness>,
     );
@@ -192,19 +178,6 @@ describe('Tools', () => {
 
     expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
     expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-  });
-
-  it('does not apply an inline style to the filter checkbox when no agent name is set', () => {
-    const { getByTestId } = render(
-      <FormHarness>
-        <Tools availableAgentTools={availableTools} />
-      </FormHarness>,
-    );
-
-    const checkbox = getByTestId('tools-only-selected-filter-checkbox') as HTMLButtonElement;
-    fireEvent.click(checkbox);
-
-    expect(checkbox.getAttribute('style')).toBeNull();
   });
 
   it('renders the search input and the filter checkbox in the same flex row', () => {

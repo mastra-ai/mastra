@@ -6,6 +6,7 @@ import type { UseFormReturn } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentColorProvider } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
@@ -128,7 +129,9 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
     <TooltipProvider>
       <MemoryRouter>
-        <FormProvider {...methods}>{children}</FormProvider>
+        <FormProvider {...methods}>
+          <AgentColorProvider agentId="agent-test">{children}</AgentColorProvider>
+        </FormProvider>
       </MemoryRouter>
     </TooltipProvider>
   );

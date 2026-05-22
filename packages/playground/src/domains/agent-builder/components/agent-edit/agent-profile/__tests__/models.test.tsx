@@ -31,16 +31,21 @@ vi.mock('@/domains/llm', () => ({
   }),
 }));
 
-const FormHarness = ({ agentName = '', children }: { agentName?: string; children: ReactNode }) => {
+const FormHarness = ({
+  agentId = 'agent_test',
+  children,
+}: {
+  agentId?: string;
+  children: ReactNode;
+}) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
-      name: agentName,
       model: { provider: 'openai', name: 'gpt-4o' },
     } as AgentBuilderEditFormValues,
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
     </FormProvider>
   );
 };
@@ -50,9 +55,9 @@ describe('Models', () => {
     cleanup();
   });
 
-  it('paints the selected model container and check cell with border-based HSL when a name is set', () => {
+  it('paints the selected model container and check cell with border-based HSL when an agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness agentName="Support agent">
+      <FormHarness>
         <Models />
       </FormHarness>,
     );
@@ -72,28 +77,9 @@ describe('Models', () => {
     expect(check.className).not.toContain('bg-accent1');
   });
 
-  it('falls back to accent classes for selected models when no agent name is set', () => {
+  it('leaves unselected model borders untouched while using agent color for focus when an agentId is provided', () => {
     const { getByTestId } = render(
       <FormHarness>
-        <Models />
-      </FormHarness>,
-    );
-
-    const container = getByTestId('model-card-openai-gpt-4o') as HTMLButtonElement;
-    const check = getByTestId('model-card-check-openai-gpt-4o') as HTMLSpanElement;
-
-    expect(container.getAttribute('style')).toBeNull();
-    expect(container.className).toContain('border-accent1');
-    expect(container.className).toContain('ring-accent1');
-
-    expect(check.getAttribute('style')).toBeNull();
-    expect(check.className).toContain('border-accent1');
-    expect(check.className).toContain('bg-accent1');
-  });
-
-  it('leaves unselected model borders untouched while using agent color for focus when a name is set', () => {
-    const { getByTestId } = render(
-      <FormHarness agentName="Support agent">
         <Models />
       </FormHarness>,
     );
@@ -191,9 +177,9 @@ describe('Models', () => {
     expect(getByText('Select at least one provider to see models')).toBeTruthy();
   });
 
-  it('paints the checked provider badge with agent color when an agent name is set', () => {
+  it('paints the checked provider badge with agent color when an agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness agentName="Support agent">
+      <FormHarness>
         <Models />
       </FormHarness>,
     );
@@ -209,25 +195,9 @@ describe('Models', () => {
     expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
   });
 
-  it('falls back to accent classes on the checked provider badge when no agent name is set', () => {
-    const { getByTestId } = render(
-      <FormHarness>
-        <Models />
-      </FormHarness>,
-    );
-
-    const badge = getByTestId('model-provider-filter-badge-openai') as HTMLLabelElement;
-    expect(badge.getAttribute('style')).toBeNull();
-    expect(badge.className).toContain('border-accent1');
-
-    const checkbox = getByTestId('model-provider-filter-checkbox-openai') as HTMLButtonElement;
-    expect(checkbox.getAttribute('style')).toBeNull();
-    expect(checkbox.className).toContain('data-[state=checked]:bg-accent1');
-  });
-
   it('combines provider filter and search: searching for a hidden provider yields the search empty state', async () => {
     const { getByTestId, findByText } = render(
-      <FormHarness agentName="Support agent">
+      <FormHarness>
         <Models />
       </FormHarness>,
     );

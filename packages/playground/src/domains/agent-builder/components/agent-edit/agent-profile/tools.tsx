@@ -19,14 +19,13 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
   const [search, setSearch] = useState('');
   const [onlySelected, setOnlySelected] = useState(false);
 
-  const filterCheckboxStyle: CSSProperties | undefined =
-    onlySelected && agentColor
-      ? {
-          backgroundColor: agentColor.background,
-          borderColor: agentColor.background,
-          color: agentColor.foreground,
-        }
-      : undefined;
+  const filterCheckboxStyle: CSSProperties | undefined = onlySelected
+    ? {
+        backgroundColor: agentColor.background,
+        borderColor: agentColor.background,
+        color: agentColor.foreground,
+      }
+    : undefined;
 
   const toggle = (item: AgentTool, next: boolean) => {
     const fieldName = item.type === 'agent' ? 'agents' : item.type === 'workflow' ? 'workflows' : 'tools';

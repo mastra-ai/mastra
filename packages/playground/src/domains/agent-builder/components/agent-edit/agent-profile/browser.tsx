@@ -1,4 +1,4 @@
-import { StatusBadge, Switch, Txt, cn } from '@mastra/playground-ui';
+import { StatusBadge, Switch, Txt } from '@mastra/playground-ui';
 import { GlobeIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -21,20 +21,14 @@ export const Browser = ({ editable = true }: BrowserProps) => {
     setValue('browserEnabled', next, { shouldDirty: true });
   };
 
-  const iconStyle: CSSProperties | undefined = agentColor
-    ? { backgroundColor: agentColor.background, color: agentColor.foreground }
-    : undefined;
+  const iconStyle: CSSProperties = { backgroundColor: agentColor.background, color: agentColor.foreground };
 
-  const switchStyle: CSSProperties | undefined =
-    browserEnabled && agentColor ? { backgroundColor: agentColor.tint } : undefined;
+  const switchStyle: CSSProperties | undefined = browserEnabled ? { backgroundColor: agentColor.tint } : undefined;
 
   return (
     <div className="flex h-full min-h-0 items-center justify-center px-6 py-8" data-testid="browser-detail-picker">
       <div className="flex w-full max-w-[28rem] flex-col items-center gap-5 text-center">
-        <div
-          className={cn('grid size-14 place-items-center rounded-full', !agentColor && 'bg-accent1/10 text-accent1')}
-          style={iconStyle}
-        >
+        <div className="grid size-14 place-items-center rounded-full" style={iconStyle}>
           <GlobeIcon className="h-7 w-7" />
         </div>
 

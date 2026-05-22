@@ -7,19 +7,18 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { AgentProfileHero } from '../agent-profile-hero';
 
-const FormHarness = ({ agentName = '', children }: { agentName?: string; children: ReactNode }) => {
+const FormHarness = ({ children }: { children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
-    defaultValues: { name: agentName } as AgentBuilderEditFormValues,
+    defaultValues: {} as AgentBuilderEditFormValues,
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
     </FormProvider>
   );
 };
 
-const renderHero = (ui: ReactNode, { agentName = '' }: { agentName?: string } = {}) =>
-  render(<FormHarness agentName={agentName}>{ui}</FormHarness>);
+const renderHero = (ui: ReactNode) => render(<FormHarness>{ui}</FormHarness>);
 
 describe('AgentProfileHero', () => {
   afterEach(() => {

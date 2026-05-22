@@ -13,11 +13,9 @@ export interface AgentStepContainerProps {
 export const AgentStepContainer = ({ children, cta, title, description }: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
   const formState = useFormState();
-  const bannerStyle = agentColor
-    ? {
-        backgroundImage: `linear-gradient(to bottom right, ${agentColor.background}, ${agentColor.foreground})`,
-      }
-    : undefined;
+  const bannerStyle = {
+    backgroundImage: `linear-gradient(to bottom right, ${agentColor.background}, ${agentColor.foreground})`,
+  };
 
   const isDirty = formState.dirtyFields.name;
 
