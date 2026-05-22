@@ -6,6 +6,7 @@ import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
   chunkToFallbackMessage,
+  editOrPostMessage,
   postFileAttachment,
   postStreamError,
   postTripwire,
@@ -101,19 +102,8 @@ export async function runStaticDriver({
     textBuffer = '';
   };
 
-  const editOrPost = async (messageId: string | undefined, content: PostableMessage) => {
-    if (messageId) {
-      try {
-        await adapter.editMessage(sdkThread.id, messageId, content);
-        return messageId;
-      } catch {
-        const sent = await sdkThread.post(content);
-        return sent?.id;
-      }
-    }
-    const sent = await sdkThread.post(content);
-    return sent?.id;
-  };
+  const editOrPost = (messageId: string | undefined, content: PostableMessage) =>
+    editOrPostMessage({ adapter, sdkThread, messageId, message: content, logger });
 
   const resetRunState = () => {
     textBuffer = '';

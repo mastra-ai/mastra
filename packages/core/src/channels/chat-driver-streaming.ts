@@ -8,6 +8,7 @@ import { asOmChunk, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
+  editOrPostMessage,
   postFileAttachment,
   postStreamError,
   postTripwire,
@@ -305,19 +306,7 @@ export async function runStreamingDriver({
 
   const editOrPost = async (messageId: string | undefined, message: PostableMessage): Promise<void> => {
     await closeSession();
-    if (messageId) {
-      try {
-        await adapter.editMessage(sdkThread.id, messageId, message);
-        return;
-      } catch (e) {
-        logger?.debug?.('[CHANNEL] streaming edit failed, falling back to post', { error: e });
-      }
-    }
-    try {
-      await sdkThread.post(message);
-    } catch (e) {
-      logger?.debug?.('[CHANNEL] streaming edit-fallback post failed', { error: e });
-    }
+    await editOrPostMessage({ adapter, sdkThread, messageId, message, logger });
   };
 
   for await (const chunk of stream) {

@@ -1,4 +1,4 @@
-import type { StreamChunk, Thread } from 'chat';
+import type { Adapter, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import {
@@ -286,6 +286,41 @@ export async function postFileAttachment(args: {
     >[0]);
   } catch (e) {
     logger?.debug?.('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
+  }
+}
+
+/**
+ * Edit an existing message by id when one was previously posted, otherwise
+ * post a fresh one. Both drivers use this for the per-tool card lifecycle
+ * (post "Running…" → edit with result/error/approval). If the edit fails
+ * (e.g. the original message was deleted), falls back to posting a new one.
+ *
+ * Returns the resulting message id — the static driver tracks this so a
+ * later `tool-result` can edit the same card; the streaming driver doesn't
+ * persist follow-up edits past the result, so it ignores the return value.
+ */
+export async function editOrPostMessage(args: {
+  adapter: Pick<Adapter<any, any>, 'editMessage'>;
+  sdkThread: Pick<Thread, 'id' | 'post'>;
+  messageId: string | undefined;
+  message: PostableMessage;
+  logger?: IMastraLogger;
+}): Promise<string | undefined> {
+  const { adapter, sdkThread, messageId, message, logger } = args;
+  if (messageId) {
+    try {
+      await adapter.editMessage(sdkThread.id, messageId, message);
+      return messageId;
+    } catch (e) {
+      logger?.debug?.('[CHANNEL] edit failed, falling back to post', { error: e });
+    }
+  }
+  try {
+    const sent = await sdkThread.post(message);
+    return sent?.id;
+  } catch (e) {
+    logger?.debug?.('[CHANNEL] edit-fallback post failed', { error: e });
+    return undefined;
   }
 }
 
