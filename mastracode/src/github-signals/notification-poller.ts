@@ -148,7 +148,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
   async refreshPullRequestSnapshot(
     repo: string,
     prNumber: number,
-    options: { staleBefore?: string; heavyStaleBefore?: string; force?: boolean } = {},
+    options: { staleBefore?: string; checksStaleBefore?: string; heavyStaleBefore?: string; force?: boolean } = {},
   ): Promise<GithubPrSnapshotCache | undefined> {
     const state = await this.store.getAccountState(this.accountKey);
     if (state.rateLimitedUntil && Date.parse(state.rateLimitedUntil) > this.#now().getTime()) {
@@ -157,7 +157,8 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
 
     const staleBefore =
       options.staleBefore ?? new Date(this.#now().getTime() - DEFAULT_SNAPSHOT_REFRESH_MS).toISOString();
-    const heavyStaleBefore = options.heavyStaleBefore ?? staleBefore;
+    const checksStaleBefore = options.checksStaleBefore ?? staleBefore;
+    const heavyStaleBefore = options.heavyStaleBefore ?? checksStaleBefore;
     if (!options.force) {
       const freshSnapshot = await this.store.readFreshPrSnapshot(this.accountKey, repo, prNumber, staleBefore);
       if (freshSnapshot) return freshSnapshot;
@@ -175,11 +176,17 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
         }
 
         const previous = await this.store.readPrSnapshot(this.accountKey, repo, prNumber);
+        const checksCheckedAt = previous?.checksCheckedAt ?? previous?.heavyCheckedAt ?? previous?.checkedAt;
         const heavyCheckedAt = previous?.heavyCheckedAt ?? previous?.checkedAt;
+        const refreshCheckFields =
+          options.force || !previous || !checksCheckedAt || Date.parse(checksCheckedAt) < Date.parse(checksStaleBefore);
         const refreshHeavyFields =
           options.force || !previous || !heavyCheckedAt || Date.parse(heavyCheckedAt) < Date.parse(heavyStaleBefore);
         await this.#heartbeatOrAbort();
-        const snapshot = await this.#loadPullRequestSnapshot(repo, prNumber, previous, refreshHeavyFields);
+        const snapshot = await this.#loadPullRequestSnapshot(repo, prNumber, previous, {
+          refreshCheckFields,
+          refreshHeavyFields,
+        });
         await this.#heartbeatOrAbort();
         await this.store.upsertPrSnapshot(this.accountKey, snapshot);
         return snapshot;
@@ -205,23 +212,23 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     repo: string,
     prNumber: number,
     previous: GithubPrSnapshotCache | undefined,
-    refreshHeavyFields: boolean,
+    options: { refreshCheckFields: boolean; refreshHeavyFields: boolean },
   ): Promise<GithubPrSnapshotCache> {
     const { stdout: pullRequestStdout } = await this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}`]);
     const pullRequest = parseJsonObject(pullRequestStdout);
     const headSha = getString(pullRequest, ['head', 'sha']);
 
     await this.#heartbeatOrAbort();
-    const [reviewsStdout, checksStdout] = refreshHeavyFields
-      ? await Promise.all([
-          this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}/reviews`, '--paginate', '--slurp']).then(
+    const [reviewsStdout, checksStdout] = await Promise.all([
+      options.refreshHeavyFields
+        ? this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}/reviews`, '--paginate', '--slurp']).then(
             result => result.stdout,
-          ),
-          headSha
-            ? this.#commandRunner(['api', `repos/${repo}/commits/${headSha}/check-runs`]).then(result => result.stdout)
-            : Promise.resolve(undefined),
-        ])
-      : [undefined, undefined];
+          )
+        : Promise.resolve(undefined),
+      options.refreshCheckFields && headSha
+        ? this.#commandRunner(['api', `repos/${repo}/commits/${headSha}/check-runs`]).then(result => result.stdout)
+        : Promise.resolve(undefined),
+    ]);
 
     const reviews = reviewsStdout
       ? parseJsonArray(reviewsStdout)
@@ -252,7 +259,8 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       failedChecks: checks,
       reviews,
       checkedAt,
-      heavyCheckedAt: refreshHeavyFields ? checkedAt : previous?.heavyCheckedAt,
+      checksCheckedAt: options.refreshCheckFields ? checkedAt : previous?.checksCheckedAt,
+      heavyCheckedAt: options.refreshHeavyFields ? checkedAt : previous?.heavyCheckedAt,
       updatedAt: checkedAt,
     };
   }

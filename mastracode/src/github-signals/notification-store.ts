@@ -43,6 +43,7 @@ export interface GithubPrSnapshotCache {
   failedChecks?: Array<{ name: string; status: string; url?: string }>;
   reviews?: Array<{ id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string }>;
   checkedAt: string;
+  checksCheckedAt?: string;
   heavyCheckedAt?: string;
   updatedAt: string;
 }
@@ -93,6 +94,7 @@ interface GithubPrSnapshotRow {
   failed_checks_json: string | null;
   reviews_json: string | null;
   checked_at: string;
+  checks_checked_at: string | null;
   heavy_checked_at: string | null;
   updated_at: string;
 }
@@ -437,8 +439,8 @@ export class GithubNotificationStore {
     await this.#execute({
       sql: `INSERT INTO github_pr_snapshots (
           account_key, repo, pr_number, title, url, state, merged, closed_at, merged_at, mergeable_json,
-          mergeable_state, head_sha, failed_checks_json, reviews_json, checked_at, heavy_checked_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          mergeable_state, head_sha, failed_checks_json, reviews_json, checked_at, checks_checked_at, heavy_checked_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(account_key, repo, pr_number) DO UPDATE SET
           title = excluded.title,
           url = excluded.url,
@@ -452,6 +454,7 @@ export class GithubNotificationStore {
           failed_checks_json = excluded.failed_checks_json,
           reviews_json = excluded.reviews_json,
           checked_at = excluded.checked_at,
+          checks_checked_at = excluded.checks_checked_at,
           heavy_checked_at = excluded.heavy_checked_at,
           updated_at = excluded.updated_at`,
       args: [
@@ -470,6 +473,7 @@ export class GithubNotificationStore {
         JSON.stringify(snapshot.failedChecks ?? []),
         JSON.stringify(snapshot.reviews ?? []),
         snapshot.checkedAt,
+        snapshot.checksCheckedAt ?? null,
         snapshot.heavyCheckedAt ?? null,
         snapshot.updatedAt,
       ],
@@ -646,10 +650,12 @@ export class GithubNotificationStore {
       failed_checks_json TEXT,
       reviews_json TEXT,
       checked_at TEXT NOT NULL,
+      checks_checked_at TEXT,
       heavy_checked_at TEXT,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (account_key, repo, pr_number)
     )`);
+    await this.#addColumnIfMissing('github_pr_snapshots', 'checks_checked_at', 'TEXT');
     await this.#addColumnIfMissing('github_pr_snapshots', 'heavy_checked_at', 'TEXT');
     await this.#execute(
       'CREATE INDEX IF NOT EXISTS idx_github_pr_snapshots_checked ON github_pr_snapshots(account_key, repo, pr_number, checked_at)',
@@ -738,6 +744,7 @@ function rowToPrSnapshot(row: GithubPrSnapshotRow): GithubPrSnapshotCache {
     failedChecks: parseFailedChecks(row.failed_checks_json) ?? [],
     reviews: parseReviews(row.reviews_json) ?? [],
     checkedAt: row.checked_at,
+    checksCheckedAt: row.checks_checked_at ?? row.heavy_checked_at ?? row.checked_at,
     heavyCheckedAt: row.heavy_checked_at ?? row.checked_at,
     updatedAt: row.updated_at,
   };

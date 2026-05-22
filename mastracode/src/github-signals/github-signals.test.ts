@@ -2299,7 +2299,7 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
-  it('refreshes PR state for conflicts before the heavy snapshot interval expires', async () => {
+  it('refreshes PR state and checks before the heavy review interval expires', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const currentTime = Date.parse('2026-01-02T00:04:00.000Z');
     const now = () => new Date(currentTime);
@@ -2358,7 +2358,7 @@ describe('GithubSignals', () => {
     ).toHaveLength(0);
     expect(
       commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/commits/sha-conflict/check-runs'),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ attributes: expect.objectContaining({ type: 'github-pr-conflict', pr: 123 }) }),
       expect.anything(),

@@ -288,12 +288,10 @@ describe('GithubNotificationPoller', () => {
     });
     const prDetailsCalls = () =>
       commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123');
-    const heavyCalls = () =>
-      commandRunner.mock.calls.filter(
-        call =>
-          call[0][1] === 'repos/mastra-ai/mastra/pulls/123/reviews' ||
-          call[0][1] === 'repos/mastra-ai/mastra/commits/sha-1/check-runs',
-      );
+    const reviewCalls = () =>
+      commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123/reviews');
+    const checkCalls = () =>
+      commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/commits/sha-1/check-runs');
 
     await expect(first.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
       title: 'Cached PR',
@@ -306,7 +304,8 @@ describe('GithubNotificationPoller', () => {
       headSha: 'sha-1',
     });
     expect(prDetailsCalls()).toHaveLength(1);
-    expect(heavyCalls()).toHaveLength(2);
+    expect(checkCalls()).toHaveLength(1);
+    expect(reviewCalls()).toHaveLength(1);
 
     currentTime += 4 * 60_000;
     await expect(
@@ -320,7 +319,8 @@ describe('GithubNotificationPoller', () => {
       reviews: [{ id: '1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
     });
     expect(prDetailsCalls()).toHaveLength(2);
-    expect(heavyCalls()).toHaveLength(2);
+    expect(checkCalls()).toHaveLength(2);
+    expect(reviewCalls()).toHaveLength(1);
 
     currentTime += 12 * 60_000;
     await expect(
@@ -332,7 +332,8 @@ describe('GithubNotificationPoller', () => {
       headSha: 'sha-1',
     });
     expect(prDetailsCalls()).toHaveLength(3);
-    expect(heavyCalls()).toHaveLength(4);
+    expect(checkCalls()).toHaveLength(3);
+    expect(reviewCalls()).toHaveLength(2);
 
     currentTime += 1_000;
     await expect(
@@ -345,7 +346,8 @@ describe('GithubNotificationPoller', () => {
       headSha: 'sha-1',
     });
     expect(prDetailsCalls()).toHaveLength(4);
-    expect(heavyCalls()).toHaveLength(6);
+    expect(checkCalls()).toHaveLength(4);
+    expect(reviewCalls()).toHaveLength(3);
   });
 
   it('does not run shared PR snapshot refresh commands from a non-master instance', async () => {

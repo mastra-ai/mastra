@@ -1209,6 +1209,7 @@ export class GithubSignals {
       subscription.prNumber,
       {
         staleBefore,
+        checksStaleBefore: staleBefore,
         heavyStaleBefore,
         force,
       },
