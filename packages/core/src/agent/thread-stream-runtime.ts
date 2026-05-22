@@ -141,13 +141,15 @@ export class AgentThreadStreamRuntime {
     if (!source) return { output };
 
     const parts: unknown[] = [];
-    const waiters: Array<() => void> = [];
+    const waiters = new Set<() => void>();
     let started = false;
     let done = false;
     let error: unknown;
 
     const wake = () => {
-      while (waiters.length) waiters.shift()?.();
+      const pending = [...waiters];
+      waiters.clear();
+      for (const waiter of pending) waiter();
     };
 
     const start = () => {
@@ -193,10 +195,12 @@ export class AgentThreadStreamRuntime {
 
     const createStream = () => {
       let index = 0;
+      let closed = false;
+      let waiter: (() => void) | undefined;
       return new ReadableStream({
         async pull(controller) {
           start();
-          while (true) {
+          while (!closed) {
             if (index < parts.length) {
               controller.enqueue(parts[index++]);
               return;
@@ -209,7 +213,22 @@ export class AgentThreadStreamRuntime {
               controller.close();
               return;
             }
-            await new Promise<void>(resolve => waiters.push(resolve));
+            await new Promise<void>(resolve => {
+              waiter = resolve;
+              waiters.add(resolve);
+            });
+            if (waiter) {
+              waiters.delete(waiter);
+              waiter = undefined;
+            }
+          }
+        },
+        cancel() {
+          closed = true;
+          if (waiter) {
+            waiters.delete(waiter);
+            waiter();
+            waiter = undefined;
           }
         },
       });
@@ -688,10 +707,10 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
+            // Local registered runs expose createSubscriberStream, while remote runs are
+            // already per-subscription streams. Do not silently skip locked streams here:
+            // a locked fallback stream means a caller is sharing a non-multicast stream.
             const subscriberStream = run.createSubscriberStream?.() ?? run.output.fullStream;
-            if ((subscriberStream as ReadableStream)?.locked) {
-              continue;
-            }
             const reader = subscriberStream.getReader();
             let readerReleased = false;
             try {

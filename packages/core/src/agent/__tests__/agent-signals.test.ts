@@ -746,6 +746,73 @@ describe('Agent signals', () => {
     }
   });
 
+  it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
+    const threadId = 'subscriber-cancel-thread';
+    const resourceId = 'subscriber-cancel-user';
+    const runId = 'subscriber-cancel-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const parts = [
+      { type: 'start', runId },
+      { type: 'text-start', runId, payload: { id: 'text-1' } },
+      { type: 'text-delta', runId, payload: { id: 'text-1', text: 'still running' } },
+      { type: 'text-end', runId, payload: { id: 'text-1' } },
+      {
+        type: 'finish',
+        runId,
+        payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+      },
+    ];
+    const fullStream = new ReadableStream({
+      async start(controller) {
+        for (const part of parts) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          controller.enqueue(part);
+        }
+        controller.close();
+        finish();
+      },
+    });
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const secondRun = readNextRun(secondIterator);
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      const firstPart = await withTimeout(firstIterator.next(), 'Timed out waiting for first subscriber part');
+      expect(firstPart.value).toMatchObject({ type: 'start', runId });
+      await firstIterator.return?.();
+      firstSubscription.unsubscribe();
+
+      await expect(
+        withTimeout(secondRun, 'Timed out waiting for second subscriber to finish run'),
+      ).resolves.toMatchObject({
+        value: { runId, text: 'still running' },
+        done: false,
+      });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription.unsubscribe();
+    }
+  });
+
   it('starts an idle thread run when a user-message signal is sent', async () => {
     const agent = new Agent({
       id: 'idle-signal-agent',
