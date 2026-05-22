@@ -257,6 +257,105 @@ export interface TaskUpdatedEvent extends HarnessEventBase {
   tasks: TaskItem[];
 }
 
+export type OMBufferedStatus = 'idle' | 'running' | 'complete';
+
+export interface OMStatusEvent extends HarnessEventBase {
+  type: 'om_status';
+  windows: {
+    active: {
+      messages: { tokens: number; threshold: number };
+      observations: { tokens: number; threshold: number };
+    };
+    buffered: {
+      observations: {
+        status: OMBufferedStatus;
+        chunks: number;
+        messageTokens: number;
+        projectedMessageRemoval: number;
+        observationTokens: number;
+      };
+      reflection: {
+        status: OMBufferedStatus;
+        inputObservationTokens: number;
+        observationTokens: number;
+      };
+    };
+  };
+  recordId: string;
+  threadId: string;
+  stepNumber: number;
+  generationCount: number;
+}
+
+export interface OMObservationStartEvent extends HarnessEventBase {
+  type: 'om_observation_start';
+  cycleId: string;
+  operationType: 'observation';
+  tokensToObserve: number;
+}
+
+export interface OMObservationEndEvent extends HarnessEventBase {
+  type: 'om_observation_end';
+  cycleId: string;
+  durationMs: number;
+  tokensObserved: number;
+  observationTokens: number;
+  observations?: string;
+  currentTask?: string;
+  suggestedResponse?: string;
+}
+
+export interface OMObservationFailedEvent extends HarnessEventBase {
+  type: 'om_observation_failed';
+  cycleId: string;
+  error: string;
+  durationMs: number;
+}
+
+export interface OMReflectionStartEvent extends HarnessEventBase {
+  type: 'om_reflection_start';
+  cycleId: string;
+  tokensToReflect: number;
+}
+
+export interface OMReflectionEndEvent extends HarnessEventBase {
+  type: 'om_reflection_end';
+  cycleId: string;
+  durationMs: number;
+  compressedTokens: number;
+  observations?: string;
+}
+
+export interface OMReflectionFailedEvent extends HarnessEventBase {
+  type: 'om_reflection_failed';
+  cycleId: string;
+  error: string;
+  durationMs: number;
+}
+
+export interface OMBufferingStartEvent extends HarnessEventBase {
+  type: 'om_buffering_start';
+  cycleId: string;
+  operationType: 'observation' | 'reflection';
+  tokensToBuffer: number;
+}
+
+export interface OMBufferingEndEvent extends HarnessEventBase {
+  type: 'om_buffering_end';
+  cycleId: string;
+  operationType: 'observation' | 'reflection';
+  tokensBuffered: number;
+  bufferedTokens: number;
+  observations?: string;
+}
+
+export interface OMBufferingFailedEvent extends HarnessEventBase {
+  type: 'om_buffering_failed';
+  cycleId?: string;
+  operationType: 'observation' | 'reflection';
+  error: string;
+}
+
 export interface ToolEndEvent extends HarnessEventBase {
   type: 'tool_end';
   toolCallId: string;
@@ -551,6 +650,16 @@ export type HarnessEvent =
   | ToolUpdateEvent
   | ShellOutputEvent
   | TaskUpdatedEvent
+  | OMStatusEvent
+  | OMObservationStartEvent
+  | OMObservationEndEvent
+  | OMObservationFailedEvent
+  | OMReflectionStartEvent
+  | OMReflectionEndEvent
+  | OMReflectionFailedEvent
+  | OMBufferingStartEvent
+  | OMBufferingEndEvent
+  | OMBufferingFailedEvent
   | ToolEndEvent
   | AgentEndEvent
   | SuspensionRequiredEvent
