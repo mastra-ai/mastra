@@ -1076,6 +1076,8 @@ export class InMemoryHarness extends HarnessStorage {
     actionKind,
     operation,
     policyDecision,
+    requestId,
+    affectedPath,
     after,
     limit,
   }: ListWorkspaceActionJournalInput): Promise<WorkspaceActionJournalEntry[]> {
@@ -1088,6 +1090,8 @@ export class InMemoryHarness extends HarnessStorage {
       if (actionKind !== undefined && entry.actionKind !== actionKind) return false;
       if (operation !== undefined && entry.operation !== operation) return false;
       if (policyDecision !== undefined && entry.policyDecision !== policyDecision) return false;
+      if (requestId !== undefined && entry.requestId !== requestId) return false;
+      if (affectedPath !== undefined && !workspaceActionJournalEntryMatchesPath(entry, affectedPath)) return false;
       if (after !== undefined && compareWorkspaceActionJournalCursor(entry, after) <= 0) return false;
       return true;
     });
@@ -3484,6 +3488,34 @@ function compareWorkspaceActionJournalCursor(
 function compareWorkspaceActionJournalId(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
+}
+
+function workspaceActionJournalEntryMatchesPath(
+  entry: WorkspaceActionJournalEntry,
+  filter: NonNullable<ListWorkspaceActionJournalInput['affectedPath']>,
+): boolean {
+  if (!workspaceActionJournalPathFilterHasSelector(filter)) return false;
+  return (
+    workspaceActionJournalPathMatches(entry.path, filter) ||
+    (filter.includeToPath === true && workspaceActionJournalPathMatches(entry.toPath, filter))
+  );
+}
+
+function workspaceActionJournalPathMatches(
+  path: WorkspaceActionJournalEntry['path'],
+  filter: NonNullable<ListWorkspaceActionJournalInput['affectedPath']>,
+): boolean {
+  if (path === undefined) return false;
+  if (filter.rootId !== undefined && path.rootId !== filter.rootId) return false;
+  if (filter.path !== undefined && path.path !== filter.path) return false;
+  if (filter.relativePath !== undefined && path.relativePath !== filter.relativePath) return false;
+  return true;
+}
+
+function workspaceActionJournalPathFilterHasSelector(
+  filter: NonNullable<ListWorkspaceActionJournalInput['affectedPath']>,
+): boolean {
+  return filter.rootId !== undefined || filter.path !== undefined || filter.relativePath !== undefined;
 }
 
 function assertWorkspaceActionKindMatches(record: WorkspaceActionJournalEntry): void {
