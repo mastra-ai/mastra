@@ -137,8 +137,6 @@ export class AgentThreadStreamRuntime {
 
   #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
     const runtime = this;
-    const source = output.fullStream as ReadableStream<unknown> | undefined;
-    if (!source) return { output };
 
     const parts: unknown[] = [];
     const waiters = new Set<() => void>();
@@ -152,21 +150,24 @@ export class AgentThreadStreamRuntime {
       for (const waiter of pending) waiter();
     };
 
+    const emitPart = (part: unknown) => {
+      parts.push(part);
+      runtime.#publish(pubsub, key, {
+        type: 'stream-part',
+        runId: output.runId,
+        part,
+        sourceId: runtime.#getSourceId(),
+      });
+      wake();
+    };
+
     const start = () => {
       if (started) return;
       started = true;
       void (async () => {
         try {
-          const emitPart = (part: unknown) => {
-            parts.push(part);
-            runtime.#publish(pubsub, key, {
-              type: 'stream-part',
-              runId: output.runId,
-              part,
-              sourceId: runtime.#getSourceId(),
-            });
-            wake();
-          };
+          const source = output.fullStream as ReadableStream<unknown> | undefined;
+          if (!source) return;
 
           if (typeof source.getReader === 'function') {
             const reader = source.getReader();
@@ -234,11 +235,6 @@ export class AgentThreadStreamRuntime {
       });
     };
 
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      enumerable: true,
-      value: createStream(),
-    });
     return { output, createSubscriberStream: createStream };
   }
 
