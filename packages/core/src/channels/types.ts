@@ -170,7 +170,7 @@ export interface ToolDisplayContext {
 
 /** Return value from a {@link ToolDisplayFn}. */
 export type ToolDisplayResult =
-  | { kind: 'post'; message: PostableMessage; replace?: boolean }
+  | { kind: 'post'; message: PostableMessage }
   | { kind: 'stream'; chunk: StreamChunk }
   | undefined
   | void;
