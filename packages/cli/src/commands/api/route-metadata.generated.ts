@@ -4413,7 +4413,6 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "authorId",
       "autoSync",
       "description",
       "filesystem",
