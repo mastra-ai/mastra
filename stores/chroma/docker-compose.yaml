@@ -1,6 +1,6 @@
 services:
   chroma:
-    image: chromadb/chroma:1.5.7
+    image: chromadb/chroma:1.5.8
     ports:
       - 8000:8000
     healthcheck:

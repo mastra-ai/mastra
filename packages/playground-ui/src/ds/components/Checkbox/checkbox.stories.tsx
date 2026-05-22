@@ -8,7 +8,6 @@ const meta: Meta<typeof Checkbox> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },
@@ -62,7 +61,7 @@ export const CheckboxGroup: Story = {
         <Label htmlFor="option1">Option 1</Label>
       </div>
       <div className="flex items-center gap-2">
-        <Checkbox id="option2" checked />
+        <Checkbox id="option2" defaultChecked />
         <Label htmlFor="option2">Option 2</Label>
       </div>
       <div className="flex items-center gap-2">

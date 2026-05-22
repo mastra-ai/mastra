@@ -1,4 +1,3 @@
-import { IconButton, cn } from '@mastra/playground-ui';
 import type { CodeHeaderProps } from '@assistant-ui/react-markdown';
 import {
   MarkdownTextPrimitive,
@@ -7,6 +6,7 @@ import {
 } from '@assistant-ui/react-markdown';
 import '@assistant-ui/react-markdown/styles/dot.css';
 import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { Button, cn } from '@mastra/playground-ui';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import type { FC, ImgHTMLAttributes } from 'react';
 import { memo, useEffect, useState } from 'react';
@@ -48,7 +48,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       className="flex items-center justify-between gap-4 px-4 py-2 text-sm font-semibold text-white"
     >
       <span className="lowercase [&>span]:text-xs">{language}</span>
-      <IconButton variant="light" size="md" tooltip="Copy" onClick={onCopy}>
+      <Button variant="default" size="icon-md" tooltip="Copy" onClick={onCopy}>
         <span className="grid">
           <span
             key="checkmark"
@@ -69,7 +69,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
             <CopyIcon size={14} />
           </span>
         </span>
-      </IconButton>
+      </Button>
     </div>
   );
 };

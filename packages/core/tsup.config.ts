@@ -58,11 +58,22 @@ export default defineConfig({
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
     'src/test-utils/llm-mock.ts',
+    'src/a2a/client.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
+    'src/agent/durable/index.ts',
     'src/auth/ee/index.ts',
+    'src/agent-builder/ee/index.ts',
+    'src/storage/domains/agents/index.ts',
+    'src/storage/domains/mcp-clients/index.ts',
+    'src/storage/domains/mcp-servers/index.ts',
+    'src/storage/domains/prompt-blocks/index.ts',
+    'src/storage/domains/scorer-definitions/index.ts',
+    'src/storage/domains/skills/index.ts',
+    'src/storage/domains/favorites/index.ts',
+    'src/storage/domains/workspaces/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
@@ -80,7 +91,15 @@ export default defineConfig({
     await new Promise(resolve => setTimeout(resolve, 1000));
     await generateTypes(
       process.cwd(),
-      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types', '@internal/core']),
+      new Set([
+        '@ai-sdk/*',
+        'eventsource-parser',
+        '@internal/ai-sdk-v4',
+        '@internal/ai-sdk-v5',
+        '@internal/ai-v6',
+        '@internal/external-types',
+        '@internal/core',
+      ]),
     );
 
     // Copy provider-registry.json to dist folder

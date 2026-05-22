@@ -249,6 +249,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           args: toolCallInput,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
+          ...((value as { observability?: unknown }).observability
+            ? { observability: (value as { observability?: unknown }).observability as any }
+            : {}),
         },
       };
     }
@@ -279,6 +282,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
           dynamic: (value as { dynamic?: boolean }).dynamic,
+          ...((value as { observability?: unknown }).observability
+            ? { observability: (value as { observability?: unknown }).observability as any }
+            : {}),
         },
       };
 
@@ -461,8 +467,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
 
       return filePart;
     }
-    case 'tool-call':
-      return {
+    case 'tool-call': {
+      const toolCallPart = {
         type: 'tool-call',
         toolCallId: chunk.payload.toolCallId,
         providerMetadata: chunk.payload.providerMetadata,
@@ -470,6 +476,11 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         toolName: chunk.payload.toolName,
         input: chunk.payload.args,
       };
+      if (chunk.payload.observability) {
+        (toolCallPart as { observability?: unknown }).observability = chunk.payload.observability;
+      }
+      return toolCallPart as OutputChunkType<OUTPUT>;
+    }
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',
@@ -478,6 +489,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         dynamic: !!chunk.payload.dynamic,
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
+        ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
       };
     case 'tool-call-input-streaming-end':
       return {
@@ -606,6 +618,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: undefined,
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
+      cacheCreationInputTokens: undefined,
       raw: undefined,
     };
   }
@@ -620,6 +633,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
+      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
       raw: usage,
     };
   }
@@ -632,6 +646,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
     raw: usage,
   };
 }

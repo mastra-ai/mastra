@@ -15,6 +15,15 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
+  // Whether observations and reflections use the terse caveman-style instruction.
+  // Off by default — caveman style is opt-in via `/om` settings; observers and
+  // reflectors fall back to their built-in (prose) behavior unless enabled.
+  cavemanObservations: z.boolean().default(false),
+  // Whether OM forwards image/file attachment parts to the Observer LLM.
+  // On by default; turn off when using a text-only observer model that
+  // would error on multimodal input. Placeholder text lines for filtered
+  // attachments are kept either way.
+  observeAttachments: z.boolean().default(true),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort
@@ -36,6 +45,7 @@ export const stateSchema = z.object({
   tasks: z
     .array(
       z.object({
+        id: z.string().optional(),
         content: z.string(),
         status: z.enum(['pending', 'in_progress', 'completed']),
         activeForm: z.string(),

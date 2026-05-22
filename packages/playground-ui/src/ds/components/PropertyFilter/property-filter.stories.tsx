@@ -52,7 +52,6 @@ const meta: Meta = {
   parameters: {
     layout: 'padded',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

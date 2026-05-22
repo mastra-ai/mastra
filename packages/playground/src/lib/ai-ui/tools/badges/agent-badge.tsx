@@ -3,8 +3,8 @@ import type { MastraUIMessage } from '@mastra/react';
 import React from 'react';
 import Markdown from 'react-markdown';
 import { ToolFallback } from '../tool-fallback';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
-
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
@@ -32,6 +32,7 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
+  keepOpenForStreamingChildMessages?: boolean;
 }
 
 export const AgentBadge = ({
@@ -45,6 +46,7 @@ export const AgentBadge = ({
   suspendPayload,
   toolCalled: toolCalledProp,
   isComplete = false,
+  keepOpenForStreamingChildMessages = false,
 }: AgentBadgeProps) => {
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
@@ -56,6 +58,11 @@ export const AgentBadge = ({
   const parentSuspendedTools =
     metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
       ? metadata?.suspendedTools
+      : undefined;
+
+  const bgEntry =
+    (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+      ? metadata.backgroundTasks[toolCallId]
       : undefined;
 
   const allChildToolsComplete =
@@ -73,6 +80,8 @@ export const AgentBadge = ({
     toolCalled = toolCalledProp ?? allChildToolsComplete;
   }
 
+  const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
@@ -85,14 +94,16 @@ export const AgentBadge = ({
       data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
-      initialCollapsed={isComplete && !toolApprovalMetadata}
+      initialCollapsed={shouldCollapseContent}
       extraInfo={
-        metadata?.mode === 'network' && (
+        metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
             selectionReason={selectionReason ?? ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        )
+        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+        ) : null
       }
     >
       {messages.map((message, index) => {

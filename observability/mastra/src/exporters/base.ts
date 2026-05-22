@@ -148,9 +148,9 @@ export abstract class BaseExporter implements ObservabilityExporter {
    *
    * @param reason - Reason why the exporter is disabled
    */
-  protected setDisabled(reason: string): void {
+  protected setDisabled(reason: string, level: 'warn' | 'debug' = 'warn'): void {
     this.#disabled = true;
-    this.logger.warn(`${this.name} disabled: ${reason}`);
+    this.logger[level](`${this.name} disabled: ${reason}`);
   }
 
   /**

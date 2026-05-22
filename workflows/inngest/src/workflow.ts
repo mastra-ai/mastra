@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
@@ -204,9 +205,9 @@ export class InngestWorkflow<
         id: `workflow.${this.id}.cron`,
         retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        triggers: { cron: this.cronConfig?.cron ?? '' },
         ...this.flowControlConfig,
       },
-      { cron: this.cronConfig?.cron ?? '' },
       async () => {
         const run = await this.createRun();
         // @ts-expect-error - cron inputData type mismatch
@@ -220,7 +221,7 @@ export class InngestWorkflow<
     return this.cronFunction;
   }
 
-  getFunction() {
+  getFunction(): ReturnType<Inngest['createFunction']> {
     if (this.function) {
       return this.function;
     }
@@ -234,11 +235,11 @@ export class InngestWorkflow<
         id: `workflow.${this.id}`,
         retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
-      { event: `workflow.${this.id}` },
-      async ({ event, step, attempt, publish }) => {
+      async ({ event, step, attempt }) => {
         let {
           inputData,
           initialState,
@@ -258,8 +259,10 @@ export class InngestWorkflow<
           });
         }
 
-        // Create InngestPubSub instance with the publish function from Inngest context
-        const pubsub = new InngestPubSub(this.inngest, this.id, publish);
+        // Create InngestPubSub instance. Publishes go through `inngest.realtime.publish()`
+        // (Inngest SDK v4 client API), which auto-includes the current runId from the
+        // function's async context.
+        const pubsub = new InngestPubSub(this.inngest, this.id);
 
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
@@ -335,9 +338,15 @@ export class InngestWorkflow<
               }
             },
           });
-        } catch (error) {
-          // Re-throw - span will be ended in finalize if we reach it
-          throw error;
+        } catch (executionError) {
+          // Execution threw an exception (not just returned failed status)
+          // Create a failed result to pass to finalize
+          result = {
+            status: 'failed',
+            steps: {},
+            state: initialState ?? {},
+            error: executionError instanceof Error ? executionError : new Error(String(executionError)),
+          } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
         // Final step to invoke lifecycle callbacks and end workflow span.
@@ -346,6 +355,17 @@ export class InngestWorkflow<
         let finalizeErrored = false;
         try {
           await step.run(`workflow.${this.id}.finalize`, async () => {
+            // For durable agent workflows, emit error event on failure so the
+            // client's stream can receive the error and close properly.
+            if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
+              const error = result.error instanceof Error ? result.error : new Error(String(result.error));
+              try {
+                await emitErrorEvent(pubsub, inputData.runId, error);
+              } catch (e) {
+                this.logger.debug?.('Failed to emit error event:', e);
+              }
+            }
+
             if (result.status !== 'paused') {
               // Invoke lifecycle callbacks (onFinish and onError)
               await engine.invokeLifecycleCallbacksInternal({
@@ -497,7 +517,7 @@ export class InngestWorkflow<
     });
   }
 
-  getFunctions() {
+  getFunctions(): ReturnType<Inngest['createFunction']>[] {
     return [
       this.getFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),

@@ -1,4 +1,5 @@
 import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { BrowserToolName } from './tools/constants';
 
 /**
  * AgentBrowser-specific configuration extensions.
@@ -17,6 +18,18 @@ export interface AgentBrowserConfigExtensions {
    * ```
    */
   storageState?: string;
+
+  /**
+   * Tool names to exclude from the browser toolset.
+   * Use this to disable specific tools, e.g. `['browser_screenshot']`
+   * to skip the screenshot tool for models that don't support vision.
+   *
+   * @example
+   * ```ts
+   * new AgentBrowser({ excludeTools: ['browser_screenshot'] })
+   * ```
+   */
+  excludeTools?: BrowserToolName[];
 }
 
 /**

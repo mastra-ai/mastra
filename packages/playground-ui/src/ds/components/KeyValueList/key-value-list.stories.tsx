@@ -8,7 +8,6 @@ const meta: Meta<typeof KeyValueList> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     labelsAreHidden: {
       control: { type: 'boolean' },

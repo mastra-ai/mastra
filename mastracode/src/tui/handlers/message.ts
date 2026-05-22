@@ -6,6 +6,7 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
@@ -15,6 +16,10 @@ import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
+
+function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
 
 /**
  * Get content parts after the last tool_call/tool_result in the message.
@@ -47,6 +52,8 @@ type StreamedSystemReminderPart = {
   path?: string;
   precedesMessageId?: string;
   gapText?: string;
+  goalMaxTurns?: number;
+  judgeModelId?: string;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -70,6 +77,8 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     path: reminder.path,
     precedesMessageId: typeof reminder.precedesMessageId === 'string' ? reminder.precedesMessageId : undefined,
     gapText: typeof reminder.gapText === 'string' ? reminder.gapText : undefined,
+    goalMaxTurns: typeof reminder.goalMaxTurns === 'number' ? reminder.goalMaxTurns : undefined,
+    judgeModelId: typeof reminder.judgeModelId === 'string' ? reminder.judgeModelId : undefined,
   };
 }
 
@@ -85,6 +94,8 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     message: reminder.message,
     reminderType: reminder.reminderType,
     path: reminder.path,
+    goalMaxTurns: reminder.goalMaxTurns,
+    judgeModelId: reminder.judgeModelId,
   });
 }
 
@@ -161,6 +172,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
         ...message,
         content: trailingParts,
       });
+      reconcileChatBoundarySpacers(state.chatContainer);
     }
     state.ui.requestRender();
   }
@@ -175,6 +187,8 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
 
   for (const reminder of systemReminderParts) {
+    if (reminder.reminderType === 'goal-judge') continue;
+
     const reminderKey = `${message.id}:${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
     if (!state.currentRunSystemReminderKeys.has(reminderKey)) {
       state.currentRunSystemReminderKeys.add(reminderKey);
@@ -183,10 +197,17 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   if (!state.streamingComponent) {
-    if (systemReminderParts.length > 0) {
-      state.ui.requestRender();
+    const trailingParts = getTrailingContentParts(message);
+    const hasToolCalls = message.content.some(content => content.type === 'tool_call');
+    if (trailingParts.length === 0 && !hasToolCalls) {
+      if (systemReminderParts.length > 0) {
+        state.ui.requestRender();
+      }
+      return;
     }
-    return;
+
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
   }
 
   state.streamingMessage = message;
@@ -226,9 +247,15 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           state.ui,
         );
         component.setExpanded(state.toolOutputExpanded);
+        if (state.quietMode) {
+          component.setCompactToolModeColor(getCurrentModeColor(ctx));
+          component.setQuietModeDisplay('quiet');
+          component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+        }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
+        reconcileChatBoundarySpacers(state.chatContainer);
 
         state.streamingComponent = new AssistantMessageComponent(
           undefined,
@@ -240,6 +267,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         const component = state.pendingTools.get(content.id);
         if (component) {
           component.updateArgs(content.args);
+          reconcileChatBoundarySpacers(state.chatContainer);
         }
       }
     }
@@ -253,6 +281,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
       ...message,
       content: trailingParts,
     });
+    reconcileChatBoundarySpacers(state.chatContainer);
   }
 
   state.ui.requestRender();
@@ -272,6 +301,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         ...message,
         content: trailingParts,
       });
+      reconcileChatBoundarySpacers(state.chatContainer);
     }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {
@@ -285,7 +315,9 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
           false,
         );
       }
+      reconcileChatBoundarySpacers(state.chatContainer);
       state.pendingTools.clear();
+      state.pendingTaskToolIds?.clear();
     }
 
     state.streamingComponent = undefined;

@@ -24,7 +24,7 @@ export function MCPServerCombobox({
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
   container,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();

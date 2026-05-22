@@ -57,13 +57,11 @@ export async function withOmTracingSpan<T>({
     entityType: EntityType.OUTPUT_STEP_PROCESSOR,
     entityName: config.entityName,
     tracingContext: observabilityContext?.tracingContext ?? observabilityContext?.tracing,
-    attributes: {
-      metadata: {
-        omPhase: phase,
-        omInputTokens: inputTokens,
-        omSelectedModel: typeof model === 'string' ? model : '(dynamic-model)',
-        ...metadata,
-      },
+    metadata: {
+      omPhase: phase,
+      omInputTokens: inputTokens,
+      omSelectedModel: typeof model === 'string' ? model : '(dynamic-model)',
+      ...metadata,
     },
     requestContext,
   });

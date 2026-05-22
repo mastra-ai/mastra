@@ -13,6 +13,23 @@ import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
 // =============================================================================
+// Sandbox Environment
+// =============================================================================
+
+function buildSandboxEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    // Explicit overrides for non-interactive subprocess execution
+    FORCE_COLOR: '1',
+    CLICOLOR_FORCE: '1',
+    TERM: process.env.TERM || 'xterm-256color',
+    CI: 'true',
+    NONINTERACTIVE: '1',
+    DEBIAN_FRONTEND: 'noninteractive',
+  };
+}
+
+// =============================================================================
 // Create Workspace with Skills
 // =============================================================================
 
@@ -47,6 +64,17 @@ export const skillPaths = [
 
 export const allowedSkillPaths = skillPaths;
 
+/**
+ * Paths the agent is always allowed to access (in addition to the project root
+ * and any per-thread sandboxAllowedPaths).  The OS temp directory is included
+ * so the agent can use it as a scratchpad without requesting access every time.
+ */
+const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp'].reduce<string[]>((acc, p) => {
+  const resolved = path.resolve(p);
+  if (!acc.includes(resolved)) acc.push(resolved);
+  return acc;
+}, []);
+
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
 /**
@@ -76,7 +104,11 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const projectPath = path.resolve(rawProjectPath);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...allowedSkillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const allowedPaths = [
+    ...allowedSkillPaths,
+    ...DEFAULT_ALLOWED_PATHS,
+    ...sandboxPaths.map((p: string) => path.resolve(p)),
+  ];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {
@@ -117,25 +149,10 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     }),
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,
-      env: {
-        ...process.env,
-        FORCE_COLOR: '1',
-        CLICOLOR_FORCE: '1',
-        TERM: process.env.TERM || 'xterm-256color',
-        CI: 'true',
-        NONINTERACTIVE: '1',
-        DEBIAN_FRONTEND: 'noninteractive',
-      },
+      env: buildSandboxEnv(),
     }),
     tools: isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES,
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
     lsp: lspConfig,
   });
-}
-
-if (skillPaths.length > 0) {
-  console.info(`Skills loaded from:`);
-  for (const p of skillPaths) {
-    console.info(`  - ${p}`);
-  }
 }

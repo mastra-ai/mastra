@@ -119,8 +119,14 @@ export function ToolsPage() {
   );
 
   const selectedOptions = useMemo(() => {
-    return options.filter(opt => selectedToolIds.includes(opt.value));
-  }, [options, selectedToolIds]);
+    // Include all selected tools, even agent-level tools not in the global list.
+    // Tools registered on the agent (not at the Mastra instance level) won't
+    // appear in useTools() but are still valid selections in the stored config.
+    return selectedToolIds.map(id => {
+      const existing = options.find(opt => opt.value === id);
+      return existing || { value: id, label: id, description: selectedTools?.[id]?.description || '' };
+    });
+  }, [options, selectedToolIds, selectedTools]);
 
   const unselectedOptions = useMemo(() => {
     return options.filter(opt => !selectedToolIds.includes(opt.value));

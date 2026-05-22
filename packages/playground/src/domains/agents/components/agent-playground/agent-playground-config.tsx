@@ -1,5 +1,6 @@
 import {
   Badge,
+  CopyButton,
   HoverPopover,
   PopoverTrigger,
   PopoverContent,
@@ -15,9 +16,9 @@ import { useState, useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
-import { usePreviewInstructions } from '../../hooks/use-preview-instructions';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
 import { ToolsPage } from '../agent-cms-pages/tools-page';
+import { useStoredPromptBlock } from '@/domains/prompt-blocks';
 
 // ---------------------------------------------------------------------------
 // Collapsible section
@@ -163,94 +164,241 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 // Diff-aware read-only views
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Per-block content helpers (raw template text, not resolved)
+// ---------------------------------------------------------------------------
+
+function getRawBlockContent(block: Record<string, unknown>): string | null {
+  if (block.type === 'prompt_block' && typeof block.content === 'string') {
+    return block.content;
+  }
+  return null;
+}
+
+function RefBlockCopyContent({ promptBlockId }: { promptBlockId: string }) {
+  const { data: promptBlock } = useStoredPromptBlock(promptBlockId);
+  const content = promptBlock?.content ?? '';
+  if (!content) return null;
+  return <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />;
+}
+
+function BlockCopyButton({ block }: { block: Record<string, unknown> }) {
+  const rawContent = getRawBlockContent(block);
+  if (rawContent) {
+    return <CopyButton content={rawContent} tooltip="Copy prompt text" size="sm" />;
+  }
+  if (block.type === 'prompt_block_ref' && (typeof block.promptBlockId === 'string' || typeof block.id === 'string')) {
+    return <RefBlockCopyContent promptBlockId={(block.promptBlockId as string) ?? (block.id as string)} />;
+  }
+  return null;
+}
+
 function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlocks: unknown; currentBlocks: unknown }) {
   const prevBlocksArr = Array.isArray(previousBlocks) ? previousBlocks : [];
   const currBlocksArr = Array.isArray(currentBlocks) ? currentBlocks : [];
 
-  const {
-    data: prevText,
-    isLoading: isLoadingPrev,
-    isError: isPrevError,
-  } = usePreviewInstructions(prevBlocksArr.length > 0 ? prevBlocksArr : undefined, prevBlocksArr.length > 0);
-  const {
-    data: currText,
-    isLoading: isLoadingCurr,
-    isError: isCurrError,
-  } = usePreviewInstructions(currBlocksArr.length > 0 ? currBlocksArr : undefined, currBlocksArr.length > 0);
+  // Build a map of current blocks by position for per-block comparison
+  const currContentByIdx = currBlocksArr.map((b: Record<string, unknown>) => getRawBlockContent(b) ?? '');
+  const prevContentByIdx = prevBlocksArr.map((b: Record<string, unknown>) => getRawBlockContent(b) ?? '');
 
-  if (isLoadingPrev || isLoadingCurr) {
+  // If only one block on each side, show a simple diff
+  if (prevBlocksArr.length <= 1 && currBlocksArr.length <= 1) {
+    const oldStr = prevContentByIdx[0] ?? '';
+    const newStr = currContentByIdx[0] ?? '';
+    const block = prevBlocksArr[0] as Record<string, unknown> | undefined;
+
+    if (oldStr === newStr) {
+      return (
+        <div className="relative rounded-md border border-border1 bg-surface2 p-3">
+          {block && (
+            <div className="absolute top-2 right-2">
+              <BlockCopyButton block={block} />
+            </div>
+          )}
+          <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
+            {oldStr || '(empty)'}
+          </Txt>
+        </div>
+      );
+    }
+
+    const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="flex items-center justify-center py-6">
+      <div className="relative rounded-md border border-border1 overflow-hidden font-mono text-sm">
+        {block && (
+          <div className="absolute top-2 right-2 z-10">
+            <BlockCopyButton block={block} />
+          </div>
+        )}
+        {diffLines.map((line, idx) => (
+          <div
+            key={idx}
+            className={cn(
+              'px-3 py-0.5 whitespace-pre-wrap wrap-break-word',
+              line.type === 'removed' && 'bg-red-950/20 text-red-300',
+              line.type === 'added' && 'bg-green-950/20 text-green-300',
+              line.type === 'equal' && 'text-neutral4',
+            )}
+          >
+            <span className="inline-block w-4 shrink-0 text-neutral3/50 select-none mr-2">
+              {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+            </span>
+            {line.text || '\u00A0'}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Multiple blocks: show per-block with individual copy buttons
+  const maxLen = Math.max(prevBlocksArr.length, currBlocksArr.length);
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: maxLen }, (_, idx) => {
+        const prevBlock = prevBlocksArr[idx] as Record<string, unknown> | undefined;
+        const currBlock = currBlocksArr[idx] as Record<string, unknown> | undefined;
+        const oldStr = prevContentByIdx[idx] ?? '';
+        const newStr = currContentByIdx[idx] ?? '';
+
+        if (!prevBlock && currBlock) {
+          return (
+            <div key={idx} className="rounded-md border border-green-900/30 bg-green-950/10 p-3 font-mono text-sm">
+              <Txt variant="ui-xs" className="text-green-400 mb-1">
+                + Added block
+              </Txt>
+              <Txt variant="ui-sm" className="text-green-300 whitespace-pre-wrap">
+                {newStr}
+              </Txt>
+            </div>
+          );
+        }
+
+        if (prevBlock && !currBlock) {
+          return (
+            <div key={idx} className="relative rounded-md border border-red-900/30 bg-red-950/10 p-3 font-mono text-sm">
+              <div className="absolute top-2 right-2">
+                <BlockCopyButton block={prevBlock} />
+              </div>
+              <Txt variant="ui-xs" className="text-red-400 mb-1">
+                − Removed in latest
+              </Txt>
+              <Txt variant="ui-sm" className="text-red-300 whitespace-pre-wrap">
+                {oldStr}
+              </Txt>
+            </div>
+          );
+        }
+
+        if (oldStr === newStr) {
+          return (
+            <div key={idx} className="relative rounded-md border border-border1 bg-surface2 p-3">
+              {prevBlock && (
+                <div className="absolute top-2 right-2">
+                  <BlockCopyButton block={prevBlock} />
+                </div>
+              )}
+              <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
+                {oldStr || '(empty)'}
+              </Txt>
+            </div>
+          );
+        }
+
+        const diffLines = computeLineDiff(oldStr, newStr);
+        return (
+          <div key={idx} className="relative rounded-md border border-border1 overflow-hidden font-mono text-sm">
+            {prevBlock && (
+              <div className="absolute top-2 right-2 z-10">
+                <BlockCopyButton block={prevBlock} />
+              </div>
+            )}
+            {diffLines.map((line, lidx) => (
+              <div
+                key={lidx}
+                className={cn(
+                  'px-3 py-0.5 whitespace-pre-wrap wrap-break-word',
+                  line.type === 'removed' && 'bg-red-950/20 text-red-300',
+                  line.type === 'added' && 'bg-green-950/20 text-green-300',
+                  line.type === 'equal' && 'text-neutral4',
+                )}
+              >
+                <span className="inline-block w-4 shrink-0 text-neutral3/50 select-none mr-2">
+                  {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+                </span>
+                {line.text || '\u00A0'}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
+  const { data: promptBlock, isLoading } = useStoredPromptBlock(promptBlockId);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-4">
         <Spinner className="h-4 w-4" />
       </div>
     );
   }
 
-  if (isPrevError || isCurrError) {
-    return (
-      <Txt variant="ui-sm" className="text-red-400 py-2">
-        Failed to load instruction preview
-      </Txt>
-    );
-  }
-
-  const oldStr = prevText ?? '';
-  const newStr = currText ?? '';
-
-  if (oldStr === newStr) {
-    return (
-      <div className="rounded-md border border-border1 bg-surface2 p-3">
-        <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
-          {oldStr || '(empty)'}
-        </Txt>
-      </div>
-    );
-  }
-
-  const diffLines = computeLineDiff(oldStr, newStr);
-
+  const content = promptBlock?.content ?? '';
   return (
-    <div className="rounded-md border border-border1 overflow-hidden font-mono text-sm">
-      {diffLines.map((line, idx) => (
-        <div
-          key={idx}
-          className={cn(
-            'px-3 py-0.5 whitespace-pre-wrap wrap-break-word',
-            line.type === 'removed' && 'bg-red-950/20 text-red-300',
-            line.type === 'added' && 'bg-green-950/20 text-green-300',
-            line.type === 'equal' && 'text-neutral4',
-          )}
-        >
-          <span className="inline-block w-4 shrink-0 text-neutral3/50 select-none mr-2">
-            {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
-          </span>
-          {line.text || '\u00A0'}
+    <div className="relative rounded-md border border-border1 bg-surface2 p-3">
+      {content && (
+        <div className="absolute top-2 right-2">
+          <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />
         </div>
-      ))}
+      )}
+      {promptBlock?.name && (
+        <Txt variant="ui-xs" className="text-neutral3 mb-1 font-medium">
+          {promptBlock.name}
+        </Txt>
+      )}
+      <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
+        {content || '(empty)'}
+      </Txt>
     </div>
   );
 }
 
 function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
   const blocksArr = Array.isArray(blocks) ? blocks : [];
-  const { data: text, isLoading } = usePreviewInstructions(
-    blocksArr.length > 0 ? blocksArr : undefined,
-    blocksArr.length > 0,
-  );
 
-  if (isLoading) {
+  if (blocksArr.length === 0) {
     return (
-      <div className="flex items-center justify-center py-6">
-        <Spinner className="h-4 w-4" />
-      </div>
+      <Txt variant="ui-sm" className="text-neutral3 py-2">
+        No instruction blocks configured
+      </Txt>
     );
   }
 
   return (
-    <div className="rounded-md border border-border1 bg-surface2 p-3">
-      <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
-        {text || '(empty)'}
-      </Txt>
+    <div className="flex flex-col gap-2">
+      {blocksArr.map((block: Record<string, unknown>, idx: number) => {
+        if (block.type === 'prompt_block_ref') {
+          const refId = (block.promptBlockId as string) ?? (block.id as string);
+          return <RefBlockPreview key={refId ?? idx} promptBlockId={refId} />;
+        }
+
+        const content = typeof block.content === 'string' ? block.content : '';
+        return (
+          <div key={(block.id as string) ?? idx} className="relative rounded-md border border-border1 bg-surface2 p-3">
+            {content && (
+              <div className="absolute top-2 right-2">
+                <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
+              </div>
+            )}
+            <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
+              {content || '(empty)'}
+            </Txt>
+          </div>
+        );
+      })}
     </div>
   );
 }

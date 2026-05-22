@@ -2,6 +2,7 @@ export type { Tool, ToolExecutionOptions, Schema } from 'ai';
 export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/provider-utils';
 
 /**
+ * @public
  * Structural type to accept provider-defined tools from external packages.
  *
  * This is necessary due to TypeScript's module path discrimination combined with

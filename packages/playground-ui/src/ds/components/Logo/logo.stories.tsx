@@ -8,7 +8,6 @@ const meta: Meta<typeof Logo> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     size: {
       control: { type: 'radio' },

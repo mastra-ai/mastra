@@ -111,7 +111,6 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
       <section className="space-y-7 @container">
         <Entry label="Chat Method">
           <RadioGroup
-            orientation="horizontal"
             value={radioValue}
             disabled={!canEditSettings}
             onValueChange={(value: string) =>
@@ -242,7 +241,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
       </section>
 
       {canEditSettings && (
-        <Button onClick={() => resetAll()} variant="light" className="w-full" size="lg">
+        <Button onClick={() => resetAll()} variant="default" className="w-full" size="lg">
           <Icon>
             <RefreshCw />
           </Icon>

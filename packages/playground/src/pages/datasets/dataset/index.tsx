@@ -1,9 +1,5 @@
 import {
-  Breadcrumb,
   Button,
-  Crumb,
-  Header,
-  Icon,
   MainContentContent,
   MainContentLayout,
   PermissionDenied,
@@ -11,16 +7,15 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { Database, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { useState } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
+import { useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   DatasetPageContent,
   ExperimentTriggerDialog,
   AddItemDialog,
   EditDatasetDialog,
   DeleteDatasetDialog,
-  DatasetCombobox,
 } from '@/domains/datasets';
 import type { DatasetVersion } from '@/domains/datasets/hooks/use-dataset-versions';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -97,20 +92,6 @@ function DatasetPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as="span" to="" isCurrent>
-            <DatasetCombobox value={datasetId} variant="ghost" />
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <MainContentContent className="content-stretch">
         <DatasetPageContent
           datasetId={datasetId}

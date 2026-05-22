@@ -43,11 +43,10 @@ test('preserves API prefix when saving other settings', async ({ page }) => {
   await page.getByRole('button', { name: 'Save Configuration' }).click();
   await page.reload();
 
-  // Change theme but don't touch apiPrefix
-  const themeSection = page.getByText('Theme mode').locator('..');
-  const selector = themeSection.getByRole('combobox');
-  await selector.click();
-  await page.getByRole('option', { name: 'Light' }).click();
+  // Change another setting (Mastra instance URL) but don't touch apiPrefix
+  const urlInput = page.locator('input[name="url"]');
+  await urlInput.clear();
+  await urlInput.fill('http://localhost:5555');
 
   await page.getByRole('button', { name: 'Save Configuration' }).click();
   await page.reload();

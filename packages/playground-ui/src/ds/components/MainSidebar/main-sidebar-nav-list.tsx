@@ -1,16 +1,12 @@
-import type { NavLink } from './main-sidebar-nav-link';
+import type { ComponentPropsWithoutRef } from 'react';
 import { cn } from '@/lib/utils';
 
-export type NavSection = {
-  key: string;
-  title?: string;
-  links: NavLink[];
-};
+export type MainSidebarNavListProps = ComponentPropsWithoutRef<'ul'>;
 
-export type MainSidebarNavListProps = {
-  children: React.ReactNode;
-  className?: string;
-};
-export function MainSidebarNavList({ children, className }: MainSidebarNavListProps) {
-  return <ul className={cn('grid gap-1 items-start content-center', className)}>{children}</ul>;
+export function MainSidebarNavList({ className, children, ...props }: MainSidebarNavListProps) {
+  return (
+    <ul className={cn('grid grid-cols-[minmax(0,1fr)] gap-1 items-start content-center', className)} {...props}>
+      {children}
+    </ul>
+  );
 }

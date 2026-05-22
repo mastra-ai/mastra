@@ -12,6 +12,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../auth/ee';
 import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -37,6 +38,7 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
+import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -312,6 +314,7 @@ export class CoreToolBuilder extends MastraBase {
             )
           : undefined,
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+        transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
         inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
@@ -404,6 +407,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
+            observe: execOptions.observe ?? noopObserve,
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -459,6 +463,7 @@ export class CoreToolBuilder extends MastraBase {
                 threadId,
                 resourceId,
                 outputWriter: execOptions.outputWriter,
+                flushMessages: execOptions.flushMessages,
               },
             };
           } else if (isWorkflowExecution) {
@@ -570,6 +575,37 @@ export class CoreToolBuilder extends MastraBase {
         requestContext: toolRequestContext,
         mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
       });
+
+      const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
+      const user = toolRequestContext?.get('user');
+      if (fgaProvider) {
+        const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
+          await import('../../auth/ee/fga-check');
+        const toolResourceId = mcpMeta?.serverName
+          ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
+          : options.agentId
+            ? getAgentToolFGAResourceId(options.agentId, options.name)
+            : getStandaloneToolFGAResourceId(options.name);
+        await requireFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'tool', id: toolResourceId },
+          permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          requestContext: toolRequestContext,
+          context: {
+            resourceId: options.resourceId,
+          },
+          metadata: {
+            toolName: options.name,
+            agentId: options.agentId,
+            agentName: options.agentName,
+            runId: options.runId,
+            threadId: options.threadId,
+            executionResourceId: options.resourceId,
+            mcpMetadata: mcpMeta,
+          },
+        });
+      }
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
@@ -808,6 +844,7 @@ export class CoreToolBuilder extends MastraBase {
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+      transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
       inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,

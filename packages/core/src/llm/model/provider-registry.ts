@@ -129,20 +129,19 @@ function syncGlobalCacheToLocal(): void {
     if (globalJsonExists) {
       const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON(), 'utf-8');
 
-      // Validate JSON before copying to prevent propagating corrupted files
+      // Validate JSON before copying to prevent propagating corrupted files.
+      // Silently delete on corruption — the next gateway sync will rewrite a
+      // valid file, so logging here just creates noise when an older mastra
+      // version (without the digit-quoting fix) shares the global cache.
       try {
         JSON.parse(globalJsonContent);
       } catch {
-        console.warn(
-          `[GatewayRegistry] Detected corrupted global cache at ${GLOBAL_PROVIDER_REGISTRY_JSON()}. ` +
-            `Deleting corrupted file.`,
-        );
         try {
           fs.unlinkSync(GLOBAL_PROVIDER_REGISTRY_JSON());
         } catch {
           // Ignore deletion errors
         }
-        return; // Don't sync corrupted file
+        return;
       }
 
       let shouldCopyJson = true;
@@ -165,11 +164,8 @@ function syncGlobalCacheToLocal(): void {
       // Validate .d.ts content: check for unquoted provider names that start with a digit
       // (e.g. "readonly 302ai:" instead of "readonly '302ai':"), which produces invalid TypeScript.
       // This can happen if the global cache was written by an older version without the quoting fix.
+      // Silently delete on corruption — the next gateway sync will rewrite a valid file.
       if (/readonly\s+\d/.test(globalDtsContent)) {
-        console.warn(
-          `[GatewayRegistry] Detected invalid provider-types in global cache at ${GLOBAL_PROVIDER_TYPES_DTS()}. ` +
-            `Deleting corrupted file.`,
-        );
         try {
           fs.unlinkSync(GLOBAL_PROVIDER_TYPES_DTS());
         } catch {
@@ -190,9 +186,9 @@ function syncGlobalCacheToLocal(): void {
         }
       }
     }
-  } catch (error) {
-    // Silent fail - fall back to existing files
-    console.warn('Failed to sync global cache to local:', error);
+  } catch {
+    // Silent fail - fall back to existing files. Sync errors are recoverable
+    // on the next call and don't need to be surfaced to users.
   }
 }
 

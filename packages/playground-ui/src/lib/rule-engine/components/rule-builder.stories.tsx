@@ -21,7 +21,6 @@ const meta: Meta<typeof RuleBuilder> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

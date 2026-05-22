@@ -12,38 +12,26 @@ export interface BadgeProps {
 }
 
 const variantClasses = {
-  default: 'text-neutral3 bg-surface4',
-  success: 'text-accent1 bg-accent1Dark',
-  error: 'text-accent2 bg-accent2Dark',
-  info: 'text-accent5 bg-accent5Dark',
-  warning: 'text-accent6 bg-accent6Dark',
-};
-
-const iconClasses = {
-  default: 'text-neutral3',
-  success: 'text-accent1',
-  error: 'text-accent2',
-  info: 'text-accent5',
-  warning: 'text-accent6',
+  default: 'text-neutral5 bg-surface4 border-border1',
+  success: 'text-notice-success-fg bg-notice-success/20 border-notice-success/20',
+  error: 'text-notice-destructive-fg bg-notice-destructive/20 border-notice-destructive/20',
+  info: 'text-notice-info-fg bg-notice-info/20 border-notice-info/20',
+  warning: 'text-notice-warning-fg bg-notice-warning/20 border-notice-warning/20',
 };
 
 export const Badge = ({ icon, variant = 'default', className, children, ...props }: BadgeProps) => {
   return (
     <div
       className={cn(
-        'font-mono text-ui-sm gap-1 h-badge-default inline-flex items-center rounded-full border border-border1 shrink-0',
+        'font-mono text-ui-sm gap-1 h-badge-default inline-flex items-center rounded-full border shrink-0',
         transitions.colors,
         icon ? 'pl-2 pr-2.5' : 'px-2.5',
-        variant === 'default' && icon ? 'bg-surface4 text-neutral5' : variantClasses[variant],
+        variantClasses[variant],
         className,
       )}
       {...props}
     >
-      {icon && (
-        <span className={iconClasses[variant]}>
-          <Icon>{icon}</Icon>
-        </span>
-      )}
+      {icon && <Icon size="sm">{icon}</Icon>}
       {children}
     </div>
   );

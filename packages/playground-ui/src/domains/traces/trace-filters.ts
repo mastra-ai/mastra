@@ -34,6 +34,17 @@ export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as 
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
+export const TRACE_LIST_MODE_PARAM = 'listMode';
+/** Branch-mode only: identifies the anchor span that defines the displayed subtree.
+ *  Stable across intra-panel span navigation (which only changes `spanId`). */
+export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
+export const TRACE_LIST_MODE_VALUES = new Set(['traces', 'branches'] as const);
+export type TraceListMode = 'traces' | 'branches';
+
+export const TRACE_LIST_MODE_OPTIONS = [
+  { label: 'Traces (default)', value: 'traces' },
+  { label: 'Branches', value: 'branches' },
+] as const satisfies readonly { label: string; value: TraceListMode }[];
 export const TRACE_DATE_PRESET_PARAM = 'datePreset';
 export const TRACE_DATE_FROM_PARAM = 'dateFrom';
 export const TRACE_DATE_TO_PARAM = 'dateTo';
@@ -129,6 +140,7 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
   if (params.has(TRACE_DATE_TO_PARAM)) return true;
   if (params.has(TRACE_ROOT_ENTITY_TYPE_PARAM)) return true;
   if (params.has(TRACE_STATUS_PARAM)) return true;
+  if (params.has(TRACE_LIST_MODE_PARAM)) return true;
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     if (params.has(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId])) return true;
   }
@@ -278,6 +290,9 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
 
   const status = searchParams.get(TRACE_STATUS_PARAM);
   if (status) next.set(TRACE_STATUS_PARAM, status);
+
+  const listMode = searchParams.get(TRACE_LIST_MODE_PARAM);
+  if (listMode) next.set(TRACE_LIST_MODE_PARAM, listMode);
 
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];
@@ -456,6 +471,7 @@ export function neutralizeFilterTokens(
     if (!field) return token;
     if (field.kind === 'text') return { fieldId: token.fieldId, value: '' };
     if (field.kind === 'pick-multi') {
+      if (field.omitAnyOption) return token;
       return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
     }
     return token;

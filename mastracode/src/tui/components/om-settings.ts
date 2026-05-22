@@ -21,6 +21,8 @@ export interface OMSettingsConfig {
   reflectorModelId: string;
   observationThreshold: number;
   reflectionThreshold: number;
+  cavemanObservations: boolean;
+  observeAttachments: boolean;
 }
 
 export interface OMSettingsCallbacks {
@@ -28,7 +30,16 @@ export interface OMSettingsCallbacks {
   onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
+  onCavemanObservationsChange: (enabled: boolean) => void;
+  onObserveAttachmentsChange: (enabled: boolean) => void;
   onClose: () => void;
+}
+
+interface BooleanSubmenuLabels {
+  onLabel?: string;
+  offLabel?: string;
+  onDescription?: string;
+  offDescription?: string;
 }
 
 // =============================================================================
@@ -158,6 +169,32 @@ class ThresholdSubmenu extends Container {
 }
 
 // =============================================================================
+// Boolean Submenu
+// =============================================================================
+
+class BooleanSubmenu extends SelectList {
+  constructor(
+    currentValue: boolean,
+    onSelect: (value: boolean) => void,
+    onBack: () => void,
+    labels?: BooleanSubmenuLabels,
+  ) {
+    const items: SelectItem[] = [
+      { value: 'on', label: `  ${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
+      { value: 'off', label: `  ${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
+    ];
+    super(items, items.length, getSelectListTheme());
+
+    this.setSelectedIndex(currentValue ? 0 : 1);
+
+    this.onSelect = (item: SelectItem) => {
+      onSelect(item.value === 'on');
+    };
+    this.onCancel = onBack;
+  }
+}
+
+// =============================================================================
 // OM Settings Component
 // =============================================================================
 
@@ -260,11 +297,54 @@ export class OMSettingsComponent extends Box implements Focusable {
             () => done(),
           ),
       },
+      {
+        id: 'caveman-observations',
+        label: 'Caveman observations',
+        description:
+          'Optional. Use terse caveman-style compression for observations and reflections ' +
+          'instead of standard prose. Off by default; turn on if you prefer the more compact style',
+        currentValue: config.cavemanObservations ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new BooleanSubmenu(
+            config.cavemanObservations,
+            value => {
+              config.cavemanObservations = value;
+              callbacks.onCavemanObservationsChange(value);
+              done(value ? 'On' : 'Off');
+            },
+            () => done(),
+            {
+              onDescription: 'Caveman-style terse compression',
+              offDescription: 'Standard prose observations',
+            },
+          ),
+      },
+      {
+        id: 'observe-attachments',
+        label: 'Observe attachments',
+        description:
+          'Forward image and file attachments to the Observer LLM. ' + 'Turn off if your observer model is text-only',
+        currentValue: config.observeAttachments ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new BooleanSubmenu(
+            config.observeAttachments,
+            value => {
+              config.observeAttachments = value;
+              callbacks.onObserveAttachmentsChange(value);
+              done(value ? 'On' : 'Off');
+            },
+            () => done(),
+            {
+              onDescription: 'Forward attachments to the observer',
+              offDescription: 'Drop attachments (placeholder text only)',
+            },
+          ),
+      },
     ];
 
     this.settingsList = new SettingsList(
       items,
-      10,
+      11,
       getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks

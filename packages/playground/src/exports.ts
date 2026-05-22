@@ -11,6 +11,6 @@ export {
 
 export { PlaygroundQueryClient } from './lib/tanstack-query';
 
-export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from '@mastra/playground-ui';
+export { usePlaygroundStore, useTheme, type Theme, type ResolvedTheme } from '@mastra/playground-ui';
 
 export { isWorkspaceV1Supported } from '@mastra/playground-ui/utils';

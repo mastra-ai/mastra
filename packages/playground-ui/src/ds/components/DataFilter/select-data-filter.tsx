@@ -1,6 +1,5 @@
-import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import { FilterIcon, SearchIcon, XIcon } from 'lucide-react';
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback } from 'react';
 
 import { Button } from '@/ds/components/Button/Button';
@@ -59,23 +58,6 @@ export type SelectDataFilterProps = {
 // ---------------------------------------------------------------------------
 
 const SUBMENU_SEARCH_THRESHOLD = 6;
-
-const subContentClass = cn(
-  'bg-surface5 backdrop-blur-xl z-50 min-w-[8rem] overflow-auto rounded-lg p-2 shadow-md',
-  'data-[state=open]:animate-in data-[state=closed]:animate-out',
-  'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
-  'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-);
-
-function PortalSubContent({ className, children, ...props }: ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
-  return (
-    <DropdownMenuPortal>
-      <DropdownMenuSubContent className={cn(subContentClass, className)} {...props}>
-        {children}
-      </DropdownMenuSubContent>
-    </DropdownMenuPortal>
-  );
-}
 
 function SubMenuSearch({
   value,
@@ -205,7 +187,7 @@ export function SelectDataFilter({
           <span className={cn('truncate')}>{cat.label}</span>
           {selectedCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{selectedCount}</span>}
         </DropdownMenu.SubTrigger>
-        <PortalSubContent className={cn('max-h-[20rem]')}>
+        <DropdownMenu.SubContent className={cn('max-h-[20rem]')}>
           {cat.values.length >= searchThreshold && (
             <SubMenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
           )}
@@ -233,7 +215,7 @@ export function SelectDataFilter({
                 </DropdownMenu.CheckboxItem>
               ))
           )}
-        </PortalSubContent>
+        </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
     );
   };
@@ -293,9 +275,9 @@ export function SelectDataFilter({
           return (
             <DropdownMenu.Sub key={group.key}>
               <DropdownMenu.SubTrigger>{group.label}</DropdownMenu.SubTrigger>
-              <PortalSubContent className={cn('max-h-[20rem]')}>
+              <DropdownMenu.SubContent className={cn('max-h-[20rem]')}>
                 {group.items.map(cat => renderCategory(cat))}
-              </PortalSubContent>
+              </DropdownMenu.SubContent>
             </DropdownMenu.Sub>
           );
         })}
