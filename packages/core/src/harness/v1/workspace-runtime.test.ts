@@ -21,11 +21,16 @@
  *     session's tool set.
  */
 
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as nodePath from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
+import { LocalFilesystem, WORKSPACE_TOOLS, Workspace as WorkspaceImpl } from '../../workspace';
 import type { Workspace } from '../../workspace';
 
 import { setupHarness } from './__test-utils__/setup';
@@ -169,6 +174,61 @@ describe('HarnessRequestContext.workspace — runtime plumbing', () => {
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     await session.message({ content: 'hi' });
     expect(getHarnessSlot(agent.streamCalls).workspace).toBeUndefined();
+  });
+
+  it('records workspace action journal rows from the Harness request-context slot', async () => {
+    const tempDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'harness-workspace-journal-'));
+    try {
+      const ws = new WorkspaceImpl({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+      const { harness, agent, storage } = setupHarness({
+        workspace: { kind: 'shared', workspace: ws },
+      });
+      const appendJournal = vi.spyOn(storage, 'appendWorkspaceActionJournalEntry');
+      const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+      await session.message({ content: 'hi' });
+
+      const slot = getHarnessSlot(agent.streamCalls);
+      expect(slot.recordWorkspaceAction).toBeTypeOf('function');
+      await slot.recordWorkspaceAction?.({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+        args: { path: 'src/index.ts', content: 'export {};' },
+        policyDecision: 'allow',
+        runId: 'run-1',
+        toolCallId: 'tool-call-1',
+        result: 'ok',
+      });
+      expect(appendJournal).toHaveBeenCalled();
+
+      const rowsByRequest = await storage.listWorkspaceActionJournalEntries({
+        sessionId: session.id,
+        resourceId: 'u1',
+        threadId: session.threadId,
+        requestId: 'tool-call-1',
+      });
+      expect(rowsByRequest).toHaveLength(1);
+
+      const rows = await storage.listWorkspaceActionJournalEntries({
+        sessionId: session.id,
+        resourceId: 'u1',
+        threadId: session.threadId,
+        requestId: 'tool-call-1',
+        affectedPath: { relativePath: 'src/index.ts' },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        actionKind: 'file',
+        operation: 'write',
+        policyDecision: 'allow',
+        requestId: 'tool-call-1',
+        path: {
+          rootPath: tempDir,
+          relativePath: 'src/index.ts',
+          path: nodePath.join(tempDir, 'src/index.ts'),
+        },
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   });
 });
 

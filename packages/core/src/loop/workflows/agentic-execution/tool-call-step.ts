@@ -54,10 +54,40 @@ type HarnessToolContextSlot = {
     toolName: string;
     args: Record<string, unknown>;
   }) => 'allow' | 'ask' | 'deny' | Promise<'allow' | 'ask' | 'deny'>;
+  recordWorkspaceAction?: (params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    policyDecision: 'allow' | 'ask' | 'deny';
+    runId?: string;
+    toolCallId?: string;
+    result?: unknown;
+    error?: unknown;
+  }) => Promise<void>;
 };
 
 function isHarnessToolPermissionPolicy(value: unknown): value is 'allow' | 'ask' | 'deny' {
   return value === 'allow' || value === 'ask' || value === 'deny';
+}
+
+async function recordHarnessWorkspaceAction(
+  harness: HarnessToolContextSlot | undefined,
+  params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    policyDecision: 'allow' | 'ask' | 'deny';
+    runId?: string;
+    toolCallId?: string;
+    result?: unknown;
+    error?: unknown;
+  },
+  logger?: { error: (...args: any[]) => void },
+): Promise<void> {
+  if (!harness?.recordWorkspaceAction) return;
+  try {
+    await harness.recordWorkspaceAction(params);
+  } catch (error) {
+    logger?.error(`Error recording Harness workspace action for tool ${params.toolName}:`, error);
+  }
 }
 
 function buildToolRequestContext(
@@ -512,6 +542,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (harnessToolPermission === 'deny') {
           await removeToolMetadata(inputData.toolName, 'approval');
+          await recordHarnessWorkspaceAction(
+            harness,
+            {
+              toolName: inputData.toolName,
+              args: args ?? {},
+              policyDecision: 'deny',
+              runId,
+              toolCallId: inputData.toolCallId,
+              error: `Tool "${inputData.toolName}" was denied by Harness permissions.`,
+            },
+            logger,
+          );
 
           return {
             ...inputData,
@@ -570,6 +612,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
+            await recordHarnessWorkspaceAction(
+              harness,
+              {
+                toolName: inputData.toolName,
+                args: args ?? {},
+                policyDecision: 'ask',
+                runId,
+                toolCallId: inputData.toolCallId,
+                result: 'approval_required',
+              },
+              logger,
+            );
 
             return suspend(
               {
@@ -1255,6 +1309,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const rawResult = await tool.execute(args, toolOptions);
         const result = ensureSerializable(rawResult);
+        await recordHarnessWorkspaceAction(
+          harness,
+          {
+            toolName: inputData.toolName,
+            args: args ?? {},
+            policyDecision: harnessToolPermission ?? 'allow',
+            runId,
+            toolCallId: inputData.toolCallId,
+            result,
+          },
+          logger,
+        );
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
@@ -1276,6 +1342,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
         }
+        const harness = requestContext.get('harness') as HarnessToolContextSlot | undefined;
+        await recordHarnessWorkspaceAction(
+          harness,
+          {
+            toolName: inputData.toolName,
+            args:
+              typeof inputData.args === 'object' && inputData.args !== null
+                ? (inputData.args as Record<string, unknown>)
+                : {},
+            policyDecision: 'allow',
+            runId,
+            toolCallId: inputData.toolCallId,
+            error,
+          },
+          logger,
+        );
         return {
           error: error as Error,
           ...inputData,

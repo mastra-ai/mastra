@@ -96,4 +96,42 @@ describe('MastraCodeHarnessEventProjector', () => {
       plan: '1. Build it',
     });
   });
+
+  it('projects subagent tool args and stringifies structured subagent output', async () => {
+    const { events, projector } = createProjector();
+
+    await projector.project({
+      type: 'subagent_tool_start',
+      toolCallId: 'parent-tool',
+      subagentSessionId: 'child',
+      agentType: 'explore',
+      innerToolCallId: 'inner-tool',
+      toolName: 'read_file',
+      args: { path: 'src/index.ts' },
+      depth: 1,
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+    await projector.project({
+      type: 'subagent_end',
+      toolCallId: 'parent-tool',
+      subagentSessionId: 'child',
+      agentType: 'explore',
+      output: { summary: 'done' },
+      isError: false,
+      durationMs: 12,
+      depth: 1,
+      id: 'e2',
+      timestamp: 2,
+    } as HarnessV1Event);
+
+    expect(events.find(event => event.type === 'subagent_tool_start')).toMatchObject({
+      subToolCallId: 'inner-tool',
+      subToolName: 'read_file',
+      subToolArgs: { path: 'src/index.ts' },
+    });
+    expect(events.find(event => event.type === 'subagent_end')).toMatchObject({
+      result: JSON.stringify({ summary: 'done' }),
+    });
+  });
 });

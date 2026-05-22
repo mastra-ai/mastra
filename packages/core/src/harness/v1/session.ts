@@ -28,6 +28,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
+import path from 'node:path';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
@@ -39,6 +40,7 @@ import { RequestContext } from '../../request-context';
 import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageSessionEventReplayUnsupportedError,
+  HarnessStorageWorkspaceActionJournalUnsupportedError,
 } from '../../storage/domains/harness';
 import type {
   GoalJudgeDecision,
@@ -63,6 +65,7 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
 import type { Workspace } from '../../workspace';
+import { WORKSPACE_TOOLS } from '../../workspace/constants';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '../tools';
@@ -221,6 +224,18 @@ function cloneMcpCatalogValue(value: unknown): unknown | undefined {
       return undefined;
     }
   }
+}
+
+type WorkspaceJournalPath = {
+  rootId: string;
+  rootPath: string;
+  path: string;
+  relativePath: string;
+};
+
+function normalizeWorkspaceJournalRelativePath(inputPath: string): string {
+  const normalized = path.normalize(inputPath).replace(/\\/g, '/');
+  return normalized.replace(/^\/+/, '') || '.';
 }
 
 function freezeHarnessRequestStateSnapshot(value: unknown, seen = new WeakSet<object>()): unknown {
@@ -3112,6 +3127,8 @@ export class Session {
       requestContext,
       ...(toolsets ? { toolsets } : {}),
       ...(opts.prepareStep ? { prepareStep: opts.prepareStep } : {}),
+      ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
+      ...(opts.stopWhen ? { stopWhen: opts.stopWhen } : {}),
       ...(this._shouldRequireToolApproval(opts.yolo) ? { requireToolApproval: true } : {}),
       ...(mode.instructions ? { instructions: mode.instructions } : {}),
     };
@@ -4038,6 +4055,168 @@ export class Session {
     if (this._record.sessionGrants.tools.includes(toolName)) return 'allow';
     if (category && this._record.sessionGrants.categories.includes(category)) return 'allow';
     return 'ask';
+  }
+
+  private async _recordWorkspaceAction(params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    policyDecision: PermissionPolicy;
+    runId?: string;
+    toolCallId?: string;
+    result?: unknown;
+    error?: unknown;
+  }): Promise<void> {
+    const mapped = this._mapWorkspaceToolAction(params.toolName, params.args);
+    if (!mapped) return;
+    const now = Date.now();
+    const action = snapshotHarnessEventForJson(
+      {
+        toolName: params.toolName,
+        args: params.args,
+        ...mapped.action,
+      },
+      'workspaceActionJournal.action',
+    );
+    const result = snapshotHarnessEventForJson(
+      {
+        status: params.error !== undefined ? 'error' : 'ok',
+        ...(params.result !== undefined ? { output: params.result } : {}),
+        ...(params.error !== undefined ? { error: projectHarnessPublicError(params.error) } : {}),
+      },
+      'workspaceActionJournal.result',
+    );
+    try {
+      await this._storage.appendWorkspaceActionJournalEntry({
+        id: `waj-${randomUUID()}`,
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        actionKind: mapped.actionKind,
+        operation: mapped.operation,
+        action,
+        policyDecision: params.policyDecision,
+        policyReasons: [`harness.tool_permission_${params.policyDecision}`],
+        matchedRules: [],
+        ...(mapped.path ? { path: mapped.path } : {}),
+        ...(mapped.toPath ? { toPath: mapped.toPath } : {}),
+        ...(mapped.cwd ? { cwd: mapped.cwd } : {}),
+        actor: snapshotHarnessEventForJson(
+          {
+            kind: 'tool',
+            toolName: params.toolName,
+            ...(params.runId ? { runId: params.runId } : {}),
+            ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
+            source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+            ...(this._record.parentSessionId ? { parentSessionId: this._record.parentSessionId } : {}),
+          },
+          'workspaceActionJournal.actor',
+        ),
+        ...(params.toolCallId ? { requestId: params.toolCallId } : {}),
+        result,
+        createdAt: now,
+      });
+    } catch (err) {
+      if (err instanceof HarnessStorageWorkspaceActionJournalUnsupportedError) return;
+      throw err;
+    }
+  }
+
+  private _mapWorkspaceToolAction(
+    toolName: string,
+    args: Record<string, unknown>,
+  ):
+    | {
+        actionKind: 'file' | 'command';
+        operation: string;
+        action: Record<string, unknown>;
+        path?: WorkspaceJournalPath;
+        toPath?: WorkspaceJournalPath;
+        cwd?: WorkspaceJournalPath;
+      }
+    | undefined {
+    const argPath = typeof args.path === 'string' ? args.path : undefined;
+    const pathRecord = argPath ? this._workspaceJournalPath(argPath) : undefined;
+    switch (toolName) {
+      case WORKSPACE_TOOLS.FILESYSTEM.READ_FILE:
+      case WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES:
+      case WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT:
+      case WORKSPACE_TOOLS.FILESYSTEM.GREP:
+        if (!pathRecord) return undefined;
+        return { actionKind: 'file', operation: 'read', action: { kind: 'file', operation: 'read' }, path: pathRecord };
+      case WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE:
+      case WORKSPACE_TOOLS.FILESYSTEM.MKDIR:
+        if (!pathRecord) return undefined;
+        return {
+          actionKind: 'file',
+          operation: 'write',
+          action: { kind: 'file', operation: 'write' },
+          path: pathRecord,
+        };
+      case WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE:
+      case WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT:
+        if (!pathRecord) return undefined;
+        return {
+          actionKind: 'file',
+          operation: 'patch',
+          action: { kind: 'file', operation: 'patch' },
+          path: pathRecord,
+        };
+      case WORKSPACE_TOOLS.FILESYSTEM.DELETE:
+        if (!pathRecord) return undefined;
+        return {
+          actionKind: 'file',
+          operation: 'delete',
+          action: { kind: 'file', operation: 'delete' },
+          path: pathRecord,
+        };
+      case WORKSPACE_TOOLS.SEARCH.INDEX:
+        if (!pathRecord) return undefined;
+        return {
+          actionKind: 'file',
+          operation: 'index',
+          action: { kind: 'file', operation: 'index' },
+          path: pathRecord,
+        };
+      case WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND: {
+        const cwd = typeof args.cwd === 'string' ? this._workspaceJournalPath(args.cwd) : undefined;
+        return {
+          actionKind: 'command',
+          operation: 'execute',
+          action: {
+            kind: 'command',
+            command: typeof args.command === 'string' ? args.command : '',
+            ...(typeof args.cwd === 'string' ? { cwd: args.cwd } : {}),
+            ...(Array.isArray(args.args) ? { args: args.args } : {}),
+          },
+          ...(cwd ? { cwd } : {}),
+        };
+      }
+      default:
+        return undefined;
+    }
+  }
+
+  private _workspaceJournalPath(inputPath: string): WorkspaceJournalPath {
+    const workspace = this._workspace;
+    const filesystem = workspace?.filesystem;
+    const rootId = filesystem?.id ?? workspace?.id ?? 'workspace';
+    const rootPath = filesystem?.basePath ?? '/';
+    const resolved = filesystem?.resolveAbsolutePath?.(inputPath);
+    const relativePath = normalizeWorkspaceJournalRelativePath(inputPath);
+    const absolutePath =
+      resolved ??
+      (path.isAbsolute(inputPath)
+        ? path.normalize(inputPath)
+        : rootPath === '/'
+          ? `/${relativePath}`
+          : path.join(rootPath, relativePath));
+    return {
+      rootId,
+      rootPath,
+      path: absolutePath,
+      relativePath,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -7906,6 +8085,7 @@ export class Session {
       registerPlanApproval: params =>
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       resolveToolPermission: params => session._resolveToolPermissionPolicy(params.toolName),
+      recordWorkspaceAction: params => session._recordWorkspaceAction(params),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
@@ -8078,10 +8258,33 @@ export class Session {
    * the session can be re-hydrated. Currently unused; lands with eviction.
    */
   _markEvicted(updatedRecord: SessionRecord): void {
+    const err = new HarnessValidationError('session.evict()', 'Session evicted');
     this._record = updatedRecord;
     this._state = 'evicted';
-    this._tearDownThreadSubscription(new HarnessValidationError('session.evict()', 'Session evicted'));
+    this._tearDownThreadSubscription(err);
     this._rejectIdleWaiters(new HarnessSessionClosedError(this.id));
+    this._rejectActiveTurnWaiters(err);
+    const activeTurn = this._currentTurnAbortController;
+    if (activeTurn) {
+      activeTurn.abort('session_evicted');
+      this._endTurn(activeTurn);
+    }
+    if (this._queuedResumeRecoveryTimer !== undefined) {
+      clearTimeout(this._queuedResumeRecoveryTimer);
+      this._queuedResumeRecoveryTimer = undefined;
+    }
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    for (const [queuedItemId, resolver] of this._queueResolvers) {
+      this._queueResolvers.delete(queuedItemId);
+      resolver.reject(err);
+    }
+  }
+
+  /** @internal — update local lease metadata after the owning Harness renews storage. */
+  _markLeaseRenewed(expiresAt: number): void {
+    if (this._state !== 'live' && this._state !== 'closing') return;
+    this._record = { ...this._record, leaseExpiresAt: expiresAt };
   }
 
   /**

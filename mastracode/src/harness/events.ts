@@ -89,6 +89,7 @@ export class MastraCodeHarnessEventProjector {
             ...event,
             subToolCallId: event.innerToolCallId,
             subToolName: event.toolName,
+            subToolArgs: (event as { args?: unknown }).args,
           } as unknown as LegacyHarnessEvent,
         ];
       case 'subagent_tool_end':
@@ -102,7 +103,7 @@ export class MastraCodeHarnessEventProjector {
           } as unknown as LegacyHarnessEvent,
         ];
       case 'subagent_end':
-        return [{ ...event, result: event.output } as unknown as LegacyHarnessEvent];
+        return [{ ...event, result: stringifySubagentOutput(event.output) } as unknown as LegacyHarnessEvent];
       case 'suspension_required':
         return this.projectSuspensionRequired(event);
       case 'suspension_resolved':
@@ -157,5 +158,15 @@ export class MastraCodeHarnessEventProjector {
       default:
         return [event as unknown as LegacyHarnessEvent];
     }
+  }
+}
+
+function stringifySubagentOutput(output: unknown): string {
+  if (typeof output === 'string') return output;
+  if (output instanceof Error) return output.message;
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
   }
 }

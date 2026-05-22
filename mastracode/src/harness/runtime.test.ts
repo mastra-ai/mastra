@@ -112,7 +112,7 @@ describe('MastraCodeHarnessRuntime', () => {
     const injectSystemReminder = vi.fn(async () => ({ id: 'sig-reminder', accepted: true }));
     (runtime as any).session = { signal, injectSystemReminder };
 
-    await runtime.sendSignal({
+    const acceptedUser = await runtime.sendSignal({
       content: 'hello',
       ifActive: { attributes: { delivery: 'while-active' } },
       ifIdle: { attributes: { delivery: 'message' } },
@@ -122,7 +122,11 @@ describe('MastraCodeHarnessRuntime', () => {
       { type: 'file', data: 'abc123', mediaType: 'image/png' },
     ];
     await runtime.sendSignal({ content: imageParts }).accepted;
-    await runtime.sendSignal({ type: 'system-reminder', contents: 'continue', attributes: { type: 'goal' } }).accepted;
+    const acceptedReminder = await runtime.sendSignal({
+      type: 'system-reminder',
+      contents: 'continue',
+      attributes: { type: 'goal' },
+    }).accepted;
 
     expect(signal).toHaveBeenCalledWith({
       content: 'hello',
@@ -135,6 +139,8 @@ describe('MastraCodeHarnessRuntime', () => {
       attributes: { type: 'goal' },
       metadata: undefined,
     });
+    expect(acceptedUser).toEqual({ id: 'sig-user', accepted: true });
+    expect(acceptedReminder).toEqual({ id: 'sig-reminder', accepted: true });
 
     await runtime.destroy();
   });
@@ -187,6 +193,58 @@ describe('MastraCodeHarnessRuntime', () => {
 
     expect(runtime.getDisplayState().omProgress.pendingTokens).toBe(0);
     expect(runtime.getDisplayState().bufferingMessages).toBe(true);
+    await runtime.destroy();
+  });
+
+  it('applies replayed OM progress from memory into the display state', async () => {
+    const runtime = createRuntime();
+    await runtime.init();
+    await runtime.createThread({ title: 'with om' });
+    (runtime as any).getMemoryStorage = vi.fn(async () => ({
+      getObservationalMemory: vi.fn(async () => ({
+        id: 'om-record-1',
+        config: { observationThreshold: 100, reflectionThreshold: 200 },
+        pendingMessageTokens: 7,
+        observationTokenCount: 11,
+      })),
+      listMessages: vi.fn(async () => ({
+        messages: [
+          {
+            role: 'assistant',
+            content: {
+              parts: [
+                {
+                  type: 'data-om-status',
+                  data: {
+                    windows: {
+                      active: {
+                        messages: { tokens: 19, threshold: 100 },
+                        observations: { tokens: 31, threshold: 200 },
+                      },
+                      buffered: {
+                        observations: { status: 'running', chunks: 2, messageTokens: 19, observationTokens: 0 },
+                        reflection: { status: 'idle', inputObservationTokens: 0, observationTokens: 0 },
+                      },
+                    },
+                    generationCount: 4,
+                    stepNumber: 5,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })),
+    }));
+
+    await runtime.loadOMProgress();
+
+    const displayState = runtime.getDisplayState();
+    expect(displayState.omProgress.pendingTokens).toBe(19);
+    expect(displayState.omProgress.observationTokens).toBe(31);
+    expect(displayState.omProgress.generationCount).toBe(4);
+    expect(displayState.omProgress.stepNumber).toBe(5);
+    expect(displayState.bufferingMessages).toBe(true);
     await runtime.destroy();
   });
 
@@ -370,6 +428,7 @@ describe('MastraCodeHarnessRuntime', () => {
           instructions: 'explore',
           defaultModelId: 'openai/gpt-4o-mini',
           forked: true,
+          maxSteps: 7,
         },
       ],
     });
@@ -380,6 +439,7 @@ describe('MastraCodeHarnessRuntime', () => {
       modeId: 'mastracode-subagent-explore',
       defaultModelId: 'openai/gpt-4o-mini',
       forked: true,
+      maxSteps: 7,
       workspace: 'inherit',
     });
     expect(runtime.getMastra().getAgent('subagent-explore' as never)).toBe(exploreAgent);
@@ -449,6 +509,7 @@ describe('MastraCodeHarnessRuntime', () => {
     });
 
     expect((runtime.core as any)._getSubagentType('explore')).toBeUndefined();
+    expect(runtime.core.getMode('mastracode-subagent-explore')).toBeUndefined();
   });
 
   it('filters denied tool categories and syncs permission rules into the Harness v1 session', async () => {

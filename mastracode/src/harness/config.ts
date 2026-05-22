@@ -126,19 +126,29 @@ export function toHarnessV1Modes<TState>(
 
 export function toHarnessV1Subagents(subagents: LegacyHarnessSubagent[]): Record<string, SubagentDefinition> {
   return Object.fromEntries(
-    subagents.map(subagent => [
-      subagent.id,
-      {
-        agentId: `subagent-${subagent.id}`,
-        modeId: subagentModeId(subagent.id),
-        description: subagent.description,
-        defaultModelId: subagent.defaultModelId,
-        forked: subagent.forked,
-        tools: subagent.tools,
-        allowedWorkspaceTools: subagent.allowedWorkspaceTools,
-        workspace: 'inherit',
-      },
-    ]),
+    subagents.map(subagent => {
+      if (subagent.allowedHarnessTools && subagent.allowedHarnessTools.length > 0) {
+        throw new Error(
+          `MastraCode Harness v1 native subagents do not support allowedHarnessTools for "${subagent.id}" yet; ` +
+            'inline the tools on the subagent or move them to allowedWorkspaceTools.',
+        );
+      }
+      return [
+        subagent.id,
+        {
+          agentId: `subagent-${subagent.id}`,
+          modeId: subagentModeId(subagent.id),
+          description: subagent.description,
+          defaultModelId: subagent.defaultModelId,
+          forked: subagent.forked,
+          tools: subagent.tools,
+          allowedWorkspaceTools: subagent.allowedWorkspaceTools,
+          maxSteps: subagent.maxSteps,
+          stopWhen: subagent.stopWhen,
+          workspace: 'inherit',
+        },
+      ];
+    }),
   );
 }
 

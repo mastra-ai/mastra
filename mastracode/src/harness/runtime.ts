@@ -81,7 +81,7 @@ type SignalInput =
 
 interface SignalHandle {
   id: string;
-  accepted: Promise<void>;
+  accepted: Promise<unknown>;
 }
 
 function normalizeMessageContent(input: SignalInput): string {
@@ -297,9 +297,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.state = { ...config.initialState };
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
-    const harnessV1Subagents = this.shouldExposeSubagentTool()
-      ? { types: toHarnessV1Subagents(config.subagents) }
-      : undefined;
+    const exposedSubagents = this.shouldExposeSubagentTool() ? config.subagents : [];
+    const harnessV1Subagents = exposedSubagents.length > 0 ? { types: toHarnessV1Subagents(exposedSubagents) } : undefined;
 
     this.mastra = new Mastra({
       agents: harnessV1Agents,
@@ -311,7 +310,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.core = new HarnessV1({
       mastra: this.mastra,
       runtimeCompatibilityGeneration: MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
-      modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, config.subagents),
+      modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, exposedSubagents),
       subagents: harnessV1Subagents,
       defaultModeId: this.defaultModeId,
       toolCategoryResolver: config.toolCategoryResolver,
@@ -947,6 +946,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         )
         .then(result => {
           handle.id = result.id;
+          return result;
         });
       return handle;
     }
@@ -963,6 +963,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       )
       .then(result => {
         handle.id = result.id;
+        return result;
       });
     return handle;
   }
@@ -1255,7 +1256,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         break;
       }
 
-      this.emit({
+      const event = {
         type: 'om_status',
         windows: {
           active: {
@@ -1268,7 +1269,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         threadId,
         stepNumber,
         generationCount,
-      } as unknown as HarnessEvent);
+      } as unknown as HarnessV1Event | MastraCodeOMEvent;
+      this.applyOMEvent(event);
+      this.emit(event as unknown as HarnessEvent);
+      this.emit({ type: 'display_state_changed', displayState: this.getDisplayState() } as unknown as HarnessEvent);
     } catch {
       // OM is optional; missing storage support should not break startup.
     }
