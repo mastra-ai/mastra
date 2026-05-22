@@ -8,7 +8,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal } from './signals';
+import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
@@ -644,9 +644,41 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            for await (const part of run.output.fullStream) {
-              yield part as any;
-              if (done) break;
+            const reader = run.output.fullStream.getReader();
+            let readerReleased = false;
+            try {
+              while (true) {
+                const { value: part, done: streamDone } = await reader.read();
+                if (streamDone) break;
+                yield part as any;
+                if (done) break;
+                if (
+                  part.type === 'finish' ||
+                  part.type === 'error' ||
+                  part.type === 'abort' ||
+                  part.type === 'tool-call-suspended'
+                ) {
+                  // After a terminal chunk, drain remaining stream data in the
+                  // background to prevent backpressure from blocking upstream
+                  // processing (e.g. OM), while allowing the generator to
+                  // immediately serve subsequent runs.
+                  readerReleased = true;
+                  void (async () => {
+                    try {
+                      while (true) {
+                        const { done: d } = await reader.read();
+                        if (d) break;
+                      }
+                    } catch {}
+                    reader.releaseLock();
+                  })();
+                  break;
+                }
+              }
+            } finally {
+              if (!readerReleased) {
+                reader.releaseLock();
+              }
             }
           }
         } finally {
@@ -675,7 +707,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
-    const signal = createSignal({ ...signalInput, acceptedAt: new Date() });
+    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -707,6 +739,12 @@ export class AgentThreadStreamRuntime {
     );
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
+
+    // Resolve conditional delivery attributes now that we know the delivery path.
+    signal = resolveDeliveryAttributes(
+      signal,
+      isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
+    );
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {

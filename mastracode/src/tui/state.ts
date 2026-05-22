@@ -40,6 +40,7 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  isInterjection?: boolean;
 }
 // =============================================================================
 // MastraTUIOptions
@@ -178,6 +179,8 @@ export interface TUIState {
   pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
+  /** Pending user-message component ids for queued slash commands */
+  pendingSlashCommandMessageIds: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
   pendingApprovalDismiss: (() => void) | null;
 
@@ -297,6 +300,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     followUpComponents: [],
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
+    pendingSlashCommandMessageIds: [],
     pendingApprovalDismiss: null,
 
     // Status line
