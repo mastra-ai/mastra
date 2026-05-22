@@ -3218,22 +3218,6 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /harness/:name/sessions/:sessionId/attachments/:attachmentId": {
-    "method": "DELETE",
-    "path": "/harness/:name/sessions/:sessionId/attachments/:attachmentId",
-    "pathParams": [
-      "name",
-      "sessionId",
-      "attachmentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "unknown"
-    }
-  },
   "POST /harness/:name/sessions/:sessionId/messages": {
     "method": "POST",
     "path": "/harness/:name/sessions/:sessionId/messages",

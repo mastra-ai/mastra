@@ -196,7 +196,7 @@ describe('Harness server routes', () => {
     expect(POST_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
-    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.responseType).toBe('json');
+    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.responseType).toBe('datastream-response');
     expect(POST_HARNESS_MESSAGE_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_MESSAGE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_QUEUE_ROUTE.requiresAuth).toBe(true);

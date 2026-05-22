@@ -20707,7 +20707,7 @@ export interface DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Route
   body: never;
   request: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Request;
   response: unknown;
-  responseType: 'json';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
