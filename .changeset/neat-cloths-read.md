@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fixed observational memory in long conversations by keeping generated response part timestamps aligned with their message timestamps.
+Fixed observational memory in long conversations by keeping active response timestamps ordered without advancing observation cursors past unobserved messages.
