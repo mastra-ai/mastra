@@ -53,8 +53,15 @@ export type ClaudeQueryOptions = {
   pathToClaudeCodeExecutable?: string;
 };
 
-export type ClaudeQueryFunction = (params: { prompt: string; options?: ClaudeQueryOptions }) => AsyncIterable<unknown>;
-export type ClaudeAgentInput = ClaudeQueryFunction | { query: ClaudeQueryFunction };
+export type ClaudeQueryFunction = (params: { prompt: string }) => AsyncIterable<unknown>;
+export type ClaudeQueryFunctionWithOptions = (params: {
+  prompt: string;
+  options?: ClaudeQueryOptions;
+}) => AsyncIterable<unknown>;
+export type ClaudeAgentInput =
+  | ClaudeQueryFunction
+  | ClaudeQueryFunctionWithOptions
+  | { query: ClaudeQueryFunction | ClaudeQueryFunctionWithOptions };
 
 export type ClaudeAgentOptions = {
   /**
@@ -331,7 +338,7 @@ function runClaudeAsMastraStream<OUTPUT>(
 function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSignal): AsyncIterable<SDKMessage> {
   const abortController = createAbortController(signal);
   const agent = options.agent;
-  const query = typeof agent === 'function' ? agent : agent.query;
+  const query = (typeof agent === 'function' ? agent : agent.query) as ClaudeQueryFunctionWithOptions;
 
   return query({
     prompt,
