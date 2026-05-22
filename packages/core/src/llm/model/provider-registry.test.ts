@@ -28,7 +28,10 @@ describe('modelSupportsAttachments', () => {
     });
 
     expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+    expect(modelSupportsAttachments('mastra/openrouter/deepseek/deepseek-v4-flash')).toBe(false);
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
   });
 });
 

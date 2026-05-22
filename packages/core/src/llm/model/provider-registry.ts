@@ -518,13 +518,36 @@ function loadProviderAttachmentModels(provider: string, useDynamicLoading: boole
  * Returns `true` if the model is listed, `false` if the provider is known but
  * the model isn't listed, or `undefined` when no data exists for the provider.
  */
+function getProviderAttachmentSupport(
+  provider: string,
+  modelId: string,
+  useDynamicLoading: boolean,
+): boolean | undefined {
+  const models = loadProviderAttachmentModels(provider, useDynamicLoading);
+  if (!models) return undefined;
+  return models.includes(modelId);
+}
+
 export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
   const { provider, modelId } = parseModelString(modelRouterId);
   if (!provider) return undefined;
+
   const registry = GatewayRegistry.getInstance();
-  const models = loadProviderAttachmentModels(provider, registry['useDynamicLoading']);
-  if (!models) return undefined;
-  return models.includes(modelId);
+  const useDynamicLoading = registry['useDynamicLoading'];
+  const directSupport = getProviderAttachmentSupport(provider, modelId, useDynamicLoading);
+  if (directSupport !== undefined) return directSupport;
+
+  const nestedProviderDelimiter = modelId.indexOf('/');
+  if (nestedProviderDelimiter !== -1) {
+    const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
+    const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
+    if (nestedProvider && nestedModelId) {
+      const nestedSupport = getProviderAttachmentSupport(nestedProvider, nestedModelId, useDynamicLoading);
+      if (nestedSupport !== undefined) return nestedSupport;
+    }
+  }
+
+  return directSupport;
 }
 
 /**

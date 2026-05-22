@@ -2606,14 +2606,14 @@ describe('Observer Agent Helpers', () => {
 
       const observer = new ObserverRunner({
         observationConfig: {
-          model: 'openrouter/deepseek-v4-flash',
+          model: 'openrouter/deepseek/deepseek-v4-flash',
           messageTokens: 1000,
           bufferTokens: false,
           previousObserverTokens: 1000,
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'openrouter/deepseek-v4-flash' as any }),
+        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,

@@ -389,7 +389,7 @@ describe('createMastraCode', () => {
     expect(harnessCall?.initialState?.observeAttachments).toBe(false);
   });
 
-  it('omits observeAttachments from initial state when global setting is null', async () => {
+  it('defaults observeAttachments to auto when global setting is null', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -397,7 +397,7 @@ describe('createMastraCode', () => {
     const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessCall?.initialState).not.toHaveProperty('observeAttachments');
+    expect(harnessCall?.initialState?.observeAttachments).toBe('auto');
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

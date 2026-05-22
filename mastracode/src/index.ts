@@ -471,7 +471,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
-  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? undefined;
+  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
