@@ -4,7 +4,7 @@ import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import { chatModule } from './chat-lazy';
 import { formatToolApproval } from './formatting';
-import { asOmChunk, renderOmTaskUpdate } from './om';
+import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
@@ -127,6 +127,28 @@ export async function runStreamingDriver({
   // later (in a new session) still replace the entry by id.
   const pendingOmTasks = new Map<string, { title: string }>();
 
+  // Coalesces consecutive "Recalled memory" activations within a single
+  // session into one aggregated row. Each `data-om-activation` chunk has a
+  // distinct `cycleId`, so naively pushing them produces a stack of
+  // "Recalled memory" rows. Instead we keep a single task (id
+  // `om-activation`) per session and roll subsequent activations into it
+  // by summing the token deltas. Reset on `closeSession()` so a new run
+  // starts fresh. Reflection activations are not aggregated — they have a
+  // distinct title per event and are typically one-shot.
+  const aggregatedRecallRef: {
+    current: {
+      count: number;
+      messageTokens: number; // sum of tokensActivated
+      memoryTokens: number; // sum of observationTokens
+    } | null;
+  } = { current: null };
+
+  // Whether we have set a non-default plan title this session. The chat
+  // SDK falls back to "Thinking completed" when no `plan_update` ever fires
+  // — push a meaningful title with the first OM event so memory-only runs
+  // don't show the default.
+  const planTitleRef: { current: boolean } = { current: false };
+
   const openSession = (): StreamingSession => {
     let buffer: (string | StreamChunk)[] = [];
     let closed = false;
@@ -220,6 +242,8 @@ export async function runStreamingDriver({
       s.push({ type: 'task_update', id, title, status: 'complete' });
     }
     pendingOmTasks.clear();
+    aggregatedRecallRef.current = null;
+    planTitleRef.current = false;
     sessionRef.current = null;
     s.close();
     await s.done;
@@ -323,6 +347,34 @@ export async function runStreamingDriver({
       if (om) {
         // `cycleId` is the stable task ID across start/end/failed events.
         if (om.data.cycleId) {
+          // Set a meaningful plan title on first OM event so memory-only
+          // runs don't show the chat-SDK default ("Thinking completed").
+          if (!planTitleRef.current) {
+            pushToSession({ type: 'plan_update', title: 'Updating memory' });
+            planTitleRef.current = true;
+          }
+
+          // Coalesce consecutive observation activations into a single
+          // aggregated row. Each activation chunk has its own `cycleId`,
+          // so without this we'd render N stacked "Recalled memory" rows.
+          if (om.type === 'data-om-activation' && om.data.operationType === 'observation') {
+            const prev = aggregatedRecallRef.current;
+            aggregatedRecallRef.current = {
+              count: (prev?.count ?? 0) + 1,
+              messageTokens: (prev?.messageTokens ?? 0) + om.data.tokensActivated,
+              memoryTokens: (prev?.memoryTokens ?? 0) + om.data.observationTokens,
+            };
+            const { count, messageTokens, memoryTokens } = aggregatedRecallRef.current;
+            pushToSession({
+              type: 'task_update',
+              id: 'om-activation',
+              title: count === 1 ? 'Recalled memory' : `Recalled memory (${count}x)`,
+              status: 'complete',
+              details: `-${formatTokens(messageTokens)} message tokens, +${formatTokens(memoryTokens)} memory tokens`,
+            });
+            continue;
+          }
+
           const update = renderOmTaskUpdate(om);
           if (update.type === 'task_update') {
             if (update.status === 'in_progress') {

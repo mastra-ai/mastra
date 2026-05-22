@@ -381,6 +381,79 @@ describe('consumeAgentStream', () => {
       expect(omUpdates[1]).toMatchObject({ status: 'complete', title: 'Saving to memory…' });
     });
 
+    it('coalesces consecutive observation activations into one aggregated row', async () => {
+      // Activation chunks fire one-per-cycle, but reflection runs typically
+      // emit a burst of them in a row. Instead of stacking N "Recalled
+      // memory" rows, the driver rolls them into a single `om-activation`
+      // task that updates in place with the running totals.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hello' } },
+          {
+            type: 'data-om-activation',
+            data: {
+              cycleId: 'a1',
+              operationType: 'observation',
+              tokensActivated: 1000,
+              observationTokens: 100,
+            },
+          },
+          {
+            type: 'data-om-activation',
+            data: {
+              cycleId: 'a2',
+              operationType: 'observation',
+              tokensActivated: 2000,
+              observationTokens: 200,
+            },
+          },
+          {
+            type: 'data-om-activation',
+            data: {
+              cycleId: 'a3',
+              operationType: 'observation',
+              tokensActivated: 3000,
+              observationTokens: 300,
+            },
+          },
+          { type: 'finish', payload: {} },
+        ] as any,
+        sdkThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg as any);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string; title: string; details?: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      const activations = taskUpdates.filter(t => t.id === 'om-activation');
+      // All three activation chunks should target the same stable id with
+      // running totals — the SDK plan widget updates the row in place.
+      expect(activations).toHaveLength(3);
+      expect(activations[0]).toMatchObject({
+        title: 'Recalled memory',
+        details: '-1k message tokens, +0.1k memory tokens',
+      });
+      expect(activations[1]).toMatchObject({
+        title: 'Recalled memory (2x)',
+        details: '-3k message tokens, +0.3k memory tokens',
+      });
+      expect(activations[2]).toMatchObject({
+        title: 'Recalled memory (3x)',
+        details: '-6k message tokens, +0.6k memory tokens',
+      });
+
+      // A meaningful plan title should be set on first OM event so memory-only
+      // runs don't show the chat-SDK default ("Thinking completed").
+      const planUpdates = drained.filter(
+        (p): p is { type: 'plan_update'; title: string } => typeof p === 'object' && (p as any).type === 'plan_update',
+      );
+      expect(planUpdates.some(p => p.title === 'Updating memory')).toBe(true);
+    });
+
     it("'hidden': drops tool-call/result chunks entirely (no card, no task_update)", async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
       await drive(

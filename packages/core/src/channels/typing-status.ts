@@ -1,5 +1,5 @@
 import type { AgentChunkType } from '../stream/types';
-
+import { asOmChunk } from './om';
 /**
  * Return value from a `TypingStatusFn`. Returning a non-empty string sets the
  * typing status. Returning `false`/`null`/`undefined`/`void` leaves the
@@ -63,36 +63,47 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  * | _everything else_     | _no change_                       |
  */
 export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatusContext): TypingStatusReturn {
-  if (chunk.type.startsWith('data-om-')) {
-    const t = chunk.type as string;
-    if (t === 'data-om-buffering-start') {
-      return 'is saving to memory…';
+  if (chunk.type.startsWith('data-')) {
+    const omChunk = asOmChunk(chunk);
+    if (omChunk) {
+      switch (omChunk.type) {
+        case 'data-om-buffering-start':
+          return STATUS_TEXT.SAVING_MEMORY;
+        case 'data-om-activation':
+          return STATUS_TEXT.RECALLING_MEMORY;
+      }
     }
-    if (t === 'data-om-activation') {
-      return 'is recalling memory…';
-    }
-  }
-
-  if (['reasoning-start', 'reasoning-delta'].includes(chunk.type)) {
-    return 'is thinking…';
-  }
-
-  if (['text-start', 'text-delta'].includes(chunk.type)) {
-    return 'is typing…';
   }
 
   switch (chunk.type) {
     case 'start':
-      return 'is working…';
+      return STATUS_TEXT.WORKING;
+
+    case 'text-delta':
+      return STATUS_TEXT.TYPING;
+
+    case 'reasoning-delta':
+      return STATUS_TEXT.THINKING;
+
     case 'tool-call':
       if (ctx.channelTools.has(chunk.payload.toolName)) return undefined;
-      return `is calling ${chunk.payload.toolName}…`;
+      return STATUS_TEXT.CALLING_TOOL(chunk.payload.toolName);
 
     case 'tool-call-approval':
       if (ctx.channelTools.has(chunk.payload.toolName)) return undefined;
-      return `is requesting approval for ${chunk.payload.toolName}…`;
+      return STATUS_TEXT.REQUESTING_APPROVAL(chunk.payload.toolName);
 
     default:
       return undefined;
   }
 }
+
+const STATUS_TEXT = {
+  TYPING: 'is typing…',
+  WORKING: 'is working…',
+  THINKING: 'is thinking…',
+  SAVING_MEMORY: 'is saving to memory…',
+  RECALLING_MEMORY: 'is recalling memory…',
+  CALLING_TOOL: (name: string) => `is calling ${name}…`,
+  REQUESTING_APPROVAL: (name: string) => `is requesting approval for ${name}…`,
+};
