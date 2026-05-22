@@ -64,7 +64,7 @@ export function buildMessagesFromChunks({
     }
   >();
   for (const chunk of chunks) {
-    if (chunk.type === 'tool-result' && chunk.payload.result != null) {
+    if (chunk.type === 'tool-result' && (chunk.payload.isError || chunk.payload.result != null)) {
       const p = chunk.payload as ToolResultPayload;
       toolResults.set(p.toolCallId, {
         result: p.result,
@@ -261,7 +261,12 @@ export function buildMessagesFromChunks({
                   toolCallId: p.toolCallId,
                   toolName: p.toolName,
                   args: p.args,
-                  errorText: typeof result.result === 'string' ? result.result : safeStringify(result.result),
+                  errorText:
+                    typeof result.result === 'string'
+                      ? result.result
+                      : result.result == null
+                        ? 'Tool execution failed'
+                        : safeStringify(result.result),
                 }
               : {
                   state: 'result' as const,

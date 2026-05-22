@@ -270,6 +270,36 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should merge tool-call + errored nullish tool-result into an output-error part', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', args: { q: 'test' } },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          result: undefined,
+          isError: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Tool execution failed',
+      },
+    });
+  });
+
   // ── Source and file parts ───────────────────────────────────
 
   it('should produce a source part', () => {
