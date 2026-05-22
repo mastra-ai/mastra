@@ -8,14 +8,20 @@ import type {
   HarnessMessage,
   HarnessMode as LegacyHarnessMode,
   HarnessSession,
+  TaskItemSnapshot,
   HarnessThread,
   ModelAuthStatus,
   PermissionPolicy,
   ToolCategory,
 } from '@mastra/core/harness';
-import { defaultDisplayState } from '@mastra/core/harness';
+import { createSubagentTool, defaultDisplayState } from '@mastra/core/harness';
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
-import type { HarnessEvent as HarnessV1Event, HarnessMessageContentPart, Session, ThreadRecord } from '@mastra/core/harness/v1';
+import type {
+  HarnessEvent as HarnessV1Event,
+  HarnessMessageContentPart,
+  Session,
+  ThreadRecord,
+} from '@mastra/core/harness/v1';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -26,7 +32,6 @@ import {
   toHarnessV1Agents,
   toHarnessV1AuthStatus,
   toHarnessV1Modes,
-  toHarnessV1Subagents,
   toModelInfo,
 } from './config.js';
 import type { MastraCodeModelInfo, MastraCodeRuntimeConfig } from './config.js';
@@ -35,13 +40,23 @@ import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 
 type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
 
+type AgentWithBrowser = {
+  setBrowser?: (browser: unknown) => void;
+  hasOwnBrowser?: () => boolean;
+};
+
 type SignalInput =
   | {
       content: string | HarnessMessageContentPart[];
       ifActive?: { attributes?: SignalDeliveryAttributes };
       ifIdle?: { attributes?: SignalDeliveryAttributes };
     }
-  | { type: string; contents: string | HarnessMessageContentPart[]; attributes?: Record<string, unknown>; metadata?: Record<string, unknown> };
+  | {
+      type: string;
+      contents: string | HarnessMessageContentPart[];
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    };
 
 interface SignalHandle {
   id: string;
@@ -51,9 +66,7 @@ interface SignalHandle {
 function normalizeMessageContent(input: SignalInput): string {
   if ('content' in input) {
     if (typeof input.content === 'string') return input.content;
-    return input.content
-      .map(part => (part.type === 'text' ? part.text : `[${part.type}]`))
-      .join('\n');
+    return input.content.map(part => (part.type === 'text' ? part.text : `[${part.type}]`)).join('\n');
   }
 
   const contents =
@@ -73,20 +86,24 @@ function signalContents(input: SignalInput): string | HarnessMessageContentPart[
 
 function messageContents(content: string, files?: unknown[]): string | HarnessMessageContentPart[] {
   if (!files?.length) return content;
-  const parts: HarnessMessageContentPart[] = [
-    { type: 'text', text: content },
-    ...files.flatMap(file => {
-      if (!file || typeof file !== 'object') return [];
-      const value = file as Record<string, unknown>;
-      const part: HarnessMessageContentPart = {
-        type: 'file',
-        ...(typeof value.data === 'string' ? { data: value.data } : {}),
-        ...(typeof value.mimeType === 'string' ? { mediaType: value.mimeType } : {}),
-        ...(typeof value.mediaType === 'string' ? { mediaType: value.mediaType } : {}),
-      };
-      return [part];
-    }),
-  ];
+  const parts: HarnessMessageContentPart[] = [{ type: 'text', text: content }];
+  for (const file of files) {
+    if (!file || typeof file !== 'object') continue;
+    const value = file as Record<string, unknown>;
+    const media =
+      typeof value.mimeType === 'string'
+        ? { mediaType: value.mimeType }
+        : typeof value.mediaType === 'string'
+          ? { mediaType: value.mediaType }
+          : {};
+    if (typeof value.data === 'string') {
+      parts.push({ type: 'file', data: value.data, ...media });
+    } else if (typeof value.url === 'string') {
+      parts.push({ type: 'file', url: value.url, ...media });
+    } else if (value.file !== undefined) {
+      parts.push({ type: 'file', file: value.file, ...media });
+    }
+  }
   return parts;
 }
 
@@ -123,15 +140,33 @@ function providerFromModelId(modelId: string): string {
   return modelId.split('/')[0] ?? '';
 }
 
-function toSystemReminderAttributes(attributes?: Record<string, unknown>): Record<string, string | number | boolean | null | undefined> | undefined {
+function toSystemReminderAttributes(
+  attributes?: Record<string, unknown>,
+): Record<string, string | number | boolean | null | undefined> | undefined {
   if (!attributes) return undefined;
   const normalized: Record<string, string | number | boolean | null | undefined> = {};
   for (const [key, value] of Object.entries(attributes)) {
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null || value === undefined) {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      value === null ||
+      value === undefined
+    ) {
       normalized[key] = value;
     }
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function recordToMap<T>(value: unknown): Map<string, T> {
+  if (value instanceof Map) return new Map(value);
+  if (value && typeof value === 'object') return new Map(Object.entries(value as Record<string, T>));
+  return new Map();
+}
+
+function cloneTasks(value: unknown): TaskItemSnapshot[] {
+  return Array.isArray(value) ? [...(value as TaskItemSnapshot[])] : [];
 }
 
 function toHarnessMessage(message: any): HarnessMessage {
@@ -151,14 +186,20 @@ function toHarnessMessage(message: any): HarnessMessage {
     content.push({
       type: 'system_reminder',
       reminderType: typeof signal.attributes?.type === 'string' ? signal.attributes.type : 'system',
-      contents: typeof signal.contents === 'string' ? signal.contents : normalizeMessageContent({ content: signal.contents ?? [] }),
+      contents:
+        typeof signal.contents === 'string'
+          ? signal.contents
+          : normalizeMessageContent({ content: signal.contents ?? [] }),
       attributes: signal.attributes,
       metadata: signal.metadata,
     } as never);
   } else if (signal?.type === 'user-message') {
     content.push({
       type: 'text',
-      text: typeof signal.contents === 'string' ? signal.contents : normalizeMessageContent({ content: signal.contents ?? [] }),
+      text:
+        typeof signal.contents === 'string'
+          ? signal.contents
+          : normalizeMessageContent({ content: signal.contents ?? [] }),
     });
   } else {
     for (const part of parts) {
@@ -196,12 +237,18 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private readonly listeners = new Set<HarnessEventListener>();
   private readonly projector: MastraCodeHarnessEventProjector;
   private readonly heartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
-  private readonly heartbeatHandlers = new Map<string, NonNullable<MastraCodeRuntimeConfig<TState>['heartbeatHandlers']>[number]>();
+  private readonly heartbeatHandlers = new Map<
+    string,
+    NonNullable<MastraCodeRuntimeConfig<TState>['heartbeatHandlers']>[number]
+  >();
   private currentWorkspace: Awaited<ReturnType<Session['getWorkspace']>> | undefined;
   private followUpCount = 0;
   private currentRunId: string | null = null;
   private currentTraceId: string | null = null;
   private stateUpdateQueue: Promise<void> = Promise.resolve();
+  private previousDisplayTasks: TaskItemSnapshot[] = [];
+  private currentDisplayTasks: TaskItemSnapshot[] = [];
+  private browser: unknown;
 
   readonly actions = Object.freeze({
     list: (options?: unknown) => this.requireSession().actions.list(options as never),
@@ -222,6 +269,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.defaultModeId = resolveDefaultModeId(config.modes);
     this.currentModeId = this.defaultModeId;
     this.state = { ...config.initialState };
+    this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
 
     this.mastra = new Mastra({
@@ -234,9 +282,12 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.core = new HarnessV1({
       mastra: this.mastra,
       runtimeCompatibilityGeneration: MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
-      modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, config.subagents),
+      modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, config.subagents).map(mode => {
+        const legacyMode = config.modes.find(entry => entry.id === mode.id);
+        const subagent = legacyMode ? this.buildLegacySubagentAlias(legacyMode) : undefined;
+        return subagent ? { ...mode, additionalTools: { subagent } } : mode;
+      }),
       defaultModeId: this.defaultModeId,
-      subagents: { maxDepth: 1, types: toHarnessV1Subagents(config.subagents) },
       toolCategoryResolver: config.toolCategoryResolver,
       models: [],
       modelAuthStatusResolver: modelId => this.resolveHarnessV1AuthStatus(modelId),
@@ -247,6 +298,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
           }
         : undefined,
     });
+
+    if (config.browser && typeof config.browser !== 'function') {
+      this.setBrowser(config.browser);
+    }
 
     this.projector = new MastraCodeHarnessEventProjector(
       event => this.emit(event),
@@ -296,6 +351,13 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     if ('runId' in event && typeof event.runId === 'string') this.currentRunId = event.runId;
     if ('traceId' in event && typeof event.traceId === 'string') this.currentTraceId = event.traceId;
     this.currentTraceId = this.session?.getDisplayState().currentTraceId ?? this.currentTraceId;
+    if (event.type === 'state_changed' && this.session) {
+      this.state = { ...this.state, ...((await this.session.getState<TState>()) as TState) };
+    }
+    if (event.type === 'task_updated') {
+      this.previousDisplayTasks = [...this.currentDisplayTasks];
+      this.currentDisplayTasks = cloneTasks((event as { tasks?: unknown }).tasks);
+    }
     await this.projector.project(event);
   }
 
@@ -349,6 +411,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
+    if (this.isRunning()) this.abort();
     const previousThreadId = this.session?.threadId ?? null;
     const thread = await this.core.threads.get({ resourceId: this.resourceId, threadId });
     if (!thread) {
@@ -445,7 +508,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async getKnownResourceIds(): Promise<string[]> {
-    const ids = new Set((await this.listThreads({ allResources: true, includeForkedSubagents: true })).map(thread => thread.resourceId));
+    const ids = new Set(
+      (await this.listThreads({ allResources: true, includeForkedSubagents: true })).map(thread => thread.resourceId),
+    );
     ids.add(this.defaultResourceId);
     ids.add(this.resourceId);
     return [...ids].sort();
@@ -458,10 +523,18 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   async setState(updates: Partial<TState>): Promise<void> {
     const nextUpdate = this.stateUpdateQueue.then(async () => {
       this.state = { ...this.state, ...updates };
+      if (Object.prototype.hasOwnProperty.call(updates, 'tasks')) {
+        this.previousDisplayTasks = [...this.currentDisplayTasks];
+        this.currentDisplayTasks = cloneTasks((updates as Record<string, unknown>).tasks);
+      }
       if (this.session) {
         await this.session.setState(this.state);
       }
-      this.emit({ type: 'state_changed', state: this.state, changedKeys: Object.keys(updates) } as unknown as HarnessEvent);
+      this.emit({
+        type: 'state_changed',
+        state: this.state,
+        changedKeys: Object.keys(updates),
+      } as unknown as HarnessEvent);
     });
     this.stateUpdateQueue = nextUpdate.catch(error => {
       console.error('MastraCode Harness state update failed', error);
@@ -488,6 +561,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async switchMode({ modeId }: { modeId: string }): Promise<void> {
+    if (!this.modes.some(mode => mode.id === modeId)) {
+      throw new Error(`Mode not found: ${modeId}`);
+    }
+    if (this.isRunning()) this.abort();
     const previousModeId = this.currentModeId;
     const currentModelId = this.getCurrentModelId();
     if (currentModelId) {
@@ -518,7 +595,15 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     return this.getCurrentModelId().length > 0;
   }
 
-  async switchModel({ modelId, scope = 'thread', modeId }: { modelId: string; scope?: 'global' | 'thread'; modeId?: string }): Promise<void> {
+  async switchModel({
+    modelId,
+    scope = 'thread',
+    modeId,
+  }: {
+    modelId: string;
+    scope?: 'global' | 'thread';
+    modeId?: string;
+  }): Promise<void> {
     const targetModeId = modeId ?? this.currentModeId;
     if (targetModeId === this.currentModeId) {
       await this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
@@ -534,7 +619,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async listAvailableModels(): Promise<AvailableModel[]> {
-    const registry = PROVIDER_REGISTRY as Record<string, { models?: string[]; name?: string; apiKeyEnvVar?: string | string[] }>;
+    const registry = PROVIDER_REGISTRY as Record<
+      string,
+      { models?: string[]; name?: string; apiKeyEnvVar?: string | string[] }
+    >;
     const useCounts = this.config.modelUseCountProvider?.() ?? {};
     const modelsById = new Map<string, AvailableModel>();
     const upsert = (model: Omit<AvailableModel, 'useCount'>) => {
@@ -554,7 +642,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       }
     }
 
-    for (const customModel of (await Promise.resolve(this.config.customModelCatalogProvider?.()).catch(() => [])) ?? []) {
+    for (const customModel of (await Promise.resolve(this.config.customModelCatalogProvider?.()).catch(() => [])) ??
+      []) {
       upsert(customModel);
     }
 
@@ -573,7 +662,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     if (!agentType) return (this.state.subagentModelId as string | undefined) ?? null;
-    return (this.state[`subagentModelId_${agentType}`] as string | undefined) ?? this.requireSession().models.getSubagent({ agentType });
+    return (
+      (this.state[`subagentModelId_${agentType}`] as string | undefined) ??
+      this.requireSession().models.getSubagent({ agentType })
+    );
   }
 
   async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
@@ -618,12 +710,14 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     void this.requireSession()
       .permissions.setPolicy({ category, policy })
       .catch(error => this.emitError(error));
+    void this.mirrorPermissionRule('categories', category, policy);
   }
 
   setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
     void this.requireSession()
       .permissions.setPolicy({ toolName, policy })
       .catch(error => this.emitError(error));
+    void this.mirrorPermissionRule('tools', toolName, policy);
   }
 
   grantSessionCategory({ category }: { category: ToolCategory }): void {
@@ -646,19 +740,38 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     return this.requireSession().permissions.getRules();
   }
 
+  private async mirrorPermissionRule(
+    kind: 'categories' | 'tools',
+    key: string,
+    policy: PermissionPolicy,
+  ): Promise<void> {
+    const current =
+      (this.state.permissionRules as
+        | { categories?: Record<string, PermissionPolicy>; tools?: Record<string, PermissionPolicy> }
+        | undefined) ?? {};
+    await this.setState({
+      permissionRules: {
+        categories: { ...(current.categories ?? {}) },
+        tools: { ...(current.tools ?? {}) },
+        [kind]: { ...(current[kind] ?? {}), [key]: policy },
+      },
+    } as unknown as Partial<TState>);
+  }
+
   getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
 
   sendSignal(input: SignalInput): SignalHandle {
-    const session = this.requireSession();
     if ('type' in input && input.type === 'system-reminder') {
       const handle: SignalHandle = { id: `signal-${randomUUID()}`, accepted: Promise.resolve() };
-      handle.accepted = session
-        .injectSystemReminder(normalizeMessageContent({ content: input.contents }), {
-          attributes: toSystemReminderAttributes(input.attributes),
-          metadata: input.metadata,
-        })
+      handle.accepted = this.ensureSession()
+        .then(session =>
+          session.injectSystemReminder(normalizeMessageContent({ content: input.contents }), {
+            attributes: toSystemReminderAttributes(input.attributes),
+            metadata: input.metadata,
+          }),
+        )
         .then(result => {
           handle.id = result.id;
         });
@@ -666,21 +779,37 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     }
 
     const handle: SignalHandle = { id: `signal-${randomUUID()}`, accepted: Promise.resolve() };
-    handle.accepted = session.signal({
-      content: signalContents(input) as never,
-      signalId: handle.id,
-      ...('content' in input && input.ifActive ? { ifActive: input.ifActive } : {}),
-      ...('content' in input && input.ifIdle ? { ifIdle: input.ifIdle } : {}),
-    } as never).then(result => {
-      handle.id = result.id;
-    });
+    handle.accepted = this.ensureSession()
+      .then(session =>
+        session.signal({
+          content: signalContents(input) as never,
+          signalId: handle.id,
+          ...('content' in input && input.ifActive ? { ifActive: input.ifActive } : {}),
+          ...('content' in input && input.ifIdle ? { ifIdle: input.ifIdle } : {}),
+        } as never),
+      )
+      .then(result => {
+        handle.id = result.id;
+      });
     return handle;
   }
 
-  async sendMessage({ content, files, admissionId }: { content: string; files?: unknown[]; admissionId?: string }): Promise<void> {
-    const session = this.requireSession();
+  async sendMessage({
+    content,
+    files,
+    admissionId,
+  }: {
+    content: string;
+    files?: unknown[];
+    admissionId?: string;
+  }): Promise<void> {
+    const session = await this.ensureSession();
     await this.ensureSessionState();
-    await session.message({ content: messageContents(content, files), ...(admissionId ? { admissionId } : {}) } as never);
+    await session.message({
+      content: messageContents(content, files),
+      ...(admissionId ? { admissionId } : {}),
+      ...(admissionId ? {} : { prepareStep: this.prepareActiveToolsStep }),
+    } as never);
   }
 
   async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
@@ -779,7 +908,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.followUpCount++;
     this.emit({ type: 'follow_up_queued', count: this.followUpCount } as unknown as HarnessEvent);
     void this.requireSession()
-      .queue({ content } as never)
+      .queue({
+        content,
+        prepareStep: this.prepareActiveToolsStep,
+      } as never)
       .catch(error => this.emitError(error))
       .finally(() => {
         this.followUpCount = Math.max(0, this.followUpCount - 1);
@@ -808,10 +940,68 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
   getDisplayState(): Readonly<HarnessDisplayState> {
     const sessionState = this.session?.getDisplayState();
+    const base = defaultDisplayState();
+    const pending = sessionState?.pending as
+      | {
+          kind?: string;
+          itemId?: string;
+          toolCallId?: string;
+          toolName?: string;
+          payload?: Record<string, unknown>;
+        }
+      | null
+      | undefined;
+    const tasks = this.currentDisplayTasks.length > 0 ? this.currentDisplayTasks : cloneTasks(this.state.tasks);
     return {
-      ...defaultDisplayState,
-      ...emptyOMProgress(),
+      ...base,
       ...(sessionState ?? {}),
+      activeTools: recordToMap((sessionState as { activeTools?: unknown } | undefined)?.activeTools),
+      toolInputBuffers: recordToMap((sessionState as { toolInputBuffers?: unknown } | undefined)?.toolInputBuffers),
+      activeSubagents: recordToMap((sessionState as { activeSubagents?: unknown } | undefined)?.activeSubagents),
+      modifiedFiles: recordToMap((sessionState as { modifiedFiles?: unknown } | undefined)?.modifiedFiles),
+      pendingApproval:
+        pending?.kind === 'tool-approval'
+          ? {
+              toolCallId: pending.toolCallId ?? pending.itemId ?? '',
+              toolName: pending.toolName ?? '',
+              args: pending.payload?.input,
+            }
+          : null,
+      pendingSuspension:
+        pending?.kind === 'tool-suspension'
+          ? {
+              toolCallId: pending.toolCallId ?? pending.itemId ?? '',
+              toolName: pending.toolName ?? '',
+              args: pending.payload?.input,
+              suspendPayload: pending.payload,
+            }
+          : null,
+      pendingQuestion:
+        pending?.kind === 'question'
+          ? {
+              questionId: pending.itemId ?? pending.toolCallId ?? '',
+              question:
+                typeof pending.payload?.question === 'string'
+                  ? pending.payload.question
+                  : 'The agent needs your input.',
+              options: Array.isArray(pending.payload?.options) ? (pending.payload.options as never) : undefined,
+              selectionMode:
+                pending.payload?.selectionMode === 'single_select' || pending.payload?.selectionMode === 'multi_select'
+                  ? pending.payload.selectionMode
+                  : undefined,
+            }
+          : null,
+      pendingPlanApproval:
+        pending?.kind === 'plan-approval'
+          ? {
+              planId: pending.itemId ?? pending.toolCallId ?? '',
+              title: typeof pending.payload?.title === 'string' ? pending.payload.title : undefined,
+              plan: typeof pending.payload?.plan === 'string' ? pending.payload.plan : '',
+            }
+          : null,
+      omProgress: { ...base.omProgress, ...emptyOMProgress() },
+      tasks,
+      previousTasks: [...this.previousDisplayTasks],
       isRunning: this.isRunning(),
       currentModelId: this.getCurrentModelId(),
       currentModeId: this.currentModeId,
@@ -819,6 +1009,12 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       resourceId: this.resourceId,
       state: this.state,
     } as unknown as HarnessDisplayState;
+  }
+
+  restoreDisplayTasks(tasks: TaskItemSnapshot[]): void {
+    this.previousDisplayTasks = [...this.currentDisplayTasks];
+    this.currentDisplayTasks = [...tasks];
+    this.emit({ type: 'display_state_changed', displayState: this.getDisplayState() } as unknown as HarnessEvent);
   }
 
   async loadOMProgress(): Promise<void> {
@@ -857,9 +1053,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       for (const message of messages.messages) {
         if (message.role !== 'assistant') continue;
         const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
-        const status = [...parts].reverse().find((part: any) => part?.type === 'data-om-status' && part.data?.windows) as
-          | { data?: any }
-          | undefined;
+        const status = [...parts]
+          .reverse()
+          .find((part: any) => part?.type === 'data-om-status' && part.data?.windows) as { data?: any } | undefined;
         if (!status?.data?.windows) continue;
         const windows = status.data.windows;
         messageTokens = windows.active?.messages?.tokens ?? messageTokens;
@@ -906,10 +1102,20 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   respondToQuestion({ answer }: { questionId?: string; answer: unknown }): void {
-    void this.requireSession().respondToQuestion({ answer }).catch(error => this.emitError(error));
+    void this.requireSession()
+      .respondToQuestion({ answer })
+      .catch(error => this.emitError(error));
   }
 
-  respondToToolApproval({ decision, approved, reason }: { decision?: 'approve' | 'decline' | 'deny' | 'always_allow_category'; approved?: boolean; reason?: string }): void {
+  respondToToolApproval({
+    decision,
+    approved,
+    reason,
+  }: {
+    decision?: 'approve' | 'decline' | 'deny' | 'always_allow_category';
+    approved?: boolean;
+    reason?: string;
+  }): void {
     if (decision === 'always_allow_category') {
       const pending = this.requireSession().getDisplayState().pending as { toolName?: string } | undefined;
       const category = pending?.toolName ? this.getToolCategory({ toolName: pending.toolName }) : null;
@@ -918,11 +1124,32 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       }
     }
     void this.requireSession()
-      .respondToToolApproval({ approved: approved ?? (decision === 'approve' || decision === 'always_allow_category'), reason })
+      .respondToToolApproval({
+        approved: approved ?? (decision === 'approve' || decision === 'always_allow_category'),
+        reason,
+      })
       .catch(error => this.emitError(error));
   }
 
-  async respondToPlanApproval({ response, approved, revision }: { planId?: string; response?: { action?: string; feedback?: string }; approved?: boolean; revision?: string }): Promise<void> {
+  async respondToToolSuspension({
+    resumeData,
+  }: {
+    resumeData: unknown;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    await this.requireSession().respondToToolSuspension({ resumeData });
+  }
+
+  async respondToPlanApproval({
+    response,
+    approved,
+    revision,
+  }: {
+    planId?: string;
+    response?: { action?: string; feedback?: string };
+    approved?: boolean;
+    revision?: string;
+  }): Promise<void> {
     const accepted = approved ?? response?.action !== 'rejected';
     await this.requireSession().respondToPlanApproval({
       approved: accepted,
@@ -967,11 +1194,15 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         'harness',
         {
           harnessId: 'mastra-code',
+          sessionId: this.session?.id,
           threadId: this.getCurrentThreadId(),
           resourceId: this.resourceId,
           modeId: this.currentModeId,
           state: this.state,
           getState: () => this.state,
+          setState: (updates: Partial<TState>) => this.setState(updates),
+          getSubagentModelId: (params?: { agentType?: string }) => this.getSubagentModelId(params),
+          workspace: this.currentWorkspace,
         },
       ],
     ]) as RequestContext<unknown>;
@@ -991,8 +1222,16 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     return Boolean(this.config.workspace);
   }
 
-  setBrowser(_browser: unknown): void {
-    this.emit({ type: 'info', message: 'Browser runtime is configured through MastraCode state under Harness v1.' } as unknown as HarnessEvent);
+  setBrowser(browser: unknown): void {
+    this.browser = browser;
+    for (const mode of this.modes) {
+      if (typeof mode.agent === 'function') continue;
+      const agent = mode.agent as AgentWithBrowser;
+      if (!agent.hasOwnBrowser?.()) agent.setBrowser?.(browser);
+    }
+    for (const agent of Object.values(this.config.agents) as AgentWithBrowser[]) {
+      if (!agent.hasOwnBrowser?.()) agent.setBrowser?.(browser);
+    }
   }
 
   registerHeartbeat(handler: NonNullable<MastraCodeRuntimeConfig<TState>['heartbeatHandlers']>[number]): void {
@@ -1032,11 +1271,66 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     };
   }
 
+  private async ensureSession(): Promise<Session> {
+    if (!this.session) {
+      await this.selectOrCreateThread();
+    }
+    return this.requireSession();
+  }
+
   private requireSession(): Session {
     if (!this.session) {
       throw new Error('MastraCode Harness session has not been initialized');
     }
     return this.session;
+  }
+
+  private readonly prepareActiveToolsStep = ({ tools }: { tools?: Record<string, unknown> }) => ({
+    activeTools: this.filterActiveTools(Object.keys(tools ?? {})),
+  });
+
+  private filterActiveTools(toolNames: string[]): string[] {
+    const disabled = new Set(this.config.disabledTools ?? []);
+    const rules = (this.state.permissionRules as { tools?: Record<string, PermissionPolicy> } | undefined)?.tools ?? {};
+    return toolNames.filter(toolName => !disabled.has(toolName) && rules[toolName] !== 'deny');
+  }
+
+  private buildLegacySubagentAlias(mode: LegacyHarnessMode<TState>): unknown {
+    if (this.config.disabledTools?.includes('subagent') || this.config.subagents.length === 0) return undefined;
+    let alias: unknown;
+    alias = createSubagentTool({
+      subagents: this.config.subagents,
+      resolveModel: (modelId: string) => this.config.resolveModel?.(modelId) as never,
+      fallbackModelId: mode.defaultModelId ?? this.getCurrentModelId(),
+      getParentModelId: () => this.getCurrentModelId() || mode.defaultModelId || '',
+      getParentAgent: () => {
+        const currentMode = this.getCurrentMode();
+        return typeof currentMode.agent === 'function' ? currentMode.agent(this.state) : currentMode.agent;
+      },
+      cloneThreadForFork: async ({
+        sourceThreadId,
+        resourceId,
+        title,
+      }: {
+        sourceThreadId: string;
+        resourceId?: string;
+        title?: string;
+      }) => {
+        const cloned = await this.core.threads.clone({
+          resourceId: resourceId ?? this.resourceId,
+          threadId: sourceThreadId,
+          title,
+          metadata: {
+            forkedSubagent: true,
+            parentThreadId: sourceThreadId,
+          },
+        });
+        return { id: cloned.id, resourceId: cloned.resourceId };
+      },
+      getParentToolsets: async (): Promise<{ harnessBuiltIn: Record<string, unknown> } | undefined> =>
+        alias ? { harnessBuiltIn: { subagent: alias } } : undefined,
+    });
+    return alias;
   }
 
   private resolveModeModel(modeId: string): string {
@@ -1098,7 +1392,13 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       if (fallback) updates.currentModelId = fallback;
     }
 
-    for (const key of ['observerModelId', 'reflectorModelId', 'observationThreshold', 'reflectionThreshold', 'subagentModelId']) {
+    for (const key of [
+      'observerModelId',
+      'reflectorModelId',
+      'observationThreshold',
+      'reflectionThreshold',
+      'subagentModelId',
+    ]) {
       if (metadata[key] !== undefined) updates[key] = metadata[key];
     }
     for (const [key, value] of Object.entries(metadata)) {
@@ -1136,7 +1436,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
   private async ensureSessionState(): Promise<void> {
     const session = this.requireSession();
-    const selectedModel = this.getCurrentModelId() || session.models.current() || this.resolveModeModel(this.currentModeId);
+    const selectedModel =
+      this.getCurrentModelId() || session.models.current() || this.resolveModeModel(this.currentModeId);
     this.state = { ...this.state, currentModelId: selectedModel };
     await session.models.switch({ model: selectedModel });
     await session.setState(this.state);

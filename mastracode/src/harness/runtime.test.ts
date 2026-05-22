@@ -13,6 +13,8 @@ function createRuntime(
     subagents?: any[];
     initialState?: Record<string, unknown>;
     resolveModel?: (modelId: string) => unknown;
+    browser?: unknown;
+    disabledTools?: string[];
   } = {},
 ) {
   const agent = new Agent({
@@ -25,23 +27,25 @@ function createRuntime(
     resourceId: 'resource-one',
     storage: options.storage ?? new InMemoryStore({ id: `mc-runtime-test-${Date.now()}-${Math.random()}` }),
     agents: options.agents ?? { 'code-agent': agent },
-    modes: options.modes ?? [
-      {
-        id: 'build',
-        name: 'Build',
-        color: 'green',
-        default: true,
-        defaultModelId: 'anthropic/claude-haiku-4-5',
-        agent,
-      },
-      {
-        id: 'plan',
-        name: 'Plan',
-        color: 'blue',
-        defaultModelId: 'openai/gpt-4o-mini',
-        agent,
-      },
-    ] as any,
+    modes:
+      options.modes ??
+      ([
+        {
+          id: 'build',
+          name: 'Build',
+          color: 'green',
+          default: true,
+          defaultModelId: 'anthropic/claude-haiku-4-5',
+          agent,
+        },
+        {
+          id: 'plan',
+          name: 'Plan',
+          color: 'blue',
+          defaultModelId: 'openai/gpt-4o-mini',
+          agent,
+        },
+      ] as any),
     subagents: options.subagents ?? [],
     initialState: {
       projectPath: options.projectPath ?? '/tmp/mastracode-runtime-test',
@@ -49,6 +53,8 @@ function createRuntime(
       ...options.initialState,
     },
     resolveModel: options.resolveModel,
+    browser: options.browser as never,
+    disabledTools: options.disabledTools,
   });
 }
 
@@ -146,15 +152,60 @@ describe('MastraCodeHarnessRuntime', () => {
       files: [{ data: 'abc123', mimeType: 'image/png' }],
     });
 
+    expect(message).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: [
+          { type: 'text', text: 'inspect this' },
+          { type: 'file', data: 'abc123', mediaType: 'image/png' },
+        ],
+      }),
+    );
+
+    await runtime.destroy();
+  });
+
+  it('does not pass prepareStep when sending duplicate-admission messages', async () => {
+    const runtime = createRuntime();
+    const message = vi.fn(async () => undefined);
+    (runtime as any).session = {
+      message,
+      models: {
+        current: () => 'anthropic/claude-haiku-4-5',
+        switch: vi.fn(async () => undefined),
+      },
+      setState: vi.fn(async () => undefined),
+    };
+
+    await runtime.sendMessage({ content: 'repeatable', admissionId: 'admission-one' });
+
     expect(message).toHaveBeenCalledWith({
-      content: [
-        { type: 'text', text: 'inspect this' },
-        { type: 'file', data: 'abc123', mediaType: 'image/png' },
-      ],
+      content: 'repeatable',
+      admissionId: 'admission-one',
     });
 
     await runtime.destroy();
   });
+
+  it('filters active tools through prepareStep for non-admission messages', async () => {
+    const runtime = createRuntime({ disabledTools: ['blocked_tool'] });
+    const message = vi.fn(async () => undefined);
+    (runtime as any).session = {
+      message,
+      models: {
+        current: () => 'anthropic/claude-haiku-4-5',
+        switch: vi.fn(async () => undefined),
+      },
+      setState: vi.fn(async () => undefined),
+    };
+
+    await runtime.sendMessage({ content: 'run tools' });
+
+    const [{ prepareStep }] = message.mock.calls[0] as any;
+    expect(prepareStep({ tools: { allowed_tool: {}, blocked_tool: {} } })).toEqual({ activeTools: ['allowed_tool'] });
+
+    await runtime.destroy();
+  });
+
 
   it('persists system reminder messages and first user previews through memory storage', async () => {
     const runtime = createRuntime();
@@ -244,8 +295,9 @@ describe('MastraCodeHarnessRuntime', () => {
     });
 
     expect(runtime.core.getMode('mastracode-subagent-explore')?.agentId).toBe('subagent-explore');
-    expect((runtime.core as any)._getSubagentType('explore')?.modeId).toBe('mastracode-subagent-explore');
+    expect((runtime.core as any)._getSubagentType('explore')).toBeUndefined();
     expect(runtime.getMastra().getAgent('subagent-explore' as never)).toBe(exploreAgent);
+    expect(runtime.core.getMode('build')?.additionalTools).toHaveProperty('subagent');
   });
 
   it('bridges legacy session and model resolver helpers', async () => {
@@ -271,5 +323,113 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(resolvedModels).toEqual(['openai/gpt-5.4-mini', 'anthropic/claude-haiku-4-5']);
 
     await runtime.destroy();
+  });
+
+  it('returns legacy Map-backed display state from v1 record snapshots', () => {
+    const runtime = createRuntime();
+    (runtime as any).session = {
+      getDisplayState: () => ({
+        activeTools: {
+          tool_1: { toolName: 'read_file', status: 'running' },
+        },
+        toolInputBuffers: {
+          tool_1: { toolName: 'read_file', text: '{"path"' },
+        },
+        activeSubagents: {
+          sub_1: { agentType: 'explore', task: 'inspect', status: 'running' },
+        },
+        tokenUsage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+        pending: null,
+      }),
+      threadId: 'thread-one',
+      isRunning: () => false,
+    };
+
+    const display = runtime.getDisplayState();
+
+    expect(display.activeTools).toBeInstanceOf(Map);
+    expect(display.toolInputBuffers).toBeInstanceOf(Map);
+    expect(display.activeSubagents).toBeInstanceOf(Map);
+    expect(display.toolInputBuffers.get('tool_1')).toEqual({ toolName: 'read_file', text: '{"path"' });
+  });
+
+  it('restores replayed task display snapshots for TUI history replay', () => {
+    const runtime = createRuntime({
+      initialState: { tasks: [{ id: 'old', content: 'Old', status: 'pending', activeForm: 'Doing old' }] },
+    });
+    const nextTasks = [{ id: 'new', content: 'New', status: 'in_progress', activeForm: 'Doing new' }];
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+
+    runtime.restoreDisplayTasks(nextTasks as any);
+
+    expect(runtime.getDisplayState().previousTasks).toEqual([
+      { id: 'old', content: 'Old', status: 'pending', activeForm: 'Doing old' },
+    ]);
+    expect(runtime.getDisplayState().tasks).toEqual(nextTasks);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'display_state_changed' }));
+  });
+
+  it('resumes v1 tool suspensions through the MastraCode compatibility surface', async () => {
+    const runtime = createRuntime();
+    const respondToToolSuspension = vi.fn(async () => undefined);
+    (runtime as any).session = { respondToToolSuspension };
+
+    await runtime.respondToToolSuspension({ resumeData: { ok: true } });
+
+    expect(respondToToolSuspension).toHaveBeenCalledWith({ resumeData: { ok: true } });
+  });
+
+  it('applies startup and live browser instances to mode agents', () => {
+    const browser = { name: 'browser' };
+    const setBrowser = vi.fn();
+    const agent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    }) as any;
+    agent.setBrowser = setBrowser;
+    agent.hasOwnBrowser = () => false;
+
+    const runtime = createRuntime({
+      agents: { 'code-agent': agent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent }],
+      browser,
+    });
+
+    expect(setBrowser).toHaveBeenCalledWith(browser);
+    const nextBrowser = { name: 'next-browser' };
+    runtime.setBrowser(nextBrowser);
+    expect(setBrowser).toHaveBeenCalledWith(nextBrowser);
+  });
+
+  it('creates a session lazily after changing resource id before headless send', async () => {
+    const runtime = createRuntime();
+    const message = vi.fn(async () => undefined);
+    const session = {
+      message,
+      models: {
+        current: () => 'anthropic/claude-haiku-4-5',
+        switch: vi.fn(async () => undefined),
+      },
+      setState: vi.fn(async () => undefined),
+    };
+    const selectOrCreateThread = vi.spyOn(runtime, 'selectOrCreateThread').mockImplementation(async () => {
+      (runtime as any).session = session;
+      return {
+        id: 'thread-two',
+        resourceId: 'resource-two',
+        title: 'New thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    });
+
+    runtime.setResourceId({ resourceId: 'resource-two' });
+    await runtime.sendMessage({ content: 'hello' });
+
+    expect(selectOrCreateThread).toHaveBeenCalled();
+    expect(message).toHaveBeenCalledWith(expect.objectContaining({ content: 'hello' }));
   });
 });

@@ -92,6 +92,30 @@ describe('HarnessRequestContext — state reads/writes', () => {
     expect(await session.getState()).toEqual({ counter: 3 });
   });
 
+  it('updateState derives updates inside the serialized state mutation queue', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.setState<{ counter: number }>({ counter: 0 });
+    await session.message({ content: 'hi' });
+    const slot = getHarnessSlot(agent.streamCalls);
+
+    await Promise.all([
+      slot.updateState!(async state => {
+        await Promise.resolve();
+        return {
+          updates: { counter: (state as { counter: number }).counter + 1 },
+          result: 'first',
+        };
+      }),
+      slot.updateState!(state => ({
+        updates: { counter: (state as { counter: number }).counter + 1 },
+        result: 'second',
+      })),
+    ]);
+
+    expect(await session.getState()).toEqual({ counter: 2 });
+  });
+
   it('rejects setState when ifVersion no longer matches at the mutation point', async () => {
     const { harness } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

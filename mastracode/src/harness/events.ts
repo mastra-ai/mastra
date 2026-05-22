@@ -1,8 +1,4 @@
-import type {
-  HarnessEvent as LegacyHarnessEvent,
-  HarnessMessage,
-  HarnessThread,
-} from '@mastra/core/harness';
+import type { HarnessEvent as LegacyHarnessEvent, HarnessMessage, HarnessThread } from '@mastra/core/harness';
 import type { HarnessEvent as HarnessV1Event, SessionDisplayState } from '@mastra/core/harness/v1';
 
 type EmitLegacyEvent = (event: LegacyHarnessEvent) => void;
@@ -78,7 +74,7 @@ export class MastraCodeHarnessEventProjector {
           } as unknown as LegacyHarnessEvent,
         ];
       case 'subagent_start':
-        return [{ ...event, forked: false } as unknown as LegacyHarnessEvent];
+        return [{ ...event, forked: (event as { forked?: boolean }).forked ?? false } as unknown as LegacyHarnessEvent];
       case 'subagent_text_delta':
         return [{ ...event, textDelta: event.delta } as unknown as LegacyHarnessEvent];
       case 'tool_start':
@@ -116,7 +112,9 @@ export class MastraCodeHarnessEventProjector {
     }
   }
 
-  private projectSuspensionRequired(event: Extract<HarnessV1Event, { type: 'suspension_required' }>): LegacyHarnessEvent[] {
+  private projectSuspensionRequired(
+    event: Extract<HarnessV1Event, { type: 'suspension_required' }>,
+  ): LegacyHarnessEvent[] {
     const displayState = this.getDisplayState() as { pending?: any };
     const pending = displayState.pending;
     const itemId = pending?.itemId ?? event.toolCallId;

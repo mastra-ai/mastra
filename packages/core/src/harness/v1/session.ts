@@ -65,9 +65,10 @@ import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
+import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '../tools';
 import type { HarnessMessage } from '../types';
 
-import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID } from './builtin-tools';
+import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID, askUser, submitPlan } from './builtin-tools';
 import {
   HarnessAdmissionConflictError,
   HarnessAttachmentUnavailableError,
@@ -7461,7 +7462,7 @@ export class Session {
    * stays consistent with the lease + version contract (§5.8).
    */
   private _flushUpdate(
-    update: (prev: SessionRecord) => SessionRecord,
+    update: (prev: SessionRecord) => SessionRecord | Promise<SessionRecord>,
     opts?: { attachmentReferences?: SaveAttachmentReferenceInput[]; ifVersion?: number },
   ): Promise<void> {
     if (this._state === 'closed') {
@@ -7477,8 +7478,9 @@ export class Session {
       if (opts?.ifVersion !== undefined && this._record.version !== opts.ifVersion) {
         throw new HarnessStateConflictError(this.id, opts.ifVersion, this._record.version);
       }
+      const updated = await update(this._record);
       const next: SessionRecord = {
-        ...update(this._record),
+        ...updated,
         lastActivityAt: Date.now(),
       };
       const saveOpts = {
@@ -7514,13 +7516,25 @@ export class Session {
     if (mode.additionalTools) toolsets[`mode:${mode.id}:add`] = mode.additionalTools;
     if (callAdditional) toolsets[`call:additional`] = callAdditional;
 
+    // Harness built-ins. `ask_user` / `submit_plan` use the v1 suspension
+    // protocol; task tools intentionally reuse the state-backed legacy tools
+    // so existing MastraCode prompts/TUI keep the same task-list semantics.
+    toolsets['harness:builtin'] = {
+      [ASK_USER_TOOL_ID]: askUser,
+      [SUBMIT_PLAN_TOOL_ID]: submitPlan,
+      task_write: taskWriteTool,
+      task_update: taskUpdateTool,
+      task_complete: taskCompleteTool,
+      task_check: taskCheckTool,
+    };
+
     // Built-in `spawn_subagent` tool. Registered automatically when the
     // harness has any subagent types configured. Closes over this session
     // so the tool can resolve the registry, create child sessions, bridge
     // events back, and enforce the depth cap (§9).
     const spawn = createSpawnSubagentTool(this);
     if (spawn) {
-      toolsets['harness:builtin'] = { [SPAWN_SUBAGENT_TOOL_ID]: spawn };
+      toolsets['harness:builtin'][SPAWN_SUBAGENT_TOOL_ID] = spawn;
     }
 
     return Object.keys(toolsets).length === 0 ? undefined : toolsets;
@@ -7577,6 +7591,43 @@ export class Session {
         session._setTurnState(
           updatesOrUpdater as Partial<unknown> | ((prev: unknown) => unknown),
         )) as HarnessRequestContext<unknown>['setState'],
+      updateState: (async <TResult>(
+        updater: (
+          state: Readonly<unknown>,
+        ) =>
+          | { updates?: Partial<unknown>; events?: EmitInput[]; result: TResult }
+          | Promise<{ updates?: Partial<unknown>; events?: EmitInput[]; result: TResult }>,
+      ): Promise<TResult> => {
+        let result!: TResult;
+        let changedKeys: string[] | undefined;
+        let events: EmitInput[] = [];
+        await session._flushUpdate(async prev => {
+          const currentState = (prev.state ?? {}) as Record<string, unknown>;
+          const mutation = await updater(currentState);
+          result = mutation.result;
+          events = mutation.events ?? [];
+          if (!mutation.updates) return prev;
+          changedKeys = Object.keys(mutation.updates as Record<string, unknown>);
+          return {
+            ...prev,
+            state: {
+              ...currentState,
+              ...(mutation.updates as Record<string, unknown>),
+            },
+          };
+        });
+        if (changedKeys) {
+          session._emitTurnEvent({
+            type: 'state_changed',
+            changedKeys,
+          });
+        }
+        for (const event of events) session._emitTurnEvent(event);
+        return result;
+      }) as HarnessRequestContext<unknown>['updateState'],
+      emitEvent: (event => {
+        session._emitTurnEvent(event as EmitInput);
+      }) as HarnessRequestContext<unknown>['emitEvent'],
       abortSignal: turn.abortSignal,
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>

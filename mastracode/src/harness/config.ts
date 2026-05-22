@@ -1,4 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import type {
   CustomModelCatalogProvider,
   HarnessMode as LegacyHarnessMode,
@@ -8,10 +9,7 @@ import type {
   ModelUseCountProvider,
   ModelUseCountTracker,
 } from '@mastra/core/harness';
-import type {
-  HarnessMode as HarnessV1Mode,
-  SubagentDefinition,
-} from '@mastra/core/harness/v1';
+import type { HarnessMode as HarnessV1Mode, SubagentDefinition } from '@mastra/core/harness/v1';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -49,6 +47,8 @@ export interface MastraCodeRuntimeConfig<TState extends Record<string, unknown>>
   modelUseCountTracker?: ModelUseCountTracker;
   customModelCatalogProvider?: CustomModelCatalogProvider;
   resolveModel?: (modelId: string) => unknown;
+  disabledTools?: string[];
+  browser?: DynamicArgument<MastraBrowser | undefined>;
 }
 
 export function resolveDefaultModeId<TState>(modes: LegacyHarnessMode<TState>[]): string {
@@ -91,7 +91,8 @@ export function toHarnessV1Modes<TState>(
   return [
     ...modes.map(mode => ({
       id: mode.id,
-      agentId: typeof mode.agent === 'function' ? 'code-agent' : (agentIdsByInstance.get(mode.agent) ?? modeAgentId(mode.id)),
+      agentId:
+        typeof mode.agent === 'function' ? 'code-agent' : (agentIdsByInstance.get(mode.agent) ?? modeAgentId(mode.id)),
       description: mode.name,
       transitionsTo: mode.id === 'plan' && defaultModeId !== 'plan' ? defaultModeId : undefined,
       metadata: {

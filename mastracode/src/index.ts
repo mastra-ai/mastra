@@ -666,6 +666,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
     customModelCatalogProvider,
     resolveModel,
+    disabledTools: config?.disabledTools,
+    browser: config?.browser,
   });
 
   // Sync hookManager session ID on thread changes

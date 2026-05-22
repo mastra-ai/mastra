@@ -217,7 +217,8 @@ describe('request_access', () => {
         selectionMode: 'single_select',
       }),
     );
-    expect(suspend).toHaveBeenCalledWith({}, undefined);
+    expect(suspend).toHaveBeenCalled();
+    expect(suspend.mock.calls[0]?.[0]).toEqual({});
   });
 
   it('resumes a Harness v1 sandbox question from agent resumeData', async () => {

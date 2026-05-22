@@ -19,6 +19,16 @@ function expandTilde(p: string): string {
 }
 
 type MastraCodeState = z.infer<typeof stateSchema>;
+type HarnessV1QuestionContext = {
+  registerQuestion: (params: {
+    questionId: string;
+    question: string;
+    options?: Array<{ label: string; description?: string }>;
+    selectionMode?: 'single_select' | 'multi_select';
+    runId?: string;
+    toolCallId?: string;
+  }) => Promise<void>;
+};
 type ToolExecutionContext = {
   agent?: {
     runId?: string;
@@ -82,7 +92,26 @@ export const requestSandboxAccessTool = createTool({
       const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
       let answer: HarnessQuestionAnswer | unknown = resumeData;
 
-      if (answer === undefined && harnessCtx.emitEvent) {
+      if (answer === undefined && toolContext?.agent?.suspend) {
+        // Harness v1 path: park the tool through the durable question suspension surface.
+        const harnessV1Ctx = harnessCtx as unknown as HarnessV1QuestionContext;
+        await harnessV1Ctx.registerQuestion({
+          questionId,
+          question: `Allow Mastra Code to access ${absolutePath}?\n\n${reason}`,
+          options: [
+            { label: 'Yes', description: 'Grant access for this session.' },
+            { label: 'No', description: 'Deny this access request.' },
+          ],
+          selectionMode: 'single_select',
+          runId: toolContext.agent.runId,
+          toolCallId: toolContext.agent.toolCallId ?? questionId,
+        });
+        await toolContext.agent.suspend({});
+        return {
+          content: 'Access request could not be processed: suspension did not complete.',
+          isError: true,
+        };
+      } else if (answer === undefined && harnessCtx.emitEvent) {
         // Legacy Harness path: emit directly and resolve through the in-memory callback registry.
         answer = await new Promise<HarnessQuestionAnswer>(resolve => {
           harnessCtx.registerQuestion!({
@@ -99,20 +128,6 @@ export const requestSandboxAccessTool = createTool({
             reason,
           });
         });
-      } else if (answer === undefined && toolContext?.agent?.suspend) {
-        // Harness v1 path: park the tool through the durable question suspension surface.
-        await harnessCtx.registerQuestion({
-          questionId,
-          question: `Allow Mastra Code to access ${absolutePath}?\n\n${reason}`,
-          options: [
-            { label: 'Yes', description: 'Grant access for this session.' },
-            { label: 'No', description: 'Deny this access request.' },
-          ],
-          selectionMode: 'single_select',
-          runId: toolContext.agent.runId,
-          toolCallId: toolContext.agent.toolCallId ?? questionId,
-        } as never);
-        await toolContext.agent.suspend({});
       }
 
       const approved = answerApproved(answer);

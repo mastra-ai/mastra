@@ -1183,7 +1183,19 @@ describe('Session.message() — per-turn overrides', () => {
 
     const tools = { extra: { id: 'extra' } as any };
     await session.message({ content: 'hi', additionalTools: tools });
-    expect(agent.calls[0]!.options.toolsets).toEqual({ 'call:additional': tools });
+    expect(agent.calls[0]!.options.toolsets).toEqual(
+      expect.objectContaining({
+        'call:additional': tools,
+        'harness:builtin': expect.objectContaining({
+          ask_user: expect.anything(),
+          submit_plan: expect.anything(),
+          task_write: expect.anything(),
+          task_update: expect.anything(),
+          task_complete: expect.anything(),
+          task_check: expect.anything(),
+        }),
+      }),
+    );
   });
 });
 

@@ -56,6 +56,36 @@ async function captureSuspendPayload<I>(
 // askUser
 // ---------------------------------------------------------------------------
 
+describe('Session built-in tool surface', () => {
+  it('injects user prompts, plan approval, task tools, and subagent launcher into real turns', async () => {
+    const { harness } = setupHarness({
+      subagents: {
+        types: {
+          explore: {
+            agentId: 'default',
+            description: 'Explore code',
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'r1', threadId: { fresh: true } });
+    const mode = harness.getMode('default')!;
+    const toolsets = (session as any)._buildToolsets(mode);
+
+    expect(Object.keys(toolsets['harness:builtin']).sort()).toEqual(
+      expect.arrayContaining([
+        'ask_user',
+        'submit_plan',
+        'task_write',
+        'task_update',
+        'task_complete',
+        'task_check',
+        'spawn_subagent',
+      ]),
+    );
+  });
+});
+
 describe('builtin askUser → Harness round-trip', () => {
   it('produces a suspend payload that Session classifies as "question"', async () => {
     // 1. Capture the real askUser tool's suspend shape.

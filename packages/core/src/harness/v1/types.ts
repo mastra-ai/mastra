@@ -1780,6 +1780,8 @@ export interface RegisterQuestionParams {
   question: string;
   options?: Array<{ label: string; description?: string }>;
   selectionMode?: 'single_select' | 'multi_select';
+  runId?: string;
+  toolCallId?: string;
 }
 
 /** Parameters accepted by `ctx.registerPlanApproval(...)` from a suspending tool. */
@@ -1822,6 +1824,20 @@ export interface HarnessRequestContext<TState = unknown> {
   getState: () => TState;
   /** Persisted shallow merge (object form) or atomic read-modify-write (functional form). */
   setState: SetStateFn<TState>;
+  /**
+   * Legacy-compatible atomic state helper. Kept on the v1 request-context slot
+   * so shared Harness tools can mutate state and emit turn events without
+   * depending on a specific Session implementation.
+   */
+  updateState?: <TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: Array<Record<string, unknown>>; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: Array<Record<string, unknown>>; result: TResult }>,
+  ) => Promise<TResult>;
+  /** Emit a Harness turn event from a tool. Primarily used by shared built-ins. */
+  emitEvent?: (event: Record<string, unknown>) => void;
 
   /** Turn abort signal. Fires for the four reasons enumerated in §4.5. */
   abortSignal: AbortSignal;
