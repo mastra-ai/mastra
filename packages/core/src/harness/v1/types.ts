@@ -1863,6 +1863,13 @@ export interface HarnessRequestContext<TState = unknown> {
   registerQuestion: (params: RegisterQuestionParams) => Promise<void>;
   /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
   registerPlanApproval: (params: RegisterPlanApprovalParams) => Promise<void>;
+  /**
+   * Resolve the Harness permission policy for one tool invocation. The agent
+   * tool dispatcher calls this before execution so per-tool/category rules and
+   * session grants can allow, ask, or deny without degrading to a global
+   * approval gate.
+   */
+  resolveToolPermission?: (params: { toolName: string; args: Record<string, unknown> }) => PermissionPolicy;
 
   /** Depth of the session in the subagent tree. `0` for the parent. */
   subagentDepth: number;

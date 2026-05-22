@@ -3967,6 +3967,18 @@ export class Session {
     );
   }
 
+  private _resolveToolPermissionPolicy(toolName: string): PermissionPolicy {
+    const category = this._harness.getToolCategory({ toolName });
+    const toolRule = this._record.permissionRules.tools[toolName];
+    const categoryRule = category ? this._record.permissionRules.categories[category] : undefined;
+    const policy = toolRule ?? categoryRule ?? this._harness._getDefaultPermissionPolicy();
+
+    if (policy !== 'ask') return policy;
+    if (this._record.sessionGrants.tools.includes(toolName)) return 'allow';
+    if (category && this._record.sessionGrants.categories.includes(category)) return 'allow';
+    return 'ask';
+  }
+
   // -------------------------------------------------------------------------
   // signal() — §4.2.
   //
@@ -7832,6 +7844,7 @@ export class Session {
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      resolveToolPermission: params => session._resolveToolPermissionPolicy(params.toolName),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
