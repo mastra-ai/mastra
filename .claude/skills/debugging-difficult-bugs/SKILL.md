@@ -1,6 +1,6 @@
 ---
 name: debugging-difficult-bugs
-description: Use early when debugging a medium or hard bug, especially when tests alone may not reveal the real runtime failure. Trigger this before extended TDD iteration when a bug involves runtime state, ordering, persistence, streaming, UI/manual reproduction, or when a red test may not fully model the issue.
+description: Use early when debugging a medium or hard bug, especially when tests alone may not reveal the real runtime failure. Trigger this before extended TDD iteration when a bug involves runtime state, ordering, persistence, streaming, concurrency, UI/manual reproduction, external services, or when a red or newly passing test may not model the real issue. Skip only when the root cause is already directly proven by a stack trace or deterministic test that exercises the real runtime path.
 ---
 
 # Debugging Difficult Bugs
@@ -22,6 +22,8 @@ Use this workflow near the start of debugging when any of these are true:
 
 Do **not** keep iterating only on tests if you do not understand the runtime behavior.
 
+Skip this workflow only when the root cause is already directly proven by a stack trace or by a deterministic failing test that exercises the real runtime path. If you are tempted to make a second speculative fix, use this workflow.
+
 ## Required Approach
 
 1. **State the uncertainty**
@@ -29,7 +31,8 @@ Do **not** keep iterating only on tests if you do not understand the runtime beh
    - Identify the real code path that must be observed.
 
 2. **Add temporary unconditional instrumentation**
-   - Add logs throughout the suspected code flow.
+   - Add minimal but sufficient logs through the suspected code flow.
+   - Log boundaries, meaningful branch decisions, state transitions, async ordering points, return values, and caught errors; do not log every line.
    - Logs must be unconditional: do **not** gate them behind an env var, debug flag, or log level.
    - Each log point must append one JSON object per line to a `.jsonl` file in the current working directory.
    - Include enough context to reconstruct the path: event name, timestamp, relevant ids, input shape, state transitions, branch decisions, return values, and caught errors.
@@ -47,6 +50,8 @@ Do **not** keep iterating only on tests if you do not understand the runtime beh
 
 5. **Clean up instrumentation**
    - Remove all temporary unconditional logs after root cause is understood and the fix is verified.
+   - Remove debug imports, helper functions, generated `.jsonl` files, and any other temporary artifacts.
+   - Check the final diff for instrumentation remnants.
    - Do not leave debug files, log helpers, or noisy runtime logging in the final diff unless the user explicitly asks.
 
 6. **Keep or improve tests**
@@ -123,6 +128,8 @@ Avoid logging:
 - Large payloads that make the log unreadable.
 - Binary data or full model responses unless the bug requires it.
 
+Treat debug logs as potentially sensitive. Do not ask the user to paste them into public issues, PRs, or shared channels unless they have reviewed/redacted them first.
+
 If sensitive data might appear, log redacted summaries:
 
 ```ts
@@ -147,7 +154,7 @@ After I inspect that log, I’ll remove the instrumentation and make the actual 
 
 If multiple processes have different working directories, either:
 
-- log the absolute `process.cwd()` at startup, or
+- log the absolute `process.cwd()`, process role, and pid at startup, or
 - write distinct files like `debug-server-flow.jsonl`, `debug-worker-flow.jsonl`, and `debug-client-flow.jsonl`.
 
 ## Analysis Checklist

@@ -53,6 +53,34 @@ function createHarness(
 }
 
 describe('Harness signal messages', () => {
+  it('renders persisted user-message signal attributes', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const thread = await harness.createThread();
+
+    await storage.stores.memory!.saveMessages({
+      messages: [
+        createSignal({
+          id: 'signal-user-1',
+          type: 'user-message',
+          contents: 'Continue with this',
+          attributes: { delivery: 'while-active' },
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      ],
+    });
+
+    await expect(harness.listMessages()).resolves.toEqual([
+      {
+        id: 'signal-user-1',
+        role: 'user',
+        content: [{ type: 'text', text: 'Continue with this' }],
+        attributes: { delivery: 'while-active' },
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      },
+    ]);
+  });
+
   it('renders persisted system-reminder signals from signal attributes', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
@@ -133,6 +161,9 @@ describe('Harness signal messages', () => {
       activeRunId: () => 'active-run-id',
     });
     const thread = await harness.createThread();
+
+    // Simulate an active run from the harness consumer's perspective
+    (harness as any).currentRunId = 'active-run-id';
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({

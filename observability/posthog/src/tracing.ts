@@ -19,9 +19,9 @@ export interface PostHogUsageMetrics {
 /**
  * Formats UsageStats to PostHog's expected property format.
  *
- * PostHog expects $ai_input_tokens to be NON-cached tokens only,
- * with cache tokens tracked separately for accurate cost calculation.
- * See: https://posthog.com/docs/llm-analytics/calculating-costs
+ * Pass through gross input token counts with cache fields as subsets.
+ * PostHog subtracts cache tokens when computing costs for non-Anthropic
+ * providers and detects Anthropic-style exclusive reporting on its own.
  *
  * @param usage - The UsageStats from span attributes
  * @returns PostHog-formatted usage properties
@@ -32,25 +32,20 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
   const props: PostHogUsageMetrics = {};
 
   if (usage.inputTokens !== undefined) {
-    // Start with total input tokens (which includes cached tokens from usage.ts)
     props.$ai_input_tokens = usage.inputTokens;
-
-    // Subtract cache tokens to get the actual non-cached input count
-    if (usage.inputDetails?.cacheRead !== undefined) {
-      props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
-      props.$ai_input_tokens -= props.$ai_cache_read_input_tokens;
-    }
-
-    if (usage.inputDetails?.cacheWrite !== undefined) {
-      props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
-      props.$ai_input_tokens -= props.$ai_cache_creation_input_tokens;
-    }
-
-    // Defensive clamp: ensure input tokens is never negative
-    if (props.$ai_input_tokens < 0) props.$ai_input_tokens = 0;
   }
 
-  if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
+  }
+
+  if (usage.inputDetails?.cacheWrite !== undefined) {
+    props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    props.$ai_output_tokens = usage.outputTokens;
+  }
 
   return props;
 }
