@@ -500,6 +500,17 @@ export class InternalMastraMCPClient extends MastraBase {
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
           this.isConnected = null;
+
+          // Cleanup transport on server-initiated close to prevent SSE leaks (fixes #16693)
+          if (this.transport) {
+            this.transport.close().catch(e => {
+              this.log('debug', 'Error closing transport on connection close (ignored)', {
+                error: e instanceof Error ? e.message : String(e),
+              });
+            });
+            this.transport = undefined;
+          }
+
           if (typeof originalOnClose === 'function') {
             originalOnClose();
           }
