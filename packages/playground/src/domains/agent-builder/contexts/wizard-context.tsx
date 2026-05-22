@@ -13,6 +13,12 @@ export interface WizardContextValue {
   next: () => void;
   /** The resolved nav tree: ordered list of steps the wizard will walk. */
   steps: WizardStep[];
+  /**
+   * `true` when the current step is the last user-facing step (the entry
+   * immediately before the synthetic `'end'` sentinel). `false` on `'end'`
+   * itself and on any intermediate step.
+   */
+  isLast: boolean;
 }
 
 const STEP_ORDER: WizardStep[] = [
@@ -138,7 +144,9 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
     });
   }, [steps]);
 
-  const value = useMemo<WizardContextValue>(() => ({ step, next, steps }), [step, next, steps]);
+  const isLast = steps.length >= 2 && steps[steps.length - 2] === step;
+
+  const value = useMemo<WizardContextValue>(() => ({ step, next, steps, isLast }), [step, next, steps, isLast]);
 
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;
 };
@@ -147,5 +155,5 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
 export const useWizard = (): WizardContextValue => {
   const ctx = useContext(WizardContext);
 
-  return ctx ?? { step: 'end', next: () => {}, steps: [] };
+  return ctx ?? { step: 'end', next: () => {}, steps: [], isLast: false };
 };

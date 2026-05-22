@@ -1,5 +1,5 @@
 import { Spinner } from '@mastra/playground-ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
@@ -28,11 +28,13 @@ import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { startViewTransition } from '@/lib/routing';
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
@@ -101,8 +103,54 @@ const EditPageBody = () => {
       availableAgentTools={availableAgentTools}
       onModeToggle={handleModeToggle}
     >
-      <AgentBuilderEditLayout topBar={<EditTopBarSlot />} chat={<ConversationPanelChat />} profile={<ProfileSlot />} />
+      <EditPageLayout />
     </EditPageProvider>
+  );
+};
+
+const EditPageLayout = () => {
+  const { step } = useWizard();
+  const features = useBuilderAgentFeatures();
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const { dirtyFields } = useFormState({ control });
+  const name = useWatch({ control, name: 'name' }) ?? '';
+  const description = useWatch({ control, name: 'description' }) ?? '';
+  const instructions = useWatch({ control, name: 'instructions' }) ?? '';
+  const modelName = useWatch({ control, name: 'model.name' }) ?? '';
+
+  // Onboarding gate: stay centered until every mandatory field for the new agent
+  // is populated. A field is considered populated when it is either user-dirty
+  // in the form OR already has a non-empty value (e.g. set by the builder agent
+  // through a tool call, or persisted on the stored agent).
+  const isFilled = (isDirty: boolean | undefined, value: string) => Boolean(isDirty) || value.trim().length > 0;
+
+  const hasMandatoryFields =
+    isFilled(dirtyFields.name, name) &&
+    isFilled(dirtyFields.description, description) &&
+    isFilled(dirtyFields.instructions, instructions) &&
+    (!features.model || isFilled(dirtyFields.model?.name, modelName));
+
+  const shouldBeCentered = step === 'initial' && !hasMandatoryFields;
+
+  const [variant, setVariant] = useState<'centered' | 'split'>(shouldBeCentered ? 'centered' : 'split');
+
+  useEffect(() => {
+    const next = shouldBeCentered ? 'centered' : 'split';
+    if (next === variant) return;
+    startViewTransition(() => {
+      setVariant(next);
+    });
+  }, [shouldBeCentered, variant]);
+
+  const isCentered = variant === 'centered';
+
+  return (
+    <AgentBuilderEditLayout
+      topBar={<EditTopBarSlot />}
+      chat={<ConversationPanelChat />}
+      profile={isCentered ? null : <ProfileSlot />}
+      variant={variant}
+    />
   );
 };
 
@@ -148,7 +196,6 @@ const ProfileSlot = () => {
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
-  const { dirtyFields } = useFormState();
   const { step } = useWizard();
 
   const heroActions = (
@@ -162,12 +209,12 @@ const ProfileSlot = () => {
     </>
   );
 
+  // When the wizard is on the 'initial' step, `EditPageLayout` guarantees that
+  // every mandatory field is filled before the profile column is rendered, so
+  // there is no preparing/skeleton state to handle here.
   if (step === 'initial') {
-    const isReady = dirtyFields.name && dirtyFields.description;
-
     return (
       <AgentProfileInitialStep
-        isPreparing={!isReady}
         avatar={<AgentProfileAvatar disabled={isRunning} />}
         details={<AgentProfileDetails mode="highlighted" disabled={isRunning} />}
       />

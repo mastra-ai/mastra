@@ -91,7 +91,10 @@ export const StreamChatProvider = ({
     send(initialUserMessage);
   }, [initialUserMessage, initialMessages, send]);
 
-  const runningValue = useMemo<RunningContextValue>(() => ({ isRunning: debouncedIsRunning }), [debouncedIsRunning]);
+  const runningValue = useMemo<RunningContextValue>(
+    () => ({ isRunning: debounceTime === 0 ? isRunning : debouncedIsRunning }),
+    [debouncedIsRunning, isRunning, debounceTime],
+  );
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages }), [messages]);
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
 

@@ -23,4 +23,33 @@ describe('AgentBuilderEditLayout', () => {
     expect(getByTestId('stub-chat')).not.toBeNull();
     expect(getByTestId('stub-profile')).not.toBeNull();
   });
+
+  it('renders split variant by default with both panels', () => {
+    const { getByTestId } = render(
+      <AgentBuilderEditLayout
+        topBar={<div data-testid="stub-top-bar">top</div>}
+        chat={<div data-testid="stub-chat">chat</div>}
+        profile={<div data-testid="stub-profile">profile</div>}
+      />,
+    );
+
+    expect(getByTestId('agent-builder-panel-chat')).not.toBeNull();
+    expect(getByTestId('agent-builder-panel-profile')).not.toBeNull();
+  });
+
+  it('renders centered variant: only the chat is shown, profile panel is absent', () => {
+    const { getByTestId, queryByTestId } = render(
+      <AgentBuilderEditLayout
+        topBar={<div data-testid="stub-top-bar">top</div>}
+        chat={<div data-testid="stub-chat">chat</div>}
+        profile={<div data-testid="stub-profile">profile</div>}
+        variant="centered"
+      />,
+    );
+
+    expect(getByTestId('agent-builder-panel-chat')).not.toBeNull();
+    expect(getByTestId('stub-chat')).not.toBeNull();
+    expect(queryByTestId('agent-builder-panel-profile')).toBeNull();
+    expect(queryByTestId('stub-profile')).toBeNull();
+  });
 });

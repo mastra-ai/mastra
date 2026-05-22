@@ -50,11 +50,12 @@ const usePlatformsHandler = (platforms: PlatformsFixture[]) => {
 };
 
 const Probe = () => {
-  const { step, next, steps } = useWizard();
+  const { step, next, steps, isLast } = useWizard();
   return (
     <div>
       <div data-testid="step">{step}</div>
       <div data-testid="steps">{steps.join('>')}</div>
+      <div data-testid="is-last">{isLast ? 'yes' : 'no'}</div>
       <button type="button" data-testid="next" onClick={next}>
         next
       </button>
@@ -240,5 +241,57 @@ describe('WizardProvider', () => {
     const { getByTestId } = render(<Probe />);
     expect(getByTestId('step').textContent).toBe('end');
     expect(getByTestId('steps').textContent).toBe('');
+    expect(getByTestId('is-last').textContent).toBe('no');
+  });
+
+  describe('isLast', () => {
+    it('is true on instructions (the only user-facing step) and false after advancing to end', async () => {
+      const { getByTestId } = renderWizard();
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('instructions>end');
+      // Default state is 'end', not 'instructions'.
+      expect(getByTestId('step').textContent).toBe('end');
+      expect(getByTestId('is-last').textContent).toBe('no');
+    });
+
+    it('is true on the last user-facing step when starting from initial', async () => {
+      const { getByTestId } = renderWizard({ initialStep: 'initial' });
+      await flushPlatforms();
+
+      // Tree: initial > instructions > end. instructions is the last user step.
+      expect(getByTestId('step').textContent).toBe('initial');
+      expect(getByTestId('is-last').textContent).toBe('no');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('instructions');
+      expect(getByTestId('is-last').textContent).toBe('yes');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('end');
+      expect(getByTestId('is-last').textContent).toBe('no');
+    });
+
+    it('is false on intermediate steps and true only on the final user-facing one', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, model: true, tools: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'initial' });
+      await flushPlatforms();
+
+      // Tree: initial > model > tools > instructions > end.
+      const order: { step: WizardStep; isLast: 'yes' | 'no' }[] = [
+        { step: 'initial', isLast: 'no' },
+        { step: 'model', isLast: 'no' },
+        { step: 'tools', isLast: 'no' },
+        { step: 'instructions', isLast: 'yes' },
+        { step: 'end', isLast: 'no' },
+      ];
+
+      for (let i = 0; i < order.length; i++) {
+        expect(getByTestId('step').textContent).toBe(order[i].step);
+        expect(getByTestId('is-last').textContent).toBe(order[i].isLast);
+        if (i < order.length - 1) fireEvent.click(getByTestId('next'));
+      }
+    });
   });
 });
