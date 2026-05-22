@@ -1967,6 +1967,62 @@ describe('Harness server routes', () => {
     expect(text.match(/id: harness-v1:epoch-1:2/g)).toHaveLength(1);
   });
 
+  it('replays closed-session Harness SSE events without reopening the session', async () => {
+    const replayed = makeEvent({ id: 'harness-v1:epoch-1:2', payload: { replay: 'closed' } });
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord({ closedAt: 300 })),
+      session: vi.fn(),
+      getSessionEventReplayState: vi.fn(async () => ({
+        epoch: 'epoch-1',
+        oldestSequence: 1,
+        newestSequence: 2,
+      })),
+      listSessionEventsAfter: vi.fn(async () => [{ sequence: 2, event: replayed }]),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        getHeader: (header: string) => (header === 'last-event-id' ? 'harness-v1:epoch-1:1' : undefined),
+      }),
+    );
+    const text = await readStreamChunk(response);
+
+    expect(response.status).toBe(200);
+    expect(harness.session).not.toHaveBeenCalled();
+    expect(harness.getSessionEventReplayState).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+    });
+    expect(harness.listSessionEventsAfter).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      epoch: 'epoch-1',
+      afterSequence: 1,
+      limit: 1000,
+    });
+    expect(text).toContain('id: harness-v1:epoch-1:2');
+    expect(text).toContain('"replay":"closed"');
+  });
+
+  it('still rejects closed-session Harness SSE streams when no replay cursor is supplied', async () => {
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord({ closedAt: 300 })),
+      session: vi.fn(),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      GET_HARNESS_SESSION_EVENTS_ROUTE.handler(makeParams({ mastra, name: 'code', sessionId: 'session-1' })),
+      404,
+      'harness.session_closed',
+    );
+    expect(harness.session).not.toHaveBeenCalled();
+  });
+
   it('pages replay through contiguous durable backlogs larger than one fetch', async () => {
     const firstPage = Array.from({ length: 1000 }, (_, index) => {
       const sequence = index + 2;

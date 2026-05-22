@@ -295,6 +295,17 @@ type HarnessLike = {
     >
   >;
   loadSession(opts: { sessionId: string; includeClosed?: boolean }): Promise<SessionRecord | null>;
+  getSessionEventReplayState(opts: {
+    sessionId: string;
+    resourceId: string;
+  }): Promise<{ epoch: string; oldestSequence: number; newestSequence: number } | null>;
+  listSessionEventsAfter(opts: {
+    sessionId: string;
+    resourceId: string;
+    epoch: string;
+    afterSequence: number;
+    limit: number;
+  }): Promise<Array<{ event: HarnessEvent; sequence: number }>>;
   lookupMessageResult(opts: { sessionId: string; resourceId: string; signalId: string }): Promise<unknown>;
   lookupQueueResult(opts: { sessionId: string; resourceId: string; queuedItemId: string }): Promise<unknown>;
   getChannelDiagnostics?(opts: {
@@ -2251,12 +2262,22 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
       if (!stored || stored.resourceId !== resourceId) {
         throwSessionNotFound(pathSessionId);
       }
-      if (stored.closedAt !== undefined) throwSessionClosed(pathSessionId);
-      if (stored.closingAt !== undefined) throwSessionClosingFromRecord(stored);
 
       const lastEventId = getHeader?.('last-event-id');
       const parsed = lastEventId ? parseHarnessEventId(lastEventId) : undefined;
-      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      const terminalLifecycle = stored.closedAt !== undefined || stored.closingAt !== undefined;
+      if (terminalLifecycle && !parsed) {
+        if (stored.closedAt !== undefined) throwSessionClosed(pathSessionId);
+        throwSessionClosingFromRecord(stored);
+      }
+      const session = terminalLifecycle ? undefined : await harness.session({ sessionId: pathSessionId, resourceId });
+      const replayReader = terminalLifecycle
+        ? {
+            getEventReplayState: () => harness.getSessionEventReplayState({ sessionId: pathSessionId, resourceId }),
+            listEventsAfter: (opts: { epoch: string; afterSequence: number; limit: number }) =>
+              harness.listSessionEventsAfter({ sessionId: pathSessionId, resourceId, ...opts }),
+          }
+        : session!;
       const liveQueue: HarnessEvent[] = [];
       const replayedEventIds = new Set<string>();
       let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
@@ -2268,19 +2289,21 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
         unsubscribe?.();
         unsubscribe = undefined;
       };
-      unsubscribe = session.subscribe(event => {
-        if (closed) return;
-        if (!controller || replaying) {
-          liveQueue.push(event);
-          return;
-        }
-        if (replayedEventIds.has(event.id)) return;
-        try {
-          controller.enqueue(encodeHarnessSseEvent(event));
-        } catch {
-          cleanup();
-        }
-      });
+      if (session) {
+        unsubscribe = session.subscribe((event: HarnessEvent) => {
+          if (closed) return;
+          if (!controller || replaying) {
+            liveQueue.push(event);
+            return;
+          }
+          if (replayedEventIds.has(event.id)) return;
+          try {
+            controller.enqueue(encodeHarnessSseEvent(event));
+          } catch {
+            cleanup();
+          }
+        });
+      }
 
       let replayState:
         | {
@@ -2291,7 +2314,7 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
         | null
         | undefined;
       if (parsed) {
-        replayState = await session.getEventReplayState();
+        replayState = await replayReader.getEventReplayState();
         if (
           !replayState ||
           replayState.epoch !== parsed.epoch ||
@@ -2314,7 +2337,7 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
             return new Response(null, { status: 204 });
           }
           const page = (
-            await session.listEventsAfter({
+            await replayReader.listEventsAfter({
               epoch: parsed.epoch,
               afterSequence,
               limit: 1000,
@@ -2357,7 +2380,7 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
               while (expectedSequence <= replayState.newestSequence) {
                 if (abortSignal?.aborted || closed) return;
                 const page = (
-                  await session.listEventsAfter({
+                  await replayReader.listEventsAfter({
                     epoch: parsed.epoch,
                     afterSequence,
                     limit: 1000,
@@ -2382,6 +2405,11 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
               }
             }
             replaying = false;
+            if (terminalLifecycle) {
+              cleanup();
+              streamController.close();
+              return;
+            }
             for (const event of liveQueue.splice(0)) {
               if (replayedEventIds.has(event.id)) continue;
               streamController.enqueue(encodeHarnessSseEvent(event));
