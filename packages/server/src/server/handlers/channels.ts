@@ -163,6 +163,7 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, platform, agentId, options }) => {
     assertChannelsAvailable();
     try {
+      assertAgentExists(mastra, agentId);
       const channel = getChannelOrThrow(mastra, platform);
 
       if (!channel.connect) {

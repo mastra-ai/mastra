@@ -1419,7 +1419,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: ['agents:read', 'stored-agents:read'],
+  requiresPermission: ['agents:read'],
   handler: async ({ mastra }) => {
     try {
       const allProviders: Record<string, ProviderConfig> = {};

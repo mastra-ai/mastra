@@ -239,6 +239,21 @@ describe('Channel Handlers RBAC', () => {
 
       expect(slackChannel.connect).toHaveBeenCalledWith('agent-owned-by-alice', undefined);
     });
+
+    it('returns 404 when the agent does not exist in the runtime registry', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'alice');
+
+      const error = await CONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'no-such-agent',
+        options: undefined,
+      }).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+      expect(slackChannel.connect).not.toHaveBeenCalled();
+    });
   });
 
   describe('DISCONNECT_CHANNEL_ROUTE', () => {
