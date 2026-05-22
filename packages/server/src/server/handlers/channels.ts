@@ -196,6 +196,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, platform, agentId }) => {
     assertChannelsAvailable();
     try {
+      assertAgentExists(mastra, agentId);
       const channel = getChannelOrThrow(mastra, platform);
 
       if (!channel.disconnect) {
