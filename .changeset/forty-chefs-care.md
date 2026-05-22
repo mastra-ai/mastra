@@ -2,4 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed type error when using `parallel()` with steps that declare a `requestContextSchema`. The `parallel()` method was dropping the workflow's request-context generic when validating each step, which produced a misleading "Expected Step with state schema that is a subset of workflow state" error for steps with a typed request context. Fixes #16975.
+Fixed `workflow.parallel()` type-checking for steps that declare `requestContextSchema`.
+Steps with matching request context now type-check correctly.
+Steps with mismatched request context still fail with a type error.
+Fixes #16975.
