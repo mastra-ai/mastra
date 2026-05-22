@@ -828,6 +828,20 @@ export type HarnessConfig = HarnessConfigCommon &
 
 export interface HarnessConfigCommon {
   /**
+   * Operator-managed compatibility token for the configured runtime surface:
+   * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
+   * bindings, workspace provider wiring, and wrappers that affect run
+   * semantics. Harness does not derive this value. Operators bump it when a
+   * change is incompatible with non-terminal persisted work.
+   *
+   * When set, recoverable work snapshots the token and later fails closed with
+   * `harness.runtime_dependency_drifted` if replay/resume observes a different
+   * current token, including when a previously configured token is later unset.
+   * Legacy rows without a snapshot continue ID-only validation.
+   */
+  runtimeCompatibilityGeneration?: string;
+
+  /**
    * Operating modes. Each mode pins a backing agent and may override or
    * extend its tool surface and instructions. Mode ids must be unique;
    * each mode's `agentId` must reference an agent visible to the harness

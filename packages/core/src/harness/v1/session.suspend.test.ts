@@ -567,6 +567,77 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(session.getRecord().pendingResume?.resumedAt).toBeUndefined();
   });
 
+  it('fails closed when a recovered question resume observes runtime compatibility generation drift', async () => {
+    const storage = new InMemoryStore();
+    const harnessStore = await storage.getStore('harness');
+    if (!harnessStore) throw new Error('expected harness storage');
+    const sessionId = 'sess-question-generation-drift';
+    const requestedAt = Date.now();
+    await harnessStore.saveSession(
+      {
+        harnessName: 'default',
+        id: sessionId,
+        resourceId: 'u',
+        threadId: 't-question-generation-drift',
+        origin: 'top-level',
+        ownsThread: false,
+        modeId: 'default',
+        modelId: 'default',
+        subagentModelOverrides: {},
+        permissionRules: { categories: {}, tools: {} },
+        sessionGrants: { categories: [], tools: [] },
+        tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        pendingQueue: [],
+        pendingResume: {
+          kind: 'question',
+          itemId: 'question:tc-Q-generation',
+          runId: 'run-Q-generation',
+          toolCallId: 'tc-Q-generation',
+          toolName: 'ask_user',
+          source: 'parent',
+          requestedAt,
+          modeId: 'default',
+          runtimeDependencies: {
+            modeId: 'default',
+            agentId: 'default',
+            modelId: 'default',
+            runtimeCompatibilityGeneration: 'generation-a',
+          },
+          payload: { question: 'pick' },
+        },
+        state: undefined,
+        createdAt: requestedAt,
+        lastActivityAt: requestedAt,
+        version: 0,
+      },
+      { harnessName: 'default', ifVersion: 0 },
+    );
+    const agent = new FakeAgent();
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      storage,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      runtimeCompatibilityGeneration: 'generation-b',
+    });
+
+    const session = await harness.session({ sessionId });
+    await expect(
+      session.respondToQuestion({ itemId: 'question:tc-Q-generation', responseId: 'answer-generation', answer: 'red' }),
+    ).rejects.toMatchObject({ code: 'harness.runtime_dependency_drifted' });
+
+    expect(agent.resumeCalls).toHaveLength(0);
+    expect(session.getRecord().inboxResponseReceipts?.['answer-generation']).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'harness.runtime_dependency_drifted',
+        message: expect.stringContaining('runtime_compatibility_generation "generation-a"'),
+      },
+    });
+    expect(session.getRecord().pendingResume).toMatchObject({ runId: 'run-Q-generation' });
+    expect(session.getRecord().pendingResume?.resumedAt).toBeUndefined();
+  });
+
   it('rejects an active question resume when the live session is marked deleted', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({

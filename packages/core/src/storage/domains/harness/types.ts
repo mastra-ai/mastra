@@ -440,6 +440,12 @@ export interface HarnessRuntimeDependencyRefs {
   modeId: string;
   agentId?: string;
   /**
+   * Operator-managed compatibility token captured at admission/resume time.
+   * When present, recovered work must match the current Harness runtime
+   * generation before invoking agents. Omitted means legacy ID-only evidence.
+   */
+  runtimeCompatibilityGeneration?: string;
+  /**
    * Evidence-only selected model id. The current Harness model catalog is a
    * UX surface, not an execution registry, so recovery does not fail closed on
    * this field until a stable runtime model registry exists.

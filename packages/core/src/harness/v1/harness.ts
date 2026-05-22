@@ -689,6 +689,7 @@ export class Harness {
   private readonly _modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
   private readonly _codeSkills: ReadonlyMap<string, HarnessSkill>;
   private readonly _channelRegistry: HarnessChannelRegistry;
+  private readonly _runtimeCompatibilityGeneration?: string;
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -706,6 +707,14 @@ export class Harness {
 
   constructor(config: HarnessConfig) {
     this.ownerId = `harness-${randomUUID()}`;
+    const runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration;
+    if (
+      runtimeCompatibilityGeneration !== undefined &&
+      (typeof runtimeCompatibilityGeneration !== 'string' || runtimeCompatibilityGeneration.trim().length === 0)
+    ) {
+      throw new HarnessConfigError('runtimeCompatibilityGeneration', 'must be a non-empty string when provided');
+    }
+    this._runtimeCompatibilityGeneration = runtimeCompatibilityGeneration?.trim();
     this._leaseTtlMs = DEFAULT_LEASE_TTL_MS;
     this._storageOverride = config.sessions?.storage;
     this._maxQueueDepth = config.sessions?.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
@@ -1257,6 +1266,9 @@ export class Harness {
     return {
       modeId,
       agentId: mode.agentId,
+      ...(this._runtimeCompatibilityGeneration
+        ? { runtimeCompatibilityGeneration: this._runtimeCompatibilityGeneration }
+        : {}),
       ...(modelId ? { modelId } : {}),
       workspaceProviderId: this._workspaceDependencyId(),
     };
@@ -1292,6 +1304,17 @@ export class Harness {
         'agent',
         agentId,
         'is not registered on this Mastra instance',
+        context,
+      );
+    }
+    if (
+      refs.runtimeCompatibilityGeneration !== undefined &&
+      refs.runtimeCompatibilityGeneration !== this._runtimeCompatibilityGeneration
+    ) {
+      throw new HarnessRuntimeDependencyDriftError(
+        'runtime_compatibility_generation',
+        refs.runtimeCompatibilityGeneration,
+        `was recorded, but the current generation is "${this._runtimeCompatibilityGeneration ?? 'unconfigured'}"`,
         context,
       );
     }

@@ -1637,6 +1637,78 @@ describe('Harness v1 — construction', () => {
     ).toThrow(expect.objectContaining({ field: 'mastra', name: 'HarnessConfigError' }));
   });
 
+  it('captures and validates runtimeCompatibilityGeneration for recoverable runtime deps', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          runtimeCompatibilityGeneration: '   ',
+          sessions: { storage: makeStorage() },
+        }),
+    ).toThrow(expect.objectContaining({ field: 'runtimeCompatibilityGeneration', name: 'HarnessConfigError' }));
+
+    const harness = new Harness({
+      agents: { default: makeAgent() },
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      runtimeCompatibilityGeneration: ' generation-a ',
+      sessions: { storage: makeStorage() },
+    });
+
+    expect(harness._runtimeDependenciesForMode('default')).toMatchObject({
+      modeId: 'default',
+      agentId: 'default',
+      runtimeCompatibilityGeneration: 'generation-a',
+    });
+
+    expect(() =>
+      harness._resolveAgentForRuntimeDependencies(
+        {
+          modeId: 'default',
+          agentId: 'default',
+          runtimeCompatibilityGeneration: 'generation-b',
+        },
+        'queued item recovery',
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'harness.runtime_dependency_drifted',
+        dependencyKind: 'runtime_compatibility_generation',
+      }),
+    );
+
+    expect(
+      harness._resolveAgentForRuntimeDependencies({ modeId: 'default', agentId: 'default' }, 'legacy recovery'),
+    ).toMatchObject({
+      mode: { id: 'default', agentId: 'default' },
+    });
+
+    const unconfiguredHarness = new Harness({
+      agents: { default: makeAgent() },
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage: makeStorage() },
+    });
+
+    expect(() =>
+      unconfiguredHarness._resolveAgentForRuntimeDependencies(
+        {
+          modeId: 'default',
+          agentId: 'default',
+          runtimeCompatibilityGeneration: 'generation-a',
+        },
+        'unset generation recovery',
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'harness.runtime_dependency_drifted',
+        dependencyKind: 'runtime_compatibility_generation',
+      }),
+    );
+  });
+
   it('throws HarnessConfigError for duplicate mode ids', () => {
     expect(
       () =>
