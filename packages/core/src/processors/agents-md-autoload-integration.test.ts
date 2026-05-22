@@ -371,7 +371,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     );
   });
 
-  it('injects AGENTS.md as a signal when sendSignal is unavailable', async () => {
+  it('injects AGENTS.md from the production list files tool through ProcessorRunner', async () => {
     messageList.add([{ role: 'user', content: 'List packages/core' }], 'input');
     messageList.add(
       [
@@ -395,22 +395,23 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     const rotateResponseMessageId = vi.fn(() => 'response-2');
     const writer: ProcessorStreamWriter = { custom: vi.fn(async () => {}) };
 
-    await injector.processInputStep({
+    const runner = new ProcessorRunner({
+      inputProcessors: [injector],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    await runner.runProcessInputStep({
       messageList,
-      messages: messageList.get.all.db(),
       stepNumber: 1,
       steps: [],
       model: {} as any,
       tools: {},
       retryCount: 0,
-      state: {},
-      systemMessages: [],
       messageId: 'response-1',
       rotateResponseMessageId,
       writer,
-      abort: () => {
-        throw new Error('unexpected abort');
-      },
     });
 
     const signals = messageList.get.all.db().filter(m => m.role === 'signal');

@@ -18,7 +18,13 @@ import { EntityType, SpanType, createObservabilityContext, resolveObservabilityC
 import type { ObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
-import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import {
+  ProcessorRunner,
+  ProcessorState,
+  ProcessorStepOutputSchema,
+  ProcessorStepSchema,
+  createProcessorSendSignal,
+} from '../../processors';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -1016,6 +1022,14 @@ function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        ...(messageList
+          ? {
+              sendSignal: createProcessorSendSignal({
+                messageList,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              }),
+            }
+          : {}),
       };
 
       // Pass-through data that should flow to the next processor in a chain

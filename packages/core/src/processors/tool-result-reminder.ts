@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import { createSignal, signalToXmlMarkup } from '../agent/signals';
+import { signalToXmlMarkup } from '../agent/signals';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
@@ -280,22 +280,12 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       return messageList;
     }
 
-    const signalInput = {
-      type: 'system-reminder' as const,
+    await args.sendSignal?.({
+      type: 'system-reminder',
       contents: reminderText,
       attributes: { type: REMINDER_TYPE, path: instructionPath },
       metadata: getReminderMetadata(instructionPath).systemReminder,
-    };
-
-    if (args.sendSignal) {
-      await args.sendSignal(signalInput);
-      return messageList;
-    }
-
-    const signal = createSignal(signalInput);
-    args.rotateResponseMessageId?.();
-    messageList.add(signal.toDBMessage(), 'input');
-    await args.writer?.custom(signal.toDataPart());
+    });
 
     return messageList;
   }
