@@ -33,6 +33,21 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+
+type MessageWithAttributes = HarnessMessage & {
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+};
+
+function getUserMessageLabel(message: MessageWithAttributes, fallbackLabel?: string): string | undefined {
+  if (message.attributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
+  return fallbackLabel;
+}
+
+function getPendingUserMessageLabel(isInterjection?: boolean): string | undefined {
+  return isInterjection ? WHILE_ACTIVE_USER_MESSAGE_LABEL : undefined;
+}
+
 function getCurrentModeColor(state: TUIState): string | undefined {
   return state.harness.getCurrentMode?.()?.color;
 }
@@ -224,6 +239,7 @@ export function addPendingUserMessage(
   messageId: string,
   text: string,
   images?: Array<{ data: string; mimeType: string }>,
+  options?: { isInterjection?: boolean },
 ): void {
   const existing = state.pendingSignalMessageComponentsById.get(messageId);
   if (existing) {
@@ -232,7 +248,7 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text });
+  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -254,7 +270,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme());
+  const label = getPendingUserMessageLabel(pending.isInterjection);
+  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+    ...(label ? { label } : {}),
+  });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -288,7 +307,10 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
-    const confirmed = new UserMessageComponent(text, getMarkdownTheme());
+    const label = getPendingUserMessageLabel(pending.isInterjection);
+    const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+      ...(label ? { label } : {}),
+    });
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -308,7 +330,7 @@ function unescapeSkillBoundary(text: string): string {
   return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
-export function addUserMessage(state: TUIState, message: HarnessMessage): void {
+export function addUserMessage(state: TUIState, message: HarnessMessage, options?: { label?: string }): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
   }
@@ -466,7 +488,10 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme());
+    const label = getUserMessageLabel(message, options?.label);
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
+      ...(label ? { label } : {}),
+    });
 
     state.messageComponentsById.set(message.id, userComponent);
 

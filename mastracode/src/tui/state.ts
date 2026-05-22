@@ -41,6 +41,7 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  isInterjection?: boolean;
 }
 
 export interface GithubPrSubscriptionBadge {

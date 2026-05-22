@@ -161,7 +161,7 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
   );
 }
 
-function createProcessorSendSignal(args: {
+export function createProcessorSendSignal(args: {
   messageList: MessageList;
   writer?: ProcessorStreamWriter;
   rotateResponseMessageId?: () => string;

@@ -21,17 +21,15 @@ type SignalFilePart = {
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
+export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalInput = {
   id?: string;
   createdAt?: Date | string;
   acceptedAt?: Date | string;
   type: AgentSignalType;
   contents: AgentSignalContents;
-  attributes?: Record<string, string | number | boolean | null | undefined>;
+  attributes?: AgentSignalAttributes;
   metadata?: Record<string, unknown>;
   /**
    * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
@@ -52,9 +50,10 @@ export type AgentSignalDataPart = {
     contents: AgentSignalContents;
     createdAt: string;
     acceptedAt?: string;
-    attributes?: Record<string, string | number | boolean | null | undefined>;
+    attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
   };
+  transient: true;
 };
 
 /**
@@ -105,7 +104,7 @@ function assertXmlName(name: string, label: string): void {
   }
 }
 
-function signalAttributesToXml(attributes?: AgentSignalInput['attributes']): string {
+function signalAttributesToXml(attributes?: AgentSignalAttributes): string {
   if (!attributes) {
     return '';
   }
@@ -299,7 +298,7 @@ function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
   );
 }
 
-function hasMeaningfulAttributes(attributes?: AgentSignalInput['attributes']): boolean {
+function hasMeaningfulAttributes(attributes?: AgentSignalAttributes): boolean {
   if (!attributes) return false;
   return Object.keys(attributes).some(key => {
     const value = attributes[key];
@@ -374,6 +373,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
     },
+    transient: true,
   };
 }
 
@@ -445,6 +445,25 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   };
 }
 
+/**
+ * Resolve delivery option attributes into concrete `attributes` on a signal.
+ * Returns a new signal with the selected branch's `attributes` merged into
+ * top-level `attributes`.
+ *
+ * @experimental
+ */
+export function resolveDeliveryAttributes(
+  signal: CreatedAgentSignal,
+  attributes: AgentSignalAttributes | undefined,
+): CreatedAgentSignal {
+  if (!attributes || Object.keys(attributes).length === 0) return signal;
+
+  return createSignal({
+    ...signal,
+    attributes: { ...signal.attributes, ...attributes },
+  });
+}
+
 export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): UserModelMessage {
   return createSignal(signal).toLLMMessage();
 }
@@ -486,7 +505,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       signalMetadata?.attributes &&
       typeof signalMetadata.attributes === 'object' &&
       !Array.isArray(signalMetadata.attributes)
-        ? (signalMetadata.attributes as AgentSignalInput['attributes'])
+        ? (signalMetadata.attributes as AgentSignalAttributes)
         : undefined,
     metadata:
       signalMetadata?.metadata && typeof signalMetadata.metadata === 'object' && !Array.isArray(signalMetadata.metadata)

@@ -28,6 +28,11 @@ import type { EventHandlerContext } from '../handlers/types.js';
 import { MastraTUI, consumePendingImages, handleGithubAutoUnsubscribe, syncInitialThreadState } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
 
+const EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS = {
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
+};
+
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   return {
     harness: {
@@ -198,7 +203,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('stay pending');
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'stay pending' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'stay pending',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
     expect(state.chatContainer.children).toHaveLength(1);
     expect(mocks.addUserMessage).not.toHaveBeenCalled();
@@ -234,7 +242,10 @@ describe('MastraTUI queueing', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'starts new thread' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'starts new thread',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(state.pendingNewThread).toBe(false);
   });
 
@@ -298,7 +309,10 @@ describe('MastraTUI queueing', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'new thread follow-up' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'new thread follow-up',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-after-new',
       role: 'user',
@@ -330,7 +344,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('render directly');
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'render directly' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'render directly',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(state.pendingSignalMessageComponentsById.has('signal-idle-1')).toBe(false);
     expect(state.chatContainer.children).toHaveLength(0);
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
@@ -368,6 +385,7 @@ describe('MastraTUI queueing', () => {
         { type: 'text', text: "what's in this image?" },
         { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
       ],
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-image-1',
