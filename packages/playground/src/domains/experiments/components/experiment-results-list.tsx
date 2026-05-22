@@ -1,5 +1,5 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { EntityList, Spinner, Tooltip, TooltipContent, TooltipTrigger, Txt, cn } from '@mastra/playground-ui';
+import { Checkbox, EntityList, Spinner, Tooltip, TooltipContent, TooltipTrigger, Txt, cn } from '@mastra/playground-ui';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -12,6 +12,8 @@ export type ExperimentResultsListProps = {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (resultId: string) => void;
 };
 
 /**
@@ -28,8 +30,11 @@ export function ExperimentResultsList({
   setEndOfListElement,
   isFetchingNextPage,
   hasNextPage,
+  selectedIds,
+  onToggleSelect,
 }: ExperimentResultsListProps) {
-  const gridColumns = columns.map(c => c.size).join(' ');
+  const hasSelection = Boolean(selectedIds && onToggleSelect);
+  const gridColumns = (hasSelection ? '2rem ' : '') + columns.map(c => c.size).join(' ');
 
   if (isLoading) {
     return (
@@ -71,9 +76,20 @@ export function ExperimentResultsList({
         {results.map(result => {
           const hasError = Boolean(result.error);
           const isSelected = result.id === featuredResultId;
+          const isChecked = selectedIds?.has(result.id) ?? false;
 
           return (
             <EntityList.Row key={result.id} onClick={() => onResultClick(result.id)} selected={isSelected}>
+              {hasSelection && (
+                <EntityList.Cell>
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={() => onToggleSelect?.(result.id)}
+                    onClick={e => e.stopPropagation()}
+                    aria-label={`Select result ${result.itemId}`}
+                  />
+                </EntityList.Cell>
+              )}
               <EntityList.TextCell>
                 <span className="truncate block font-mono">{result.itemId}</span>
               </EntityList.TextCell>

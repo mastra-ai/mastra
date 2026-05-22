@@ -2,8 +2,21 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { Column, Columns, MultiColumn, Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui';
-import { useState, useMemo } from 'react';
+import {
+  Button,
+  Column,
+  Columns,
+  Icon,
+  MultiColumn,
+  Tabs,
+  Tab,
+  TabList,
+  TabContent,
+  toast,
+  Txt,
+} from '@mastra/playground-ui';
+import { ClipboardCheck } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
 
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { ExperimentResultPanel } from './experiment-result-panel';
@@ -13,9 +26,11 @@ import { ExperimentResultsList } from './experiment-results-list';
 import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 export type ExperimentPageContentProps = {
   experimentId: string;
+  datasetId: string;
   experimentStatus?: ExperimentStatus;
   results: DatasetExperimentResult[];
   isLoading: boolean;
@@ -30,6 +45,7 @@ export type ExperimentPageContentProps = {
  */
 export function ExperimentPageContent({
   experimentId,
+  datasetId,
   experimentStatus,
   results,
   isLoading,
@@ -41,6 +57,52 @@ export function ExperimentPageContent({
   const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
   const [featuredSpanId, setFeaturedSpanId] = useState<string | undefined>(undefined);
   const [featuredScoreId, setFeaturedScoreId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const { updateExperimentResult } = useDatasetMutations();
+
+  const toggleSelect = useCallback((resultId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(resultId)) {
+        next.delete(resultId);
+      } else {
+        next.add(resultId);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const selectAllFailed = useCallback(() => {
+    const failedIds = results.filter(r => Boolean(r.error)).map(r => r.id);
+    setSelectedIds(new Set(failedIds));
+  }, [results]);
+
+  const flagForReview = useCallback(
+    async (resultIds: string[]) => {
+      let flagged = 0;
+      for (const resultId of resultIds) {
+        try {
+          await updateExperimentResult.mutateAsync({
+            datasetId,
+            experimentId,
+            resultId,
+            status: 'needs-review',
+          });
+          flagged++;
+        } catch {
+          // continue on individual failures
+        }
+      }
+      setSelectedIds(new Set());
+      if (flagged > 0) {
+        toast(`${flagged} result${flagged > 1 ? 's' : ''} flagged for review`);
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
+  );
 
   const featuredResult = results.find(r => r.id === featuredResultId) ?? null;
 
@@ -162,6 +224,30 @@ export function ExperimentPageContent({
       </TabContent>
 
       <TabContent value="results" className="grid overflow-hidden mt-5">
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-surface3 border-b border-border1 rounded-t">
+            <Txt variant="ui-xs" className="text-neutral5 font-medium">
+              {selectedIds.size} selected
+            </Txt>
+            <div className="flex-1" />
+            <Button variant="outline" size="sm" onClick={() => flagForReview([...selectedIds])}>
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Flag for Review
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Clear
+            </Button>
+          </div>
+        )}
+        {results.length > 0 && selectedIds.size === 0 && !isLoading && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border1">
+            <Button variant="ghost" size="sm" onClick={selectAllFailed}>
+              Select all failures
+            </Button>
+          </div>
+        )}
         <Columns className={featuredResult ? 'grid-cols-[1fr_2fr]' : undefined}>
           {/* List column - always visible */}
           <Column>
@@ -176,6 +262,8 @@ export function ExperimentPageContent({
               setEndOfListElement={setEndOfListElement}
               isFetchingNextPage={isFetchingNextPage}
               hasNextPage={hasNextPage}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
             />
           </Column>
 
@@ -201,6 +289,7 @@ export function ExperimentPageContent({
                       setFeaturedSpanId(undefined);
                       setFeaturedScoreId(null);
                     }}
+                    onFlagForReview={resultId => flagForReview([resultId])}
                   />
                 </Column>
               )}
