@@ -63,6 +63,7 @@ export const requestSandboxAccessTool = createTool({
     reason: z.string().min(1).describe('Brief explanation of why you need access to this directory.'),
   }),
   execute: async ({ path: requestedPath, reason }, context) => {
+    let propagatingHarnessV1Suspension = false;
     try {
       const toolContext = context as ToolExecutionContext | undefined;
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
@@ -106,7 +107,9 @@ export const requestSandboxAccessTool = createTool({
           runId: toolContext.agent.runId,
           toolCallId: toolContext.agent.toolCallId ?? questionId,
         });
+        propagatingHarnessV1Suspension = true;
         await toolContext.agent.suspend({});
+        propagatingHarnessV1Suspension = false;
         return {
           content: 'Access request could not be processed: suspension did not complete.',
           isError: true,
@@ -158,6 +161,7 @@ export const requestSandboxAccessTool = createTool({
         };
       }
     } catch (error) {
+      if (propagatingHarnessV1Suspension) throw error;
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {
         content: `Failed to request sandbox access: ${msg}`,

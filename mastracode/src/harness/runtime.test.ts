@@ -360,6 +360,40 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(runtime.core.getMode('build')?.additionalTools).toBeUndefined();
   });
 
+  it('seeds global MastraCode subagent model defaults into Harness v1 native spawn overrides', async () => {
+    const codeAgent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    const exploreAgent = new Agent({
+      id: 'subagent-explore',
+      name: 'Explore',
+      instructions: 'explore',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    const runtime = createRuntime({
+      agents: { 'code-agent': codeAgent, 'subagent-explore': exploreAgent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent: codeAgent }],
+      subagents: [
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'Read-only exploration',
+          instructions: 'explore',
+          defaultModelId: 'openai/gpt-4o-mini',
+        },
+      ],
+      initialState: { subagentModelId: 'anthropic/claude-haiku-4-5' },
+    });
+
+    await runtime.init();
+
+    expect((runtime as any).session.models.getSubagent({ agentType: 'explore' })).toBe('anthropic/claude-haiku-4-5');
+    await runtime.destroy();
+  });
+
   it('does not register native subagents when the subagent tool is disabled', () => {
     const codeAgent = new Agent({
       id: 'code-agent',
@@ -389,6 +423,27 @@ describe('MastraCodeHarnessRuntime', () => {
     });
 
     expect((runtime.core as any)._getSubagentType('explore')).toBeUndefined();
+  });
+
+  it('filters denied tool categories and syncs permission rules into the Harness v1 session', async () => {
+    const runtime = createRuntime({
+      initialState: {
+        permissionRules: {
+          categories: { execute: 'deny' },
+          tools: { read_file: 'allow' },
+        },
+      },
+    });
+    (runtime as any).config.toolCategoryResolver = (toolName: string) => (toolName === 'shell' ? 'execute' : null);
+    await runtime.init();
+
+    expect((runtime as any).filterActiveTools(['read_file', 'shell'])).toEqual(['read_file']);
+    expect((runtime as any).session.permissions.getRules()).toEqual({
+      categories: { execute: 'deny' },
+      tools: { read_file: 'allow' },
+    });
+
+    await runtime.destroy();
   });
 
   it('bridges legacy session and model resolver helpers', async () => {

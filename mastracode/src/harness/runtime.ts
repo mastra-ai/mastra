@@ -42,6 +42,7 @@ import { MastraCodeHarnessEventProjector } from './events.js';
 import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 
 type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
+const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 type MastraCodeOMEvent = Extract<
   HarnessEvent,
   {
@@ -376,6 +377,17 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     if (event.type === 'state_changed' && this.session) {
       this.state = { ...this.state, ...((await this.session.getState<TState>()) as TState) };
     }
+    if (event.type === 'mode_changed') {
+      this.currentModeId = event.modeId;
+      await this.setThreadSetting({ key: 'currentModeId', value: event.modeId }).catch(error =>
+        this.emitError(error),
+      );
+    }
+    if (event.type === 'model_changed') {
+      await this.setState({ currentModelId: event.modelId } as unknown as Partial<TState>).catch(error =>
+        this.emitError(error),
+      );
+    }
     if (event.type === 'task_updated') {
       this.previousDisplayTasks = [...this.currentDisplayTasks];
       this.currentDisplayTasks = cloneTasks((event as { tasks?: unknown }).tasks);
@@ -511,6 +523,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       modelId: this.resolveModeModel(this.currentModeId),
     });
     await this.ensureSessionState();
+    await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
     return toLegacyThread(thread);
   }
@@ -529,6 +542,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       modelId: this.resolveModeModel(this.currentModeId),
     });
     await this.ensureSessionState();
+    await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
     const legacy = toLegacyThread(thread);
     this.emit({ type: 'thread_created', thread: legacy } as unknown as HarnessEvent);
@@ -550,6 +564,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       modelId: this.resolveModeModel(this.currentModeId),
     });
     await this.ensureSessionState();
+    await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
     this.emit({ type: 'thread_changed', threadId, previousThreadId } as unknown as HarnessEvent);
   }
@@ -799,6 +814,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       await this.requireSession().models.setSubagent({ agentType, model: modelId });
     }
     await this.setState({ [key]: modelId } as unknown as Partial<TState>);
+    if (!agentType) {
+      await this.syncSubagentModelOverrides(this.requireSession());
+    }
     await this.setThreadSetting({ key, value: modelId });
     this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as unknown as HarnessEvent);
   }
@@ -930,6 +948,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }): Promise<void> {
     const session = await this.ensureSession();
     await this.ensureSessionState();
+    await this.syncSessionControls();
     await session.message({
       content: messageContents(content, files),
       ...(admissionId ? { admissionId } : {}),
@@ -1035,6 +1054,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     void this.requireSession()
       .queue({
         content,
+        ...((this.state as Record<string, unknown>).yolo === true ? { yolo: true } : {}),
         prepareStep: this.prepareActiveToolsStep,
       } as never)
       .catch(error => this.emitError(error))
@@ -1426,8 +1446,17 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
   private filterActiveTools(toolNames: string[]): string[] {
     const disabled = new Set(this.config.disabledTools ?? []);
-    const rules = (this.state.permissionRules as { tools?: Record<string, PermissionPolicy> } | undefined)?.tools ?? {};
-    return toolNames.filter(toolName => !this.isToolDisabled(toolName, disabled) && rules[toolName] !== 'deny');
+    return toolNames.filter(toolName => !this.isToolDisabled(toolName, disabled) && !this.isToolDenied(toolName));
+  }
+
+  private isToolDenied(toolName: string): boolean {
+    const rules =
+      (this.state.permissionRules as
+        | { categories?: Record<string, PermissionPolicy>; tools?: Record<string, PermissionPolicy> }
+        | undefined) ?? {};
+    if (rules.tools?.[toolName] === 'deny') return true;
+    const category = this.getToolCategory({ toolName });
+    return Boolean(category && rules.categories?.[category] === 'deny');
   }
 
   private isToolDisabled(toolName: string, disabled = new Set(this.config.disabledTools ?? [])): boolean {
@@ -1550,6 +1579,42 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.state = { ...this.state, currentModelId: selectedModel };
     await session.models.switch({ model: selectedModel });
     await session.setState(this.state);
+  }
+
+  private async syncSessionControls(): Promise<void> {
+    const session = this.requireSession();
+    await this.syncPermissionRules(session);
+    await this.syncSubagentModelOverrides(session);
+  }
+
+  private async syncPermissionRules(session: Session): Promise<void> {
+    const rules =
+      (this.state.permissionRules as
+        | { categories?: Record<string, PermissionPolicy>; tools?: Record<string, PermissionPolicy> }
+        | undefined) ?? {};
+    await Promise.all([
+      ...Object.entries(rules.categories ?? {})
+        .filter(([category]) => TOOL_CATEGORIES.includes(category as ToolCategory))
+        .map(([category, policy]) => session.permissions.setPolicy({ category: category as ToolCategory, policy })),
+      ...Object.entries(rules.tools ?? {}).map(([toolName, policy]) =>
+        session.permissions.setPolicy({ toolName, policy }),
+      ),
+    ]);
+  }
+
+  private async syncSubagentModelOverrides(session: Session): Promise<void> {
+    const state = this.state as Record<string, unknown>;
+    const defaultModel = typeof state.subagentModelId === 'string' ? state.subagentModelId : undefined;
+    await Promise.all(
+      this.config.subagents.map(subagent => {
+        const key = `subagentModelId_${subagent.id}`;
+        const model = typeof state[key] === 'string' ? state[key] : defaultModel;
+        if (!model || session.models.getSubagent({ agentType: subagent.id }) === model) {
+          return Promise.resolve();
+        }
+        return session.models.setSubagent({ agentType: subagent.id, model });
+      }),
+    );
   }
 
   private async resolveHarnessV1AuthStatus(modelId: string) {

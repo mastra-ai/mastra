@@ -203,10 +203,9 @@ describe('request_access', () => {
       workspace: {},
     };
 
-    const result = await (requestSandboxAccessTool as any).execute(
-      { path: '/outside/project/dir', reason: 'need to read config' },
-      context,
-    );
+    await expect(
+      (requestSandboxAccessTool as any).execute({ path: '/outside/project/dir', reason: 'need to read config' }, context),
+    ).rejects.toThrow('suspended');
 
     expect(registerQuestion).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -219,7 +218,6 @@ describe('request_access', () => {
     );
     expect(suspend).toHaveBeenCalled();
     expect(suspend.mock.calls[0]?.[0]).toEqual({});
-    expect(result).toEqual({ isError: true, content: 'Failed to request sandbox access: suspended' });
   });
 
   it('resumes a Harness v1 sandbox question from agent resumeData', async () => {
