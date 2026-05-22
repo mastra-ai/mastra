@@ -58,6 +58,7 @@ export function ExperimentPageContent({
   const [featuredSpanId, setFeaturedSpanId] = useState<string | undefined>(undefined);
   const [featuredScoreId, setFeaturedScoreId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isFlagging, setIsFlagging] = useState(false);
 
   const { updateExperimentResult } = useDatasetMutations();
 
@@ -75,33 +76,39 @@ export function ExperimentPageContent({
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  const selectAllFailed = useCallback(() => {
+  const selectLoadedFailed = useCallback(() => {
     const failedIds = results.filter(r => Boolean(r.error)).map(r => r.id);
     setSelectedIds(new Set(failedIds));
   }, [results]);
 
   const flagForReview = useCallback(
     async (resultIds: string[]) => {
+      if (isFlagging || resultIds.length === 0) return;
+      setIsFlagging(true);
       let flagged = 0;
-      for (const resultId of resultIds) {
-        try {
-          await updateExperimentResult.mutateAsync({
-            datasetId,
-            experimentId,
-            resultId,
-            status: 'needs-review',
-          });
-          flagged++;
-        } catch {
-          // continue on individual failures
+      try {
+        for (const resultId of resultIds) {
+          try {
+            await updateExperimentResult.mutateAsync({
+              datasetId,
+              experimentId,
+              resultId,
+              status: 'needs-review',
+            });
+            flagged++;
+          } catch {
+            // continue on individual failures
+          }
         }
+      } finally {
+        setIsFlagging(false);
       }
       setSelectedIds(new Set());
       if (flagged > 0) {
         toast(`${flagged} result${flagged > 1 ? 's' : ''} flagged for review`);
       }
     },
-    [datasetId, experimentId, updateExperimentResult],
+    [datasetId, experimentId, isFlagging, updateExperimentResult],
   );
 
   const featuredResult = results.find(r => r.id === featuredResultId) ?? null;
@@ -230,7 +237,7 @@ export function ExperimentPageContent({
               {selectedIds.size} selected
             </Txt>
             <div className="flex-1" />
-            <Button variant="outline" size="sm" onClick={() => flagForReview([...selectedIds])}>
+            <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
               <Icon size="sm">
                 <ClipboardCheck />
               </Icon>
@@ -243,8 +250,8 @@ export function ExperimentPageContent({
         )}
         {results.length > 0 && selectedIds.size === 0 && !isLoading && (
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border1">
-            <Button variant="ghost" size="sm" onClick={selectAllFailed}>
-              Select all failures
+            <Button variant="ghost" size="sm" onClick={selectLoadedFailed}>
+              Select loaded failures
             </Button>
           </div>
         )}
