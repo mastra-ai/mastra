@@ -23,6 +23,7 @@ export * from './common';
 export * from './conversations';
 export * from './datasets';
 export * from './default-options';
+export * from './editor-builder';
 export * from './logs';
 export * from './mcp-client-versions';
 export * from './memory';
