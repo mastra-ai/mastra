@@ -249,7 +249,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(toolResult.result).toBeUndefined();
   });
 
-  it('should persist streamed provider tool errors even when result is undefined', async () => {
+  it('should persist streamed provider tool errors without output', async () => {
     const tools = {
       perplexitySearch: {
         type: 'provider' as const,

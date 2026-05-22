@@ -253,7 +253,6 @@ export function buildMessagesFromChunks({
         const result = toolResults.get(p.toolCallId);
 
         if (result) {
-          // Merge call + result into a single part (output-error when isError is set).
           const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
           parts.push({
             type: 'tool-invocation' as const,

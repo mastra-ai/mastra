@@ -604,8 +604,6 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
   });
 
   it('should persist tool execution errors as output-error with errorText', async () => {
-    // A thrown tool error must be stored as output-error, not a successful result, or it
-    // is indistinguishable from a real result on history reload (#15569).
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
