@@ -343,6 +343,35 @@ describe('dispatchSlashCommand models routing', () => {
     expect(state.chatContainer.children.length).toBe(1);
   });
 
+  it('removes the pending message when custom slash command signal delivery fails', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-custom-1', accepted: Promise.reject(new Error('rejected')) });
+    const state = {
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+      pendingNewThread: false,
+      allSlashCommandComponents: [],
+      messageComponentsById: new Map(),
+      pendingSignalMessageComponentsById: new Map(),
+      followUpComponents: [],
+      chatContainer: new Container(),
+      ui: { requestRender: vi.fn() },
+      harness: {
+        isCurrentThreadStreamActive: vi.fn(() => true),
+        getDisplayState: vi.fn(() => ({ isRunning: true })),
+        sendSignal,
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('//deploy staging', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(state.pendingSignalMessageComponentsById.has('signal-custom-1')).toBe(false);
+    expect(state.chatContainer.children.length).toBe(0);
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Error executing //deploy: rejected');
+  });
+
   it('creates the pending new thread before sending a custom slash command', async () => {
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
