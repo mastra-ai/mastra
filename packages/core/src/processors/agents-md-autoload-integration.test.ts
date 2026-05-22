@@ -238,6 +238,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
             type: 'dynamic-agents-md',
           }),
         }),
+        transient: true,
       }),
     ]);
   });

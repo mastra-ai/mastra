@@ -55,6 +55,7 @@ export type AgentSignalDataPart = {
     attributes?: Record<string, string | number | boolean | null | undefined>;
     metadata?: Record<string, unknown>;
   };
+  transient: true;
 };
 
 /**
@@ -374,6 +375,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
     },
+    transient: true,
   };
 }
 
