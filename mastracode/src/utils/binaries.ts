@@ -73,8 +73,11 @@ export async function detectCommonBinariesAsync(): Promise<CommonBinary[]> {
       path: await resolveBinaryAsync(name),
     })),
   );
-  cachedBinaries = await inFlightPromise;
-  inFlightPromise = null;
 
-  return cachedBinaries;
+  try {
+    cachedBinaries = await inFlightPromise;
+    return cachedBinaries;
+  } finally {
+    inFlightPromise = null;
+  }
 }
