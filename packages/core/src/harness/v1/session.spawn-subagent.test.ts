@@ -27,6 +27,7 @@ import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagen
 
 class FakeAgent extends Agent<any, any, any> {
   chunks: any[] = [];
+  lastMessages: any;
   lastStreamOptions: any;
   fullOutput: any = {
     text: 'child-result',
@@ -59,7 +60,8 @@ class FakeAgent extends Agent<any, any, any> {
     super({ id: name, name, instructions: 'fake', model: 'openai/gpt-4o-mini' as any });
   }
 
-  async stream(_messages: any, options?: any): Promise<any> {
+  async stream(messages: any, options?: any): Promise<any> {
+    this.lastMessages = messages;
     this.lastStreamOptions = options;
     const out = buildFakeOutput({
       runId: options?.runId ?? this.fullOutput.runId,
@@ -79,7 +81,12 @@ class FakeAgent extends Agent<any, any, any> {
   }
 }
 
-function setup(opts?: { maxDepth?: number; chunks?: any[]; allowedWorkspaceTools?: string[] }) {
+function setup(opts?: {
+  maxDepth?: number;
+  chunks?: any[];
+  allowedWorkspaceTools?: string[];
+  forkedDefault?: boolean;
+}) {
   const parentAgent = new FakeAgent('parent-agent');
   const childAgent = new FakeAgent('child-agent');
   if (opts?.chunks) childAgent.chunks = opts.chunks;
@@ -100,6 +107,7 @@ function setup(opts?: { maxDepth?: number; chunks?: any[]; allowedWorkspaceTools
           modeId: 'explore-mode',
           description: 'Read-only codebase exploration',
           defaultModelId: 'openai/gpt-4o-mini',
+          forked: opts?.forkedDefault,
           allowedWorkspaceTools: opts?.allowedWorkspaceTools,
           workspace: 'inherit',
         },
@@ -339,5 +347,93 @@ describe('spawn_subagent tool — execution', () => {
     expect(result.subagentSessionId).toBeTruthy();
     const childRecord = await storage.loadSession({ sessionId: result.subagentSessionId });
     expect(childRecord?.closedAt).toBeDefined();
+  });
+
+  it('forks by cloning the parent thread and running on the parent mode/model', async () => {
+    const { harness, parentAgent, childAgent, storage } = setup();
+    const parentThread = await harness.threads.create({ resourceId: 'u1', title: 'parent' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: parentThread.id });
+    await parent.models.switch({ model: 'openai/gpt-4o' });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const events: HarnessEvent[] = [];
+    parent.subscribe(e => {
+      events.push(e);
+    });
+
+    const result = (await tool.execute!(
+      { agentType: 'explore', task: 'inspect context-dependent code', forked: true, modelOverride: 'ignored-model' },
+      {
+        ...execCtx('tc-fork'),
+        agent: {
+          toolCallId: 'tc-fork',
+          runId: 'run-1',
+          flushMessages: async () => undefined,
+        },
+      } as any,
+    )) as any;
+
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(parentAgent.lastStreamOptions?.memory?.thread).toBeDefined();
+    expect(parentAgent.lastStreamOptions.memory.thread).not.toBe(parent.threadId);
+    expect(parentAgent.lastStreamOptions.memory.resource).toBe(parent.resourceId);
+    expect(parentAgent.lastStreamOptions.requestContext.get('harness')).toMatchObject({
+      threadId: parentAgent.lastStreamOptions.memory.thread,
+      resourceId: parent.resourceId,
+      modeId: 'default',
+      modelId: 'openai/gpt-4o',
+      source: 'subagent',
+      parentSessionId: parent.id,
+    });
+    expect(parentAgent.lastStreamOptions.requireToolApproval).toBeUndefined();
+    expect(childAgent.lastStreamOptions).toBeUndefined();
+
+    const childRecord = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRecord).toMatchObject({
+      parentSessionId: parent.id,
+      origin: 'subagent-tool',
+      ownsThread: false,
+      modeId: 'default',
+      modelId: 'openai/gpt-4o',
+      subagentDepth: 1,
+    });
+    expect(childRecord?.threadId).toBe(parentAgent.lastStreamOptions.memory.thread);
+
+    const clone = await harness.threads.get({ resourceId: parent.resourceId, threadId: childRecord!.threadId });
+    expect(clone?.metadata).toMatchObject({ forkedSubagent: true, parentThreadId: parent.threadId });
+
+    const start = events.find(e => e.type === 'subagent_start') as any;
+    expect(start).toMatchObject({
+      toolCallId: 'tc-fork',
+      agentType: 'explore',
+      modelId: 'openai/gpt-4o',
+      forked: true,
+    });
+  });
+
+  it('forks by default when the subagent definition sets forked=true', async () => {
+    const { harness, parentAgent, childAgent } = setup({ forkedDefault: true });
+    const parentThread = await harness.threads.create({ resourceId: 'u1', title: 'parent' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: parentThread.id });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    await tool.execute!({ agentType: 'explore', task: 'use parent context' }, execCtx('tc-fork-default'));
+
+    expect(parentAgent.lastStreamOptions?.memory?.thread).toBeDefined();
+    expect(parentAgent.lastStreamOptions.memory.thread).not.toBe(parent.threadId);
+    expect(childAgent.lastStreamOptions).toBeUndefined();
+  });
+
+  it('lets per-call forked=false override a forked subagent definition default', async () => {
+    const { harness, parentAgent, childAgent } = setup({ forkedDefault: true });
+    const parentThread = await harness.threads.create({ resourceId: 'u1', title: 'parent' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: parentThread.id });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    await tool.execute!({ agentType: 'explore', task: 'isolated work', forked: false }, execCtx('tc-fork-off'));
+
+    expect(childAgent.lastStreamOptions?.memory?.thread).toBeDefined();
+    expect(childAgent.lastStreamOptions.memory.thread).not.toBe(parent.threadId);
+    expect(parentAgent.lastStreamOptions).toBeUndefined();
   });
 });

@@ -26,6 +26,12 @@ import type { SubagentDefinition } from './types';
 
 export const SPAWN_SUBAGENT_TOOL_ID = 'spawn_subagent';
 
+const FORKED_SUBAGENT_NESTING_NOTICE =
+  'Do not call the `spawn_subagent` tool. You are already running inside a forked subagent. Answer the task directly using the conversation history and the other tools available to you.';
+
+const FORKED_SUBAGENT_TASK_NOTICE =
+  'This is a forked subagent task. Use the cloned conversation for context and report only the findings relevant to the delegated task.';
+
 function optionalModelId(value: string | null | undefined): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
@@ -40,6 +46,14 @@ export function createSpawnSubagentTool(parent: Session) {
     _listSubagentTypeIds(): string[];
     _getSubagentType(id: string): SubagentDefinition | undefined;
     _getSubagentMaxDepth(): number;
+    threads: {
+      clone(opts: {
+        resourceId: string;
+        threadId: string;
+        title?: string;
+        metadata?: Record<string, unknown>;
+      }): Promise<{ id: string; resourceId: string }>;
+    };
     session(opts: unknown): Promise<Session>;
   };
   const typeIds = harness._listSubagentTypeIds();
@@ -66,7 +80,15 @@ export function createSpawnSubagentTool(parent: Session) {
     modelOverride: z
       .string()
       .optional()
-      .describe('Optional model id override for this invocation. Falls back to the subagent type default.'),
+      .describe(
+        'Optional model id override for this invocation. Falls back to the subagent type default. Ignored when `forked` is true.',
+      ),
+    forked: z
+      .boolean()
+      .optional()
+      .describe(
+        'If true, clone the parent thread and run on the parent mode/model so the subagent sees the conversation context. Defaults to the subagent type setting.',
+      ),
   });
 
   const outputSchema = z.object({
@@ -87,7 +109,7 @@ export function createSpawnSubagentTool(parent: Session) {
     inputSchema,
     outputSchema,
     execute: async (input, ctx) => {
-      const { agentType, task, modelOverride } = input;
+      const { agentType, task, modelOverride, forked } = input;
       const toolCallId = ctx.agent?.toolCallId ?? 'unknown';
 
       const def = harness._getSubagentType(agentType);
@@ -141,23 +163,62 @@ export function createSpawnSubagentTool(parent: Session) {
         };
       }
 
-      const resolvedModelId =
-        optionalModelId(modelOverride) ??
-        optionalModelId(parent.models.getSubagent({ agentType })) ??
-        optionalModelId(def.defaultModelId);
+      const runAsForked = forked ?? def.forked ?? false;
+      const resolvedModelId = runAsForked
+        ? optionalModelId(parent.models.current())
+        : (optionalModelId(modelOverride) ??
+          optionalModelId(parent.models.getSubagent({ agentType })) ??
+          optionalModelId(def.defaultModelId));
 
-      // Create a fresh thread + session for the subagent. The session is
-      // `origin: 'subagent-tool'` and `parentSessionId` is wired so cascade
-      // rules + the depth field on the record are populated correctly.
-      const child = await harness.session({
-        resourceId: parent.resourceId,
-        threadId: { fresh: true },
-        parentSessionId: parent.id,
-        origin: 'subagent-tool',
-        modeId: def.modeId,
-        modelId: resolvedModelId,
-        subagentDepth: childDepth,
-      });
+      let child: Session;
+      try {
+        if (runAsForked) {
+          await ctx.agent?.flushMessages?.().catch(() => {
+            // Best-effort: cloning stale-but-valid history is better than
+            // failing a subagent when the runtime has no flush hook.
+          });
+          const forkedThread = await harness.threads.clone({
+            resourceId: parent.resourceId,
+            threadId: parent.threadId,
+            title: `Fork: ${agentType} subagent`,
+            metadata: {
+              forkedSubagent: true,
+              parentThreadId: parent.threadId,
+            },
+          });
+          const parentRecord = parent.getRecord();
+          child = await harness.session({
+            resourceId: forkedThread.resourceId,
+            threadId: forkedThread.id,
+            parentSessionId: parent.id,
+            origin: 'subagent-tool',
+            modeId: parentRecord.modeId,
+            modelId: resolvedModelId,
+            subagentDepth: childDepth,
+          });
+        } else {
+          // Create a fresh thread + session for the subagent. The session is
+          // `origin: 'subagent-tool'` and `parentSessionId` is wired so cascade
+          // rules + the depth field on the record are populated correctly.
+          child = await harness.session({
+            resourceId: parent.resourceId,
+            threadId: { fresh: true },
+            parentSessionId: parent.id,
+            origin: 'subagent-tool',
+            modeId: def.modeId ?? parent.getRecord().modeId,
+            modelId: resolvedModelId,
+            subagentDepth: childDepth,
+          });
+        }
+      } catch (err) {
+        return {
+          isError: true,
+          errorName: err instanceof Error ? err.name : 'Error',
+          message: err instanceof Error ? err.message : String(err),
+          subagentSessionId: '',
+          result: undefined,
+        };
+      }
 
       // Workspace inheritance (§2.7 / §8). `'inherit'` (default) makes the
       // child share the parent's workspace via a refcount on the same entry.
@@ -220,6 +281,7 @@ export function createSpawnSubagentTool(parent: Session) {
               agentType,
               task,
               modelId: subagentModelId,
+              ...(runAsForked ? { forked: true } : {}),
               depth: childDepth,
             });
             break;
@@ -276,6 +338,7 @@ export function createSpawnSubagentTool(parent: Session) {
           task: string;
           parentToolCallId: string;
           startedAt: number;
+          forked?: boolean;
         }
       >;
       activeMap.set(toolCallId, {
@@ -284,15 +347,20 @@ export function createSpawnSubagentTool(parent: Session) {
         task,
         parentToolCallId: toolCallId,
         startedAt: Date.now(),
+        ...(runAsForked ? { forked: true } : {}),
       });
 
       const startTime = Date.now();
       let result: unknown;
       let isError = false;
       try {
+        const childTask = runAsForked
+          ? `${task}\n\n${FORKED_SUBAGENT_NESTING_NOTICE}\n\n${FORKED_SUBAGENT_TASK_NOTICE}`
+          : task;
         result = await child.message({
-          content: task,
+          content: childTask,
           abortSignal: ctx.abortSignal,
+          ...(runAsForked ? { yolo: true } : {}),
           ...(prepareStep ? { prepareStep } : {}),
         });
       } catch (err) {

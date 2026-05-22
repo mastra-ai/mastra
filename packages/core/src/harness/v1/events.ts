@@ -506,6 +506,7 @@ export interface SubagentStartEvent extends HarnessEventBase {
   agentType: string;
   task: string;
   modelId: string;
+  forked?: boolean;
   parentId?: string;
   depth: number;
 }
