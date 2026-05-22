@@ -1211,7 +1211,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               createdAt: currentStep.createdAt,
             });
             for (const msg of builtMessages) {
-              messageList.add(msg, 'response', { appendAfterLastCreatedAt: true });
+              messageList.add(msg, 'response');
             }
 
             // Apply structuredOutput metadata to the assistant message.
