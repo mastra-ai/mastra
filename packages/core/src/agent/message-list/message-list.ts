@@ -192,7 +192,11 @@ export class MessageList {
     return signalForTranscript;
   }
 
-  public add(messages: MessageListInput, messageSource: MessageSource) {
+  public add(
+    messages: MessageListInput,
+    messageSource: MessageSource,
+    options?: { appendAfterLastCreatedAt?: boolean },
+  ) {
     if (messageSource === `user`) messageSource = `input`;
 
     if (!messages) return this;
@@ -232,6 +236,7 @@ export class MessageList {
                 }
               : nestedMessage,
             messageSource,
+            options,
           );
         }
         continue;
@@ -245,6 +250,7 @@ export class MessageList {
             }
           : messageInput,
         messageSource,
+        options,
       );
     }
     return this;
@@ -1341,7 +1347,11 @@ export class MessageList {
     };
   }
 
-  private addOne(message: MessageInput, messageSource: MessageSource) {
+  private addOne(
+    message: MessageInput,
+    messageSource: MessageSource,
+    options?: { appendAfterLastCreatedAt?: boolean },
+  ) {
     if (
       (!(`content` in message) ||
         (!message.content &&
@@ -1393,7 +1403,7 @@ export class MessageList {
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
 
-    if (messageSource === 'response') {
+    if (options?.appendAfterLastCreatedAt) {
       messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
     }
 

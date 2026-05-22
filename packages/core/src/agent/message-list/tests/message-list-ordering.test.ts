@@ -647,7 +647,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
             content: { format: 2, content: 'Hi', parts: [{ type: 'text', text: 'Hi' }] },
             createdAt: new Date('2023-01-01T00:01:00.000Z'),
           },
-          'memory',
+          'response',
         );
         list.add(
           {
@@ -669,7 +669,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
             content: { format: 2, content: 'Answer', parts: [{ type: 'text', text: 'Answer' }] },
             createdAt: new Date('2023-01-01T00:03:00.000Z'),
           },
-          'memory',
+          'response',
         );
 
         const messages = list.get.all.db();
