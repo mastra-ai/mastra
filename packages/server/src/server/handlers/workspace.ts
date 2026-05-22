@@ -60,13 +60,15 @@ import {
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-/** Directory path for skills installed via skills.sh */
-const SKILLS_SH_DIR = '.agents/skills';
+import {
+  SKILLS_SH_DIR,
+  assertSafeFilePath,
+  assertSafeSkillName,
+  fetchSkillFiles,
+  getPopularSkillsSh,
+  previewSkillsSh,
+  searchSkillsSh,
+} from './skills-sh-shared';
 
 // =============================================================================
 // Helper Functions
@@ -238,6 +240,7 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
 export const LIST_WORKSPACES_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces',
+  requiresAuth: true,
   responseType: 'json',
   responseSchema: listWorkspacesResponseSchema,
   summary: 'List all workspaces',
@@ -374,6 +377,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 export const GET_WORKSPACE_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   responseSchema: workspaceInfoResponseSchema,
@@ -471,6 +475,7 @@ export const GET_WORKSPACE_ROUTE = createRoute({
 export const WORKSPACE_FS_READ_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/fs/read',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsReadQuerySchema,
@@ -517,6 +522,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
 export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/fs/write',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: fsWriteBodySchema,
@@ -564,6 +570,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
 export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/fs/list',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsListQuerySchema,
@@ -610,6 +617,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   method: 'DELETE',
   path: '/workspaces/:workspaceId/fs/delete',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsDeleteQuerySchema,
@@ -664,6 +672,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
 export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/fs/mkdir',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: fsMkdirBodySchema,
@@ -705,6 +714,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
 export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/fs/stat',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsStatQuerySchema,
@@ -755,6 +765,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
 export const WORKSPACE_SEARCH_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/search',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: searchQuerySchema,
@@ -827,6 +838,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
 export const WORKSPACE_INDEX_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/index',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: indexBodySchema,
@@ -874,6 +886,7 @@ const SKILLS_SH_PATH_PREFIX = `${SKILLS_SH_DIR}/`;
 export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   responseSchema: listSkillsResponseSchema,
@@ -942,6 +955,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/:skillName',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   queryParamSchema: skillDisambiguationQuerySchema,
@@ -995,6 +1009,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/:skillName/references',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   queryParamSchema: skillDisambiguationQuerySchema,
@@ -1041,6 +1056,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/:skillName/references/:referencePath',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
   queryParamSchema: skillDisambiguationQuerySchema,
@@ -1107,6 +1123,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/search',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: searchSkillsQuerySchema,
@@ -1165,11 +1182,10 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
 // skills.sh Proxy Routes
 // =============================================================================
 
-const SKILLS_SH_API_URL = 'https://skills-api-production.up.railway.app';
-
 export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills-sh/search',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShSearchQuerySchema,
@@ -1179,41 +1195,7 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ q, limit }) => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const url = `${SKILLS_SH_API_URL}/api/skills?query=${encodeURIComponent(q)}&pageSize=${limit}`;
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new HTTPException(502, {
-          message: `Skills API error: ${response.status} ${response.statusText}`,
-        });
-      }
-
-      const data = (await response.json()) as {
-        skills: Array<{
-          skillId: string;
-          name: string;
-          installs: number;
-          source: string;
-          owner: string;
-          repo: string;
-          githubUrl: string;
-          displayName: string;
-        }>;
-        total: number;
-        page: number;
-        pageSize: number;
-        totalPages: number;
-      };
-      return {
-        query: q,
-        searchType: 'query',
-        skills: data.skills.map(s => ({ id: s.skillId, name: s.name, installs: s.installs, topSource: s.source })),
-        count: data.total,
-      };
+      return await searchSkillsSh({ q, limit });
     } catch (error) {
       if (error instanceof HTTPException) {
         throw error;
@@ -1226,6 +1208,7 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
 export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills-sh/popular',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShPopularQuerySchema,
@@ -1235,39 +1218,7 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ limit, offset }) => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const page = offset > 0 ? Math.floor(offset / limit) + 1 : 1;
-      const url = `${SKILLS_SH_API_URL}/api/skills/top?pageSize=${limit}&page=${page}`;
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new HTTPException(502, {
-          message: `Skills API error: ${response.status} ${response.statusText}`,
-        });
-      }
-
-      const data = (await response.json()) as {
-        skills: Array<{
-          skillId: string;
-          name: string;
-          installs: number;
-          source: string;
-          owner: string;
-          repo: string;
-          githubUrl: string;
-          displayName: string;
-        }>;
-        total: number;
-      };
-      return {
-        skills: data.skills.map(s => ({ id: s.skillId, name: s.name, installs: s.installs, topSource: s.source })),
-        count: data.total,
-        limit,
-        offset,
-      };
+      return await getPopularSkillsSh({ limit, offset });
     } catch (error) {
       if (error instanceof HTTPException) {
         throw error;
@@ -1278,90 +1229,13 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
 });
 
 // =============================================================================
-// Skills API helpers
-// =============================================================================
-
-/**
- * Validate skill name to prevent path traversal attacks.
- * Only allows alphanumeric characters, hyphens, and underscores.
- */
-const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-_]*$/i;
-
-function assertSafeSkillName(name: string): string {
-  if (!SKILL_NAME_REGEX.test(name)) {
-    throw new HTTPException(400, {
-      message: `Invalid skill name "${name}". Names must start with alphanumeric and contain only letters, numbers, hyphens, and underscores.`,
-    });
-  }
-  return name;
-}
-
-/**
- * Validate that a file path is safe (no traversal, no absolute paths).
- * Prevents malicious API responses from writing files outside the skill directory.
- */
-function assertSafeFilePath(filePath: string): string {
-  // Reject absolute paths
-  if (filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)) {
-    throw new HTTPException(400, {
-      message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
-    });
-  }
-  // Reject path traversal attempts
-  const segments = filePath.split('/');
-  for (const segment of segments) {
-    if (segment === '..' || segment === '.') {
-      throw new HTTPException(400, {
-        message: `Invalid file path "${filePath}". Path traversal is not allowed.`,
-      });
-    }
-  }
-  return filePath;
-}
-
-interface SkillFileEntry {
-  path: string;
-  content: string;
-  encoding: 'utf-8' | 'base64';
-}
-
-interface SkillFilesResponse {
-  skillId: string;
-  owner: string;
-  repo: string;
-  branch: string;
-  files: SkillFileEntry[];
-}
-
-/**
- * Fetch skill files from the Skills API.
- * Returns all files for a skill with their content.
- */
-async function fetchSkillFiles(owner: string, repo: string, skillName: string): Promise<SkillFilesResponse | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s for file downloads
-
-  const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/files`;
-  const response = await fetch(url, { signal: controller.signal });
-  clearTimeout(timeoutId);
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      return null;
-    }
-    throw new Error(`Skills API error: ${response.status} ${response.statusText}`);
-  }
-
-  return (await response.json()) as SkillFilesResponse;
-}
-
-// =============================================================================
 // skills.sh Preview Route
 // =============================================================================
 
 export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills-sh/preview',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShPreviewQuerySchema,
@@ -1371,29 +1245,7 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ owner, repo, path: skillName }) => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/content`;
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new HTTPException(404, {
-          message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
-        });
-      }
-
-      const data = (await response.json()) as { instructions: string; raw: string };
-      const content = data.instructions || data.raw || '';
-
-      if (!content) {
-        throw new HTTPException(404, {
-          message: `No content available for skill "${skillName}"`,
-        });
-      }
-
-      return { content };
+      return await previewSkillsSh({ owner, repo, skillName });
     } catch (error) {
       if (error instanceof HTTPException) {
         throw error;
@@ -1410,6 +1262,7 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
 export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/install',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShInstallBodySchema,
@@ -1526,6 +1379,7 @@ interface SkillMetaFile {
 export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/remove',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShRemoveBodySchema,
@@ -1598,6 +1452,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/update',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShUpdateBodySchema,
