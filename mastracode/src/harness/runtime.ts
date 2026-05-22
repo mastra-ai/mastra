@@ -349,8 +349,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
     this.core.subscribe(event => {
       void this.handleCoreEvent(event).catch(error => {
-        if (isHarnessSessionLifecycleError(error)) return;
-        this.emitError(error);
+        this.emitNonLifecycleError(error);
       });
     });
 
@@ -390,17 +389,21 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     if ('traceId' in event && typeof event.traceId === 'string') this.currentTraceId = event.traceId;
     this.currentTraceId = this.getSessionDisplayState()?.currentTraceId ?? this.currentTraceId;
     if (event.type === 'state_changed' && this.session) {
-      this.state = { ...this.state, ...((await this.session.getState<TState>()) as TState) };
+      try {
+        this.state = { ...this.state, ...((await this.session.getState<TState>()) as TState) };
+      } catch (error) {
+        if (!isHarnessSessionLifecycleError(error)) throw error;
+      }
     }
     if (event.type === 'mode_changed') {
       this.currentModeId = event.modeId;
       await this.setThreadSetting({ key: 'currentModeId', value: event.modeId }).catch(error =>
-        this.emitError(error),
+        this.emitNonLifecycleError(error),
       );
     }
     if (event.type === 'model_changed') {
       await this.setState({ currentModelId: event.modelId } as unknown as Partial<TState>).catch(error =>
-        this.emitError(error),
+        this.emitNonLifecycleError(error),
       );
     }
     if (event.type === 'task_updated') {
@@ -845,7 +848,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     if (!agentType) return (this.state.subagentModelId as string | undefined) ?? null;
     return (
-      this.requireSession().models.getSubagent({ agentType }) ??
+      this.session?.models.getSubagent({ agentType }) ??
       (this.state[`subagentModelId_${agentType}`] as string | undefined) ??
       null
     );
@@ -1683,6 +1686,11 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       error: error instanceof Error ? error : new Error(String(error)),
       message: error instanceof Error ? error.message : String(error),
     } as unknown as HarnessEvent);
+  }
+
+  private emitNonLifecycleError(error: unknown): void {
+    if (isHarnessSessionLifecycleError(error)) return;
+    this.emitError(error);
   }
 
   private getSessionDisplayState(): SessionDisplayState | undefined {

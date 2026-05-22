@@ -257,7 +257,15 @@ describe('MastraCodeHarnessRuntime', () => {
       getDisplayState: () => {
         throw closed;
       },
+      getState: async () => {
+        throw closed;
+      },
+      setState: async () => {
+        throw closed;
+      },
     };
+    const listener = vi.fn();
+    runtime.subscribe(listener);
 
     await expect(
       (runtime as any).handleCoreEvent({
@@ -267,6 +275,9 @@ describe('MastraCodeHarnessRuntime', () => {
     ).resolves.toBeUndefined();
 
     expect(runtime.getDisplayState().tasks).toEqual([{ id: 'late-task', title: 'Late task', status: 'completed' }]);
+    await expect((runtime as any).handleCoreEvent({ type: 'state_changed' })).resolves.toBeUndefined();
+    await expect((runtime as any).handleCoreEvent({ type: 'model_changed', modelId: 'openai/gpt-4o-mini' })).resolves.toBeUndefined();
+    expect(listener).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
     await runtime.destroy();
   });
 
@@ -493,9 +504,13 @@ describe('MastraCodeHarnessRuntime', () => {
           defaultModelId: 'openai/gpt-4o-mini',
         },
       ],
-      initialState: { subagentModelId: 'anthropic/claude-haiku-4-5' },
+      initialState: {
+        subagentModelId: 'anthropic/claude-haiku-4-5',
+        subagentModelId_explore: 'anthropic/claude-haiku-4-5',
+      },
     });
 
+    expect(runtime.getSubagentModelId({ agentType: 'explore' })).toBe('anthropic/claude-haiku-4-5');
     await runtime.init();
 
     expect((runtime as any).session.models.getSubagent({ agentType: 'explore' })).toBe('anthropic/claude-haiku-4-5');

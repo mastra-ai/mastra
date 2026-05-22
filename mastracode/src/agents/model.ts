@@ -313,7 +313,7 @@ export function resolveModel(
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
   const harnessContext = requestContext.get('harness') as ModelHarnessRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId ?? harnessContext?.modelId;
+  const modelId = harnessContext?.modelId ?? harnessContext?.state?.currentModelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }

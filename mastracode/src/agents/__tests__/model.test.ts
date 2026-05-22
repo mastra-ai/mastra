@@ -366,6 +366,35 @@ describe('resolveModel', () => {
         headers: undefined,
       });
     });
+
+    it('prefers the Harness per-turn model id over stale runtime state', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      const values = new Map<string, unknown>();
+      const requestContext = {
+        get: (key: string) => values.get(key),
+        set: (key: string, value: unknown) => values.set(key, value),
+      } as any;
+      requestContext.set('harness', {
+        modelId: 'openai/gpt-5.2',
+        state: {
+          currentModelId: 'openai/gpt-4o',
+          thinkingLevel: 'high',
+        },
+      });
+
+      getDynamicModel({ requestContext });
+
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
+        thinkingLevel: 'high',
+        headers: undefined,
+      });
+    });
   });
 
   describe('other providers', () => {
