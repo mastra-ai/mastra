@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
-import type { SignalDeliveryAttributes } from '@mastra/core/agent';
+import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
@@ -85,11 +85,14 @@ export type { MastraTUIOptions } from './state.js';
 // =============================================================================
 
 /**
- * Delivery attributes applied to user-message signals. When the signal is delivered to an
+ * Delivery option attributes applied to user-message signals. When the signal is delivered to an
  * active run it is tagged as while-active; when it starts a new run it is a message.
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
-const USER_SIGNAL_DELIVERY_ATTRIBUTES: SignalDeliveryAttributes = {
+const USER_SIGNAL_DELIVERY_OPTIONS: {
+  ifActive: { attributes: AgentSignalAttributes };
+  ifIdle: { attributes: AgentSignalAttributes };
+} = {
   ifActive: { attributes: { delivery: 'while-active' } },
   ifIdle: { attributes: { delivery: 'message' } },
 };
@@ -379,7 +382,7 @@ export class MastraTUI {
 
       const signal = this.state.harness.sendSignal({
         content: this.createUserSignalContent(content, images),
-        deliveryAttributes: USER_SIGNAL_DELIVERY_ATTRIBUTES,
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
@@ -407,7 +410,7 @@ export class MastraTUI {
       this.clearIdleCounter();
       const signal = this.state.harness.sendSignal({
         content: this.createUserSignalContent(content, images),
-        deliveryAttributes: USER_SIGNAL_DELIVERY_ATTRIBUTES,
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
 
       if (hasActiveRun) {

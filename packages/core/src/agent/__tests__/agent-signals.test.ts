@@ -2078,74 +2078,25 @@ describe('Agent signals', () => {
     ).toBe(true);
   });
 
-  describe('deliveryAttributes', () => {
-    it('resolveDeliveryAttributes merges ifActive attributes when delivery is active', () => {
+  describe('delivery option attributes', () => {
+    it('resolveDeliveryAttributes merges option attributes into signal attributes', () => {
       const signal = createSignal({
         type: 'user-message',
         contents: 'hello',
         attributes: { existing: 'yes' },
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-          ifIdle: { attributes: { delivery: 'message' } },
-        },
       });
 
-      const resolved = resolveDeliveryAttributes(signal, 'active');
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
       expect(resolved.attributes).toEqual({ existing: 'yes', delivery: 'while-active' });
-      expect(resolved.deliveryAttributes).toBeUndefined();
     });
 
-    it('resolveDeliveryAttributes merges ifIdle attributes when delivery is idle', () => {
-      const signal = createSignal({
-        type: 'user-message',
-        contents: 'hello',
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-          ifIdle: { attributes: { delivery: 'message' } },
-        },
-      });
-
-      const resolved = resolveDeliveryAttributes(signal, 'idle');
-      expect(resolved.attributes).toEqual({ delivery: 'message' });
-      expect(resolved.deliveryAttributes).toBeUndefined();
-    });
-
-    it('resolveDeliveryAttributes strips deliveryAttributes when selected branch has no attributes', () => {
-      const signal = createSignal({
-        type: 'user-message',
-        contents: 'hello',
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-          ifIdle: {},
-        },
-      });
-
-      const resolved = resolveDeliveryAttributes(signal, 'idle');
-      expect(resolved.attributes).toBeUndefined();
-      expect(resolved.deliveryAttributes).toBeUndefined();
-    });
-
-    it('resolveDeliveryAttributes strips deliveryAttributes when selected branch is missing', () => {
-      const signal = createSignal({
-        type: 'user-message',
-        contents: 'hello',
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-        },
-      });
-
-      const resolved = resolveDeliveryAttributes(signal, 'idle');
-      expect(resolved.attributes).toBeUndefined();
-      expect(resolved.deliveryAttributes).toBeUndefined();
-    });
-
-    it('resolveDeliveryAttributes returns same signal when no deliveryAttributes', () => {
+    it('resolveDeliveryAttributes returns same signal when no option attributes are selected', () => {
       const signal = createSignal({
         type: 'user-message',
         contents: 'hello',
       });
 
-      const resolved = resolveDeliveryAttributes(signal, 'active');
+      const resolved = resolveDeliveryAttributes(signal, undefined);
       expect(resolved).toBe(signal);
     });
 
@@ -2153,12 +2104,9 @@ describe('Agent signals', () => {
       const signal = createSignal({
         type: 'user-message',
         contents: 'fix the bug',
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-        },
       });
 
-      const resolved = resolveDeliveryAttributes(signal, 'active');
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
       expect(resolved.toLLMMessage()).toEqual({
         role: 'user',
         content: '<user-message delivery="while-active">fix the bug</user-message>',
@@ -2169,12 +2117,9 @@ describe('Agent signals', () => {
       const signal = createSignal({
         type: 'user-message',
         contents: 'fix the bug',
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-        },
       });
 
-      const resolved = resolveDeliveryAttributes(signal, 'active');
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
       const db = resolved.toDBMessage({ threadId: 't', resourceId: 'r' });
       expect((db.content.metadata!.signal as Record<string, unknown>).attributes).toEqual({
         delivery: 'while-active',
@@ -2184,23 +2129,7 @@ describe('Agent signals', () => {
       expect(dataPart.data.attributes).toEqual({ delivery: 'while-active' });
     });
 
-    it('idle-resolved user-message without attributes renders as plain text', () => {
-      const signal = createSignal({
-        type: 'user-message',
-        contents: 'hello',
-        deliveryAttributes: {
-          ifActive: { attributes: { delivery: 'while-active' } },
-        },
-      });
-
-      const resolved = resolveDeliveryAttributes(signal, 'idle');
-      expect(resolved.toLLMMessage()).toEqual({
-        role: 'user',
-        content: 'hello',
-      });
-    });
-
-    it('thread-stream-runtime resolves deliveryAttributes as while-active on active signal delivery', () => {
+    it('thread-stream-runtime resolves ifActive.attributes as while-active on active signal delivery', () => {
       const runtime = new AgentThreadStreamRuntime();
       const pubsub = new EventEmitterPubSub();
       const agent = { id: 'delivery-active-agent' } as any;
@@ -2230,15 +2159,13 @@ describe('Agent signals', () => {
         {
           type: 'user-message',
           contents: 'while-active test',
-          deliveryAttributes: {
-            ifActive: { attributes: { delivery: 'while-active' } },
-            ifIdle: { attributes: { delivery: 'message' } },
-          },
         },
         {
           resourceId: 'delivery-resource',
           threadId: 'delivery-thread',
+          ifActive: { attributes: { delivery: 'while-active' } },
           ifIdle: {
+            attributes: { delivery: 'message' },
             streamOptions: {
               memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
             },
@@ -2247,12 +2174,11 @@ describe('Agent signals', () => {
         pubsub,
       );
 
-      // Active run → ifActive branch → delivery: 'while-active'
+      // Active run → ifActive.attributes → delivery: 'while-active'
       expect(result.signal.attributes).toEqual({ delivery: 'while-active' });
-      expect(result.signal.deliveryAttributes).toBeUndefined();
     });
 
-    it('thread-stream-runtime resolves deliveryAttributes as message on idle signal delivery', () => {
+    it('thread-stream-runtime resolves ifIdle.attributes as message on idle signal delivery', () => {
       const runtime = new AgentThreadStreamRuntime();
       const pubsub = new EventEmitterPubSub();
       const agent = { id: 'delivery-idle-agent', stream: () => new Promise(() => {}) } as any;
@@ -2263,15 +2189,13 @@ describe('Agent signals', () => {
         {
           type: 'user-message',
           contents: 'idle test',
-          deliveryAttributes: {
-            ifActive: { attributes: { delivery: 'while-active' } },
-            ifIdle: { attributes: { delivery: 'message' } },
-          },
         },
         {
           resourceId: 'idle-resource',
           threadId: 'idle-thread',
+          ifActive: { attributes: { delivery: 'while-active' } },
           ifIdle: {
+            attributes: { delivery: 'message' },
             streamOptions: {
               memory: { thread: 'idle-thread', resource: 'idle-resource' },
             },
@@ -2280,9 +2204,8 @@ describe('Agent signals', () => {
         pubsub,
       );
 
-      // No active run → ifIdle branch → delivery: 'message'
+      // No active run → ifIdle.attributes → delivery: 'message'
       expect(result.signal.attributes).toEqual({ delivery: 'message' });
-      expect(result.signal.deliveryAttributes).toBeUndefined();
     });
   });
 });

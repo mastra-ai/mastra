@@ -155,7 +155,7 @@ Use XML-safe signal type names and attribute names. Signal type names and attrib
 
 ## Delivery attributes
 
-Use `deliveryAttributes` to tag a signal with context that depends on whether the agent is active or idle at delivery time. Mastra resolves the correct branch when the signal is accepted.
+Use `ifActive.attributes` and `ifIdle.attributes` to tag a signal with context that depends on whether the agent is active or idle at delivery time. Mastra resolves the correct branch when the signal is accepted.
 
 ```typescript title="src/mastra/signals.ts"
 agent.sendSignal(
@@ -163,14 +163,12 @@ agent.sendSignal(
     type: 'user-message',
     contents: 'Also cover the edge cases.',
     attributes: { source: 'chat' },
-    deliveryAttributes: {
-      ifActive: { attributes: { delivery: 'while-active' } },
-      ifIdle: { attributes: { delivery: 'message' } },
-    },
   },
   {
     resourceId: 'user_123',
     threadId: 'thread_456',
+    ifActive: { attributes: { delivery: 'while-active' } },
+    ifIdle: { attributes: { delivery: 'message' } },
   },
 )
 ```
@@ -192,7 +190,7 @@ Top-level `attributes` always apply. The selected branch's `attributes` are merg
 Delivery attributes work with any signal type and can carry any key-value pairs. The `delivery` name shown above is not a special Mastra API field. It is a custom attribute name used for this example; you can use any attribute names that fit your application.
 
 :::note
-Visit [Agent.sendSignal() reference](/reference/agents/agent#sendsignalsignal-options) for the full `AgentSignalInput` type.
+Visit [Agent.sendSignal() reference](/reference/agents/agent#sendsignalsignal-options) for the full signal input and options types.
 :::
 
 ## Use the client SDK

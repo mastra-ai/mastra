@@ -23,21 +23,6 @@ type SignalFilePart = {
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
-/**
- * Conditional attributes that are resolved and merged into `attributes` based on
- * whether the signal is delivered to an active agent run or starts a new (idle) run.
- *
- * @experimental
- */
-export type SignalDeliveryBranch = {
-  attributes?: AgentSignalAttributes;
-};
-
-export type SignalDeliveryAttributes = {
-  ifActive?: SignalDeliveryBranch;
-  ifIdle?: SignalDeliveryBranch;
-};
-
 export type AgentSignalInput = {
   id?: string;
   createdAt?: Date | string;
@@ -52,14 +37,6 @@ export type AgentSignalInput = {
    * message (also visible to UI consumers via `useChat` message metadata).
    */
   providerOptions?: MastraProviderMetadata;
-  /**
-   * Conditional branch attributes merged into top-level `attributes` based on whether
-   * the signal is delivered to an active run (`ifActive`) or starts a new idle run (`ifIdle`).
-   * Call `resolveDeliveryAttributes()` to produce a signal with the correct attributes.
-   *
-   * @experimental
-   */
-  deliveryAttributes?: SignalDeliveryAttributes;
 };
 
 /**
@@ -467,24 +444,21 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
 }
 
 /**
- * Resolve `deliveryAttributes` into concrete `attributes` on a signal.
+ * Resolve delivery option attributes into concrete `attributes` on a signal.
  * Returns a new signal with the selected branch's `attributes` merged into
- * top-level `attributes` and `deliveryAttributes` removed.
+ * top-level `attributes`.
  *
  * @experimental
  */
-export function resolveDeliveryAttributes(signal: CreatedAgentSignal, delivery: 'active' | 'idle'): CreatedAgentSignal {
-  const branch = delivery === 'active' ? signal.deliveryAttributes?.ifActive : signal.deliveryAttributes?.ifIdle;
-  const extra = branch?.attributes;
-  if (!extra || Object.keys(extra).length === 0) {
-    if (!signal.deliveryAttributes) return signal;
-    // Strip deliveryAttributes even if the selected branch attributes are empty.
-    return createSignal({ ...signal, deliveryAttributes: undefined });
-  }
+export function resolveDeliveryAttributes(
+  signal: CreatedAgentSignal,
+  attributes: AgentSignalAttributes | undefined,
+): CreatedAgentSignal {
+  if (!attributes || Object.keys(attributes).length === 0) return signal;
+
   return createSignal({
     ...signal,
-    attributes: { ...signal.attributes, ...extra },
-    deliveryAttributes: undefined,
+    attributes: { ...signal.attributes, ...attributes },
   });
 }
 

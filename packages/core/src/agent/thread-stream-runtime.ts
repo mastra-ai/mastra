@@ -709,9 +709,10 @@ export class AgentThreadStreamRuntime {
     const threadId = target.threadId ?? activeRecord?.threadId;
 
     // Resolve conditional delivery attributes now that we know the delivery path.
-    if (signal.deliveryAttributes) {
-      signal = resolveDeliveryAttributes(signal, isActiveTarget ? 'active' : 'idle');
-    }
+    signal = resolveDeliveryAttributes(
+      signal,
+      isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
+    );
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
