@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Preserve client-tool call args across streaming recursion. `@mastra/client-js` `processStreamResponse` now sends a separate `role: 'tool'` message with the original args attached as `input` (mirroring `generateLegacy` and the existing `ToolResultWithInput` convention). `@mastra/core` `AIV5Adapter.fromModelMessage` consults that `input` field instead of fabricating `args: {}` when the matching tool-call lives in a prior model message. Fixes #16017.
+Preserve original tool-call arguments across client-tool streaming recursion. Tool results from recursive calls now carry the arguments the tool was invoked with, instead of being persisted as empty `{}`. Prevents long-running streaming agents from producing repeated invalid tool calls. Fixes #16017.
