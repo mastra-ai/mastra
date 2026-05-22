@@ -2299,6 +2299,73 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('refreshes PR state for conflicts before the heavy snapshot interval expires', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const currentTime = Date.parse('2026-01-02T00:04:00.000Z');
+    const now = () => new Date(currentTime);
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertPrSnapshot('account-1', {
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      title: 'Cached PR',
+      url: 'https://github.com/mastra-ai/mastra/pull/123',
+      state: 'open',
+      merged: false,
+      mergeable: true,
+      mergeableState: 'clean',
+      headSha: 'sha-clean',
+      failedChecks: [{ name: 'old-check', status: 'failure', url: 'https://checks/old' }],
+      reviews: [{ id: '1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
+      checkedAt: '2026-01-02T00:00:00.000Z',
+      heavyCheckedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+    const commandRunner = createSnapshotCommandRunner([
+      createSnapshot({
+        title: 'feat: needs merge work',
+        mergeable: false,
+        mergeableState: 'dirty',
+        headSha: 'sha-conflict',
+      }),
+    ]);
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      prStatePollIntervalMs: 3 * 60_000,
+      snapshotPollIntervalMs: 15 * 60_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastMergeConflictFingerprint: undefined,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123')).toHaveLength(1);
+    expect(
+      commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123/reviews'),
+    ).toHaveLength(0);
+    expect(
+      commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/commits/sha-conflict/check-runs'),
+    ).toHaveLength(0);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: expect.objectContaining({ type: 'github-pr-conflict', pr: 123 }) }),
+      expect.anything(),
+    );
+    github.destroy();
+  });
+
   it('emits real conflicts from the shared-inbox snapshot fallback when no inbox row changes', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');

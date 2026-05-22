@@ -32,6 +32,7 @@ const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
+const DEFAULT_PR_STATE_POLL_INTERVAL_MS = 3 * 60_000;
 const DEFAULT_SNAPSHOT_POLL_INTERVAL_MS = 15 * 60_000;
 const DEFAULT_PENDING_FLUSH_MS = 5 * 60_000;
 const DEFAULT_GH_COMMAND_TIMEOUT_MS = 30_000;
@@ -75,6 +76,7 @@ export type GithubAutoUnsubscribeHandler = (event: GithubAutoUnsubscribeEvent) =
 export interface GithubSignalsOptions {
   repo?: string;
   pollIntervalMs?: number;
+  prStatePollIntervalMs?: number;
   snapshotPollIntervalMs?: number;
   pendingFlushMs?: number;
   includeTool?: boolean;
@@ -91,6 +93,7 @@ type NormalizedGithubSignalsOptions = Required<
   Pick<
     GithubSignalsOptions,
     | 'pollIntervalMs'
+    | 'prStatePollIntervalMs'
     | 'snapshotPollIntervalMs'
     | 'pendingFlushMs'
     | 'includeTool'
@@ -708,6 +711,7 @@ export class GithubSignals {
     this.#options = {
       repo: options.repo,
       pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+      prStatePollIntervalMs: options.prStatePollIntervalMs ?? DEFAULT_PR_STATE_POLL_INTERVAL_MS,
       snapshotPollIntervalMs: options.snapshotPollIntervalMs ?? DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
       pendingFlushMs: options.pendingFlushMs ?? DEFAULT_PENDING_FLUSH_MS,
       includeTool: options.includeTool ?? true,
@@ -1197,12 +1201,15 @@ export class GithubSignals {
     force: boolean,
   ): Promise<GithubPRSnapshot | undefined> {
     if (!this.#notificationPoller || !subscription.repo) return undefined;
-    const staleBefore = new Date(this.#options.now().getTime() - this.#options.snapshotPollIntervalMs).toISOString();
+    const now = this.#options.now().getTime();
+    const staleBefore = new Date(now - this.#options.prStatePollIntervalMs).toISOString();
+    const heavyStaleBefore = new Date(now - this.#options.snapshotPollIntervalMs).toISOString();
     const cachedSnapshot = await this.#notificationPoller.refreshPullRequestSnapshot(
       subscription.repo,
       subscription.prNumber,
       {
         staleBefore,
+        heavyStaleBefore,
         force,
       },
     );

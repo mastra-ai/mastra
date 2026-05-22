@@ -286,6 +286,14 @@ describe('GithubNotificationPoller', () => {
       accountKey: 'account-1',
       now,
     });
+    const prDetailsCalls = () =>
+      commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123');
+    const heavyCalls = () =>
+      commandRunner.mock.calls.filter(
+        call =>
+          call[0][1] === 'repos/mastra-ai/mastra/pulls/123/reviews' ||
+          call[0][1] === 'repos/mastra-ai/mastra/commits/sha-1/check-runs',
+      );
 
     await expect(first.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
       title: 'Cached PR',
@@ -297,13 +305,47 @@ describe('GithubNotificationPoller', () => {
     await expect(second.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
       headSha: 'sha-1',
     });
-    expect(commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123')).toHaveLength(1);
+    expect(prDetailsCalls()).toHaveLength(1);
+    expect(heavyCalls()).toHaveLength(2);
 
-    currentTime += 16 * 60_000;
-    await expect(second.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
+    currentTime += 4 * 60_000;
+    await expect(
+      second.refreshPullRequestSnapshot('mastra-ai/mastra', 123, {
+        staleBefore: new Date(currentTime - 3 * 60_000).toISOString(),
+        heavyStaleBefore: new Date(currentTime - 15 * 60_000).toISOString(),
+      }),
+    ).resolves.toMatchObject({
+      headSha: 'sha-1',
+      failedChecks: [{ name: 'test', status: 'failure', url: 'https://checks/test' }],
+      reviews: [{ id: '1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
+    });
+    expect(prDetailsCalls()).toHaveLength(2);
+    expect(heavyCalls()).toHaveLength(2);
+
+    currentTime += 12 * 60_000;
+    await expect(
+      second.refreshPullRequestSnapshot('mastra-ai/mastra', 123, {
+        staleBefore: new Date(currentTime - 3 * 60_000).toISOString(),
+        heavyStaleBefore: new Date(currentTime - 15 * 60_000).toISOString(),
+      }),
+    ).resolves.toMatchObject({
       headSha: 'sha-1',
     });
-    expect(commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123')).toHaveLength(2);
+    expect(prDetailsCalls()).toHaveLength(3);
+    expect(heavyCalls()).toHaveLength(4);
+
+    currentTime += 1_000;
+    await expect(
+      second.refreshPullRequestSnapshot('mastra-ai/mastra', 123, {
+        staleBefore: new Date(currentTime - 3 * 60_000).toISOString(),
+        heavyStaleBefore: new Date(currentTime - 15 * 60_000).toISOString(),
+        force: true,
+      }),
+    ).resolves.toMatchObject({
+      headSha: 'sha-1',
+    });
+    expect(prDetailsCalls()).toHaveLength(4);
+    expect(heavyCalls()).toHaveLength(6);
   });
 
   it('does not run shared PR snapshot refresh commands from a non-master instance', async () => {
