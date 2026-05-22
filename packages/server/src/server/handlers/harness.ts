@@ -534,13 +534,21 @@ function projectInboxResponseLookup(receipt: unknown): InboxResponseLookupRespon
   if (!receipt || typeof receipt !== 'object') return { status: 'not_found', source: 'inbox-response' };
   const record = receipt as Record<string, unknown>;
   const status = record.status;
+  const itemId = typeof record.itemId === 'string' ? record.itemId : undefined;
+  const responseId = typeof record.responseId === 'string' ? record.responseId : undefined;
+  const resumeAttemptId = typeof record.resumeAttemptId === 'string' ? record.resumeAttemptId : undefined;
+  const runId = typeof record.runId === 'string' ? record.runId : undefined;
+  const kind = isPendingInboxKind(record.kind) ? record.kind : undefined;
+  if (!itemId || !responseId || !resumeAttemptId || !runId || !kind) {
+    return { status: 'not_found', source: 'inbox-response' };
+  }
   const base = {
     source: 'inbox-response' as const,
-    itemId: typeof record.itemId === 'string' ? record.itemId : '',
-    kind: isPendingInboxKind(record.kind) ? record.kind : 'question',
-    responseId: typeof record.responseId === 'string' ? record.responseId : '',
-    resumeAttemptId: typeof record.resumeAttemptId === 'string' ? record.resumeAttemptId : '',
-    runId: typeof record.runId === 'string' ? record.runId : '',
+    itemId,
+    kind,
+    responseId,
+    resumeAttemptId,
+    runId,
     ...(typeof record.queuedItemId === 'string' ? { queuedItemId: record.queuedItemId } : {}),
   };
   if (status === 'accepted' || status === 'applied') {

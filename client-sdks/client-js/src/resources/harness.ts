@@ -51,7 +51,7 @@ export interface HarnessEventStreamOptions {
 }
 
 export interface HarnessPatchStateOptions {
-  ifMatch?: string | number;
+  ifMatch: string | number;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -83,21 +83,27 @@ function appendQuery(
 
 function parseSseBlock(block: string): HarnessEvent | null {
   const normalizedBlock = block.replace(/\r\n/g, '\n').trim();
-  if (!normalizedBlock || normalizedBlock.startsWith(':')) {
+  if (!normalizedBlock) {
     return null;
   }
 
-  const data = normalizedBlock
-    .split('\n')
-    .filter(line => line.startsWith('data:'))
-    .map(line => line.slice('data:'.length).trim())
-    .join('\n');
+  let eventId: string | undefined;
+  const dataLines: string[] = [];
+  for (const line of normalizedBlock.split('\n')) {
+    if (line.startsWith('id:')) {
+      eventId = line.slice('id:'.length).trim();
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trim());
+    }
+  }
+  const data = dataLines.join('\n');
 
   if (!data || data === '[DONE]') {
     return null;
   }
 
-  return JSON.parse(data) as HarnessEvent;
+  const event = JSON.parse(data) as HarnessEvent;
+  return eventId ? { ...event, id: eventId } : event;
 }
 
 function findSseBoundary(buffer: string): { index: number; length: number } | null {
@@ -284,11 +290,11 @@ export class RemoteSession extends BaseResource {
     return this.request(this.withContext(`${this.basePath}/state`, options.requestContext));
   }
 
-  patchState(body: HarnessStatePatch, options: HarnessPatchStateOptions = {}): Promise<unknown> {
+  patchState(body: HarnessStatePatch, options: HarnessPatchStateOptions): Promise<unknown> {
     return this.request(this.withContext(`${this.basePath}/state`, options.requestContext), {
       method: 'PATCH',
       body,
-      ...(options.ifMatch !== undefined ? { headers: { 'If-Match': `"${options.ifMatch}"` } } : {}),
+      headers: { 'If-Match': `"${options.ifMatch}"` },
     });
   }
 
