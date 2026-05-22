@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import { signalToXmlMarkup } from '../agent/signals';
+import { createSignal, signalToXmlMarkup } from '../agent/signals';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
@@ -204,8 +204,8 @@ function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[]
   return completed;
 }
 
-function getResponseMessages(messageList: MessageList): MastraDBMessage[] {
-  return messageList.get.all.db().filter(message => message.role === 'assistant');
+function getCurrentStepResponseMessages(messageList: MessageList): MastraDBMessage[] {
+  return messageList.get.response.db();
 }
 
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
@@ -262,7 +262,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
     const messages = messageList.get.all.db();
-    const responseMessages = getResponseMessages(messageList);
+    const responseMessages = getCurrentStepResponseMessages(messageList);
     const completedToolCalls = getCompletedToolCalls(responseMessages);
     const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
@@ -280,12 +280,22 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       return messageList;
     }
 
-    await args.sendSignal?.({
-      type: 'system-reminder',
+    const signalInput = {
+      type: 'system-reminder' as const,
       contents: reminderText,
       attributes: { type: REMINDER_TYPE, path: instructionPath },
       metadata: getReminderMetadata(instructionPath).systemReminder,
-    });
+    };
+
+    if (args.sendSignal) {
+      await args.sendSignal(signalInput);
+      return messageList;
+    }
+
+    const signal = createSignal(signalInput);
+    args.rotateResponseMessageId?.();
+    messageList.add(signal.toDBMessage(), 'input');
+    await args.writer?.custom(signal.toDataPart());
 
     return messageList;
   }

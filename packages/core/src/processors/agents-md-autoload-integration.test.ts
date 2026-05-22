@@ -371,7 +371,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     );
   });
 
-  it('injects AGENTS.md from a completed directory listing after response messages are persisted', async () => {
+  it('injects AGENTS.md as a signal when sendSignal is unavailable', async () => {
     messageList.add([{ role: 'user', content: 'List packages/core' }], 'input');
     messageList.add(
       [
@@ -384,11 +384,6 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       'response',
     );
 
-    // Simulate the save queue persisting the tool result before the next model step.
-    // The message remains in the transcript, but it is no longer in the response source set.
-    messageList.drainUnsavedMessages();
-    expect(messageList.get.response.db()).toHaveLength(0);
-
     const injector = new AgentsMDInjector({
       pathExists: (path: string) => path === '/repo/packages/core' || path === '/repo/packages/core/AGENTS.md',
       isDirectory: (path: string) => path === '/repo/packages/core' || path === '/repo/packages' || path === '/repo',
@@ -397,24 +392,25 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
         throw new Error(`Unexpected read: ${path}`);
       },
     });
+    const rotateResponseMessageId = vi.fn(() => 'response-2');
+    const writer: ProcessorStreamWriter = { custom: vi.fn(async () => {}) };
 
-    const runner = new ProcessorRunner({
-      inputProcessors: [injector],
-      outputProcessors: [],
-      logger: mockLogger,
-      agentName: 'test-agent',
-    });
-
-    await runner.runProcessInputStep({
+    await injector.processInputStep({
       messageList,
+      messages: messageList.get.all.db(),
       stepNumber: 1,
       steps: [],
       model: {} as any,
       tools: {},
       retryCount: 0,
+      state: {},
+      systemMessages: [],
       messageId: 'response-1',
-      rotateResponseMessageId: () => 'response-2',
-      writer: { custom: async () => {} },
+      rotateResponseMessageId,
+      writer,
+      abort: () => {
+        throw new Error('unexpected abort');
+      },
     });
 
     const signals = messageList.get.all.db().filter(m => m.role === 'signal');
@@ -422,6 +418,11 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     expect(signals[0]!.content.parts[0]).toEqual(
       expect.objectContaining({ type: 'text', text: 'Core package instructions' }),
     );
+    expect(signals[0]!.content.metadata?.signal).toEqual(
+      expect.objectContaining({ attributes: { type: 'dynamic-agents-md', path: '/repo/packages/core/AGENTS.md' } }),
+    );
+    expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    expect(writer.custom).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder' }));
   });
 
   it('no injection when tool call path has no nearby AGENTS.md', async () => {
