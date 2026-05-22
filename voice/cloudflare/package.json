@@ -32,10 +32,10 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "cloudflare": "^5.2.0"
+    "cloudflare": "^5.2.0",
+    "@cloudflare/workers-types": "^4.20260418.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260418.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

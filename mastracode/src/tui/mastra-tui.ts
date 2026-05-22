@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
+import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
@@ -83,6 +84,19 @@ export type { MastraTUIOptions } from './state.js';
 // =============================================================================
 // MastraTUI Class
 // =============================================================================
+
+/**
+ * Delivery option attributes applied to user-message signals. When the signal is delivered to an
+ * active run it is tagged as while-active; when it starts a new run it is a message.
+ * The LLM sees these as XML attributes on the `<user-message>` element.
+ */
+const USER_SIGNAL_DELIVERY_OPTIONS: {
+  ifActive: { attributes: AgentSignalAttributes };
+  ifIdle: { attributes: AgentSignalAttributes };
+} = {
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
+};
 
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
@@ -320,7 +334,10 @@ export class MastraTUI {
 
   private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
     const messageId = `user-${Date.now()}`;
-    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId));
+    const isInterjection = this.state.harness.isCurrentThreadStreamActive();
+    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
+      ...(isInterjection ? { label: 'steer' } : {}),
+    });
     this.state.ui.requestRender();
     return messageId;
   }
@@ -364,7 +381,10 @@ export class MastraTUI {
         pendingNewThread,
       });
 
-      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
+      });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
         this.removeOptimisticUserMessage(signal.id);
@@ -389,10 +409,13 @@ export class MastraTUI {
 
     const send = () => {
       this.clearIdleCounter();
-      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
+      });
 
       if (hasActiveRun) {
-        addPendingUserMessage(this.state, signal.id, content, images);
+        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
       } else {
         addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
       }
