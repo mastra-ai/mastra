@@ -82,7 +82,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const messageIds = messages.map(m => m.id);
-    const lastObservedAt = this.getMaxMessageTimestamp(messages);
+    const maxTs = this.getMaxMessageTimestamp(messages);
+    const lastObservedAt = new Date(maxTs.getTime() + 1);
 
     return {
       observations: newObservations,
