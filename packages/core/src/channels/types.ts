@@ -16,7 +16,7 @@ export type PostableMessage = string | CardElement;
 
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
-  adapter: Adapter;
+  adapter: Adapter<any, any>;
   /**
    * CORS configuration for the generated webhook route for this adapter.
    */
@@ -226,7 +226,7 @@ export interface ChannelHandlers {
 /** Configuration for agent chat channels. */
 export interface ChannelConfig {
   /** Platform adapters keyed by name (e.g. 'slack', 'discord'). */
-  adapters: Record<string, Adapter | ChannelAdapterConfig>;
+  adapters: Record<string, ChannelAdapterConfig | Adapter<any, any>>;
 
   /**
    * Override built-in event handlers.
