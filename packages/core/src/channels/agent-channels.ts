@@ -1501,11 +1501,15 @@ export class AgentChannels {
     // doesn't render (returns `undefined`).
     let fn = typeof requested === 'function' ? requested : undefined;
     const requestedMode = typeof requested === 'function' ? undefined : requested;
-    // Deprecated `cards: boolean` only applies when `toolDisplay` is not set:
-    // `cards: true` → `'cards'`, `cards: false` → `'text'`. The `@deprecated`
-    // JSDoc surfaces in IDEs so we don't bother with a runtime warning.
+    // Deprecated `cards: boolean` only applies when `toolDisplay` is not set
+    // (in any form — string mode or function): `cards: true` → `'cards'`,
+    // `cards: false` → `'text'`. The `@deprecated` JSDoc surfaces in IDEs so
+    // we don't bother with a runtime warning. The discriminated union also
+    // makes `cards` + `toolDisplay` a type error, but we still guard at
+    // runtime so casts/JS callers don't get surprising fallback behavior
+    // when the fn returns `undefined`.
     const fromDeprecatedCards =
-      requestedMode === undefined && deprecatedCards !== undefined ? (deprecatedCards ? 'cards' : 'text') : undefined;
+      requested === undefined && deprecatedCards !== undefined ? (deprecatedCards ? 'cards' : 'text') : undefined;
     // Deprecated `formatToolCall` is shimmed into a `ToolDisplayFn`. The old
     // callback only fired on `tool-result`/`tool-error` and returned a
     // message (or `null` to skip), so the shim mirrors that contract: emit

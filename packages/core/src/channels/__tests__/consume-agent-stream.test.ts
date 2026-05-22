@@ -635,6 +635,46 @@ describe('consumeAgentStream', () => {
       expect(posts.every(p => typeof (p as any).arg === 'string')).toBe(true);
     });
 
+    it('deprecated cards is ignored when toolDisplay is a function (type-bypass case)', async () => {
+      // The discriminated union makes this a TS error, but runtime callers
+      // (casts, JS, dynamic configs) should still get a function-form
+      // resolution untouched by `cards` so the fn drives every event.
+      const seen: string[] = [];
+      const { channels, calls, sdkThread } = makeChannels({
+        streaming: false,
+        cards: false,
+        toolDisplay: event => {
+          seen.push(event.kind);
+          if (event.kind === 'result') return { kind: 'post', message: `fn:${event.toolName}=${String(event.result)}` };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      // The fn drives the render path: result event fires and the fn's
+      // custom message is posted. (Static driver intentionally skips the
+      // 'running' event when a fn is set — most fns prefer a single render
+      // on result.) Crucially, `cards: false` did not divert to the
+      // built-in `'text'` renderer.
+      expect(seen).toContain('result');
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts.some(p => (p as any).arg === 'fn:weather=sunny')).toBe(true);
+      // No built-in 'text'-mode "Running…" / "Result" plain-text fallback
+      // posts (those would show up alongside the fn's custom message).
+      expect(posts).toHaveLength(1);
+    });
+
     it('deprecated formatToolCall shims into toolDisplay fn for result events', async () => {
       const { channels, calls, sdkThread } = makeChannels({
         streaming: false,
@@ -1136,7 +1176,9 @@ describe('consumeAgentStream', () => {
               // task_update with no title/details has no fallback text → skip.
               return {
                 kind: 'stream',
-                chunk: { type: 'task_update', id: 'x' },
+                // Cast: intentionally minimal chunk to exercise the
+                // `chunkToFallbackMessage` null path in static mode.
+                chunk: { type: 'task_update', id: 'x' } as any,
               };
             },
           },
