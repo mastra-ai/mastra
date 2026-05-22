@@ -139,6 +139,57 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.destroy();
   });
 
+  it('retains Harness v1 OM progress in the MastraCode display state', async () => {
+    const runtime = createRuntime();
+
+    await (runtime as any).handleCoreEvent({
+      type: 'om_status',
+      windows: {
+        active: {
+          messages: { tokens: 41, threshold: 30000 },
+          observations: { tokens: 1200, threshold: 40000 },
+        },
+        buffered: {
+          observations: {
+            status: 'running',
+            chunks: 1,
+            messageTokens: 41,
+            projectedMessageRemoval: 0,
+            observationTokens: 0,
+          },
+          reflection: {
+            status: 'idle',
+            inputObservationTokens: 0,
+            observationTokens: 0,
+          },
+        },
+      },
+      recordId: 'om-record-1',
+      threadId: 'thread-1',
+      stepNumber: 2,
+      generationCount: 3,
+    });
+
+    const displayState = runtime.getDisplayState();
+    expect(displayState.omProgress.pendingTokens).toBe(41);
+    expect(displayState.omProgress.observationTokens).toBe(1200);
+    expect(displayState.omProgress.stepNumber).toBe(2);
+    expect(displayState.omProgress.generationCount).toBe(3);
+    expect(displayState.bufferingMessages).toBe(true);
+
+    await (runtime as any).handleCoreEvent({
+      type: 'om_observation_end',
+      cycleId: 'obs-1',
+      durationMs: 10,
+      tokensObserved: 41,
+      observationTokens: 1200,
+    });
+
+    expect(runtime.getDisplayState().omProgress.pendingTokens).toBe(0);
+    expect(runtime.getDisplayState().bufferingMessages).toBe(true);
+    await runtime.destroy();
+  });
+
   it('passes initial-message files through to Harness v1 message content parts', async () => {
     const runtime = createRuntime();
     const message = vi.fn(async () => undefined);

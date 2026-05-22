@@ -11,6 +11,7 @@ import type {
   TaskItemSnapshot,
   HarnessThread,
   ModelAuthStatus,
+  OMProgressState,
   PermissionPolicy,
   ToolCategory,
 } from '@mastra/core/harness';
@@ -41,6 +42,22 @@ import { MastraCodeHarnessEventProjector } from './events.js';
 import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 
 type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
+type MastraCodeOMEvent = Extract<
+  HarnessEvent,
+  {
+    type:
+      | 'om_status'
+      | 'om_observation_start'
+      | 'om_observation_end'
+      | 'om_observation_failed'
+      | 'om_reflection_start'
+      | 'om_reflection_end'
+      | 'om_reflection_failed'
+      | 'om_buffering_start'
+      | 'om_buffering_end'
+      | 'om_buffering_failed';
+  }
+>;
 
 type AgentWithBrowser = {
   setBrowser?: (browser: unknown) => void;
@@ -247,6 +264,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private followUpCount = 0;
   private currentRunId: string | null = null;
   private currentTraceId: string | null = null;
+  private readonly omProgress: OMProgressState = defaultDisplayState().omProgress;
+  private bufferingMessages = false;
+  private bufferingObservations = false;
   private stateUpdateQueue: Promise<void> = Promise.resolve();
   private previousDisplayTasks: TaskItemSnapshot[] = [];
   private currentDisplayTasks: TaskItemSnapshot[] = [];
@@ -360,7 +380,110 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       this.previousDisplayTasks = [...this.currentDisplayTasks];
       this.currentDisplayTasks = cloneTasks((event as { tasks?: unknown }).tasks);
     }
+    this.applyOMEvent(event as HarnessV1Event | MastraCodeOMEvent);
     await this.projector.project(event);
+  }
+
+  private applyOMEvent(event: HarnessV1Event | MastraCodeOMEvent): void {
+    switch (event.type) {
+      case 'om_status': {
+        const w = event.windows;
+        this.omProgress.pendingTokens = w.active.messages.tokens;
+        this.omProgress.threshold = w.active.messages.threshold;
+        this.omProgress.thresholdPercent =
+          w.active.messages.threshold > 0 ? (w.active.messages.tokens / w.active.messages.threshold) * 100 : 0;
+        this.omProgress.observationTokens = w.active.observations.tokens;
+        this.omProgress.reflectionThreshold = w.active.observations.threshold;
+        this.omProgress.reflectionThresholdPercent =
+          w.active.observations.threshold > 0
+            ? (w.active.observations.tokens / w.active.observations.threshold) * 100
+            : 0;
+        this.omProgress.buffered = {
+          observations: { ...w.buffered.observations },
+          reflection: { ...w.buffered.reflection },
+        };
+        this.omProgress.generationCount = event.generationCount;
+        this.omProgress.stepNumber = event.stepNumber;
+        this.bufferingMessages = w.buffered.observations.status === 'running';
+        this.bufferingObservations = w.buffered.reflection.status === 'running';
+        break;
+      }
+      case 'om_observation_start':
+        this.omProgress.status = 'observing';
+        this.omProgress.cycleId = event.cycleId;
+        this.omProgress.startTime = Date.now();
+        break;
+      case 'om_observation_end':
+        this.omProgress.status = 'idle';
+        this.omProgress.cycleId = undefined;
+        this.omProgress.startTime = undefined;
+        this.omProgress.observationTokens = event.observationTokens;
+        this.omProgress.pendingTokens = 0;
+        this.omProgress.thresholdPercent = 0;
+        break;
+      case 'om_observation_failed':
+        this.omProgress.status = 'idle';
+        this.omProgress.cycleId = undefined;
+        this.omProgress.startTime = undefined;
+        break;
+      case 'om_reflection_start':
+        this.omProgress.status = 'reflecting';
+        this.omProgress.cycleId = event.cycleId;
+        this.omProgress.startTime = Date.now();
+        this.omProgress.preReflectionTokens = this.omProgress.observationTokens;
+        this.omProgress.observationTokens = event.tokensToReflect;
+        this.omProgress.reflectionThresholdPercent =
+          this.omProgress.reflectionThreshold > 0
+            ? (event.tokensToReflect / this.omProgress.reflectionThreshold) * 100
+            : 0;
+        break;
+      case 'om_reflection_end':
+        this.omProgress.status = 'idle';
+        this.omProgress.cycleId = undefined;
+        this.omProgress.startTime = undefined;
+        this.omProgress.observationTokens = event.compressedTokens;
+        this.omProgress.reflectionThresholdPercent =
+          this.omProgress.reflectionThreshold > 0
+            ? (event.compressedTokens / this.omProgress.reflectionThreshold) * 100
+            : 0;
+        break;
+      case 'om_reflection_failed':
+        this.omProgress.status = 'idle';
+        this.omProgress.cycleId = undefined;
+        this.omProgress.startTime = undefined;
+        break;
+      case 'om_buffering_start':
+        if (event.operationType === 'reflection') {
+          this.bufferingObservations = true;
+          this.omProgress.buffered.reflection.status = 'running';
+          this.omProgress.buffered.reflection.inputObservationTokens = event.tokensToBuffer;
+        } else {
+          this.bufferingMessages = true;
+          this.omProgress.buffered.observations.status = 'running';
+          this.omProgress.buffered.observations.messageTokens = event.tokensToBuffer;
+        }
+        break;
+      case 'om_buffering_end':
+        if (event.operationType === 'reflection') {
+          this.bufferingObservations = false;
+          this.omProgress.buffered.reflection.status = 'complete';
+          this.omProgress.buffered.reflection.observationTokens = event.bufferedTokens;
+        } else {
+          this.bufferingMessages = false;
+          this.omProgress.buffered.observations.status = 'complete';
+          this.omProgress.buffered.observations.observationTokens = event.bufferedTokens;
+        }
+        break;
+      case 'om_buffering_failed':
+        if (event.operationType === 'reflection') {
+          this.bufferingObservations = false;
+          this.omProgress.buffered.reflection.status = 'idle';
+        } else {
+          this.bufferingMessages = false;
+          this.omProgress.buffered.observations.status = 'idle';
+        }
+        break;
+    }
   }
 
   async selectOrCreateThread(): Promise<HarnessThread> {
@@ -1001,7 +1124,17 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
               plan: typeof pending.payload?.plan === 'string' ? pending.payload.plan : '',
             }
           : null,
-      omProgress: { ...base.omProgress, ...emptyOMProgress() },
+      omProgress: {
+        ...base.omProgress,
+        ...emptyOMProgress(),
+        ...this.omProgress,
+        buffered: {
+          observations: { ...this.omProgress.buffered.observations },
+          reflection: { ...this.omProgress.buffered.reflection },
+        },
+      },
+      bufferingMessages: this.bufferingMessages,
+      bufferingObservations: this.bufferingObservations,
       tasks,
       previousTasks: [...this.previousDisplayTasks],
       isRunning: this.isRunning(),
