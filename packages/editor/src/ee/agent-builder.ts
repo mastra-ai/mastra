@@ -1,6 +1,6 @@
 import type { AgentBuilderOptions, AgentFeatures, IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import { isBuilderModelPolicyActive, isModelAllowed, resolveAgentFeatures } from '@mastra/core/agent-builder/ee';
-import { isProviderRegistered } from '@mastra/core/llm';
+
 
 /**
  * Concrete implementation of the Agent Builder EE feature.
@@ -182,21 +182,6 @@ export class EditorAgentBuilder implements IAgentBuilder {
       }
     }
 
-    // Sanity warnings for entries with unknown provider strings that aren't
-    // tagged as custom gateways. Non-fatal — gateways may register lazily.
-    if (allowed !== undefined) {
-      for (const entry of allowed) {
-        const isCustom = 'kind' in entry && entry.kind === 'custom';
-        if (isCustom) continue;
-        if (isProviderRegistered(entry.provider)) continue;
-        const warning =
-          `Agent Builder allowlist contains unknown provider "${entry.provider}". ` +
-          `If this is a custom gateway, tag it with \`kind: 'custom'\`. Otherwise, check for a typo.`;
-        this.modelPolicyWarnings.push(warning);
-        // eslint-disable-next-line no-console
-        console.warn(`[mastra:editor:builder] ${warning}`);
-      }
-    }
   }
 }
 

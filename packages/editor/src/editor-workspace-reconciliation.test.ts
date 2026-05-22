@@ -3,7 +3,8 @@ import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
 import { Workspace } from '@mastra/core/workspace';
 import { LocalFilesystem } from '@mastra/core/workspace';
-import { MastraEditor, snapshotsMatch } from './index';
+import { MastraEditor } from './index';
+import { snapshotsMatch } from './snapshots-match';
 
 // =============================================================================
 // Helpers

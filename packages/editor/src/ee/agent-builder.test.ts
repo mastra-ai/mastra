@@ -1,4 +1,3 @@
-import type { ProviderModelEntry } from '@mastra/core/agent-builder/ee';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EditorAgentBuilder } from './agent-builder';
 
@@ -211,52 +210,8 @@ describe('EditorAgentBuilder', () => {
       ).toThrow(/default model is not in the allowlist/);
     });
 
-    it('warns (does not throw) on unknown provider strings without kind: custom', () => {
-      const builder = new EditorAgentBuilder({
-        features: { agent: { model: true } },
-        configuration: {
-          agent: {
-            models: {
-              // intentionally untagged: simulates an admin who forgot `kind: 'custom'`
-              allowed: [{ provider: 'definitely-not-a-provider' } as unknown as ProviderModelEntry],
-            },
-          },
-        },
-      });
-      expect(builder.getModelPolicyWarnings()).toHaveLength(1);
-      expect(builder.getModelPolicyWarnings()[0]).toMatch(/definitely-not-a-provider/);
-      expect(warnSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not warn for entries tagged kind: custom', () => {
-      const builder = new EditorAgentBuilder({
-        configuration: {
-          agent: {
-            models: {
-              default: { kind: 'custom', provider: 'acme/gateway', modelId: 'foo-1' },
-              allowed: [{ kind: 'custom', provider: 'acme/gateway' }],
-            },
-          },
-        },
-      });
-      expect(builder.getModelPolicyWarnings()).toEqual([]);
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not warn for known providers in the registry', () => {
-      const builder = new EditorAgentBuilder({
-        configuration: {
-          agent: {
-            models: {
-              default: { provider: 'openai', modelId: 'gpt-4o-mini' },
-              allowed: [{ provider: 'openai' }, { provider: 'anthropic' }],
-            },
-          },
-        },
-      });
-      expect(builder.getModelPolicyWarnings()).toEqual([]);
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
+    // Provider-registered sanity warnings are deferred until isProviderRegistered
+    // is exported from @mastra/core/llm (see PR #16934).
   });
 
   describe('browser config validation', () => {

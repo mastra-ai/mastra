@@ -11,8 +11,7 @@ import type {
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
-import type { BlobStore, StorageWorkspaceSnapshotType } from '@mastra/core/storage';
-import { UnknownToolProviderError } from '@mastra/core/tool-provider';
+import type { BlobStore } from '@mastra/core/storage';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
@@ -26,6 +25,7 @@ import {
   EditorFavoritesNamespace,
 } from './namespaces';
 import { localFilesystemProvider, localSandboxProvider } from './providers';
+import { snapshotsMatch } from './snapshots-match';
 
 export type { MastraEditorConfig };
 
@@ -362,7 +362,9 @@ export class MastraEditor implements IMastraEditor {
   getToolProviderOrThrow(id: string): ToolProvider {
     const provider = this.__toolProviders[id];
     if (!provider) {
-      throw new UnknownToolProviderError(id, Object.keys(this.__toolProviders));
+      throw new Error(
+        `Unknown tool provider "${id}". Available: ${Object.keys(this.__toolProviders).join(', ') || '(none)'}`,
+      );
     }
     return provider;
   }
@@ -430,40 +432,4 @@ export class MastraEditor implements IMastraEditor {
   }
 }
 
-/**
- * Compare a resolved workspace's config fields against a runtime snapshot.
- * Returns true if all snapshot config fields match.
- */
-export function snapshotsMatch(
-  stored: { name: string } & Partial<StorageWorkspaceSnapshotType>,
-  runtime: StorageWorkspaceSnapshotType,
-): boolean {
-  const keys: (keyof StorageWorkspaceSnapshotType)[] = [
-    'name',
-    'description',
-    'filesystem',
-    'sandbox',
-    'mounts',
-    'search',
-    'skills',
-    'tools',
-    'autoSync',
-    'operationTimeout',
-  ];
 
-  // JSON replacer that strips falsy leaf values (false, null, 0) so DB-hydrated
-  // defaults don't cause spurious mismatches against runtime snapshots.
-  const replacer = (_k: string, v: unknown) => (v === false || v === null || v === 0 ? undefined : v);
-
-  for (const key of keys) {
-    const storedVal = stored[key];
-    const runtimeVal = runtime[key];
-
-    const storedJSON = storedVal == null || storedVal === false ? undefined : JSON.stringify(storedVal, replacer);
-    const runtimeJSON = runtimeVal == null || runtimeVal === false ? undefined : JSON.stringify(runtimeVal, replacer);
-
-    if (storedJSON !== runtimeJSON) return false;
-  }
-
-  return true;
-}
