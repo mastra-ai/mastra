@@ -406,6 +406,23 @@ user-invocable: false
   });
 
   describe('refresh()', () => {
+    it('should discover skills when refresh is called before first list', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      await skills.refresh();
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+    });
+
     it('should re-discover skills after refresh', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
@@ -2664,6 +2681,28 @@ Premium instructions.
 
       const result = await skills.list();
       expect(result).toEqual([]);
+    });
+
+    it('should preserve context-resolved empty paths across refresh', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/default/default-skill/SKILL.md': BASIC_SKILL_MD.replace('basic-skill', 'default-skill'),
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ctx => {
+          const tier = (ctx.requestContext as { get?: (key: string) => unknown } | undefined)?.get?.('tier');
+          return tier === 'none' ? [] : ['skills/default'];
+        },
+      });
+
+      expect(await skills.list()).toHaveLength(1);
+
+      await skills.maybeRefresh({
+        requestContext: { get: (key: string) => (key === 'tier' ? 'none' : undefined) } as unknown as undefined,
+      });
+
+      expect(await skills.list()).toEqual([]);
     });
 
     it('should work with order-independent path comparison', async () => {

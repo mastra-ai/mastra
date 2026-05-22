@@ -532,6 +532,7 @@ describe('Session skill discovery (§4.6)', () => {
     await session.skills.refresh();
     const after = await session.skills.list();
     expect(after.map(s => s.name).sort()).toEqual(['a', 'b']);
+    expect(fakeSkills.refreshCallCount).toBe(1);
     expect(fakeSkills.listCallCount).toBe(2);
   });
 
