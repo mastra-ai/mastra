@@ -155,7 +155,7 @@ export function ScheduleTriggersList({
           </>
         );
 
-        return workflowId && t.run && !isPublishFailure ? (
+        return workflowId && t.run && t.runId && !isPublishFailure ? (
           <EntityList.RowLink key={rowKey} to={paths.workflowRunLink(workflowId, t.runId)} LinkComponent={Link}>
             {cells}
           </EntityList.RowLink>

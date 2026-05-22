@@ -7,6 +7,12 @@ packages:
 
 # Response Caching
 
+:::experimental
+
+This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Response caching skips the LLM call and replays a previously cached response when an agent receives an identical request. Use it to reduce latency and avoid paying for repeated calls.
 
 Caching is implemented as the [`ResponseCache`](/reference/processors/response-cache) input processor. Mastra doesn't provide an agent-level option. To enable caching, register the processor explicitly. This keeps the API surface small while Mastra collects feedback; per-call overrides flow through `RequestContext`.
@@ -29,7 +35,7 @@ const cache = new InMemoryServerCache()
 export const searchAgent = new Agent({
   name: 'Search Agent',
   instructions: 'You answer questions concisely.',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache, ttl: 600 })], // 10 minutes
 })
 ```
@@ -98,7 +104,7 @@ const cache = new RedisCache({ url: process.env.REDIS_URL })
 export const agent = new Agent({
   name: 'Cached Agent',
   instructions: '...',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache })],
 })
 ```

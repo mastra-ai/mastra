@@ -177,27 +177,16 @@ export class MessageList {
     const source = options?.source ?? 'input';
     const createdAt = this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
-    const signalForTranscript = createSignal(
-      signal.type === 'user-message'
-        ? {
-            id: signal.id,
-            type: 'user-message',
-            contents: signal.contents,
-            attributes: signal.attributes,
-            metadata: signal.metadata,
-            createdAt,
-            acceptedAt,
-          }
-        : {
-            id: signal.id,
-            type: signal.type,
-            contents: String(signal.contents),
-            attributes: signal.attributes,
-            metadata: signal.metadata,
-            createdAt,
-            acceptedAt,
-          },
-    );
+    const signalForTranscript = createSignal({
+      id: signal.id,
+      type: signal.type,
+      contents: signal.contents,
+      attributes: signal.attributes,
+      metadata: signal.metadata,
+      providerOptions: signal.providerOptions,
+      createdAt,
+      acceptedAt,
+    });
 
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;
@@ -325,44 +314,29 @@ export class MessageList {
   }
 
   private convertSignalForModelPrompt(message: MastraDBMessage): MastraDBMessage[] {
-    // Signals are persisted losslessly as DB signal messages, but model providers
-    // only understand normal prompt messages. Convert the signal into its
-    // LLM-facing message content without mutating MessageList timestamp/id
-    // bookkeeping or changing the signal's chronological position.
-    const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
-    return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map((signalMessage, index) => {
-      const createdAt = message.createdAt;
-      const id = index === 0 ? message.id : `${message.id}:prompt:${index}`;
-      const promptMessage =
-        typeof signalMessage === `string`
-          ? {
-              id,
-              role: 'user' as const,
-              content: signalMessage,
-              metadata: { createdAt },
-            }
-          : {
-              ...signalMessage,
-              id: 'id' in signalMessage && typeof signalMessage.id === 'string' ? signalMessage.id : id,
-              metadata: {
-                ...('metadata' in signalMessage && signalMessage.metadata && typeof signalMessage.metadata === 'object'
-                  ? signalMessage.metadata
-                  : {}),
-                createdAt,
-              },
-            };
+    // Model providers only understand normal prompt messages, so project the signal into
+    // its LLM-facing UserModelMessage. Preserve the original id/createdAt so MessageList's
+    // timestamp/ordering bookkeeping stays anchored to the persisted signal row.
+    const signalMessage = mastraDBMessageToSignal(message).toLLMMessage();
+    const createdAt = message.createdAt;
+    const promptMessage = {
+      ...signalMessage,
+      id: message.id,
+      metadata: { createdAt },
+    };
 
-      return convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+    return [
+      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
         memoryInfo: this.memoryInfo,
-        newMessageId: () => id,
+        newMessageId: () => message.id,
         generateCreatedAt: (_messageSource, start) => {
           if (start instanceof Date) return start;
           if (typeof start === 'string' || typeof start === 'number') return new Date(start);
           return createdAt;
         },
         dbMessages: this.messages,
-      });
-    });
+      }),
+    ];
   }
 
   public makeMessageSourceChecker(): {
@@ -1418,6 +1392,11 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+
+    if (messageSource === 'response') {
+      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+    }
+
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
@@ -1634,7 +1613,7 @@ export class MessageList {
     }
 
     this.lastCreatedAt = nowTime;
-    return now;
+    return startDate ?? now;
   }
 
   private newMessageId(role?: string): string {

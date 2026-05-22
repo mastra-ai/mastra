@@ -16,113 +16,6 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 );
 const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
 
-const commonMessageFieldsSchema = {
-  id: z.string().optional(),
-  name: z.string().optional(),
-  metadata: jsonRecordSchema.optional(),
-  providerMetadata: jsonRecordSchema.optional(),
-  providerOptions: jsonRecordSchema.optional(),
-  experimental_providerMetadata: jsonRecordSchema.optional(),
-};
-
-const textContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('text'),
-  text: z.string(),
-});
-
-const imageContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('image'),
-  image: z.union([z.string(), jsonRecordSchema]),
-  mediaType: z.string().optional(),
-  mimeType: z.string().optional(),
-});
-
-const fileContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('file'),
-  data: z.union([z.string(), jsonRecordSchema]).optional(),
-  file: z.union([z.string(), jsonRecordSchema]).optional(),
-  url: z.string().optional(),
-  mediaType: z.string().optional(),
-  mimeType: z.string().optional(),
-  filename: z.string().optional(),
-});
-
-const toolCallContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('tool-call'),
-  toolCallId: z.string(),
-  toolName: z.string(),
-  args: jsonValueSchema.optional(),
-  input: jsonValueSchema.optional(),
-});
-
-const toolResultContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('tool-result'),
-  toolCallId: z.string(),
-  toolName: z.string().optional(),
-  result: jsonValueSchema.optional(),
-  output: jsonValueSchema.optional(),
-});
-
-const messageContentPartSchema = z.union([
-  textContentPartSchema,
-  imageContentPartSchema,
-  fileContentPartSchema,
-  toolCallContentPartSchema,
-  toolResultContentPartSchema,
-]);
-const messageContentSchema = z.union([z.string(), z.array(messageContentPartSchema)]);
-
-const modelMessageSchema = z.object({
-  ...commonMessageFieldsSchema,
-  role: z.enum(['system', 'user', 'assistant', 'tool']),
-  content: messageContentSchema,
-});
-
-const uiMessageSchema = z.object({
-  ...commonMessageFieldsSchema,
-  role: z.enum(['system', 'user', 'assistant', 'tool', 'data']),
-  content: messageContentSchema.optional(),
-  parts: z.array(messageContentPartSchema).optional(),
-  createdAt: z.union([z.string(), z.date()]).optional(),
-});
-
-const mastraDBMessagePartSchema = z.object({ type: z.string() }).passthrough();
-const mastraDBMessageContentSchema = z
-  .object({
-    format: z.literal(2),
-    parts: z.array(mastraDBMessagePartSchema),
-    content: messageContentSchema.optional(),
-    experimental_attachments: z.array(jsonRecordSchema).optional(),
-    toolInvocations: z.array(jsonRecordSchema).optional(),
-    reasoning: z.string().optional(),
-    annotations: z.array(jsonValueSchema).optional(),
-    metadata: jsonRecordSchema.optional(),
-    providerMetadata: jsonRecordSchema.optional(),
-  })
-  .passthrough();
-const mastraDBMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(['system', 'user', 'assistant', 'signal']),
-  createdAt: z.union([z.string(), z.date()]),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-  type: z.string().optional(),
-  content: mastraDBMessageContentSchema,
-});
-
-const messageInputSchema = z.union([modelMessageSchema, uiMessageSchema, mastraDBMessageSchema]);
-const messageListInputSchema = z.union([
-  z.string(),
-  z.array(z.string()),
-  messageInputSchema,
-  z.array(messageInputSchema),
-]);
-
 const signalAttributesSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]),
@@ -135,19 +28,32 @@ const baseSignalSchema = z.object({
   attributes: signalAttributesSchema.optional(),
 });
 
-const userMessageSignalSchema = baseSignalSchema.extend({
-  type: z.literal('user-message'),
-  contents: messageListInputSchema,
+const partProviderOptionsSchema = z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional();
+
+const signalTextPartSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+  providerOptions: partProviderOptionsSchema,
 });
 
-const contextSignalSchema = baseSignalSchema.extend({
-  type: z.string().refine(type => type !== 'user-message', {
-    message: 'non-user-message signals must not use type "user-message"',
-  }),
-  contents: z.string(),
+const signalFilePartSchema = z.object({
+  type: z.literal('file'),
+  data: z.string(),
+  mediaType: z.string(),
+  filename: z.string().optional(),
+  providerOptions: partProviderOptionsSchema,
 });
 
-const agentSignalSchema = z.union([userMessageSignalSchema, contextSignalSchema]);
+const userMessageSignalContentsSchema = z.union([
+  z.string(),
+  z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
+]);
+
+const agentSignalSchema = baseSignalSchema.extend({
+  type: z.string(),
+  contents: userMessageSignalContentsSchema,
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -298,6 +204,10 @@ export const providerSchema = z.object({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
+  envVar: z.union([z.string(), z.array(z.string())]),
+  connected: z.boolean(),
+  docUrl: z.string().optional(),
+  models: z.array(z.string()),
 });
 
 /**

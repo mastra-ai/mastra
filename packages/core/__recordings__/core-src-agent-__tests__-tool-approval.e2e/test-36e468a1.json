@@ -1,0 +1,887 @@
+{
+  "meta": {
+    "name": "test-36e468a1",
+    "testFile": "packages/core/src/agent/__tests__/tool-approval.e2e.test.ts",
+    "testName": "tool approval and suspension > suspension > should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-05-18T10:52:11.721Z",
+    "updatedAt": "2026-05-18T11:57:49.810Z"
+  },
+  "recordings": [
+    {
+      "hash": "756b09eb812bc22a",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are an agent that can get list of users using findUserTool."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "findUserTool",
+              "description": "This is a test tool that returns the name and email",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "findUserProfessionTool",
+              "description": "This is a test tool that returns the profession of the user",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779105464337
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdaafa03afbb753-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:57:46 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1886",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9973",
+          "x-ratelimit-remaining-tokens": "199587",
+          "x-ratelimit-reset-requests": "3m45.493s",
+          "x-ratelimit-reset-tokens": "123ms",
+          "x-request-id": "req_fd642fd70db14e80939b68a2c8a6ec89"
+        },
+        "body": {
+          "id": "resp_0fd7783078244b4c006a0afeb875b48195982b4ea3f2fce73f",
+          "object": "response",
+          "created_at": 1779105464,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779105465,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "fc_0fd7783078244b4c006a0afeb9f67c8195a84bb5d9686b9844",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_B9GncuVBFQ1PFoPDXq1UvEUr",
+              "name": "findUserTool"
+            },
+            {
+              "id": "fc_0fd7783078244b4c006a0afeb9f69481958e1ebe81efdfc217",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_sePlPxIEGEu8cU0u0qsArHZQ",
+              "name": "findUserProfessionTool"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the name and email",
+              "name": "findUserTool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the profession of the user",
+              "name": "findUserProfessionTool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 196,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 78,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 274
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "06b66c40b1e4d43b",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_B9GncuVBFQ1PFoPDXq1UvEUr\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000003\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "He is 25 years old"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "findUserTool",
+              "description": "This is a test tool that returns the name and email",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "findUserProfessionTool",
+              "description": "This is a test tool that returns the profession of the user",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779105466410
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdaafad2a45b753-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:57:47 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1376",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9973",
+          "x-ratelimit-remaining-tokens": "199232",
+          "x-ratelimit-reset-requests": "3m52.033s",
+          "x-ratelimit-reset-tokens": "230ms",
+          "x-request-id": "req_adcbb94a62d346ab95db17a0f41346a7"
+        },
+        "body": {
+          "id": "resp_06ebe94ef782ad3a006a0afeba8c3881958ee8039ccd6cb811",
+          "object": "response",
+          "created_at": 1779105466,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779105467,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "fc_06ebe94ef782ad3a006a0afebb10f88195aec3178c8add3a7a",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":\"00000000-0000-4000-8000-000000000003\",\"resumeData\":{\"age\":25}}",
+              "call_id": "call_TxkxNo4Yo0HNxdNoSxI8KvMF",
+              "name": "findUserTool"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the name and email",
+              "name": "findUserTool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the profession of the user",
+              "name": "findUserProfessionTool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 551,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 49,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 600
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "388f0ddffcc2c5e4",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are an agent that can get list of users using findUserTool."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "He is 25 years old"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_06ebe94ef782ad3a006a0afebb10f88195aec3178c8add3a7a"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_TxkxNo4Yo0HNxdNoSxI8KvMF",
+              "output": "{\"name\":\"Dero Israel\",\"age\":25,\"email\":\"test@test.com\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "findUserTool",
+              "description": "This is a test tool that returns the name and email",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "findUserProfessionTool",
+              "description": "This is a test tool that returns the profession of the user",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779105467969
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdaafb6e836b753-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:57:49 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1625",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9972",
+          "x-ratelimit-remaining-tokens": "199502",
+          "x-ratelimit-reset-requests": "3m59.119s",
+          "x-ratelimit-reset-tokens": "149ms",
+          "x-request-id": "req_26bd8925940e47dc9903e23a410a4b94"
+        },
+        "body": {
+          "id": "resp_06ebe94ef782ad3a006a0afebc196081959531f3b4ce65aeaa",
+          "object": "response",
+          "created_at": 1779105468,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779105469,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_06ebe94ef782ad3a006a0afebc8174819585249e09ccc4e52b",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The user **Dero Israel** is **25 years old** and his email is **test@test.com**. \n\nIf you need to know his profession or any additional information, please let me know!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the name and email",
+              "name": "findUserTool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the profession of the user",
+              "name": "findUserProfessionTool",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 281,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 43,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 324
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

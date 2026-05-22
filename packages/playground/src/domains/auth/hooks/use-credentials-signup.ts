@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -63,7 +64,7 @@ export type CredentialsSignUpResponse = {
  * @internal
  */
 export async function makeCredentialsSignUpRequest(
-  client: { options: any },
+  client: MastraClient,
   { email, password, name }: CredentialsSignUpRequest,
 ): Promise<CredentialsSignUpResponse> {
   const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
@@ -96,7 +97,7 @@ export function useCredentialsSignUp() {
   const queryClient = useQueryClient();
 
   return useMutation<CredentialsSignUpResponse, Error, CredentialsSignUpRequest>({
-    mutationFn: ({ email, password, name }) => makeCredentialsSignUpRequest(client as any, { email, password, name }),
+    mutationFn: ({ email, password, name }) => makeCredentialsSignUpRequest(client, { email, password, name }),
     onSuccess: () => {
       // Invalidate auth queries to refetch user state
       void queryClient.invalidateQueries({ queryKey: ['auth'] });

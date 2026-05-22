@@ -31,7 +31,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState } from '../processors';
+import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
@@ -996,6 +996,14 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorState = state ?? {};
       }
 
+      const processorMessageList =
+        messageList ??
+        (Array.isArray(messages)
+          ? new MessageList()
+              .add(messages as MastraDBMessage[], 'input')
+              .addSystem((systemMessages ?? []) as CoreMessage[])
+          : undefined);
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
@@ -1006,6 +1014,15 @@ function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        ...(processorMessageList
+          ? {
+              sendSignal: createProcessorSendSignal({
+                messageList: processorMessageList,
+                writer: processorWriter,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              }),
+            }
+          : {}),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -1014,13 +1031,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         phase,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
-        messageList:
-          messageList ??
-          (Array.isArray(messages)
-            ? new MessageList()
-                .add(messages as MastraDBMessage[], 'input')
-                .addSystem((systemMessages ?? []) as CoreMessage[])
-            : undefined),
+        messageList: processorMessageList,
         stepNumber,
         systemMessages,
         streamParts,
@@ -2553,15 +2564,22 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'workflow', id: this.id },
-          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
-        });
-      }
+      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.id) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+        context: {
+          resourceId,
+        },
+        metadata: {
+          workflowId: this.id,
+          runId,
+          resourceId,
+        },
+      });
     }
 
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;

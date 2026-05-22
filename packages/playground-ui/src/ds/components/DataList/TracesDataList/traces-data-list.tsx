@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { DataListDateCell, DataListIdCell, DataListTimeCell } from '../data-list-cells';
 import { DataListNextPageLoading } from '../data-list-next-page-loading';
 import { DataListNoMatch } from '../data-list-no-match';
 import { DataListRoot } from '../data-list-root';
@@ -9,10 +10,6 @@ import { DataListSubHeading } from '../data-list-subheading';
 import { DataListTop } from '../data-list-top';
 import { DataListTopCell, DataListTopCellWithTooltip } from '../data-list-top-cell';
 import {
-  TracesDataListIdCell,
-  TracesDataListKindCell,
-  TracesDataListDateCell,
-  TracesDataListTimeCell,
   TracesDataListNameCell,
   TracesDataListInputCell,
   TracesDataListEntityCell,
@@ -32,10 +29,9 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   Subheader: DataListSubheader,
   SubHeading: DataListSubHeading,
   Spacer: DataListSpacer,
-  IdCell: TracesDataListIdCell,
-  KindCell: TracesDataListKindCell,
-  DateCell: TracesDataListDateCell,
-  TimeCell: TracesDataListTimeCell,
+  IdCell: DataListIdCell,
+  DateCell: DataListDateCell,
+  TimeCell: DataListTimeCell,
   NameCell: TracesDataListNameCell,
   InputCell: TracesDataListInputCell,
   EntityCell: TracesDataListEntityCell,
