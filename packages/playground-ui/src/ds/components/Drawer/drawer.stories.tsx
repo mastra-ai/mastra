@@ -269,7 +269,7 @@ export const SnapPoints: Story = {
       <DrawerTrigger asChild>
         <Button>Open snap drawer</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerContent className="max-h-[calc(100dvh-3rem)]">
         <DrawerHeader>
           <DrawerTitle>Snap points</DrawerTitle>
           <DrawerDescription>Drag the sheet to snap between a compact peek and full height.</DrawerDescription>
@@ -432,7 +432,7 @@ export const MobileNavigation: Story = {
       <DrawerTrigger asChild>
         <Button>Open mobile menu</Button>
       </DrawerTrigger>
-      <DrawerContent className="h-full max-h-full rounded-none">
+      <DrawerContent className="mb-0 h-full max-h-full rounded-none pb-0">
         <DrawerHeader>
           <DrawerTitle>Menu</DrawerTitle>
           <DrawerDescription>Scroll the long list. Swipe down to dismiss.</DrawerDescription>
