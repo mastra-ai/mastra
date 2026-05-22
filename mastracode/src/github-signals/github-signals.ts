@@ -478,7 +478,7 @@ function isGithubRateLimitError(message: string) {
 }
 
 function isGithubTransientNetworkError(message: string) {
-  return /connection reset by peer|ECONNRESET|socket hang up|TLS handshake timeout|i\/o timeout|network is unreachable/i.test(
+  return /connection reset by peer|ECONNRESET|socket hang up|TLS handshake timeout|i\/o timeout|network is unreachable|error connecting to api\.github\.com|check your internet connection/i.test(
     message,
   );
 }

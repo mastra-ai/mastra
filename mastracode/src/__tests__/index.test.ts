@@ -436,7 +436,7 @@ describe('createMastraCode', () => {
     expect(harnessCall?.initialState?.observeAttachments).toBe(false);
   });
 
-  it('omits observeAttachments from initial state when global setting is null', async () => {
+  it('defaults observeAttachments to auto when global setting is null', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -444,7 +444,20 @@ describe('createMastraCode', () => {
     const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessCall?.initialState).not.toHaveProperty('observeAttachments');
+    expect(harnessCall?.initialState?.observeAttachments).toBe('auto');
+  });
+
+  it('restores observeAttachments metadata for the current thread at startup', async () => {
+    harnessStateMock = { observeAttachments: true };
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

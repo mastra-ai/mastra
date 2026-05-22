@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, unlink } from 'node:fs/promises';
+import { mkdir, open, stat, unlink } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
 import { dirname } from 'node:path';
 
@@ -239,11 +240,8 @@ export class UnixSocketPubSub extends PubSub {
       }
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK') {
-        await unlink(this.socketPath).catch(() => {});
         this.#throwIfClosed();
-        await this.#listen();
-        this.#throwIfClosed();
-        this.#isBroker = true;
+        await this.#electBroker();
         return;
       }
       throw error;
@@ -331,6 +329,64 @@ export class UnixSocketPubSub extends PubSub {
         if (this.#closed) return;
         await new Promise(resolve => setTimeout(resolve, 10));
       }
+    }
+  }
+
+  /**
+   * Serializes broker election across processes using an exclusive lock file.
+   * Only the lock winner unlinks the stale socket and listens; losers wait
+   * then connect as clients to the newly elected broker.
+   */
+  async #electBroker(): Promise<void> {
+    const lockPath = this.socketPath + '.elect';
+    let lockFd: FileHandle | undefined;
+    try {
+      lockFd = await open(lockPath, 'wx');
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+        if (await this.#isElectionLockStale(lockPath)) {
+          await unlink(lockPath).catch(() => {});
+          throw new Error('Stale broker election lock removed');
+        }
+        await new Promise(resolve => setTimeout(resolve, 150));
+        try {
+          await this.#connectClient();
+          this.#throwIfClosed();
+          return;
+        } catch {
+          throw new Error('Broker election in progress by another process');
+        }
+      }
+      throw e;
+    }
+
+    try {
+      // Re-check: a previous election round may have installed a broker
+      // between our initial connectClient() and acquiring this lock.
+      try {
+        await this.#connectClient();
+        this.#throwIfClosed();
+        return;
+      } catch {
+        // Still no live broker — proceed with election.
+      }
+      await unlink(this.socketPath).catch(() => {});
+      this.#throwIfClosed();
+      await this.#listen();
+      this.#throwIfClosed();
+      this.#isBroker = true;
+    } finally {
+      await lockFd.close().catch(() => {});
+      await unlink(lockPath).catch(() => {});
+    }
+  }
+
+  async #isElectionLockStale(lockPath: string): Promise<boolean> {
+    try {
+      const lockStat = await stat(lockPath);
+      return Date.now() - lockStat.mtimeMs > 2000;
+    } catch {
+      return true;
     }
   }
 

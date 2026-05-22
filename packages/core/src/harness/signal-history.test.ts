@@ -122,6 +122,7 @@ describe('Harness signal history rendering', () => {
             timestamp: undefined,
             goalMaxTurns: undefined,
             judgeModelId: undefined,
+            metadata: { type: 'temporal-gap', path: '/tmp/project' },
           },
         ],
       },

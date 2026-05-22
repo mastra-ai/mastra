@@ -111,6 +111,24 @@ export default defineConfig({
       console.info('✓ Copied provider-registry.json to dist/');
     }
 
+    // Copy capabilities/ directory to dist/
+    const srcCapDir = path.join(process.cwd(), 'src/llm/model/capabilities');
+    const distCapDir = path.join(process.cwd(), 'dist/capabilities');
+
+    if (fs.existsSync(srcCapDir)) {
+      if (!fs.existsSync(distCapDir)) {
+        fs.mkdirSync(distCapDir, { recursive: true });
+      }
+      for (const file of fs.readdirSync(distCapDir).filter((f: string) => f.endsWith('.json'))) {
+        fs.unlinkSync(path.join(distCapDir, file));
+      }
+      const capFiles = fs.readdirSync(srcCapDir).filter((f: string) => f.endsWith('.json'));
+      for (const file of capFiles) {
+        fs.copyFileSync(path.join(srcCapDir, file), path.join(distCapDir, file));
+      }
+      console.info(`✓ Copied ${capFiles.length} capability files to dist/capabilities/`);
+    }
+
     // Copy provider-types.generated.d.ts to dist/llm/model/ folder
     const srcDts = path.join(process.cwd(), 'src/llm/model/provider-types.generated.d.ts');
     const distDtsDir = path.join(process.cwd(), 'dist/llm/model');

@@ -3825,11 +3825,11 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
-  it('suppresses transient GitHub network resets from shared inbox polling', async () => {
+  it('suppresses transient GitHub connection errors from shared inbox polling', async () => {
     const poller = {
       poll: vi.fn(async () => {
         throw new Error(
-          'Command failed: gh api --method GET /notifications -i -F participating=true -F all=false -F per_page=100\nGet "https://api.github.com/notifications?all=false&participating=true&per_page=100": read tcp 192.168.8.181:56625->140.82.112.5:443: read: connection reset by peer',
+          'Command failed: gh api --method GET /notifications -i -F participating=true -F all=false -F per_page=100\nerror connecting to api.github.com\ncheck your internet connection or https://githubstatus.com',
         );
       }),
     } as unknown as GithubNotificationPoller;

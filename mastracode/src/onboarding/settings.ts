@@ -169,10 +169,10 @@ export interface GlobalSettings {
     omCavemanObservations: boolean | null;
     /**
      * Whether Observational Memory forwards image/file attachment parts to the
-     * Observer LLM. `null` ⇒ inherit built-in default (true). Turn off when
-     * using a text-only observer model.
+     * Observer LLM. `null` ⇒ inherit built-in default ('auto'). 'auto' checks
+     * model capabilities; true/false forces the setting.
      */
-    omObserveAttachments: boolean | null;
+    omObserveAttachments: 'auto' | boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
