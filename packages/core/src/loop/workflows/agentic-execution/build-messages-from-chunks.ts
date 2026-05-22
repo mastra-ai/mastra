@@ -13,6 +13,7 @@ import type {
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
+import { safeStringify } from '../../../utils';
 
 /**
  * A raw chunk collected during the stream.
@@ -260,7 +261,7 @@ export function buildMessagesFromChunks({
                   toolCallId: p.toolCallId,
                   toolName: p.toolName,
                   args: p.args,
-                  errorText: typeof result.result === 'string' ? result.result : JSON.stringify(result.result),
+                  errorText: typeof result.result === 'string' ? result.result : safeStringify(result.result),
                 }
               : {
                   state: 'result' as const,
