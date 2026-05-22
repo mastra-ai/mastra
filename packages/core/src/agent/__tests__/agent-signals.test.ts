@@ -14,6 +14,7 @@ import {
   createSignal,
   dataPartToSignal,
   mastraDBMessageToSignal,
+  resolveDeliveryAttributes,
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
@@ -139,6 +140,7 @@ describe('Agent signals', () => {
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
+      transient: true,
     });
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
@@ -848,6 +850,7 @@ describe('Agent signals', () => {
       acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
     });
     expect(signalPart?.data.createdAt).toBeDefined();
+    expect(signalPart?.transient).toBe(true);
 
     subscription.unsubscribe();
   });
@@ -2235,5 +2238,136 @@ describe('Agent signals', () => {
           ),
       ),
     ).toBe(true);
+  });
+
+  describe('delivery option attributes', () => {
+    it('resolveDeliveryAttributes merges option attributes into signal attributes', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        attributes: { existing: 'yes' },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+      expect(resolved.attributes).toEqual({ existing: 'yes', delivery: 'while-active' });
+    });
+
+    it('resolveDeliveryAttributes returns same signal when no option attributes are selected', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, undefined);
+      expect(resolved).toBe(signal);
+    });
+
+    it('resolved delivery attributes appear in toLLMMessage XML', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'fix the bug',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+      expect(resolved.toLLMMessage()).toEqual({
+        role: 'user',
+        content: '<user-message delivery="while-active">fix the bug</user-message>',
+      });
+    });
+
+    it('resolved delivery attributes appear in toDBMessage and toDataPart', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'fix the bug',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+      const db = resolved.toDBMessage({ threadId: 't', resourceId: 'r' });
+      expect((db.content.metadata!.signal as Record<string, unknown>).attributes).toEqual({
+        delivery: 'while-active',
+      });
+
+      const dataPart = resolved.toDataPart();
+      expect(dataPart.data.attributes).toEqual({ delivery: 'while-active' });
+    });
+
+    it('thread-stream-runtime resolves ifActive.attributes as while-active on active signal delivery', () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = { id: 'delivery-active-agent' } as any;
+
+      // Prepare and register a run that is still "running" so the thread is active.
+      const options = runtime.prepareRunOptions(
+        {
+          runId: 'active-run',
+          memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+        } as any,
+        pubsub,
+      );
+      runtime.registerRun(
+        agent,
+        {
+          runId: 'active-run',
+          status: 'running',
+          _waitUntilFinished: () => new Promise<any>(() => {}),
+        } as any,
+        options,
+        pubsub,
+      );
+
+      // Send a signal while the run is still active.
+      const result = runtime.sendSignal(
+        agent,
+        {
+          type: 'user-message',
+          contents: 'while-active test',
+        },
+        {
+          resourceId: 'delivery-resource',
+          threadId: 'delivery-thread',
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: {
+            attributes: { delivery: 'message' },
+            streamOptions: {
+              memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+            },
+          },
+        },
+        pubsub,
+      );
+
+      // Active run → ifActive.attributes → delivery: 'while-active'
+      expect(result.signal.attributes).toEqual({ delivery: 'while-active' });
+    });
+
+    it('thread-stream-runtime resolves ifIdle.attributes as message on idle signal delivery', () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = { id: 'delivery-idle-agent', stream: () => new Promise(() => {}) } as any;
+
+      // No run registered → thread is idle.
+      const result = runtime.sendSignal(
+        agent,
+        {
+          type: 'user-message',
+          contents: 'idle test',
+        },
+        {
+          resourceId: 'idle-resource',
+          threadId: 'idle-thread',
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: {
+            attributes: { delivery: 'message' },
+            streamOptions: {
+              memory: { thread: 'idle-thread', resource: 'idle-resource' },
+            },
+          },
+        },
+        pubsub,
+      );
+
+      // No active run → ifIdle.attributes → delivery: 'message'
+      expect(result.signal.attributes).toEqual({ delivery: 'message' });
+    });
   });
 });

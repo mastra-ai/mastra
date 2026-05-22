@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
@@ -167,6 +167,7 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
     id,
     type: 'user-message',
     contents: rawContents as AgentSignalContents,
+    attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
     createdAt: getStringValue(payload.createdAt),
   });
   const content = signalContentsToHarnessContent(signal.contents);
@@ -177,6 +178,7 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
     role: 'user',
     content,
     createdAt: signal.createdAt,
+    attributes: signal.attributes,
   };
 }
 
@@ -1723,12 +1725,16 @@ export class Harness<TState = {}> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
+          ifActive?: { attributes?: AgentSignalAttributes };
+          ifIdle?: { attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const ifActive = 'content' in input ? input.ifActive : undefined;
+    const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
@@ -1743,6 +1749,8 @@ export class Harness<TState = {}> {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,
+          ifActive,
+          ifIdle,
         });
         return { accepted: result.accepted, runId: result.runId };
       }
@@ -1767,7 +1775,8 @@ export class Harness<TState = {}> {
       const result = agent.sendSignal(signal, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
-        ifIdle: { streamOptions: streamOptions as any },
+        ifActive,
+        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
       return { accepted: result.accepted, runId: result.runId };
     });
@@ -1995,6 +2004,7 @@ export class Harness<TState = {}> {
             role: 'user',
             content: signalContent,
             createdAt: msg.createdAt,
+            attributes: signal.attributes,
           };
         }
       }
