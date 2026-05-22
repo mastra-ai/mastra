@@ -119,8 +119,12 @@ export class Deps extends MastraBase {
    */
   private async ensurePnpmWorkspaceYaml(dir: string): Promise<void> {
     const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
-    if (fs.existsSync(workspaceYamlPath)) return;
-    await fsPromises.writeFile(workspaceYamlPath, 'packages: []\n', 'utf8');
+    try {
+      await fsPromises.writeFile(workspaceYamlPath, 'packages: []\n', { encoding: 'utf8', flag: 'wx' });
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'EEXIST' && err.code !== 'EISDIR') throw err;
+    }
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
