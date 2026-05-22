@@ -1574,6 +1574,8 @@ export class HarnessLibSQL extends HarnessStorage {
     actionKind,
     operation,
     policyDecision,
+    requestId,
+    affectedPath,
     after,
     limit,
   }: ListWorkspaceActionJournalInput): Promise<WorkspaceActionJournalEntry[]> {
@@ -1598,6 +1600,11 @@ export class HarnessLibSQL extends HarnessStorage {
       conditions.push('policy_decision = ?');
       args.push(policyDecision);
     }
+    if (requestId !== undefined) {
+      conditions.push('request_id = ?');
+      args.push(requestId);
+    }
+    addWorkspaceActionPathFilter(conditions, args, affectedPath);
     if (after !== undefined) {
       conditions.push('(created_at > ? OR (created_at = ? AND id > ?))');
       args.push(after.createdAt, after.createdAt, after.id);
@@ -5138,6 +5145,52 @@ function assertWorkspaceActionKindMatches(record: WorkspaceActionJournalEntry): 
       throw new Error(`Workspace action journal kind mismatch: ${String(actionKind)} != ${record.actionKind}`);
     }
   }
+}
+
+function addWorkspaceActionPathFilter(
+  conditions: string[],
+  args: (string | number)[],
+  filter: ListWorkspaceActionJournalInput['affectedPath'],
+): void {
+  if (filter === undefined) return;
+  if (!workspaceActionPathFilterHasSelector(filter)) {
+    conditions.push('1 = 0');
+    return;
+  }
+  const pathCondition = buildLibSqlWorkspaceActionPathCondition('path', filter, args);
+  if (filter.includeToPath === true) {
+    const toPathCondition = buildLibSqlWorkspaceActionPathCondition('to_path', filter, args);
+    conditions.push(`(${pathCondition} OR ${toPathCondition})`);
+    return;
+  }
+  conditions.push(pathCondition);
+}
+
+function buildLibSqlWorkspaceActionPathCondition(
+  column: 'path' | 'to_path',
+  filter: NonNullable<ListWorkspaceActionJournalInput['affectedPath']>,
+  args: (string | number)[],
+): string {
+  const predicates = [`${column} IS NOT NULL`];
+  if (filter.rootId !== undefined) {
+    predicates.push(`json_extract(${column}, '$.rootId') = ?`);
+    args.push(filter.rootId);
+  }
+  if (filter.path !== undefined) {
+    predicates.push(`json_extract(${column}, '$.path') = ?`);
+    args.push(filter.path);
+  }
+  if (filter.relativePath !== undefined) {
+    predicates.push(`json_extract(${column}, '$.relativePath') = ?`);
+    args.push(filter.relativePath);
+  }
+  return `(${predicates.join(' AND ')})`;
+}
+
+function workspaceActionPathFilterHasSelector(
+  filter: NonNullable<ListWorkspaceActionJournalInput['affectedPath']>,
+): boolean {
+  return filter.rootId !== undefined || filter.path !== undefined || filter.relativePath !== undefined;
 }
 
 function rowToMessageResultEvidence(row: Record<string, unknown>): AgentSignalResultEvidence {

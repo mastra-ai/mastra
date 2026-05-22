@@ -8,7 +8,7 @@ import {
   TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS,
   TABLE_HARNESS_SESSION_EVENTS,
 } from '@mastra/core/storage';
-import type { HarnessProviderCallbackBinding, SessionRecord } from '@mastra/core/storage';
+import type { HarnessProviderCallbackBinding, SessionRecord, WorkspaceActionJournalEntry } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { exportSchemas, HarnessPG, PostgresStore } from '../..';
@@ -244,6 +244,283 @@ describe('HarnessPG', () => {
       renderer: { id: 'citation-card', version: '2' },
       metadata: { doi: '10.1234/example' },
     });
+  });
+
+  it('appends and pages workspace action journal rows by session/resource', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+    await harness!.saveSession(createSampleSessionRecord({ id: 'other-session', resourceId: 'other-resource' }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'b', createdAt: 1000 }));
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'a', createdAt: 1000 }));
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'c', createdAt: 1100 }));
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'other-resource-entry',
+        sessionId: 'other-session',
+        resourceId: 'other-resource',
+      }),
+    );
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        limit: 2,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'a', actionKind: 'file', path: expect.objectContaining({ rootId: 'project' }) }),
+      expect.objectContaining({ id: 'b', actionKind: 'file' }),
+    ]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        after: { createdAt: 1000, id: 'b' },
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'c' })]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        limit: -1,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('filters workspace action journal rows by thread, kind, operation, and policy decision', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+    await harness!.saveSession(createSampleSessionRecord({ harnessName: 'other-harness' }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'wrong-thread', threadId: 'thread-2' }),
+      ),
+    ).resolves.toEqual({ created: false });
+    await harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'a', createdAt: 1000 }));
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'b',
+        operation: 'read',
+        action: { kind: 'file', operation: 'read', path: 'notes.md' },
+        policyDecision: 'allow',
+        createdAt: 1000,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'c',
+        actionKind: 'command',
+        operation: 'run',
+        action: { kind: 'command', operation: 'run', command: 'pnpm test' },
+        policyDecision: 'deny',
+        path: undefined,
+        createdAt: 1100,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'd',
+        actionKind: 'mcp',
+        operation: 'call',
+        action: { kind: 'mcp', operation: 'call', serverKey: 'filesystem' },
+        policyDecision: 'allow',
+        path: undefined,
+        createdAt: 1200,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'e',
+        actionKind: 'network',
+        operation: 'fetch',
+        action: { kind: 'network', operation: 'fetch', url: 'https://example.test' },
+        path: undefined,
+        createdAt: 1300,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        harnessName: 'other-harness',
+        id: 'other-namespace',
+        createdAt: 900,
+      }),
+    );
+
+    const listIds = async (
+      overrides: Partial<Parameters<typeof harness.listWorkspaceActionJournalEntries>[0]>,
+    ): Promise<string[]> =>
+      (
+        await harness!.listWorkspaceActionJournalEntries({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          limit: 10,
+          ...overrides,
+        })
+      ).map(entry => entry.id);
+
+    await expect(listIds({ threadId: 'thread-1' })).resolves.toEqual(['a', 'b', 'c', 'd', 'e']);
+    await expect(listIds({ threadId: 'thread-2' })).resolves.toEqual([]);
+    await expect(listIds({ sessionId: 'other-session' })).resolves.toEqual([]);
+    await expect(listIds({ resourceId: 'other-resource' })).resolves.toEqual([]);
+    await expect(listIds({ actionKind: 'file' })).resolves.toEqual(['a', 'b']);
+    await expect(listIds({ operation: 'write' })).resolves.toEqual(['a']);
+    await expect(listIds({ policyDecision: 'ask' })).resolves.toEqual(['a', 'e']);
+    await expect(listIds({ actionKind: 'mcp', policyDecision: 'allow' })).resolves.toEqual(['d']);
+    await expect(listIds({ actionKind: 'command', operation: 'run', policyDecision: 'deny' })).resolves.toEqual(['c']);
+    await expect(listIds({ actionKind: 'file', after: { createdAt: 1000, id: 'a' } })).resolves.toEqual(['b']);
+    await expect(listIds({ harnessName: 'other-harness' })).resolves.toEqual(['other-namespace']);
+  });
+
+  it('filters workspace action journal rows by request and affected path', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'write-readme',
+        requestId: 'turn-1',
+        path: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/README.md',
+          relativePath: 'README.md',
+        },
+        action: { kind: 'file', operation: 'write', path: 'README.md' },
+        createdAt: 1000,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'rename-source',
+        requestId: 'turn-1',
+        operation: 'rename',
+        action: { kind: 'file', operation: 'rename', path: 'src/old.ts', toPath: 'src/new.ts' },
+        path: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/src/old.ts',
+          relativePath: 'src/old.ts',
+        },
+        toPath: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/src/new.ts',
+          relativePath: 'src/new.ts',
+        },
+        createdAt: 1100,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'write-docs-readme',
+        requestId: 'turn-2',
+        path: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/docs/README.md',
+          relativePath: 'docs/README.md',
+        },
+        action: { kind: 'file', operation: 'write', path: 'docs/README.md' },
+        createdAt: 1200,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'run-command',
+        requestId: 'turn-1',
+        actionKind: 'command',
+        operation: 'run',
+        action: { kind: 'command', operation: 'run', command: 'pnpm test' },
+        path: undefined,
+        createdAt: 1300,
+      }),
+    );
+
+    type HarnessJournalListInput = Parameters<NonNullable<typeof harness>['listWorkspaceActionJournalEntries']>[0];
+    const listIds = async (overrides: Partial<HarnessJournalListInput>): Promise<string[]> =>
+      (
+        await harness!.listWorkspaceActionJournalEntries({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          limit: 10,
+          ...overrides,
+        })
+      ).map(entry => entry.id);
+
+    await expect(listIds({ requestId: 'turn-1' })).resolves.toEqual(['write-readme', 'rename-source', 'run-command']);
+    await expect(listIds({ requestId: 'turn-2', affectedPath: { relativePath: 'docs/README.md' } })).resolves.toEqual([
+      'write-docs-readme',
+    ]);
+    await expect(listIds({ affectedPath: { rootId: 'project', relativePath: 'README.md' } })).resolves.toEqual([
+      'write-readme',
+    ]);
+    await expect(listIds({ affectedPath: { path: '/workspace/src/old.ts' } })).resolves.toEqual(['rename-source']);
+    await expect(listIds({ affectedPath: { relativePath: 'src/new.ts' } })).resolves.toEqual([]);
+    await expect(listIds({ affectedPath: { relativePath: 'src/new.ts', includeToPath: true } })).resolves.toEqual([
+      'rename-source',
+    ]);
+    await expect(listIds({ affectedPath: { rootId: 'other', relativePath: 'README.md' } })).resolves.toEqual([]);
+    await expect(listIds({ affectedPath: {} })).resolves.toEqual([]);
+    await expect(listIds({ affectedPath: { includeToPath: true } })).resolves.toEqual([]);
+  });
+
+  it('ignores duplicate or mismatched workspace action journal appends and deletes rows with the session', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord({ closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'entry-1' })),
+    ).resolves.toEqual({ created: true });
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'entry-1', result: { status: 'changed' } }),
+      ),
+    ).resolves.toEqual({ created: false });
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'wrong-resource', resourceId: 'other-resource' }),
+      ),
+    ).resolves.toEqual({ created: false });
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({ sessionId: 'session-1', resourceId: 'resource-1', limit: 10 }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'entry-1', result: { status: 'ok' } })]);
+
+    const closed = await harness!.loadSession({ sessionId: 'session-1' });
+    if (!closed) throw new Error('expected closed session');
+    await harness!.deleteSession({
+      sessionId: 'session-1',
+      ifVersion: closed.version,
+      expectedResourceId: closed.resourceId,
+      expectedThreadId: closed.threadId,
+      expectedParentSessionId: closed.parentSessionId ?? null,
+      expectedCreatedAt: closed.createdAt,
+      requireClosed: true,
+    });
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({ sessionId: 'session-1', resourceId: 'resource-1', limit: 10 }),
+    ).resolves.toEqual([]);
   });
 
   it('keeps §15 attachment-reference admission atomic and delete-guarded', async () => {
@@ -663,6 +940,35 @@ function createSampleSessionRecord(overrides: Partial<SessionRecord> = {}): Sess
     createdAt: 1000,
     lastActivityAt: 1000,
     version: 0,
+    ...overrides,
+  };
+}
+
+function sampleWorkspaceActionJournalEntry(
+  overrides: Partial<WorkspaceActionJournalEntry> = {},
+): WorkspaceActionJournalEntry {
+  return {
+    id: 'workspace-action-1',
+    harnessName: 'default',
+    sessionId: 'session-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    actionKind: 'file',
+    operation: 'write',
+    action: { kind: 'file', operation: 'write', path: 'notes.md' },
+    policyDecision: 'ask',
+    policyReasons: ['workspace.default_ask'],
+    matchedRules: [],
+    path: {
+      rootId: 'project',
+      rootPath: '/workspace',
+      path: '/workspace/notes.md',
+      relativePath: 'notes.md',
+    },
+    actor: { type: 'user', id: 'user-1' },
+    requestId: 'request-1',
+    result: { status: 'ok' },
+    createdAt: 1000,
     ...overrides,
   };
 }
