@@ -79,6 +79,8 @@ type RealtimeClientServerEventMap = {
   ['response.output_audio.done']: [{ response_id: string }];
   ['response.output_audio_transcript.delta']: [{ delta: string; response_id: string }];
   ['response.output_audio_transcript.done']: [{ response_id: string }];
+  ['response.output_text.delta']: [{ delta: string; response_id: string }];
+  ['response.output_text.done']: [{ response_id: string }];
 };
 
 /**
@@ -629,6 +631,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     const handleAudioTranscriptDone = (ev: { response_id: string }) => {
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
     };
+    const handleTextDelta = (ev: { delta: string; response_id: string }) => {
+      this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
+    };
+    const handleTextDone = (ev: { response_id: string }) => {
+      this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
+    };
     this.client.on('response.audio.delta', handleAudioDelta);
     this.client.on('response.output_audio.delta', handleAudioDelta);
     this.client.on('response.audio.done', handleAudioDone);
@@ -637,12 +645,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('response.output_audio_transcript.delta', handleAudioTranscriptDelta);
     this.client.on('response.audio_transcript.done', handleAudioTranscriptDone);
     this.client.on('response.output_audio_transcript.done', handleAudioTranscriptDone);
-    this.client.on('response.text.delta', ev => {
-      this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
-    });
-    this.client.on('response.text.done', ev => {
-      this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
-    });
+    // GA Realtime renamed `response.text.*` → `response.output_text.*`. Listen
+    // to both so the same handler fires against legacy beta and GA endpoints.
+    this.client.on('response.text.delta', handleTextDelta);
+    this.client.on('response.output_text.delta', handleTextDelta);
+    this.client.on('response.text.done', handleTextDone);
+    this.client.on('response.output_text.done', handleTextDone);
     this.client.on('response.done', async ev => {
       await this.handleFunctionCalls(ev);
       this.emit('response.done', ev);
