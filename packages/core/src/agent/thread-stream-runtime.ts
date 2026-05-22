@@ -8,6 +8,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import type { MessageList } from './message-list';
 import { createSignal, dataPartToDBMessage, resolveDeliveryAttributes } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
@@ -124,6 +125,18 @@ export class AgentThreadStreamRuntime {
 
   #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
     return signal;
+  }
+
+  #getActiveRunRecord(resourceId: string, threadId: string, pubsub?: PubSub): AgentThreadRunRecord<any> | undefined {
+    const key = this.#threadKey(resourceId, threadId);
+    const state = this.#getState(pubsub);
+    const activeRunId = state.activeThreadRunIds.get(key);
+    if (!activeRunId) return undefined;
+
+    const record = state.threadRunsById.get(activeRunId);
+    if (!record || record.threadId !== threadId || record.resourceId !== resourceId) return undefined;
+
+    return record;
   }
 
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
@@ -650,7 +663,7 @@ export class AgentThreadStreamRuntime {
       stream: (async function* () {
         try {
           while (!done || pendingRuns.length > 0 || pendingDataParts.length > 0) {
-            // Yield any standalone data-part signals that arrived outside a run
+            // Yield any standalone data parts that arrived outside a run
             while (pendingDataParts.length > 0) {
               yield pendingDataParts.shift()! as any;
             }
@@ -666,7 +679,7 @@ export class AgentThreadStreamRuntime {
                 const { value: part, done: streamDone } = await reader.read();
                 if (streamDone) break;
                 yield part as any;
-                // Also drain data-part signals that arrived during the run
+                // Also drain data parts that arrived during the run
                 while (pendingDataParts.length > 0) {
                   yield pendingDataParts.shift()! as any;
                 }
@@ -888,6 +901,7 @@ export class AgentThreadStreamRuntime {
     dataPart: DataPartInput,
     target: SendDataPartOptions,
     pubsub?: PubSub,
+    activeMessageList?: MessageList,
   ): SendDataPartResult {
     const key = this.#threadKey(target.resourceId, target.threadId);
 
@@ -899,7 +913,15 @@ export class AgentThreadStreamRuntime {
     });
 
     // Persist to storage
-    const persisted = this.#persistDataPart(agent, dataPart, target.resourceId, target.threadId);
+    const activeRunRecord = this.#getActiveRunRecord(target.resourceId, target.threadId, pubsub);
+    const persisted = this.#persistDataPart(
+      agent,
+      dataPart,
+      target.resourceId,
+      target.threadId,
+      activeRunRecord,
+      activeMessageList,
+    );
     void persisted.catch(() => {});
 
     return { accepted: true, persisted };
@@ -922,41 +944,65 @@ export class AgentThreadStreamRuntime {
     dataPart: DataPartInput,
     resourceId: string,
     threadId: string,
+    activeRunRecord?: AgentThreadRunRecord<any>,
+    activeMessageList?: MessageList,
   ) {
     const memory = await agent.getMemory();
     if (!memory) return;
 
-    // Try to append to the latest assistant message so the persisted shape
-    // matches what writer.custom() produces. Fall back to a new assistant
-    // message when no assistant message exists or the append fails.
-    try {
-      const memoryStore = await memory.storage.getStore('memory');
-      if (memoryStore) {
-        const { messages } = await memoryStore.listMessages({
-          threadId,
-          perPage: 20,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
-        });
-        const lastAssistant = messages.find(m => m.role === 'assistant');
-        if (lastAssistant) {
-          const existingParts = lastAssistant.content?.parts ?? [];
-          const updatedParts = [...existingParts, { type: dataPart.type, data: dataPart.data }];
-          await memoryStore.updateMessages({
-            messages: [
-              {
-                id: lastAssistant.id,
-                content: {
-                  ...lastAssistant.content,
-                  parts: updatedParts,
-                } as any,
-              },
-            ],
-          });
-          return;
-        }
+    const part = { type: dataPart.type, data: dataPart.data };
+
+    // Only append to the assistant message that belongs to the active run.
+    // Idle sends must not mutate an arbitrary historical assistant message.
+    if (activeRunRecord?.output.messageId) {
+      const activeAssistant = activeRunRecord.output.messageList.get.response
+        .db()
+        .find(message => message.id === activeRunRecord.output.messageId && message.role === 'assistant');
+
+      if (activeAssistant) {
+        activeAssistant.content = {
+          ...activeAssistant.content,
+          parts: [...(activeAssistant.content?.parts ?? []), part],
+        };
+        return;
       }
-    } catch {
-      // Fall through to creating a new message
+
+      try {
+        const memoryStore = await memory.storage.getStore('memory');
+        if (memoryStore) {
+          const { messages } = await memoryStore.listMessagesById({ messageIds: [activeRunRecord.output.messageId] });
+          const persistedActiveAssistant = messages.find(message => message.role === 'assistant');
+          if (persistedActiveAssistant) {
+            await memoryStore.updateMessages({
+              messages: [
+                {
+                  id: persistedActiveAssistant.id,
+                  content: {
+                    ...persistedActiveAssistant.content,
+                    parts: [...(persistedActiveAssistant.content?.parts ?? []), part],
+                  } as any,
+                },
+              ],
+            });
+            return;
+          }
+        }
+      } catch {
+        // Fall through to creating a new message
+      }
+    }
+
+    if (activeMessageList) {
+      const activeAssistant = [...activeMessageList.get.response.db()]
+        .reverse()
+        .find(message => message.role === 'assistant');
+      if (activeAssistant) {
+        activeAssistant.content = {
+          ...activeAssistant.content,
+          parts: [...(activeAssistant.content?.parts ?? []), part],
+        };
+        return;
+      }
     }
 
     const dbMessage = dataPartToDBMessage(dataPart, { threadId, resourceId });

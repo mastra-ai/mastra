@@ -10,6 +10,7 @@ import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
+import { MessageList } from '../message-list';
 import {
   createSignal,
   dataPartToSignal,
@@ -707,6 +708,108 @@ describe('Agent signals', () => {
     );
 
     expect(result).toEqual(expect.objectContaining({ accepted: true }));
+  });
+
+  it('persists idle data parts as a new assistant message without appending to stale history', async () => {
+    let streamCount = 0;
+    const memory = new MockMemory();
+    await memory.createThread({ threadId: 'idle-data-part-thread', resourceId: 'idle-data-part-user' });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'historical-assistant',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          threadId: 'idle-data-part-thread',
+          resourceId: 'idle-data-part-user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'historical response' }],
+            content: 'historical response',
+          },
+        },
+      ],
+    });
+
+    const agent = new Agent({
+      id: 'idle-data-part-agent',
+      name: 'Idle Data Part Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+      memory,
+    });
+
+    const result = agent.sendDataPart(
+      { type: 'data-om-observation', data: { observationId: 'obs-1' } },
+      { resourceId: 'idle-data-part-user', threadId: 'idle-data-part-thread' },
+    );
+    await expect(result.persisted).resolves.toBeUndefined();
+
+    const recalled = await memory.recall({ threadId: 'idle-data-part-thread', resourceId: 'idle-data-part-user' });
+    expect(streamCount).toBe(0);
+    expect(recalled.messages).toHaveLength(2);
+    expect(recalled.messages[0]?.id).toBe('historical-assistant');
+    expect(recalled.messages[0]?.content.parts).toEqual([{ type: 'text', text: 'historical response' }]);
+    expect(recalled.messages[1]?.role).toBe('assistant');
+    expect(recalled.messages[1]?.content.parts).toEqual([
+      { type: 'data-om-observation', data: { observationId: 'obs-1' } },
+    ]);
+  });
+
+  it('appends active-run data parts to the current assistant message', async () => {
+    const memory = new MockMemory();
+    const messageList = new MessageList().add(
+      {
+        id: 'active-response-message',
+        role: 'assistant',
+        type: 'text',
+        threadId: 'active-data-part-thread',
+        resourceId: 'active-data-part-user',
+        content: { format: 2, parts: [{ type: 'text', text: 'active response' }] },
+        createdAt: new Date(),
+      },
+      'response',
+    );
+    const runtime = new AgentThreadStreamRuntime();
+    const neverFinishes = new Promise<any>(() => {});
+
+    runtime.registerRun(
+      { id: 'active-data-part-agent', getMemory: async () => memory } as any,
+      {
+        runId: 'active-data-part-run',
+        messageId: 'active-response-message',
+        messageList,
+        status: 'running',
+        _waitUntilFinished: () => neverFinishes,
+      } as any,
+      {
+        runId: 'active-data-part-run',
+        memory: { thread: 'active-data-part-thread', resource: 'active-data-part-user' },
+      } as any,
+    );
+
+    const result = runtime.sendDataPart(
+      { id: 'active-data-part-agent', getMemory: async () => memory } as any,
+      { type: 'data-om-observation', data: { observationId: 'active-obs' } },
+      { threadId: 'active-data-part-thread', resourceId: 'active-data-part-user' },
+    );
+    await expect(result.persisted).resolves.toBeUndefined();
+
+    expect(messageList.get.response.db()[0]?.content.parts).toMatchObject([
+      { type: 'text', text: 'active response' },
+      { type: 'data-om-observation', data: { observationId: 'active-obs' } },
+    ]);
+    const recalled = await memory.recall({ threadId: 'active-data-part-thread', resourceId: 'active-data-part-user' });
+    expect(recalled.messages).toHaveLength(0);
   });
 
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {

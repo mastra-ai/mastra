@@ -3484,7 +3484,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
-        sendDataPart: this.#createBoundSendDataPart(requestContext),
+        sendDataPart: this.#createBoundSendDataPart(requestContext, messageList),
       });
 
       try {
@@ -6391,12 +6391,19 @@ export class Agent<
 
   #createBoundSendDataPart(
     requestContext: RequestContext,
+    activeMessageList?: MessageList,
   ): ((dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>) | undefined {
     const threadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
     const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     if (!threadId || !resourceId) return undefined;
     return async (dataPart: { type: `data-${string}`; data: unknown }) => {
-      const result = this.sendDataPart(dataPart, { resourceId, threadId });
+      const result = agentThreadStreamRuntime.sendDataPart(
+        this as Agent<any, any, any, any>,
+        dataPart,
+        { resourceId, threadId },
+        this.getPubSub(),
+        activeMessageList,
+      );
       await result.persisted;
     };
   }

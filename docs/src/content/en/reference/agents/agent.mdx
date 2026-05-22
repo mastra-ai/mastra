@@ -217,7 +217,7 @@ Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?
 
 ### `sendDataPart(dataPart, target)`
 
-Sends a data part to a thread. Data parts are streamed to any subscriber but never included in the LLM prompt and never wake the agent. They are always persisted to storage.
+Sends a data part to a thread. Data parts are streamed to any subscriber but never included in the LLM prompt and never wake the agent. They are always persisted to storage as assistant `data-*` parts. During an active response, Mastra appends the part to the current assistant message. When the thread is idle or no current assistant message is available, Mastra writes a new assistant message that contains only the data part.
 
 <PropertiesTable
   content={[
