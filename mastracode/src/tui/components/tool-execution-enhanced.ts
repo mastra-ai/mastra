@@ -10,7 +10,7 @@ import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
-import { MC_TOOLS } from '../../tool-names.js';
+import { isSubagentToolName, MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -1082,9 +1082,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         return this.getFirstStringArg('pid');
       case 'skill':
         return this.getFirstStringArg('name');
-      case 'subagent':
-        return this.formatSubagentSummary();
       default:
+        if (isSubagentToolName(this.toolName)) return this.formatSubagentSummary();
         return this.formatPlainArgsSummary().trim();
     }
   }

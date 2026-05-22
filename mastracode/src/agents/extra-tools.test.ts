@@ -154,6 +154,7 @@ describe('getToolCategory – extra tools', () => {
     expect(getToolCategory(MC_TOOLS.FIND_FILES)).toBe('read');
     expect(getToolCategory(MC_TOOLS.LSP_INSPECT)).toBe('read');
     expect(getToolCategory(MC_TOOLS.STRING_REPLACE_LSP)).toBe('edit');
+    expect(getToolCategory('spawn_subagent')).toBe('edit');
     expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });
 
@@ -273,12 +274,12 @@ describe('buildToolGuidance – denied tool filtering', () => {
 
   it('should omit multiple denied tools from guidance', () => {
     const guidance = buildToolGuidance('build', {
-      deniedTools: new Set([MC_TOOLS.EXECUTE_COMMAND, MC_TOOLS.WRITE_FILE, 'subagent']),
+      deniedTools: new Set([MC_TOOLS.EXECUTE_COMMAND, MC_TOOLS.WRITE_FILE, 'spawn_subagent']),
     });
 
     expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).not.toContain(`**${MC_TOOLS.WRITE_FILE}**`);
-    expect(guidance).not.toContain('**subagent**');
+    expect(guidance).not.toContain('**spawn_subagent**');
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
   });
@@ -291,6 +292,6 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
     expect(guidance).toContain('**task_update**');
     expect(guidance).toContain('**task_complete**');
-    expect(guidance).toContain('**subagent**');
+    expect(guidance).toContain('**spawn_subagent**');
   });
 });

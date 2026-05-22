@@ -6,6 +6,7 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
+import { isSubagentToolName } from '../../tool-names.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -220,7 +221,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
       // SubagentExecutionComponent handles the visual rendering.
       // Check subagentToolCallIds separately since handleToolStart
       // may have already added the ID to seenToolCallIds.
-      if (content.name === 'subagent' && !state.subagentToolCallIds.has(content.id)) {
+      if (isSubagentToolName(content.name) && !state.subagentToolCallIds.has(content.id)) {
         state.seenToolCallIds.add(content.id);
         state.subagentToolCallIds.add(content.id);
         // Freeze current component with pre-subagent content

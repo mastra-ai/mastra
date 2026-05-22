@@ -271,7 +271,7 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(runtime.getMastra().getAgent('mode-review-agent' as never)).toBe(reviewAgent);
   });
 
-  it('registers hidden Harness v1 modes for MastraCode subagent agents', () => {
+  it('registers native Harness v1 spawn_subagent types for MastraCode subagent agents', () => {
     const codeAgent = new Agent({
       id: 'code-agent',
       name: 'Code Agent',
@@ -299,9 +299,45 @@ describe('MastraCodeHarnessRuntime', () => {
     });
 
     expect(runtime.core.getMode('mastracode-subagent-explore')?.agentId).toBe('subagent-explore');
-    expect((runtime.core as any)._getSubagentType('explore')).toBeUndefined();
+    expect((runtime.core as any)._getSubagentType('explore')).toMatchObject({
+      agentId: 'subagent-explore',
+      modeId: 'mastracode-subagent-explore',
+      defaultModelId: 'openai/gpt-4o-mini',
+      workspace: 'inherit',
+    });
     expect(runtime.getMastra().getAgent('subagent-explore' as never)).toBe(exploreAgent);
-    expect(runtime.core.getMode('build')?.additionalTools).toHaveProperty('subagent');
+    expect(runtime.core.getMode('build')?.additionalTools).toBeUndefined();
+  });
+
+  it('does not register native subagents when the subagent tool is disabled', () => {
+    const codeAgent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    const exploreAgent = new Agent({
+      id: 'subagent-explore',
+      name: 'Explore',
+      instructions: 'explore',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    const runtime = createRuntime({
+      agents: { 'code-agent': codeAgent, 'subagent-explore': exploreAgent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent: codeAgent }],
+      subagents: [
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'Read-only exploration',
+          instructions: 'explore',
+          defaultModelId: 'openai/gpt-4o-mini',
+        },
+      ],
+      disabledTools: ['subagent'],
+    });
+
+    expect((runtime.core as any)._getSubagentType('explore')).toBeUndefined();
   });
 
   it('bridges legacy session and model resolver helpers', async () => {

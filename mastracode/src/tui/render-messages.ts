@@ -8,6 +8,8 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+
+import { isSubagentToolName } from '../tool-names.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -607,12 +609,13 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           const toolResult = message.content.find(c => c.type === 'tool_result' && c.id === content.id);
 
           // Render subagent tool calls with dedicated component
-          if (content.name === 'subagent') {
+          if (isSubagentToolName(content.name)) {
             const subArgs = content.args as
               | {
                   agentType?: string;
                   task?: string;
                   modelId?: string;
+                  modelOverride?: string;
                   forked?: boolean;
                 }
               | undefined;
@@ -626,7 +629,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
                 ? (state.harness as { getFullModelId: () => string }).getFullModelId()
                 : undefined;
-            const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
+            const modelId =
+              meta?.modelId ?? subArgs?.modelOverride ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
             const subComponent = new SubagentExecutionComponent(

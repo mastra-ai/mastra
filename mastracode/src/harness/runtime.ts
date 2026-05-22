@@ -14,7 +14,7 @@ import type {
   PermissionPolicy,
   ToolCategory,
 } from '@mastra/core/harness';
-import { createSubagentTool, defaultDisplayState } from '@mastra/core/harness';
+import { defaultDisplayState } from '@mastra/core/harness';
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type {
   HarnessEvent as HarnessV1Event,
@@ -26,12 +26,14 @@ import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 
+import { isSubagentToolName } from '../tool-names.js';
 import {
   MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
   resolveDefaultModeId,
   toHarnessV1Agents,
   toHarnessV1AuthStatus,
   toHarnessV1Modes,
+  toHarnessV1Subagents,
   toModelInfo,
 } from './config.js';
 import type { MastraCodeModelInfo, MastraCodeRuntimeConfig } from './config.js';
@@ -271,6 +273,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.state = { ...config.initialState };
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
+    const harnessV1Subagents = this.shouldExposeSubagentTool()
+      ? { types: toHarnessV1Subagents(config.subagents) }
+      : undefined;
 
     this.mastra = new Mastra({
       agents: harnessV1Agents,
@@ -282,11 +287,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.core = new HarnessV1({
       mastra: this.mastra,
       runtimeCompatibilityGeneration: MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
-      modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, config.subagents).map(mode => {
-        const legacyMode = config.modes.find(entry => entry.id === mode.id);
-        const subagent = legacyMode ? this.buildLegacySubagentAlias(legacyMode) : undefined;
-        return subagent ? { ...mode, additionalTools: { subagent } } : mode;
-      }),
+      modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, config.subagents),
+      subagents: harnessV1Subagents,
       defaultModeId: this.defaultModeId,
       toolCategoryResolver: config.toolCategoryResolver,
       models: [],
@@ -1292,45 +1294,19 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private filterActiveTools(toolNames: string[]): string[] {
     const disabled = new Set(this.config.disabledTools ?? []);
     const rules = (this.state.permissionRules as { tools?: Record<string, PermissionPolicy> } | undefined)?.tools ?? {};
-    return toolNames.filter(toolName => !disabled.has(toolName) && rules[toolName] !== 'deny');
+    return toolNames.filter(toolName => !this.isToolDisabled(toolName, disabled) && rules[toolName] !== 'deny');
   }
 
-  private buildLegacySubagentAlias(mode: LegacyHarnessMode<TState>): unknown {
-    if (this.config.disabledTools?.includes('subagent') || this.config.subagents.length === 0) return undefined;
-    let alias: unknown;
-    alias = createSubagentTool({
-      subagents: this.config.subagents,
-      resolveModel: (modelId: string) => this.config.resolveModel?.(modelId) as never,
-      fallbackModelId: mode.defaultModelId ?? this.getCurrentModelId(),
-      getParentModelId: () => this.getCurrentModelId() || mode.defaultModelId || '',
-      getParentAgent: () => {
-        const currentMode = this.getCurrentMode();
-        return typeof currentMode.agent === 'function' ? currentMode.agent(this.state) : currentMode.agent;
-      },
-      cloneThreadForFork: async ({
-        sourceThreadId,
-        resourceId,
-        title,
-      }: {
-        sourceThreadId: string;
-        resourceId?: string;
-        title?: string;
-      }) => {
-        const cloned = await this.core.threads.clone({
-          resourceId: resourceId ?? this.resourceId,
-          threadId: sourceThreadId,
-          title,
-          metadata: {
-            forkedSubagent: true,
-            parentThreadId: sourceThreadId,
-          },
-        });
-        return { id: cloned.id, resourceId: cloned.resourceId };
-      },
-      getParentToolsets: async (): Promise<{ harnessBuiltIn: Record<string, unknown> } | undefined> =>
-        alias ? { harnessBuiltIn: { subagent: alias } } : undefined,
-    });
-    return alias;
+  private isToolDisabled(toolName: string, disabled = new Set(this.config.disabledTools ?? [])): boolean {
+    if (isSubagentToolName(toolName)) {
+      return disabled.has('subagent') || disabled.has('spawn_subagent');
+    }
+    return disabled.has(toolName);
+  }
+
+  private shouldExposeSubagentTool(): boolean {
+    if (this.config.subagents.length === 0) return false;
+    return !this.isToolDisabled('spawn_subagent');
   }
 
   private resolveModeModel(modeId: string): string {

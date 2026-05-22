@@ -11,6 +11,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { isSubagentToolName } from '../../tool-names.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -186,7 +187,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
     // Skip creating the regular tool component for subagent calls
     // The SubagentExecutionComponent will handle all the rendering
-    if (toolName === 'subagent') {
+    if (isSubagentToolName(toolName)) {
       return;
     }
 
@@ -334,7 +335,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
     state.ui.requestRender();
-  } else if (toolName !== 'subagent') {
+  } else if (!isSubagentToolName(toolName)) {
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
