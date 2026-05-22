@@ -400,6 +400,19 @@ describe('createMastraCode', () => {
     expect(harnessCall?.initialState?.observeAttachments).toBe('auto');
   });
 
+  it('restores observeAttachments metadata for the current thread at startup', async () => {
+    harnessStateMock = { observeAttachments: true };
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
+  });
+
   it('enables OpenAI Responses stream error retries by default', async () => {
     const { createMastraCode } = await import('../index.js');
 

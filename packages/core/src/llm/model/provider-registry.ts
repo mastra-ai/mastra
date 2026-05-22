@@ -165,6 +165,18 @@ function syncGlobalCacheToLocal(): void {
       const localCapDir = path.join(packageRoot, 'dist', 'capabilities');
       fs.mkdirSync(localCapDir, { recursive: true });
       const files = fs.readdirSync(globalCapDir).filter(f => f.endsWith('.json'));
+      const globalFiles = new Set(files);
+
+      for (const localFileName of fs.readdirSync(localCapDir).filter(f => f.endsWith('.json'))) {
+        if (!globalFiles.has(localFileName)) {
+          try {
+            fs.unlinkSync(path.join(localCapDir, localFileName));
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      }
+
       for (const file of files) {
         const globalFile = path.join(globalCapDir, file);
         const localFile = path.join(localCapDir, file);

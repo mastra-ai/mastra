@@ -129,6 +129,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         },
         onObserveAttachmentsChange: async value => {
           await ctx.state.harness.setState({ observeAttachments: value } as any);
+          await ctx.state.harness.setThreadSetting({ key: 'observeAttachments', value });
           persistOmObserveAttachments(value);
           const label = value === 'auto' ? 'auto' : value ? 'on' : 'off';
           ctx.showInfo(`Observe attachments → ${label}`);

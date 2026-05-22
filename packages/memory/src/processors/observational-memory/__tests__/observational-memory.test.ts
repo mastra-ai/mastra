@@ -2574,31 +2574,33 @@ describe('Observer Agent Helpers', () => {
       const llmModule = await import('@mastra/core/llm');
       const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
 
-      const message = createTestMessage('ignored', 'user');
-      message.content = {
-        format: 2,
-        parts: [
-          { type: 'text', text: 'Please check this image.' },
-          { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
-        ],
-      };
+      try {
+        const message = createTestMessage('ignored', 'user');
+        message.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Please check this image.' },
+            { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+          ],
+        };
 
-      await observer.call(undefined, [message], undefined, {
-        requestContext: { threadId: 'test-thread' } as any,
-      });
+        await observer.call(undefined, [message], undefined, {
+          requestContext: { threadId: 'test-thread' } as any,
+        });
 
-      // The function model should be resolved with requestContext, looked up,
-      // found to not support attachments, and attachments should be dropped
-      expect(spy).toHaveBeenCalledWith('deepseek/deepseek-v4-flash');
-      const content = capturedPrompt[1].content as any[];
-      expect(content.some((part: any) => part.type === 'image')).toBe(false);
-      const joined = content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
-      expect(joined).toContain('[Image #1: photo.png]');
-
-      spy.mockRestore();
+        // The function model should be resolved with requestContext, looked up,
+        // found to not support attachments, and attachments should be dropped
+        expect(spy).toHaveBeenCalledWith('deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('auto mode drops attachments for OpenRouter text-only models using provider capabilities', async () => {
@@ -2686,24 +2688,26 @@ describe('Observer Agent Helpers', () => {
       const llmModule = await import('@mastra/core/llm');
       const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(true);
 
-      const message = createTestMessage('ignored', 'user');
-      message.content = {
-        format: 2,
-        parts: [
-          { type: 'text', text: 'Please check this image.' },
-          { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
-        ],
-      };
+      try {
+        const message = createTestMessage('ignored', 'user');
+        message.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Please check this image.' },
+            { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+          ],
+        };
 
-      await observer.call(undefined, [message], undefined, {
-        requestContext: { threadId: 'test-thread' } as any,
-      });
+        await observer.call(undefined, [message], undefined, {
+          requestContext: { threadId: 'test-thread' } as any,
+        });
 
-      expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
-      const content = capturedPrompt[1].content as any[];
-      expect(content.some((part: any) => part.type === 'image')).toBe(true);
-
-      spy.mockRestore();
+        expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('should inject thread title instructions into the observer request when enabled', async () => {

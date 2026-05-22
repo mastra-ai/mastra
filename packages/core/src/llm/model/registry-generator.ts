@@ -7,6 +7,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AttachmentCapabilities, MastraModelGateway, ProviderConfig } from './gateways/base.js';
 
+interface GatewayWithAttachmentCapabilities {
+  getAttachmentCapabilities(): AttachmentCapabilities;
+}
+
+function hasAttachmentCapabilities(
+  gateway: MastraModelGateway,
+): gateway is MastraModelGateway & GatewayWithAttachmentCapabilities {
+  return (
+    'getAttachmentCapabilities' in gateway &&
+    typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
+  );
+}
+
 /**
  * Write a file atomically using the write-to-temp-then-rename pattern.
  * This prevents file corruption when multiple processes write to the same file concurrently.
@@ -80,10 +93,9 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
         const isProviderRegistry = gateway.id === 'models.dev';
 
         // Collect attachment capabilities if the gateway exposes them
-        const gatewayAttachmentCaps =
-          'getAttachmentCapabilities' in gateway && typeof (gateway as any).getAttachmentCapabilities === 'function'
-            ? ((gateway as any).getAttachmentCapabilities() as AttachmentCapabilities)
-            : undefined;
+        const gatewayAttachmentCaps = hasAttachmentCapabilities(gateway)
+          ? gateway.getAttachmentCapabilities()
+          : undefined;
 
         for (const [providerId, config] of Object.entries(providers)) {
           // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")

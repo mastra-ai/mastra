@@ -31,7 +31,7 @@ export interface OMSettingsCallbacks {
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onCavemanObservationsChange: (enabled: boolean) => void;
-  onObserveAttachmentsChange: (value: 'auto' | boolean) => void;
+  onObserveAttachmentsChange: (value: 'auto' | boolean) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -334,11 +334,15 @@ export class OMSettingsComponent extends Box implements Focusable {
           const list = new SelectList(items, items.length, getSelectListTheme());
           const currentIndex = config.observeAttachments === 'auto' ? 0 : config.observeAttachments ? 1 : 2;
           list.setSelectedIndex(currentIndex);
-          list.onSelect = (item: SelectItem) => {
+          list.onSelect = async (item: SelectItem) => {
             const value: 'auto' | boolean = item.value === 'auto' ? 'auto' : item.value === 'on';
-            config.observeAttachments = value;
-            callbacks.onObserveAttachmentsChange(value);
-            done(formatAttachmentValue(value));
+            try {
+              await callbacks.onObserveAttachmentsChange(value);
+              config.observeAttachments = value;
+              done(formatAttachmentValue(value));
+            } catch (error) {
+              console.error('Failed to update observe attachments setting:', error);
+            }
           };
           list.onCancel = () => done();
           return list;
