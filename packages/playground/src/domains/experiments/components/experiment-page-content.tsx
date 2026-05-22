@@ -86,6 +86,7 @@ export function ExperimentPageContent({
       if (isFlagging || resultIds.length === 0) return;
       setIsFlagging(true);
       let flagged = 0;
+      const flaggedIds = new Set<string>();
       try {
         for (const resultId of resultIds) {
           try {
@@ -96,6 +97,7 @@ export function ExperimentPageContent({
               status: 'needs-review',
             });
             flagged++;
+            flaggedIds.add(resultId);
           } catch {
             // continue on individual failures
           }
@@ -103,7 +105,13 @@ export function ExperimentPageContent({
       } finally {
         setIsFlagging(false);
       }
-      setSelectedIds(new Set());
+      if (flaggedIds.size > 0) {
+        setSelectedIds(prev => {
+          const next = new Set(prev);
+          for (const id of flaggedIds) next.delete(id);
+          return next;
+        });
+      }
       if (flagged > 0) {
         toast(`${flagged} result${flagged > 1 ? 's' : ''} flagged for review`);
       }
