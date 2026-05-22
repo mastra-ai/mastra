@@ -229,6 +229,7 @@ Data parts differ from signals:
 
 - **Never visible to the LLM** — data parts are filtered from the prompt. Signals become model context.
 - **Never wake the agent** — data parts are always persisted and streamed but never start a new run.
+- **Persist as assistant parts** — data parts sent during an active agent response are stored on that response message. If there is no current assistant response, Mastra creates a small assistant message whose only part is the data part.
 - **Round-trip cleanly** — persisted data parts reload with the exact `{ type, data }` shape they were sent with.
 
 ```typescript title="src/mastra/data-parts.ts"
@@ -244,7 +245,7 @@ agent.sendDataPart(
 )
 ```
 
-The return value includes `accepted` and a `persisted` promise:
+The return value includes `accepted` and a `persisted` promise. During an active response, the data part is appended to the current assistant message, similar to `writer.custom()`. When the thread is idle or no current assistant message is available, Mastra writes a new assistant message that contains only the data part.
 
 ```typescript title="src/mastra/data-parts.ts"
 const result = agent.sendDataPart(

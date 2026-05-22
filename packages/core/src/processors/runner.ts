@@ -282,7 +282,7 @@ export class ProcessorRunner {
    * Keyed by processor ID.
    */
   private readonly processorStates: Map<string, ProcessorState>;
-  /** Optional callback for sending data-part signals (never seen by LLM, always persisted). */
+  /** Optional callback for sending data parts (never seen by LLM, always persisted). */
   private readonly sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
 
   constructor({
