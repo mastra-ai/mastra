@@ -85,6 +85,7 @@ export class UnixSocketPubSub extends PubSub {
   #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
   #pendingWrites: Promise<void>[] = [];
+  #recovering?: Promise<void>;
 
   constructor(socketPath: string) {
     super();
@@ -286,14 +287,10 @@ export class UnixSocketPubSub extends PubSub {
         this.#clientSocket = socket;
         this.#isBroker = false;
         readFrames(socket, frame => this.#handleServerFrame(frame));
-        socket.on('close', () => {
-          if (this.#clientSocket === socket) this.#clientSocket = undefined;
-          this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub broker connection closed'));
-        });
-        socket.on('error', error => {
-          if (this.#clientSocket === socket) this.#clientSocket = undefined;
-          this.#rejectSubscribeWaiters(error);
-        });
+        socket.on('close', () =>
+          this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
+        );
+        socket.on('error', error => this.#handleClientDisconnect(socket, error));
         void this.#resubscribeClient().then(resolve, reject);
       };
 
@@ -305,6 +302,35 @@ export class UnixSocketPubSub extends PubSub {
   async #resubscribeClient() {
     for (const topic of this.#callbacks.keys()) {
       await this.#sendSubscribeToBroker(topic);
+    }
+  }
+
+  #handleClientDisconnect(socket: net.Socket, error: Error) {
+    if (this.#clientSocket !== socket) return;
+    this.#clientSocket = undefined;
+    this.#rejectSubscribeWaiters(error);
+    if (!this.#closed) {
+      void this.#recoverClientConnection();
+    }
+  }
+
+  async #recoverClientConnection(): Promise<void> {
+    if (this.#recovering) return this.#recovering;
+    this.#recovering = this.#recoverClientConnectionLoop().finally(() => {
+      this.#recovering = undefined;
+    });
+    return this.#recovering;
+  }
+
+  async #recoverClientConnectionLoop(): Promise<void> {
+    while (!this.#closed && !this.#isBroker && !(this.#clientSocket && !this.#clientSocket.destroyed)) {
+      try {
+        await this.#ensureStarted(true);
+        return;
+      } catch {
+        if (this.#closed) return;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
     }
   }
 

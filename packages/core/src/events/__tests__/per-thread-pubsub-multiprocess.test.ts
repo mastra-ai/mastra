@@ -34,10 +34,15 @@ function threadSocketPath(baseDir: string, resourceId: string, threadId: string)
   return join(baseDir, resourceId, `${threadId}.sock`);
 }
 
-function waitForMessage(child: ChildProcess, type: string, timeoutMs = 5000): Promise<WorkerMessage> {
+function waitForMessage(
+  child: ChildProcess,
+  type: string,
+  timeoutMs = 5000,
+  predicate: (msg: WorkerMessage) => boolean = () => true,
+): Promise<WorkerMessage> {
   return new Promise((resolve, reject) => {
     const handler = (msg: WorkerMessage) => {
-      if (msg.type === type) {
+      if (msg.type === type && predicate(msg)) {
         clearTimeout(timer);
         child.off('message', handler);
         resolve(msg);
@@ -93,6 +98,17 @@ process.on('message', async (msg) => {
           remoteClientCount: pubsub.remoteClientCount,
         }
       });
+    } else if (msg.type === 'wait-for-status') {
+      const start = Date.now();
+      while (Date.now() - start < (msg.timeoutMs || 5000)) {
+        const status = { isBroker: pubsub.isBroker, remoteClientCount: pubsub.remoteClientCount };
+        if ((msg.isBroker === undefined || status.isBroker === msg.isBroker) && (msg.remoteClientCount === undefined || status.remoteClientCount === msg.remoteClientCount)) {
+          process.send({ type: 'status', data: status });
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      process.send({ type: 'error', data: { message: 'Timed out waiting for status' } });
     } else if (msg.type === 'close') {
       await pubsub.close();
       process.send({ type: 'ready', data: { closed: true } });
@@ -252,5 +268,59 @@ process.send({ type: 'ready', data: { started: true } });
     expect(status.data.remoteClientCount).toBe(0);
 
     worker1.send({ type: 'close' });
+  });
+
+  it('elects a new broker and preserves IPC subscriptions after broker process exits', async () => {
+    const sockPath = threadSocketPath(tempDir, resourceId, threadA);
+    const topic = threadTopic(resourceId, threadA);
+
+    const worker1 = spawnWorker(sockPath);
+    const worker2 = spawnWorker(sockPath);
+    const worker3 = spawnWorker(sockPath);
+    await waitForMessage(worker1, 'ready');
+    await waitForMessage(worker2, 'ready');
+    await waitForMessage(worker3, 'ready');
+
+    worker1.send({ type: 'subscribe', topic });
+    await waitForMessage(worker1, 'ready');
+    worker2.send({ type: 'subscribe', topic });
+    await waitForMessage(worker2, 'ready');
+    worker3.send({ type: 'subscribe', topic });
+    await waitForMessage(worker3, 'ready');
+
+    worker1.send({ type: 'get-status' });
+    const brokerStatus = await waitForMessage(worker1, 'status');
+    expect(brokerStatus.data.isBroker).toBe(true);
+    expect(brokerStatus.data.remoteClientCount).toBe(2);
+
+    worker1.kill('SIGKILL');
+
+    worker2.send({ type: 'wait-for-status', isBroker: true, remoteClientCount: 1 });
+    await waitForMessage(worker2, 'status');
+    worker3.send({ type: 'wait-for-status', isBroker: false });
+    await waitForMessage(worker3, 'status');
+
+    const w2EventPromise = waitForMessage(
+      worker2,
+      'event-received',
+      5000,
+      msg => msg.data?.eventType === 'after-failover',
+    );
+    const w3EventPromise = waitForMessage(
+      worker3,
+      'event-received',
+      5000,
+      msg => msg.data?.eventType === 'after-failover',
+    );
+
+    worker3.send({ type: 'publish', topic, event: { type: 'after-failover' } });
+    await waitForMessage(worker3, 'ready');
+
+    const [w2Event, w3Event] = await Promise.all([w2EventPromise, w3EventPromise]);
+    expect(w2Event.data.eventType).toBe('after-failover');
+    expect(w3Event.data.eventType).toBe('after-failover');
+
+    worker2.send({ type: 'close' });
+    worker3.send({ type: 'close' });
   });
 });

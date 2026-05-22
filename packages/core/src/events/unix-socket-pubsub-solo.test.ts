@@ -125,4 +125,36 @@ describe('UnixSocketPubSub - skip serialization when solo', () => {
     expect(brokerCb.mock.calls[0]![0].type).toBe('from-A');
     expect(clientBCb.mock.calls[0]![0].type).toBe('from-A');
   });
+
+  it('elects a new broker and keeps subscriptions synced when the broker disconnects', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(clientA, clientB);
+
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+
+    await broker.subscribe('topic-a', vi.fn());
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    await broker.close();
+
+    await waitFor(() => {
+      const activePubsubs = [clientA, clientB];
+      expect(activePubsubs.filter(pubsub => pubsub.isBroker)).toHaveLength(1);
+      expect(activePubsubs.some(pubsub => !pubsub.isBroker)).toBe(true);
+    });
+
+    await clientA.publish('topic-a', makeEvent({ type: 'after-failover' }));
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+      expect(clientBCb).toHaveBeenCalledTimes(1);
+    });
+    expect(clientACb.mock.calls[0]![0].type).toBe('after-failover');
+    expect(clientBCb.mock.calls[0]![0].type).toBe('after-failover');
+  });
 });
