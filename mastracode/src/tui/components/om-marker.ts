@@ -71,11 +71,7 @@ export type OMMarkerData =
       tokensActivated: number;
       observationTokens: number;
       activationCount?: number;
-    }
-  | {
-      type: 'om_activation_ttl';
-      activateAfterIdle: number;
-      ttlExpiredMs: number;
+      activateAfterIdle?: number;
     }
   | {
       type: 'om_activation_provider_change';
@@ -168,13 +164,9 @@ function formatMarker(data: OMMarkerData): string {
       const obsTokens = formatTokens(data.observationTokens);
       const label =
         data.activationCount && data.activationCount > 1 ? `${data.activationCount} observations` : 'observations';
-      return theme.fg('success', `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
-    }
-    case 'om_activation_ttl': {
-      return theme.fg(
-        'muted',
-        `  Idle timeout (${formatDuration(data.activateAfterIdle)}) exceeded by ${formatDuration(data.ttlExpiredMs)}, activating observations`,
-      );
+      const idleSuffix =
+        data.activateAfterIdle !== undefined ? ` (${formatDuration(data.activateAfterIdle)} idle timeout)` : '';
+      return theme.fg('success', `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens${idleSuffix}`);
     }
     case 'om_activation_provider_change': {
       return theme.fg('muted', `  Model changed ${data.previousModel} → ${data.currentModel}, activating observations`);
