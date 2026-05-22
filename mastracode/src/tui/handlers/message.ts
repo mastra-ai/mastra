@@ -6,7 +6,10 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
-import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';

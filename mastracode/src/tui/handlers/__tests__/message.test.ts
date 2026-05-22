@@ -291,7 +291,12 @@ describe('handleMessageUpdate system reminders', () => {
       ]),
     );
 
-    expect(visibleChildren(state)).toEqual([earlierUserMessage, state.allSystemReminderComponents[0], optimisticUserMessage, streamingMessage]);
+    expect(visibleChildren(state)).toEqual([
+      earlierUserMessage,
+      state.allSystemReminderComponents[0],
+      optimisticUserMessage,
+      streamingMessage,
+    ]);
     expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
   });
