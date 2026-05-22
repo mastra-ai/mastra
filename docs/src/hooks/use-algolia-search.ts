@@ -36,14 +36,6 @@ export type AlgoliaSearchOptions = {
    */
   attributesToSnippet?: string[]
   /**
-   * Highlight pre tag
-   */
-  highlightPreTag?: string
-  /**
-   * Highlight post tag
-   */
-  highlightPostTag?: string
-  /**
    * Snippet ellipsis text
    */
   snippetEllipsisText?: string
@@ -238,8 +230,9 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
               'content',
             ],
             attributesToSnippet: searchOptions?.attributesToSnippet || ['content:30'],
-            highlightPreTag: searchOptions?.highlightPreTag || '<mark>',
-            highlightPostTag: searchOptions?.highlightPostTag || '</mark>',
+            // Hardcoded so the highlight tag stays in sync with sanitizeSearchHtml's allowlist
+            highlightPreTag: '<mark>',
+            highlightPostTag: '</mark>',
             snippetEllipsisText: searchOptions?.snippetEllipsisText || '…',
             ...(searchOptions?.filters && { filters: searchOptions.filters }),
             ...(searchOptions?.facetFilters && {
@@ -455,8 +448,9 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
             'content',
           ],
           attributesToSnippet: searchOptions?.attributesToSnippet || ['content:30'],
-          highlightPreTag: searchOptions?.highlightPreTag || '<mark>',
-          highlightPostTag: searchOptions?.highlightPostTag || '</mark>',
+          // Hardcoded so the highlight tag stays in sync with sanitizeSearchHtml's allowlist
+          highlightPreTag: '<mark>',
+          highlightPostTag: '</mark>',
           snippetEllipsisText: searchOptions?.snippetEllipsisText || '…',
           ...(searchOptions?.filters && { filters: searchOptions.filters }),
           ...(searchOptions?.facetFilters && {

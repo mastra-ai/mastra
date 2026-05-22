@@ -5,8 +5,8 @@ import DOMPurify from 'dompurify'
  * `dangerouslySetInnerHTML`. Algolia wraps matched terms in `<mark>` tags; every
  * other tag and attribute is stripped while the text content is kept.
  *
- * This assumes the default `highlightPreTag` / `highlightPostTag` of `<mark>`.
- * If a custom highlight tag is ever configured, add it to `ALLOWED_TAGS`.
+ * The Algolia query in `useAlgoliaSearch` hardcodes the `<mark>` highlight tag,
+ * so the allowlist below stays in sync with it.
  *
  * Only ever called from the browser (inside a `useEffect`), so DOMPurify has a
  * real DOM. The Node unit test runs with the jsdom environment.
