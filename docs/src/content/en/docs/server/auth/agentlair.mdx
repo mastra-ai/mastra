@@ -1,0 +1,105 @@
+---
+title: "AgentLair | Auth"
+description: "Documentation for the @agentlair/mastra package, which adds agent identity verification and behavioral telemetry to Mastra applications."
+packages:
+  - "@agentlair/mastra"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# AgentLair
+
+The `@agentlair/mastra` package adds two capabilities to your Mastra agents:
+
+1. **Behavioral telemetry** — captures generate calls, tool use, and token usage to build your agent's trust profile on [AgentLair](https://agentlair.dev).
+2. **AAT verification** — verifies incoming Agent Authentication Tokens (AATs) so your services can confirm requests come from registered AgentLair agents.
+
+## Prerequisites
+
+Create an account at [agentlair.dev](https://agentlair.dev) and generate an API key from the dashboard.
+
+```env title=".env"
+AGENTLAIR_API_KEY=al_live_...
+```
+
+## Installation
+
+```bash npm2yarn
+npm install @agentlair/mastra
+```
+
+## Usage examples
+
+### Telemetry hooks
+
+Wrap your agent's generate calls with AgentLair hooks to record behavioral events:
+
+```typescript title="src/mastra/index.ts"
+import { createAgentLairPlugin } from '@agentlair/mastra';
+import { Agent } from '@mastra/core/agent';
+
+const agentlair = createAgentLairPlugin({
+  apiKey: process.env.AGENTLAIR_API_KEY!,
+  agentId: 'my-mastra-agent',
+});
+
+const agent = new Agent({ /* ... */ });
+
+agentlair.onGenerateStart({ model: 'gpt-4o', toolCount: 2 });
+const result = await agent.generate("Summarise last week's invoices");
+agentlair.onGenerateFinish({
+  text: result.text,
+  finishReason: 'stop',
+  usage: result.usage,
+});
+
+// Flush buffer before process exit
+await agentlair.shutdown();
+```
+
+Events are batched and flushed every 5 seconds (buffer auto-flushes at 50 events).
+
+### AAT verification
+
+Verify that incoming requests carry a valid AgentLair Agent Authentication Token (AAT) before processing them:
+
+```typescript title="src/mastra/routes.ts"
+import { createAgentLairPlugin } from '@agentlair/mastra';
+
+const agentlair = createAgentLairPlugin({
+  apiKey: process.env.AGENTLAIR_API_KEY!,
+  agentId: 'my-mastra-agent',
+});
+
+// In a custom route handler
+async function handleAgentRequest(request: Request) {
+  const token = request.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
+
+  const agent = await agentlair.verifyAat(token, {
+    audience: 'https://my-service.com',
+  });
+
+  if (!agent) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  // agent.sub contains the verified agent ID
+  return new Response(`Hello, agent ${agent.sub}`);
+}
+```
+
+## Captured events
+
+| Hook | AgentLair event | Data |
+|---|---|---|
+| `onGenerateStart` | `generate_start` | model, tool count, message count |
+| `onGenerateFinish` | `generate_finish` | token usage, finish reason, error |
+| `onToolCallStart` | `{toolName}` | tool name, call ID |
+| `onToolCallFinish` | `{toolName}_complete` | duration, success/failure, error |
+
+## Resources
+
+- [AgentLair documentation](https://agentlair.dev/docs)
+- [npm: @agentlair/mastra](https://www.npmjs.com/package/@agentlair/mastra)
