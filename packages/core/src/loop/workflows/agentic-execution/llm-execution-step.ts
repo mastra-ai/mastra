@@ -688,13 +688,25 @@ async function processOutputStream<OUTPUT = undefined>({
           const resultToolDef = resolveDirectOrProviderTool(chunk.payload.toolName);
           messageList.updateToolInvocation({
             type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: chunk.payload.toolCallId,
-              toolName: chunk.payload.toolName,
-              args: chunk.payload.args,
-              result: chunk.payload.result,
-            },
+            // A failed provider-executed tool sets isError — persist it as output-error.
+            toolInvocation: chunk.payload.isError
+              ? {
+                  state: 'output-error',
+                  toolCallId: chunk.payload.toolCallId,
+                  toolName: chunk.payload.toolName,
+                  args: chunk.payload.args,
+                  errorText:
+                    typeof chunk.payload.result === 'string'
+                      ? chunk.payload.result
+                      : JSON.stringify(chunk.payload.result),
+                }
+              : {
+                  state: 'result',
+                  toolCallId: chunk.payload.toolCallId,
+                  toolName: chunk.payload.toolName,
+                  args: chunk.payload.args,
+                  result: chunk.payload.result,
+                },
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
