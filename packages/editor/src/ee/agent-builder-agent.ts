@@ -1,8 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
-const memory = new Memory();
-
 /**
  * Agent Builder Agent
  *
@@ -20,7 +18,9 @@ const memory = new Memory();
  * - createSkillTool (gated by features.skills) — only when a needed capability does not exist
  */
 
-export const builderAgent = new Agent({
+export function createBuilderAgent(): Agent {
+  const memory = new Memory();
+  return new Agent({
   id: 'builder-agent',
   name: 'Agent Builder Agent',
   description: 'An agent that can build agents',
@@ -154,4 +154,5 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
 - The final message should make clear that the agent starts with initial parameters and can be adjusted later.`,
   model: 'openai/gpt-5.5',
   memory,
-});
+  });
+}
