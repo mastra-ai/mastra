@@ -90,7 +90,12 @@ type DrawerBackdropProps = Omit<DrawerPrimitive.Backdrop.Props, 'className'> & {
 };
 
 const DrawerBackdrop = React.forwardRef<HTMLDivElement, DrawerBackdropProps>(({ className, ...props }, ref) => (
-  <DrawerPrimitive.Backdrop ref={ref} data-slot="drawer-backdrop" className={cn(drawerBackdropClass, className)} {...props} />
+  <DrawerPrimitive.Backdrop
+    ref={ref}
+    data-slot="drawer-backdrop"
+    className={cn(drawerBackdropClass, className)}
+    {...props}
+  />
 ));
 DrawerBackdrop.displayName = 'DrawerBackdrop';
 
@@ -209,7 +214,9 @@ const nestedFadeClass = cn(
   'group-data-[nested-drawer-open]/popup:opacity-0',
 );
 
-const HandleBar = () => <div className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface5', nestedFadeClass)} />;
+const HandleBar = () => (
+  <div className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface5', nestedFadeClass)} />
+);
 
 /**
  * Convenience composition of Portal + Backdrop + Viewport + Popup.

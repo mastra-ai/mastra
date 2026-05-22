@@ -316,10 +316,7 @@ function SwipeToOpenExample() {
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
 
   return (
-    <div
-      ref={setContainer}
-      className="relative h-80 w-96 overflow-hidden rounded-xl border border-border1 bg-surface2"
-    >
+    <div ref={setContainer} className="relative h-80 w-96 overflow-hidden rounded-xl border border-border1 bg-surface2">
       <Drawer side="right" modal={false}>
         <DrawerSwipeArea className="absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed border-border2 bg-surface4/40" />
         <div className="flex h-full items-center justify-center px-12 text-center">
