@@ -2136,7 +2136,7 @@ export const POST_HARNESS_ATTACHMENT_ROUTE = createRoute({
 export const DELETE_HARNESS_ATTACHMENT_ROUTE = createRoute({
   method: 'DELETE',
   path: '/harness/:name/sessions/:sessionId/attachments/:attachmentId',
-  responseType: 'json',
+  responseType: 'datastream-response',
   pathParamSchema: harnessAttachmentPathParams,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },
