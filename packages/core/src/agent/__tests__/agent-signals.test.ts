@@ -14,6 +14,7 @@ import {
   createSignal,
   dataPartToSignal,
   mastraDBMessageToSignal,
+  resolveDeliveryAttributes,
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
@@ -94,6 +95,20 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 500) {
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 500): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 describe('Agent signals', () => {
   beforeEach(() => {
     agentThreadStreamRuntime.resetForTests();
@@ -125,6 +140,7 @@ describe('Agent signals', () => {
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
+      transient: true,
     });
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
@@ -653,6 +669,152 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('delivers each thread run to multiple same-runtime subscribers', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'multi-subscriber-thread-agent' } as Agent<any, any, any, any>;
+    const threadId = 'multi-subscriber-thread';
+    const resourceId = 'multi-subscriber-user';
+
+    const registerRun = (runNumber: number) => {
+      const runId = `multi-subscriber-run-${runNumber}`;
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const parts = [
+        { type: 'start', runId },
+        { type: 'text-start', runId, payload: { id: `text-${runNumber}` } },
+        { type: 'text-delta', runId, payload: { id: `text-${runNumber}`, text: `response ${runNumber}` } },
+        { type: 'text-end', runId, payload: { id: `text-${runNumber}` } },
+        {
+          type: 'finish',
+          runId,
+          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+        },
+      ];
+      const fullStream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+            finish();
+          }, 25);
+        },
+      });
+
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+      return runId;
+    };
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const firstSubscriberRun1 = readNextRun(firstIterator);
+      const secondSubscriberRun1 = readNextRun(secondIterator);
+      const runId1 = registerRun(1);
+
+      const [run1a, run1b] = await Promise.all([
+        withTimeout(firstSubscriberRun1, 'Timed out waiting for first subscriber to receive run 1'),
+        withTimeout(secondSubscriberRun1, 'Timed out waiting for second subscriber to receive run 1'),
+      ]);
+      expect(run1a.value).toMatchObject({ runId: runId1, text: 'response 1' });
+      expect(run1b.value).toMatchObject({ runId: runId1, text: 'response 1' });
+
+      const firstSubscriberRun2 = readNextRun(firstIterator);
+      const secondSubscriberRun2 = readNextRun(secondIterator);
+      const runId2 = registerRun(2);
+
+      const [run2a, run2b] = await Promise.all([
+        withTimeout(firstSubscriberRun2, 'Timed out waiting for first subscriber to receive run 2'),
+        withTimeout(secondSubscriberRun2, 'Timed out waiting for second subscriber to receive run 2'),
+      ]);
+      expect(run2a.value).toMatchObject({ runId: runId2, text: 'response 2' });
+      expect(run2b.value).toMatchObject({ runId: runId2, text: 'response 2' });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription.unsubscribe();
+    }
+  });
+
+  it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
+    const threadId = 'subscriber-cancel-thread';
+    const resourceId = 'subscriber-cancel-user';
+    const runId = 'subscriber-cancel-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const parts = [
+      { type: 'start', runId },
+      { type: 'text-start', runId, payload: { id: 'text-1' } },
+      { type: 'text-delta', runId, payload: { id: 'text-1', text: 'still running' } },
+      { type: 'text-end', runId, payload: { id: 'text-1' } },
+      {
+        type: 'finish',
+        runId,
+        payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+      },
+    ];
+    const fullStream = new ReadableStream({
+      async start(controller) {
+        for (const part of parts) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          controller.enqueue(part);
+        }
+        controller.close();
+        finish();
+      },
+    });
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const secondRun = readNextRun(secondIterator);
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      const firstPart = await withTimeout(firstIterator.next(), 'Timed out waiting for first subscriber part');
+      expect(firstPart.value).toMatchObject({ type: 'start', runId });
+      await firstIterator.return?.();
+      firstSubscription.unsubscribe();
+
+      await expect(
+        withTimeout(secondRun, 'Timed out waiting for second subscriber to finish run'),
+      ).resolves.toMatchObject({
+        value: { runId, text: 'still running' },
+        done: false,
+      });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription.unsubscribe();
+    }
+  });
+
   it('starts an idle thread run when a user-message signal is sent', async () => {
     const agent = new Agent({
       id: 'idle-signal-agent',
@@ -688,6 +850,7 @@ describe('Agent signals', () => {
       acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
     });
     expect(signalPart?.data.createdAt).toBeDefined();
+    expect(signalPart?.transient).toBe(true);
 
     subscription.unsubscribe();
   });
@@ -945,6 +1108,56 @@ describe('Agent signals', () => {
         await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
         finishRun();
         ownerSubscription.unsubscribe();
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'broadcasts to a remote subscriber without a same-runtime subscriber',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-remote-only-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = { id: 'remote-only-agent' } as Agent<any, any, any, any>;
+      const follower = { id: 'remote-only-agent' } as Agent<any, any, any, any>;
+      const runId = 'remote-only-run';
+      let finishRun!: () => void;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId, payload: { text: 'remote only response' } };
+          yield { type: 'finish', runId, payload: {} };
+        })(),
+        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+      } as any;
+
+      try {
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'remote-only-resource', threadId: 'remote-only-thread' },
+          followerPubSub,
+        );
+        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId, memory: { resource: 'remote-only-resource', thread: 'remote-only-thread' } } as any,
+          ownerPubSub,
+        );
+
+        await expect(withTimeout(followerRun, 'Timed out waiting for remote-only subscriber')).resolves.toMatchObject({
+          value: { runId, text: 'remote only response' },
+          done: false,
+        });
+        finishRun();
         followerSubscription.unsubscribe();
       } finally {
         await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
@@ -2075,5 +2288,136 @@ describe('Agent signals', () => {
           ),
       ),
     ).toBe(true);
+  });
+
+  describe('delivery option attributes', () => {
+    it('resolveDeliveryAttributes merges option attributes into signal attributes', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+        attributes: { existing: 'yes' },
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+      expect(resolved.attributes).toEqual({ existing: 'yes', delivery: 'while-active' });
+    });
+
+    it('resolveDeliveryAttributes returns same signal when no option attributes are selected', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'hello',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, undefined);
+      expect(resolved).toBe(signal);
+    });
+
+    it('resolved delivery attributes appear in toLLMMessage XML', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'fix the bug',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+      expect(resolved.toLLMMessage()).toEqual({
+        role: 'user',
+        content: '<user-message delivery="while-active">fix the bug</user-message>',
+      });
+    });
+
+    it('resolved delivery attributes appear in toDBMessage and toDataPart', () => {
+      const signal = createSignal({
+        type: 'user-message',
+        contents: 'fix the bug',
+      });
+
+      const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+      const db = resolved.toDBMessage({ threadId: 't', resourceId: 'r' });
+      expect((db.content.metadata!.signal as Record<string, unknown>).attributes).toEqual({
+        delivery: 'while-active',
+      });
+
+      const dataPart = resolved.toDataPart();
+      expect(dataPart.data.attributes).toEqual({ delivery: 'while-active' });
+    });
+
+    it('thread-stream-runtime resolves ifActive.attributes as while-active on active signal delivery', () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = { id: 'delivery-active-agent' } as any;
+
+      // Prepare and register a run that is still "running" so the thread is active.
+      const options = runtime.prepareRunOptions(
+        {
+          runId: 'active-run',
+          memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+        } as any,
+        pubsub,
+      );
+      runtime.registerRun(
+        agent,
+        {
+          runId: 'active-run',
+          status: 'running',
+          _waitUntilFinished: () => new Promise<any>(() => {}),
+        } as any,
+        options,
+        pubsub,
+      );
+
+      // Send a signal while the run is still active.
+      const result = runtime.sendSignal(
+        agent,
+        {
+          type: 'user-message',
+          contents: 'while-active test',
+        },
+        {
+          resourceId: 'delivery-resource',
+          threadId: 'delivery-thread',
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: {
+            attributes: { delivery: 'message' },
+            streamOptions: {
+              memory: { thread: 'delivery-thread', resource: 'delivery-resource' },
+            },
+          },
+        },
+        pubsub,
+      );
+
+      // Active run → ifActive.attributes → delivery: 'while-active'
+      expect(result.signal.attributes).toEqual({ delivery: 'while-active' });
+    });
+
+    it('thread-stream-runtime resolves ifIdle.attributes as message on idle signal delivery', () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = { id: 'delivery-idle-agent', stream: () => new Promise(() => {}) } as any;
+
+      // No run registered → thread is idle.
+      const result = runtime.sendSignal(
+        agent,
+        {
+          type: 'user-message',
+          contents: 'idle test',
+        },
+        {
+          resourceId: 'idle-resource',
+          threadId: 'idle-thread',
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: {
+            attributes: { delivery: 'message' },
+            streamOptions: {
+              memory: { thread: 'idle-thread', resource: 'idle-resource' },
+            },
+          },
+        },
+        pubsub,
+      );
+
+      // No active run → ifIdle.attributes → delivery: 'message'
+      expect(result.signal.attributes).toEqual({ delivery: 'message' });
+    });
   });
 });

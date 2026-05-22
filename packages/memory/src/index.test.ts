@@ -2271,6 +2271,24 @@ describe('Memory', () => {
       await expect(memory.deleteMessages(['msg-789'])).resolves.not.toThrow();
     });
 
+    it('passes observeAttachments to the ObservationalMemory engine', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            observation: {
+              observeAttachments: 'auto',
+            },
+          },
+        },
+      });
+
+      const engine = await (memory as any)._initOMEngine();
+
+      expect(engine?.getObservationConfig().observeAttachments).toBe('auto');
+    });
+
     it('should clear thread-scoped observational memory when deleting a thread', async () => {
       const storage = new InMemoryStore();
       const memory = new Memory({

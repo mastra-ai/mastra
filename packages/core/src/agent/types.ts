@@ -53,7 +53,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -82,6 +82,7 @@ export type ToolsInput = Record<
 export type AgentInstructions = SystemMessage;
 
 export type {
+  AgentSignalAttributes,
   AgentSignalInput as AgentSignal,
   AgentSignalType,
   AgentSignalDataPart,
@@ -106,15 +107,19 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
     }
   | {
       runId?: string;
       resourceId: string;
       threadId: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
-      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: AgentExecutionOptions<OUTPUT> };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+      ifIdle?: {
+        behavior?: AgentSignalIdleBehavior;
+        streamOptions?: AgentExecutionOptions<OUTPUT>;
+        attributes?: AgentSignalAttributes;
+      };
     };
 
 /**
