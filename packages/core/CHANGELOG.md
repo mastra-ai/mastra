@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.37.0-alpha.3
+
+### Minor Changes
+
+- Add per-provider capability files and `auto` mode for `observeAttachments` ([#16922](https://github.com/mastra-ai/mastra/pull/16922))
+  - Generate per-provider capability files (e.g. `capabilities/openai.json`) alongside the model router registry, sourced from models.dev API
+  - Export `modelSupportsAttachments(modelRouterId)` from `@mastra/core/llm` to check whether a model supports image/file attachments
+  - Extend `observeAttachments` config to accept `'auto'` in addition to `boolean | string[]`
+  - When set to `'auto'`, the observer resolves the model (including function-based models) and checks the capability registry before deciding to forward or drop attachment parts
+
+### Patch Changes
+
+- Fixed thread subscription streams stalling or deadlocking when multiple consumers observe the same active run. Thread streams are now multicast to subscribers so each subscriber receives the run without competing for the underlying stream, and follow-up messages can continue while a subscription is active. ([#16946](https://github.com/mastra-ai/mastra/pull/16946))
+
+- Fixed split-brain broker election race in UnixSocketPubSub. When a broker process dies and multiple clients recover concurrently, an exclusive lock file now serializes the election so exactly one process becomes the new broker. ([#16955](https://github.com/mastra-ai/mastra/pull/16955))
+
+- Fixed agent responses being ordered before the user message that triggered them in long conversations. This prevents duplicate tool calls in the next step. This regression started in 1.35.0. Fixes https://github.com/mastra-ai/mastra/issues/16893. ([#16913](https://github.com/mastra-ai/mastra/pull/16913))
+
+- UnixSocketPubSub: skip serialization when broker has 0 remote clients, lazily build ServerFrame only when a subscribed client exists, and automatically elect a new broker with resubscription when the active broker disconnects. ([#16939](https://github.com/mastra-ai/mastra/pull/16939))
+
+- Fixed thread stream subscriptions so streamed agent responses are saved to memory while still supporting multiple subscribers. ([#16982](https://github.com/mastra-ai/mastra/pull/16982))
+
 ## 1.37.0-alpha.2
 
 ### Minor Changes
