@@ -1314,7 +1314,6 @@ export class AgentThreadStreamRuntime {
             // a locked fallback stream means a caller is sharing a non-multicast stream.
             const subscriberStream = run.createSubscriberStream?.() ?? run.output.fullStream;
             const reader = subscriberStream.getReader();
-            let readerReleased = false;
             try {
               while (true) {
                 const { value: part, done: streamDone } = await reader.read();
@@ -1322,33 +1321,9 @@ export class AgentThreadStreamRuntime {
                 const typedPart = part as any;
                 yield typedPart;
                 if (done) break;
-                if (
-                  typedPart.type === 'finish' ||
-                  typedPart.type === 'error' ||
-                  typedPart.type === 'abort' ||
-                  typedPart.type === 'tool-call-suspended'
-                ) {
-                  // After a terminal chunk, drain remaining stream data in the
-                  // background to prevent backpressure from blocking upstream
-                  // processing (e.g. OM), while allowing the generator to
-                  // immediately serve subsequent runs.
-                  readerReleased = true;
-                  void (async () => {
-                    try {
-                      while (true) {
-                        const { done: d } = await reader.read();
-                        if (d) break;
-                      }
-                    } catch {}
-                    reader.releaseLock();
-                  })();
-                  break;
-                }
               }
             } finally {
-              if (!readerReleased) {
-                reader.releaseLock();
-              }
+              reader.releaseLock();
             }
             continue;
           }
