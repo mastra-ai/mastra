@@ -1377,7 +1377,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
               tools: currentStep.tools,
-              createdAt: currentStep.createdAt,
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');
