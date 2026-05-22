@@ -38,6 +38,10 @@ export const harnessInboxPathParams = harnessSessionPathParams.extend({
   itemId: z.string().min(1).describe('Pending inbox item id'),
 });
 
+export const harnessInboxResponseResultPathParams = harnessSessionPathParams.extend({
+  responseId: z.string().min(1).describe('Inbox response id'),
+});
+
 export const harnessMessageResultPathParams = harnessSessionPathParams.extend({
   signalId: z.string().min(1).describe('Message signal id'),
 });
@@ -590,6 +594,56 @@ export const harnessInboxResponseResultSchema = z.object({
   responseId: z.string(),
   duplicate: z.boolean(),
 });
+
+const inboxResponseLookupBaseSchema = z.object({
+  source: z.literal('inbox-response'),
+});
+
+export const harnessInboxResponseLookupResponseSchema = z.discriminatedUnion('status', [
+  inboxResponseLookupBaseSchema.extend({ status: z.literal('not_found') }),
+  inboxResponseLookupBaseSchema.extend({
+    status: z.literal('accepted'),
+    itemId: z.string(),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    responseId: z.string(),
+    resumeAttemptId: z.string(),
+    runId: z.string(),
+    queuedItemId: z.string().optional(),
+    result: z.unknown().optional(),
+  }),
+  inboxResponseLookupBaseSchema.extend({
+    status: z.literal('applied'),
+    itemId: z.string(),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    responseId: z.string(),
+    resumeAttemptId: z.string(),
+    runId: z.string(),
+    queuedItemId: z.string().optional(),
+    result: z.unknown().optional(),
+  }),
+  inboxResponseLookupBaseSchema.extend({
+    status: z.literal('failed'),
+    itemId: z.string(),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    responseId: z.string(),
+    resumeAttemptId: z.string(),
+    runId: z.string(),
+    queuedItemId: z.string().optional(),
+    retryable: z.boolean().optional(),
+    error: z.object({ code: z.string(), message: z.string() }),
+  }),
+  inboxResponseLookupBaseSchema.extend({
+    status: z.literal('dead'),
+    itemId: z.string(),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    responseId: z.string(),
+    resumeAttemptId: z.string(),
+    runId: z.string(),
+    queuedItemId: z.string().optional(),
+    retryable: z.boolean().optional(),
+    error: z.object({ code: z.string(), message: z.string() }),
+  }),
+]);
 
 export const harnessGoalSchema = z.object({
   id: z.string(),

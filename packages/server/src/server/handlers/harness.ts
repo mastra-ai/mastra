@@ -36,8 +36,10 @@ import {
   harnessGoalBodySchema,
   harnessGoalResponseSchema,
   harnessInboxPathParams,
+  harnessInboxResponseLookupResponseSchema,
   harnessInboxResponseBodySchema,
   harnessInboxResponseResultSchema,
+  harnessInboxResponseResultPathParams,
   harnessMessageAdmissionBodySchema,
   harnessMessageAdmissionResponseSchema,
   harnessMessageResultPathParams,
@@ -308,6 +310,7 @@ type HarnessLike = {
   }): Promise<Array<{ event: HarnessEvent; sequence: number }>>;
   lookupMessageResult(opts: { sessionId: string; resourceId: string; signalId: string }): Promise<unknown>;
   lookupQueueResult(opts: { sessionId: string; resourceId: string; queuedItemId: string }): Promise<unknown>;
+  lookupInboxResponseResult(opts: { sessionId: string; resourceId: string; responseId: string }): Promise<unknown>;
   getChannelDiagnostics?(opts: {
     sessionId: string;
     resourceId: string;
@@ -355,6 +358,31 @@ type OperationLookupResponse =
   | { status: 'failed'; source: 'message' | 'queue'; runId?: string; error: { code: string; message: string } }
   | { status: 'expired'; source: 'message' | 'queue'; runId?: string; expiredAt?: number }
   | { status: 'not_found'; source: 'message' | 'queue' };
+type InboxResponseLookupResponse =
+  | { status: 'not_found'; source: 'inbox-response' }
+  | {
+      status: 'accepted' | 'applied';
+      source: 'inbox-response';
+      itemId: string;
+      kind: PendingInboxKind;
+      responseId: string;
+      resumeAttemptId: string;
+      runId: string;
+      queuedItemId?: string;
+      result?: unknown;
+    }
+  | {
+      status: 'failed' | 'dead';
+      source: 'inbox-response';
+      itemId: string;
+      kind: PendingInboxKind;
+      responseId: string;
+      resumeAttemptId: string;
+      runId: string;
+      queuedItemId?: string;
+      retryable?: boolean;
+      error: { code: string; message: string };
+    };
 
 type MemoryThreadLike = { resourceId?: string | null };
 
@@ -410,6 +438,7 @@ function preconditionFailedResponse(details: Record<string, unknown>): Response 
           snapshot: 'GET /harness/:name/sessions/:sessionId',
           messageResult: 'GET /harness/:name/sessions/:sessionId/message-results/:signalId',
           queueResult: 'GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result',
+          inboxResponseResult: 'GET /harness/:name/sessions/:sessionId/inbox-responses/:responseId/result',
         },
       },
       true,
@@ -421,6 +450,10 @@ function preconditionFailedResponse(details: Record<string, unknown>): Response 
 function encodeHarnessSseEvent(event: HarnessEvent): Uint8Array {
   const data = JSON.stringify(event, harnessSseJsonReplacer);
   return new TextEncoder().encode(`id: ${event.id}\nevent: ${event.type}\ndata: ${data}\n\n`);
+}
+
+function encodeHarnessSseKeepalive(): Uint8Array {
+  return new TextEncoder().encode(': keepalive\n\n');
 }
 
 function harnessSseJsonReplacer(_key: string, value: unknown): unknown {
@@ -495,6 +528,45 @@ function projectOperationLookup(source: 'message' | 'queue', evidence: unknown):
     };
   }
   return { status: 'not_found', source };
+}
+
+function projectInboxResponseLookup(receipt: unknown): InboxResponseLookupResponse {
+  if (!receipt || typeof receipt !== 'object') return { status: 'not_found', source: 'inbox-response' };
+  const record = receipt as Record<string, unknown>;
+  const status = record.status;
+  const base = {
+    source: 'inbox-response' as const,
+    itemId: typeof record.itemId === 'string' ? record.itemId : '',
+    kind: isPendingInboxKind(record.kind) ? record.kind : 'question',
+    responseId: typeof record.responseId === 'string' ? record.responseId : '',
+    resumeAttemptId: typeof record.resumeAttemptId === 'string' ? record.resumeAttemptId : '',
+    runId: typeof record.runId === 'string' ? record.runId : '',
+    ...(typeof record.queuedItemId === 'string' ? { queuedItemId: record.queuedItemId } : {}),
+  };
+  if (status === 'accepted' || status === 'applied') {
+    return {
+      ...base,
+      status,
+      ...(record.result !== undefined ? { result: record.result } : {}),
+    };
+  }
+  if (status === 'failed' || status === 'dead') {
+    const error = record.error && typeof record.error === 'object' ? (record.error as Record<string, unknown>) : {};
+    return {
+      ...base,
+      status,
+      ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+      error: {
+        code: typeof error.code === 'string' ? error.code : 'harness.inbox_response_failed',
+        message: typeof error.message === 'string' ? error.message : 'Harness inbox response failed',
+      },
+    };
+  }
+  return { status: 'not_found', source: 'inbox-response' };
+}
+
+function isPendingInboxKind(value: unknown): value is PendingInboxKind {
+  return value === 'tool-approval' || value === 'tool-suspension' || value === 'question' || value === 'plan-approval';
 }
 
 function parseStrongIfMatch(value: string | undefined): number {
@@ -2064,7 +2136,7 @@ export const POST_HARNESS_ATTACHMENT_ROUTE = createRoute({
 export const DELETE_HARNESS_ATTACHMENT_ROUTE = createRoute({
   method: 'DELETE',
   path: '/harness/:name/sessions/:sessionId/attachments/:attachmentId',
-  responseType: 'datastream-response',
+  responseType: 'json',
   pathParamSchema: harnessAttachmentPathParams,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },
@@ -2241,6 +2313,33 @@ export const GET_HARNESS_QUEUE_RESULT_ROUTE = createRoute({
   },
 });
 
+export const GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/inbox-responses/:responseId/result',
+  responseType: 'json',
+  pathParamSchema: harnessInboxResponseResultPathParams,
+  responseSchema: harnessInboxResponseLookupResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Lookup Harness inbox response result',
+  description: 'Reads non-admitting inbox response evidence for reconnect recovery.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, responseId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const pathResponseId = stringPathParam(requestPathParams, responseId, 'responseId');
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      return projectInboxResponseLookup(
+        await harness.lookupInboxResponseResult({ sessionId: pathSessionId, resourceId, responseId: pathResponseId }),
+      );
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
 export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/harness/:name/sessions/:sessionId/events',
@@ -2279,7 +2378,8 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
           }
         : session!;
       const liveQueue: HarnessEvent[] = [];
-      const replayedEventIds = new Set<string>();
+      const liveQueuedEventIds = new Set<string>();
+      const replayedLiveEventIds = new Set<string>();
       let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
       let replaying = parsed !== undefined;
       let closed = false;
@@ -2294,9 +2394,9 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
           if (closed) return;
           if (!controller || replaying) {
             liveQueue.push(event);
+            liveQueuedEventIds.add(event.id);
             return;
           }
-          if (replayedEventIds.has(event.id)) return;
           try {
             controller.enqueue(encodeHarnessSseEvent(event));
           } catch {
@@ -2397,10 +2497,13 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
                     streamController.error(new Error('Harness event replay gap appeared after preflight'));
                     return;
                   }
-                  replayedEventIds.add(row.event.id);
+                  if (liveQueuedEventIds.has(row.event.id)) replayedLiveEventIds.add(row.event.id);
                   streamController.enqueue(encodeHarnessSseEvent(row.event));
                   afterSequence = row.sequence;
                   expectedSequence += 1;
+                }
+                if (expectedSequence <= replayState.newestSequence) {
+                  streamController.enqueue(encodeHarnessSseKeepalive());
                 }
               }
             }
@@ -2411,9 +2514,12 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
               return;
             }
             for (const event of liveQueue.splice(0)) {
-              if (replayedEventIds.has(event.id)) continue;
+              liveQueuedEventIds.delete(event.id);
+              if (replayedLiveEventIds.has(event.id)) continue;
               streamController.enqueue(encodeHarnessSseEvent(event));
             }
+            replayedLiveEventIds.clear();
+            liveQueuedEventIds.clear();
           } catch (error) {
             cleanup();
             streamController.error(error);

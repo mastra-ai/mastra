@@ -705,6 +705,7 @@ export class Session {
    * can drop the marker and reprovision by calling `clearWorkspaceLost()`.
    */
   private _workspaceLost = false;
+  private _workspaceActionJournalUnsupportedEmitted = false;
 
   // -------------------------------------------------------------------------
   // Skill discovery cache (§4.6).
@@ -4117,7 +4118,20 @@ export class Session {
         createdAt: now,
       });
     } catch (err) {
-      if (err instanceof HarnessStorageWorkspaceActionJournalUnsupportedError) return;
+      if (err instanceof HarnessStorageWorkspaceActionJournalUnsupportedError) {
+        if (!this._workspaceActionJournalUnsupportedEmitted) {
+          this._workspaceActionJournalUnsupportedEmitted = true;
+          this._emit({
+            type: 'workspace_action_journal_unsupported',
+            resourceId: this.resourceId,
+            threadId: this.threadId,
+            toolName: params.toolName,
+            actionKind: mapped.actionKind,
+            operation: mapped.operation,
+          });
+        }
+        return;
+      }
       throw err;
     }
   }

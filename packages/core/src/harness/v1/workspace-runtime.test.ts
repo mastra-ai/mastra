@@ -28,6 +28,7 @@ import * as nodePath from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
+import { HarnessStorageWorkspaceActionJournalUnsupportedError } from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { LocalFilesystem, WORKSPACE_TOOLS, Workspace as WorkspaceImpl } from '../../workspace';
@@ -229,6 +230,41 @@ describe('HarnessRequestContext.workspace — runtime plumbing', () => {
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
+  });
+
+  it('emits one event when workspace action journal storage is unsupported', async () => {
+    const { harness, agent, storage } = setupHarness();
+    vi.spyOn(storage, 'appendWorkspaceActionJournalEntry').mockRejectedValue(
+      new HarnessStorageWorkspaceActionJournalUnsupportedError(),
+    );
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const events: any[] = [];
+    session.subscribe(event => {
+      if (event.type === 'workspace_action_journal_unsupported') events.push(event);
+    });
+    await session.message({ content: 'hi' });
+
+    const slot = getHarnessSlot(agent.streamCalls);
+    for (let index = 0; index < 2; index++) {
+      await slot.recordWorkspaceAction?.({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+        args: { path: 'src/index.ts', content: 'export {};' },
+        policyDecision: 'allow',
+        runId: 'run-1',
+        toolCallId: `tool-call-${index}`,
+        result: 'ok',
+      });
+    }
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'workspace_action_journal_unsupported',
+      resourceId: 'u1',
+      threadId: session.threadId,
+      toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+      actionKind: 'file',
+      operation: 'write',
+    });
   });
 });
 

@@ -43,6 +43,7 @@ import type {
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
   AgentSignalResultStatus,
+  InboxResponseReceipt,
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
   HarnessRuntimeDependencyRefs,
@@ -3049,6 +3050,23 @@ export class Harness {
       resourceId: stored.resourceId,
       queuedItemId: opts.queuedItemId,
     });
+  }
+
+  async lookupInboxResponseResult(opts: {
+    sessionId: string;
+    resourceId: string;
+    responseId: string;
+  }): Promise<InboxResponseReceipt | null> {
+    const storage = this._requireStorage('lookupInboxResponseResult()');
+    if (opts.responseId.length === 0) {
+      throw new HarnessValidationError(
+        'lookupInboxResponseResult().responseId',
+        'responseId must be a non-empty string',
+      );
+    }
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!stored || stored.resourceId !== opts.resourceId) return null;
+    return stored.inboxResponseReceipts?.[opts.responseId] ?? null;
   }
 
   /**
