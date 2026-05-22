@@ -59,6 +59,10 @@ function createRuntime(
 }
 
 describe('MastraCodeHarnessRuntime', () => {
+  it('rejects empty mode configuration instead of inventing a default mode id', () => {
+    expect(() => createRuntime({ modes: [] })).toThrow('No MastraCode harness modes configured');
+  });
+
   it('restores Harness v1 thread metadata into MastraCode runtime state', async () => {
     const runtime = createRuntime();
     await runtime.init();

@@ -116,6 +116,22 @@ describe('HarnessRequestContext — state reads/writes', () => {
     expect(await session.getState()).toEqual({ counter: 2 });
   });
 
+  it('updateState exposes an immutable snapshot and only persists explicit updates', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.setState<{ nested: { items: string[] }; kept: boolean }>({ nested: { items: ['a'] }, kept: true });
+    await session.message({ content: 'hi' });
+    const slot = getHarnessSlot(agent.streamCalls);
+
+    await expect(
+      slot.updateState!(state => {
+        (state as { nested: { items: string[] } }).nested.items.push('leaked');
+        return { result: 'done' };
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+    await expect(session.getState()).resolves.toEqual({ nested: { items: ['a'] }, kept: true });
+  });
+
   it('rejects setState when ifVersion no longer matches at the mutation point', async () => {
     const { harness } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

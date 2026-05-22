@@ -222,6 +222,16 @@ function cloneMcpCatalogValue(value: unknown): unknown | undefined {
   }
 }
 
+function freezeHarnessRequestStateSnapshot(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    freezeHarnessRequestStateSnapshot(child, seen);
+  }
+  return Object.freeze(value);
+}
+
 function isPlainMcpCatalogObject(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   if (Object.prototype.toString.call(value) !== '[object Object]') return false;
@@ -2927,13 +2937,24 @@ export class Session {
     // `agent.stream(signal, streamOptions)`; on an active same-agent run
     // the signal drains mid-flight into the running execution loop. Both
     // paths surface chunks through the same subscription stream.
+    let subscription;
     try {
-      await Promise.race([this._ensureThreadSubscription(agent), activeTurnWaiter.promise]);
+      subscription = await Promise.race([this._ensureThreadSubscription(agent), activeTurnWaiter.promise]);
     } catch (err) {
       failOwnedMessageTurnBeforeDispatch(err);
       throw err;
     }
     assertOwnedMessageTurnNotDeleted();
+    const activeRunId = subscription.activeRunId();
+    if (activeRunId !== null && opts.prepareStep !== undefined) {
+      const err = new HarnessOverrideConflictError(
+        this.id,
+        'prepareStep',
+        `cannot supply prepareStep on a message that drains into an active run (run ${activeRunId})`,
+      );
+      failOwnedMessageTurnBeforeDispatch(err);
+      throw err;
+    }
 
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       try {
@@ -7602,8 +7623,11 @@ export class Session {
         let changedKeys: string[] | undefined;
         let events: EmitInput[] = [];
         await session._flushUpdate(async prev => {
-          const currentState = (prev.state ?? {}) as Record<string, unknown>;
-          const mutation = await updater(currentState);
+          const currentState = { ...((prev.state ?? {}) as Record<string, unknown>) };
+          const snapshot = (cloneMcpCatalogValue(currentState) as Record<string, unknown> | undefined) ?? {
+            ...currentState,
+          };
+          const mutation = await updater(freezeHarnessRequestStateSnapshot(snapshot) as Readonly<unknown>);
           result = mutation.result;
           events = mutation.events ?? [];
           if (!mutation.updates) return prev;

@@ -51,9 +51,17 @@ export interface MastraCodeRuntimeConfig<TState extends Record<string, unknown>>
   browser?: DynamicArgument<MastraBrowser | undefined>;
 }
 
+/**
+ * Resolve the runtime's default mode from configured modes.
+ * Callers must provide at least one valid mode; the runtime should never
+ * invent a mode id that the Harness v1 config cannot resolve.
+ */
 export function resolveDefaultModeId<TState>(modes: LegacyHarnessMode<TState>[]): string {
+  if (modes.length === 0) {
+    throw new Error('No MastraCode harness modes configured');
+  }
   const defaultMode = modes.find(mode => mode.default);
-  return defaultMode?.id ?? modes[0]?.id ?? 'build';
+  return defaultMode?.id ?? modes[0]!.id;
 }
 
 function modeAgentId(modeId: string): string {
