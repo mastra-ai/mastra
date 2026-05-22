@@ -210,9 +210,13 @@ const nestedFadeClass = cn(
 const HandleBar = () => <div className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface5', nestedFadeClass)} />;
 
 /**
- * Convenience composition of Portal + Backdrop + Viewport + Popup + Base UI `Content`.
- * The `Content` element is what lets the drawer be dragged from anywhere on the panel
- * (not just the handle) while still allowing mouse text selection of its children.
+ * Convenience composition of Portal + Backdrop + Viewport + Popup.
+ *
+ * Children are wrapped in a plain `<div>`, not Base UI's `Drawer.Content` — the latter
+ * marks its subtree as mouse-text-selectable, which makes a mouse drag inside it select
+ * text instead of swiping the drawer closed. A plain `<div>` keeps the whole panel
+ * draggable-to-dismiss with both pointer and touch, anywhere on its surface.
+ *
  * For layouts that need their own structure, compose the styled parts
  * (`DrawerPortal`, `DrawerBackdrop`, `DrawerViewport`, `DrawerPopup`) directly instead.
  */
@@ -227,10 +231,7 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
         <DrawerViewport>
           <DrawerPopup ref={ref} className={className} {...props}>
             {showHandle && side === 'bottom' && <HandleBar />}
-            <DrawerPrimitive.Content
-              data-slot="drawer-content"
-              className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}
-            >
+            <div data-slot="drawer-content" className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}>
               {children}
               {!hideCloseButton && (
                 <DrawerPrimitive.Close
@@ -241,7 +242,7 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
                   }
                 />
               )}
-            </DrawerPrimitive.Content>
+            </div>
             {showHandle && side === 'top' && <HandleBar />}
           </DrawerPopup>
         </DrawerViewport>
