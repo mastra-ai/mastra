@@ -43,13 +43,13 @@
   },
   "optionalDependencies": {
     "@grpc/grpc-js": "^1.14.3",
-    "@opentelemetry/exporter-logs-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-proto": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
-    "@opentelemetry/exporter-zipkin": "^2.7.0"
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
+    "@opentelemetry/exporter-zipkin": "^2.8.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -66,13 +66,13 @@
   "peerDependencies": {
     "@grpc/grpc-js": "^1.13.4",
     "@mastra/core": ">=1.16.0-0 <2.0.0-0",
-    "@opentelemetry/exporter-logs-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-proto": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
-    "@opentelemetry/exporter-zipkin": "^2.6.0"
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
+    "@opentelemetry/exporter-zipkin": "^2.8.0"
   },
   "peerDependenciesMeta": {
     "@grpc/grpc-js": {
