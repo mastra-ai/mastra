@@ -47,20 +47,28 @@ export interface TypingStatusContext {
 export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusContext) => TypingStatusReturn;
 
 /**
- * Built-in default typing status map. Used when `typingStatus: true` (the
- * default) and exported so user functions can compose with it instead of
- * re-implementing the defaults for chunks they don't care about.
+ * Built-in typing-status resolver. Used when `typingStatus: true` (the default)
+ * and exported so custom `TypingStatusFn` implementations can compose with it
+ * — call `defaultTypingStatus(chunk, ctx)` to fall back to the built-in copy
+ * for any chunk type you don't handle yourself.
  *
- * Defaults are written without a leading subject so platforms that prepend the
- * app name (e.g. Slack Assistant: `<App Name> <status>`) read naturally as
- * "Devin is typing…".
+ * Status strings are written without a leading subject so platforms that
+ * prepend the app name (e.g. Slack Assistant renders `<App Name> <status>`)
+ * read naturally as `<App Name> is typing…`.
  *
- * | Chunk type            | Status                            |
- * | --------------------- | --------------------------------- |
- * | `text-delta`          | `is typing…`                      |
- * | `tool-call`           | `is calling ${toolName}…`         |
- * | `tool-call-approval`  | `is requesting approval for ${toolName}…`        |
- * | _everything else_     | _no change_                       |
+ * Channel tools (`add_reaction`, etc.) are filtered via `ctx.channelTools` so
+ * internal plumbing never bleeds into the user-facing indicator.
+ *
+ * | Chunk type            | Status                                     |
+ * | --------------------- | ------------------------------------------ |
+ * | `start`               | `is working…`                              |
+ * | `text-delta`          | `is typing…`                               |
+ * | `reasoning-delta`     | `is thinking…`                             |
+ * | `tool-call`           | `is calling ${toolName}…`                  |
+ * | `tool-call-approval`  | `is requesting approval for ${toolName}…`  |
+ * | `data-om-buffering-start` | `is saving to memory…`                 |
+ * | `data-om-activation`  | `is recalling memory…`                     |
+ * | _everything else_     | _no change_                                |
  */
 export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatusContext): TypingStatusReturn {
   if (chunk.type.startsWith('data-')) {
