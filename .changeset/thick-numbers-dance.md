@@ -1,9 +1,19 @@
 ---
 '@mastra/core': patch
+'mastra': patch
 ---
 
-Loosened `MASTRA_TELEMETRY_DISABLED` check to accept any truthy value. Previously only the literal string `'1'` disabled enterprise telemetry, meaning common values like `true` or `yes` silently kept telemetry on. The CLI and Studio playground already used truthy-string semantics; this aligns enterprise telemetry with the rest of the framework.
+Fixed `MASTRA_TELEMETRY_DISABLED` opt-out detection. The values `1`, `true`, and `yes` (case-insensitive, trimmed) now reliably disable telemetry in both `@mastra/core` enterprise events and the `mastra` CLI's PostHog analytics.
 
-**Before:** `MASTRA_TELEMETRY_DISABLED=true` did not disable enterprise telemetry — only `MASTRA_TELEMETRY_DISABLED=1` did.
+Previously, `@mastra/core` only treated the literal string `'1'` as disabled, so common opt-out values like `MASTRA_TELEMETRY_DISABLED=true` silently kept telemetry on.
 
-**After:** Any non-empty value (`true`, `1`, `yes`, etc.) disables enterprise telemetry, matching CLI behavior.
+The `mastra` CLI's `PosthogAnalytics` constructor now also short-circuits when telemetry is disabled — no disk I/O, no tracking ID generation, no PostHog client. Previously the config file (`mastra-cli.json`) was written even when telemetry was disabled.
+
+**Example:**
+
+```bash
+# .env — any of these now reliably disable telemetry
+MASTRA_TELEMETRY_DISABLED=true
+MASTRA_TELEMETRY_DISABLED=1
+MASTRA_TELEMETRY_DISABLED=yes
+```
