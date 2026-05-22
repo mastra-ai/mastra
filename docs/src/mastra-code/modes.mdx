@@ -117,7 +117,7 @@ Visit [`createMastraCode()` reference](/reference) for details on configuring cu
 
 ## Subagents
 
-In Build mode, the agent can spawn subagents to parallelize work. Subagents run as focused, independent tasks with their own tool access:
+In Build mode, the agent can use Harness v1's native `spawn_subagent` tool to parallelize work. Subagents run as focused tasks with their own type, model default, and workspace-tool allowlist:
 
 | Subagent | Access | Use case |
 | - | - | - |
@@ -126,6 +126,8 @@ In Build mode, the agent can spawn subagents to parallelize work. Subagents run 
 | **Execute** | Read + write | "Implement feature X", "Fix bug Y", "Refactor module Z" |
 
 The parent agent spawns subagents only when multiple tasks can run in parallel. For a single task, the agent handles it directly. Subagent outputs are treated as untrusted — the parent agent verifies results before moving on.
+
+By default, subagents run as independent Harness v1 subagent sessions. The parent can set `forked: true` in `spawn_subagent` when a parallel task needs the current conversation, previous tool results, or the parent tool environment. Forked subagents clone the parent thread and reuse the parent mode agent context and model, then return their result to the parent without appearing in normal thread pickers.
 
 ## Thinking level
 

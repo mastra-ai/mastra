@@ -83,9 +83,13 @@ Subagent definitions for spawning focused child agents.
 | `instructions` | `string` | Yes | System prompt for the subagent |
 | `tools` | `ToolsInput` | No | Tools available to this subagent |
 | `allowedHarnessTools` | `string[]` | No | Tool IDs from harness tools this subagent can use |
+| `allowedWorkspaceTools` | `string[]` | No | Workspace tool names this subagent can use; omitted means all workspace tools are visible |
 | `defaultModelId` | `string` | No | Default model for this subagent type |
 | `maxSteps` | `number` | No | Optional maximum number of steps for the spawned subagent; defaults to `50` |
 | `stopWhen` | `LoopOptions['stopWhen']` | No | Optional stop condition for the spawned subagent loop |
+| `forked` | `boolean` | No | Default `spawn_subagent` fork behavior for this subagent type |
+
+Mastra Code exposes subagents through Harness v1's native `spawn_subagent` tool. Non-forked runs use the configured subagent instructions, tools, `allowedWorkspaceTools`, default model, and stop settings. Forked runs clone the parent thread and reuse the parent mode agent context, tool environment, and model; use `forked: true` for context-dependent parallel work that needs the current conversation or prior tool results.
 
 #### `StorageConfig`
 
