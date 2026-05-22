@@ -10,7 +10,7 @@ let client: PostHog | null = null;
 export type EEEventName = 'ee_license_check' | 'ee_feature_used';
 
 export function isEETelemetryEnabled(): boolean {
-  return process.env['MASTRA_TELEMETRY_DISABLED'] !== '1';
+  return !process.env['MASTRA_TELEMETRY_DISABLED'];
 }
 
 export function hashTelemetryValue(value: string): string {
