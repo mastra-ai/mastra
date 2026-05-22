@@ -270,11 +270,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
-                state: 'result' as const,
+                state: 'output-error' as const,
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                result: toolCall.error?.message ?? toolCall.error,
+                errorText: String(toolCall.error?.message ?? toolCall.error),
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
