@@ -27,6 +27,7 @@ import {
   DELETE_HARNESS_GOAL_ROUTE,
   GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE,
   GET_HARNESS_GOAL_ROUTE,
+  GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE,
   GET_HARNESS_MESSAGE_RESULT_ROUTE,
   GET_HARNESS_QUEUE_RESULT_ROUTE,
   GET_HARNESS_SESSION_ROUTE,
@@ -169,6 +170,7 @@ describe('Harness server routes', () => {
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_SIGNAL_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_MESSAGE_RESULT_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_QUEUE_RESULT_ROUTE);
+    expect(HARNESS_ROUTES).toContain(GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_SESSION_EVENTS_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_STATE_ROUTE);
     expect(HARNESS_ROUTES).toContain(PATCH_HARNESS_STATE_ROUTE);
@@ -194,6 +196,7 @@ describe('Harness server routes', () => {
     expect(POST_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.responseType).toBe('json');
     expect(POST_HARNESS_MESSAGE_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_MESSAGE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_QUEUE_ROUTE.requiresAuth).toBe(true);
@@ -204,6 +207,8 @@ describe('Harness server routes', () => {
     expect(GET_HARNESS_MESSAGE_RESULT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_QUEUE_RESULT_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_QUEUE_RESULT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE.requiresAuth).toBe(true);
+    expect(GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_SESSION_EVENTS_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_SESSION_EVENTS_ROUTE.harnessAuth).toEqual({
       clientRoute: true,
@@ -1839,6 +1844,89 @@ describe('Harness server routes', () => {
     ).resolves.toEqual({ status: 'expired', source: 'queue', expiredAt: 2000 });
   });
 
+  it('looks up inbox response evidence by response id without re-applying the response', async () => {
+    const harness = {
+      lookupInboxResponseResult: vi.fn(async () => ({
+        itemId: 'question:tool-1',
+        kind: 'question',
+        status: 'applied',
+        responseId: 'response-1',
+        resumeAttemptId: 'response-1',
+        runId: 'run-1',
+        queuedItemId: 'queue-1',
+        result: { text: 'done' },
+      })),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const result = await GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'query-code',
+        sessionId: 'query-session',
+        responseId: 'query-response',
+        requestPathParams: { name: 'code', sessionId: 'session-1', responseId: 'response-1' },
+      }),
+    );
+
+    expect(harness.lookupInboxResponseResult).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      responseId: 'response-1',
+    });
+    expect(result).toEqual({
+      source: 'inbox-response',
+      itemId: 'question:tool-1',
+      kind: 'question',
+      status: 'applied',
+      responseId: 'response-1',
+      resumeAttemptId: 'response-1',
+      runId: 'run-1',
+      queuedItemId: 'queue-1',
+      result: { text: 'done' },
+    });
+  });
+
+  it('maps missing and failed inbox response evidence', async () => {
+    const harness = {
+      lookupInboxResponseResult: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          itemId: 'question:tool-1',
+          kind: 'question',
+          status: 'failed',
+          responseId: 'response-1',
+          resumeAttemptId: 'response-1',
+          runId: 'run-1',
+          retryable: true,
+          error: { code: 'agent.failed', message: 'agent failed' },
+        }),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', responseId: 'missing' }),
+      ),
+    ).resolves.toEqual({ status: 'not_found', source: 'inbox-response' });
+    await expect(
+      GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', responseId: 'response-1' }),
+      ),
+    ).resolves.toEqual({
+      source: 'inbox-response',
+      itemId: 'question:tool-1',
+      kind: 'question',
+      status: 'failed',
+      responseId: 'response-1',
+      resumeAttemptId: 'response-1',
+      runId: 'run-1',
+      retryable: true,
+      error: { code: 'agent.failed', message: 'agent failed' },
+    });
+  });
+
   it('streams live Harness session events and cleans up on disconnect', async () => {
     let listener: ((event: any) => void) | undefined;
     const unsubscribe = vi.fn();
@@ -2056,6 +2144,16 @@ describe('Harness server routes', () => {
     );
 
     expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    for (let index = 0; index < 1005 && !text.includes(': keepalive'); index++) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      text += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    expect(text).toContain(': keepalive');
     expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1, limit: 1000 });
     expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1001, limit: 1000 });
   });

@@ -654,6 +654,15 @@ export interface WorkspaceErrorEvent extends HarnessEventBase {
   error: { name: string; message: string };
 }
 
+export interface WorkspaceActionJournalUnsupportedEvent extends HarnessEventBase {
+  type: 'workspace_action_journal_unsupported';
+  resourceId: string;
+  threadId: string;
+  toolName: string;
+  actionKind: 'file' | 'command';
+  operation: string;
+}
+
 export type HarnessEvent =
   | SessionCreatedEvent
   | SessionClosingEvent
@@ -713,6 +722,7 @@ export type HarnessEvent =
   | GoalClearedEvent
   | WorkspaceStatusChangedEvent
   | WorkspaceErrorEvent
+  | WorkspaceActionJournalUnsupportedEvent
   | CustomEvent;
 
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
@@ -1010,6 +1020,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'goal_cleared',
   'workspace_status_changed',
   'workspace_error',
+  'workspace_action_journal_unsupported',
   'permission_granted',
   'permission_revoked',
   'permission_policy_changed',

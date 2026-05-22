@@ -3564,6 +3564,34 @@ describe('Harness v1 — delete lifecycle', () => {
 });
 
 describe('Harness v1 — crash recovery (lease TTL)', () => {
+  it('renews live session leases before the TTL expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    try {
+      const storage = makeStorage();
+      const renew = vi.spyOn(storage, 'renewSessionLease');
+      const harness = makeHarness({ sessions: { storage } });
+      const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(renew).toHaveBeenCalledWith({
+        harnessName: 'default',
+        sessionId: session.id,
+        ownerId: harness.ownerId,
+        ttlMs: 30_000,
+      });
+      expect(session.getRecord().leaseExpiresAt).toBe(1_040_000);
+
+      const renewCount = renew.mock.calls.length;
+      await harness.shutdown();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(renew).toHaveBeenCalledTimes(renewCount);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lets a fresh harness take over once the prior owner lease has expired', async () => {
     // Build storage with a db handle we can poke directly to age out the lease.
     const db = new InMemoryDB();

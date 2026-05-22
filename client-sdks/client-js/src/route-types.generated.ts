@@ -20707,7 +20707,7 @@ export interface DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Route
   body: never;
   request: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Request;
   response: unknown;
-  responseType: 'datastream-response';
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -21268,6 +21268,93 @@ export interface GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteCon
   body: never;
   request: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_Request;
   response: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId/inbox-responses/:responseId/result
+// ============================================================================
+export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+  /** Inbox response id */
+  responseId: string;
+};
+
+export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Response =
+  | {
+      source: 'inbox-response';
+      status: 'not_found';
+    }
+  | {
+      source: 'inbox-response';
+      status: 'accepted';
+      itemId: string;
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      responseId: string;
+      resumeAttemptId: string;
+      runId: string;
+      queuedItemId?: string | undefined;
+      result?: unknown | undefined;
+    }
+  | {
+      source: 'inbox-response';
+      status: 'applied';
+      itemId: string;
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      responseId: string;
+      resumeAttemptId: string;
+      runId: string;
+      queuedItemId?: string | undefined;
+      result?: unknown | undefined;
+    }
+  | {
+      source: 'inbox-response';
+      status: 'failed';
+      itemId: string;
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      responseId: string;
+      resumeAttemptId: string;
+      runId: string;
+      queuedItemId?: string | undefined;
+      retryable?: boolean | undefined;
+      error: {
+        code: string;
+        message: string;
+      };
+    }
+  | {
+      source: 'inbox-response';
+      status: 'dead';
+      itemId: string;
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      responseId: string;
+      resumeAttemptId: string;
+      runId: string;
+      queuedItemId?: string | undefined;
+      retryable?: boolean | undefined;
+      error: {
+        code: string;
+        message: string;
+      };
+    };
+
+export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Request = Simplify<
+  (GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Request;
+  response: GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Response;
   responseType: 'json';
 }
 
@@ -74209,7 +74296,6 @@ export type PatchStoredWorkspacesStoredWorkspaceId_PathParams = {
 };
 
 export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
-  authorId?: (string | undefined) | undefined;
   metadata?:
     | (
         | {
@@ -79178,6 +79264,7 @@ export interface RouteTypes {
   'POST /harness/:name/sessions/:sessionId/signals': PostHarnessNameSessionsSessionIdSignals_RouteContract;
   'GET /harness/:name/sessions/:sessionId/message-results/:signalId': GetHarnessNameSessionsSessionIdMessageResultsSignalId_RouteContract;
   'GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result': GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteContract;
+  'GET /harness/:name/sessions/:sessionId/inbox-responses/:responseId/result': GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_RouteContract;
   'GET /harness/:name/sessions/:sessionId/events': GetHarnessNameSessionsSessionIdEvents_RouteContract;
   'GET /harness/:name/sessions/:sessionId/state': GetHarnessNameSessionsSessionIdState_RouteContract;
   'PATCH /harness/:name/sessions/:sessionId/state': PatchHarnessNameSessionsSessionIdState_RouteContract;
@@ -79611,6 +79698,9 @@ export interface Client {
   };
   '/harness/:name/sessions/:sessionId/goal/resume': {
     POST: PostHarnessNameSessionsSessionIdGoalResume_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/inbox-responses/:responseId/result': {
+    GET: GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_RouteContract;
   };
   '/harness/:name/sessions/:sessionId/inbox/:itemId': {
     POST: PostHarnessNameSessionsSessionIdInboxItemId_RouteContract;

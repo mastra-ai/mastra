@@ -3218,6 +3218,22 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /harness/:name/sessions/:sessionId/attachments/:attachmentId": {
+    "method": "DELETE",
+    "path": "/harness/:name/sessions/:sessionId/attachments/:attachmentId",
+    "pathParams": [
+      "name",
+      "sessionId",
+      "attachmentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
   "POST /harness/:name/sessions/:sessionId/messages": {
     "method": "POST",
     "path": "/harness/:name/sessions/:sessionId/messages",
@@ -3301,6 +3317,22 @@ export const API_ROUTE_METADATA = {
       "name",
       "sessionId",
       "queuedItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId/inbox-responses/:responseId/result": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/inbox-responses/:responseId/result",
+    "pathParams": [
+      "name",
+      "sessionId",
+      "responseId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -4413,7 +4445,6 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "authorId",
       "autoSync",
       "description",
       "filesystem",

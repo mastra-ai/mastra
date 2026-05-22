@@ -536,3 +536,30 @@ describe('CoreToolBuilder strict', () => {
     expect((builtTool as any).id).toBe('anthropic.web_search_20250305');
   });
 });
+
+describe('CoreToolBuilder background task schema injection', () => {
+  it('does not crash re-building a tool whose inputSchema has a refinement (zod v4)', () => {
+    const refinedTool = createTool({
+      id: 'refined_tool',
+      description: 'tool whose input schema carries a .refine()',
+      inputSchema: z
+        .object({ a: z.string().optional(), b: z.string().optional() })
+        .refine(d => !!d.a || !!d.b, { message: 'pass a or b' }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const build = () =>
+      new CoreToolBuilder({
+        originalTool: refinedTool,
+        options: { name: 'refined_tool', requestContext: new RequestContext() },
+        backgroundTaskEnabled: true,
+      }).build();
+
+    // The builder mutates originalTool.inputSchema, so the second build re-injects
+    // `_background` onto the already-refined schema. With `.extend()` Zod v4 threw
+    // "Cannot overwrite keys on object schemas containing refinements"; safeExtend fixes it.
+    expect(() => build()).not.toThrow();
+    expect(() => build()).not.toThrow();
+    expect((refinedTool.inputSchema as z.ZodTypeAny).safeParse({}).success).toBe(false);
+  });
+});
