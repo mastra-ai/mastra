@@ -473,10 +473,12 @@ export class MastraTUI {
 
   private queueFollowUpMessage(text: string): void {
     if (text.startsWith('/')) {
+      const messageId = `queued-slash-${Date.now()}-${this.state.pendingSlashCommands.length}`;
       this.state.pendingSlashCommands.push(text);
+      this.state.pendingSlashCommandMessageIds.push(messageId);
       this.state.pendingQueuedActions.push('slash');
+      addPendingUserMessage(this.state, messageId, text);
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
       return;
     }
 
@@ -981,7 +983,13 @@ export class MastraTUI {
 
         if (this.state.harness.isRunning()) {
           if (text.startsWith('/')) {
-            this.queueFollowUpMessage(text);
+            // Run slash commands immediately — they are either settings
+            // commands (no agent interaction) or agent-facing commands the
+            // user explicitly chose to run mid-stream.  Use Ctrl+F to
+            // queue instead.
+            this.handleSlashCommand(text).catch(error => {
+              showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
+            });
             return;
           }
 
