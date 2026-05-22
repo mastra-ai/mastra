@@ -85,7 +85,8 @@ function createPlanApprovalCtx() {
       }),
       invalidate: vi.fn(),
     },
-    ui: { requestRender: vi.fn() },
+    ui: { requestRender: vi.fn(), setFocus: vi.fn() },
+    editor: {},
     pendingSubmitPlanComponents: new Map(),
     planStartedGoalId: undefined,
   } as any;
@@ -114,6 +115,7 @@ describe('handlePlanApproval goal mode', () => {
       planId: 'plan-1',
       response: { action: 'approved' },
     });
+    expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // `startGoal` is invoked with the title+plan as the objective and the
     // default trigger — it owns sending the canonical goal-reminder signal
     // via `harness.sendSignal`, so the handler does not also send one.
@@ -154,6 +156,7 @@ describe('handlePlanApproval regular approval', () => {
 
     expect(state.chatContainer.children.filter((child: unknown) => child === streamedComponent)).toHaveLength(1);
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
+    expect(state.ui.setFocus).toHaveBeenCalledWith(streamedComponent);
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
   });
 
@@ -170,6 +173,7 @@ describe('handlePlanApproval regular approval', () => {
       planId: 'plan-1',
       response: { action: 'approved' },
     });
+    expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // The trigger goes through the structured signal pathway. We do not
     // also call `addUserMessage` or `fireMessage` — either would render
     // the reminder a second time.
