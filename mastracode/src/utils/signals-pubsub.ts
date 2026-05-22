@@ -69,12 +69,15 @@ class SignalsPubSub extends PubSub {
       inflight = this.#initSocket(topic);
       this.#pending.set(topic, inflight);
     }
-    return inflight;
+    const socket = await inflight;
+    if (this.#closed) throw new Error('SignalsPubSub is closed');
+    return socket;
   }
 
   async #initSocket(topic: string): Promise<UnixSocketPubSub> {
     try {
       const socketPath = await this.#socketPath(topic);
+      if (this.#closed) throw new Error('SignalsPubSub is closed');
       const socket = new UnixSocketPubSub(socketPath);
       this.#sockets.set(topic, socket);
       return socket;
