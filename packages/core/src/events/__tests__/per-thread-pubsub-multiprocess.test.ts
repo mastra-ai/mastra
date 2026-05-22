@@ -139,6 +139,27 @@ process.send({ type: 'ready', data: { started: true } });
     return child;
   }
 
+  async function waitForElectedBroker(workers: ChildProcess[]) {
+    const start = Date.now();
+    let lastStatuses: WorkerMessage[] = [];
+    while (Date.now() - start < 5000) {
+      const statusPromises = workers.map(worker => {
+        worker.send({ type: 'get-status' });
+        return waitForMessage(worker, 'status', 1000);
+      });
+      lastStatuses = await Promise.all(statusPromises);
+      const brokers = lastStatuses.filter(status => status.data.isBroker);
+      const clients = lastStatuses.filter(status => !status.data.isBroker);
+      if (brokers.length === 1 && brokers[0]?.data.remoteClientCount === clients.length) {
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    throw new Error(
+      `Timed out waiting for broker election: ${JSON.stringify(lastStatuses.map(status => status.data))}`,
+    );
+  }
+
   const resourceId = 'res-abc123';
   const threadA = 'thread-aaaa-1111';
   const threadB = 'thread-bbbb-2222';
@@ -295,10 +316,7 @@ process.send({ type: 'ready', data: { started: true } });
 
     worker1.kill('SIGKILL');
 
-    worker2.send({ type: 'wait-for-status', isBroker: true, remoteClientCount: 1 });
-    await waitForMessage(worker2, 'status');
-    worker3.send({ type: 'wait-for-status', isBroker: false });
-    await waitForMessage(worker3, 'status');
+    await waitForElectedBroker([worker2, worker3]);
 
     const w2EventPromise = waitForMessage(
       worker2,
