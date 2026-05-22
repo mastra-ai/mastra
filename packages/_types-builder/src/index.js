@@ -105,7 +105,6 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
 
       await fs.writeFile(fullPath, code);
     }
-
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
     if (typeof err.code !== 'number') {
