@@ -89,6 +89,24 @@ describe('EditTopBar', () => {
     expect(mobile.parentElement!.className).toContain('lg:hidden');
   });
 
+  it('renders primaryAction before the mode-toggle in DOM order', () => {
+    render(
+      <FormWrapper>
+        <EditTopBar
+          isLoading={false}
+          mode="test"
+          onModeToggle={() => {}}
+          primaryAction={<button data-testid="primary-action">Deploy</button>}
+        />
+      </FormWrapper>,
+    );
+
+    const primary = screen.getByTestId('primary-action');
+    const toggle = screen.getByTestId('agent-builder-mode-toggle');
+    // DOCUMENT_POSITION_FOLLOWING (4) means `toggle` comes after `primary`.
+    expect(primary.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('disables the toggle when modeToggleDisabled is true', () => {
     const onModeToggle = vi.fn();
     render(

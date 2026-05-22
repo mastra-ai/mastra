@@ -19,6 +19,7 @@ import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-list/agent-builder-list';
+import { DeployAgentBuilderButton } from '@/domains/agent-builder/components/agent-list/deploy-agent-builder-button';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -100,8 +101,9 @@ export default function AgentBuilderAgentsPage() {
             </PageHeader.Title>
             <PageHeader.Description>Agents you've created.</PageHeader.Description>
           </PageHeader>
-          {agents.length > 0 && canWrite && (
-            <div className="w-full shrink-0 md:w-auto">
+          <div className="flex w-full shrink-0 flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <DeployAgentBuilderButton agentId="builder-agent" />
+            {agents.length > 0 && canWrite && (
               <Button
                 as={FrameworkLink}
                 to="/agent-builder/agents/create"
@@ -110,8 +112,8 @@ export default function AgentBuilderAgentsPage() {
               >
                 <PlusIcon /> New agent
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />

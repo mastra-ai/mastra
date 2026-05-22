@@ -27,6 +27,12 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: currentUser, isLoading: isCurrentUserLoading }),
 }));
 
+vi.mock('@/domains/agent-builder/components/agent-list/deploy-agent-builder-button', () => ({
+  DeployAgentBuilderButton: ({ agentId }: { agentId: string }) => (
+    <div data-testid="deploy-agent-builder-button-stub" data-agent-id={agentId} />
+  ),
+}));
+
 const BASE_URL = 'http://localhost:4111';
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -146,6 +152,19 @@ describe('AgentBuilderAgentsPage', () => {
     await act(() => new Promise(resolve => setTimeout(resolve, 0)));
     expect(screen.queryByText('No agents yet')).toBeNull();
     expect(screen.queryByText('Create an agent')).toBeNull();
+  });
+
+  it('renders the deploy agent builder button targeting the builder-agent', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents`, () => {
+        return HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false });
+      }),
+    );
+
+    renderPage();
+
+    const button = await screen.findByTestId('deploy-agent-builder-button-stub');
+    expect(button.getAttribute('data-agent-id')).toBe('builder-agent');
   });
 
   it('omits authorId when no current user is available', async () => {
