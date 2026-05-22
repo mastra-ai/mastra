@@ -89,6 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  Harnesses,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -203,12 +204,14 @@ export class MastraClient extends BaseResource {
   public readonly conversations: Conversations;
   public readonly responses: Responses;
   public readonly channels: Channels;
+  public readonly harnesses: Harnesses;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
     this.conversations = new Conversations(options);
     this.responses = new Responses(options);
     this.channels = new Channels(options);
+    this.harnesses = new Harnesses(options);
   }
 
   /**
