@@ -406,10 +406,14 @@ export class ObservationStep {
 
     // Sync observation — we've waited for buffering and tried activation,
     // if we're still above threshold we must observe synchronously.
+    const seededResponseMessageId = this._seededMarkerMessage ? this.turn.responseMessageId : undefined;
+    const messagesForObservation = seededResponseMessageId
+      ? messageList.get.all.db().filter(message => message.id !== seededResponseMessageId)
+      : messageList.get.all.db();
     const obsResult = await om.observe({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      messages: messagesForObservation,
       // Pass the live MessageList so observation strategies can attach
       // lifecycle markers to the in-memory assistant message (incl. the
       // step-0 seed) via persistMarkerToMessage instead of looking up the
@@ -435,7 +439,8 @@ export class ObservationStep {
       }
 
       const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
-      const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      const shouldSealMessage = !seededResponseMessageId || messageToSeal?.id !== seededResponseMessageId;
+      const messagesToSeal = messageToSeal && shouldSealMessage ? [messageToSeal] : [];
       om.sealMessagesForBuffering(messagesToSeal);
 
       // Suppress the rotation hook when we just seeded an empty assistant

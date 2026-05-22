@@ -392,6 +392,68 @@ describe('Mid-Loop Observation', () => {
       expect(record?.lastObservedAt).toBeDefined();
     });
 
+    it('should keep step-0 OM markers on the active response message so later assistant output merges', async () => {
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+      const responseMessageId = 'active-response-message-id';
+      const messageList = new MessageList({ threadId, resourceId });
+
+      messageList.add(
+        createTestMessage('Please summarise the following document: '.padEnd(5000, 'x'), 'user', 'big-user-msg'),
+        'input',
+      );
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        messageId: responseMessageId,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeTruthy();
+      expect(record?.observedMessageIds).not.toContain(responseMessageId);
+
+      const seededAssistant = messageList.get.all.db().find(message => message.id === responseMessageId);
+      expect(seededAssistant?.role).toBe('assistant');
+      expect(seededAssistant?.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(true);
+      expect(
+        (seededAssistant?.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed,
+      ).not.toBe(true);
+
+      for (const userMessage of messageList.get.all.db().filter(message => message.role === 'user')) {
+        expect(userMessage.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(false);
+      }
+
+      const storedMessages = await storage.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      const storedAssistant = storedMessages.messages.find(message => message.id === responseMessageId);
+      expect(storedAssistant?.role).toBe('assistant');
+      expect(storedAssistant?.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(true);
+
+      messageList.add(createTestMessage('Here is the final summary.', 'assistant', responseMessageId), 'response');
+
+      const assistantMessages = messageList.get.all.db().filter(message => message.role === 'assistant');
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0]?.id).toBe(responseMessageId);
+      expect(assistantMessages[0]?.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(true);
+      expect(
+        assistantMessages[0]?.content.parts.some(
+          part => part.type === 'text' && part.text === 'Here is the final summary.',
+        ),
+      ).toBe(true);
+    });
+
     it('should activate buffered observations mid-step when threshold is crossed (not defer to next user turn)', async () => {
       // This test uses async buffering (bufferTokens enabled) to expose the bug where
       // unbufferedPendingTokens is calculated using c.tokenCount (observation tokens)
