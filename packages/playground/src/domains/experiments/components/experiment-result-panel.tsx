@@ -3,6 +3,7 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import {
   Column,
+  Icon,
   ItemList,
   MainHeader,
   PrevNextNav,
@@ -13,7 +14,16 @@ import {
   Notice,
 } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
-import { FileOutputIcon, Calendar1Icon, PlayIcon, FileCodeIcon, PanelRightIcon, TagIcon, XIcon } from 'lucide-react';
+import {
+  ClipboardCheck,
+  FileOutputIcon,
+  Calendar1Icon,
+  PlayIcon,
+  FileCodeIcon,
+  PanelRightIcon,
+  TagIcon,
+  XIcon,
+} from 'lucide-react';
 
 const scoreColumns = [
   { name: 'scorer', label: 'Scorer', size: '1fr' },
@@ -29,6 +39,7 @@ export type ExperimentResultPanelProps = {
   onShowTrace?: () => void;
   onScoreClick?: (scoreId: string) => void;
   featuredScoreId?: string | null;
+  onFlagForReview?: (resultId: string) => void;
 };
 
 export function ExperimentResultPanel({
@@ -40,6 +51,7 @@ export function ExperimentResultPanel({
   onShowTrace,
   onScoreClick,
   featuredScoreId,
+  onFlagForReview,
 }: ExperimentResultPanelProps) {
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
@@ -55,6 +67,14 @@ export function ExperimentResultPanel({
           nextAriaLabel="View next result details"
         />
         <ButtonsGroup>
+          {onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete' && (
+            <Button onClick={() => onFlagForReview(result.id)}>
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Flag for Review
+            </Button>
+          )}
           <Button onClick={onShowTrace} disabled={!result.traceId}>
             <PanelRightIcon />
             Show Trace
