@@ -10,11 +10,9 @@ import { Browser } from '../browser';
 const Wrapper = ({
   children,
   defaultValues,
-  agentId = 'agent_test',
 }: {
   children: React.ReactNode;
   defaultValues?: Partial<AgentBuilderEditFormValues>;
-  agentId?: string;
 }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
@@ -30,7 +28,7 @@ const Wrapper = ({
   return (
     <TooltipProvider>
       <FormProvider {...methods}>
-        <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
+        <AgentColorProvider>{children}</AgentColorProvider>
       </FormProvider>
     </TooltipProvider>
   );
@@ -86,16 +84,16 @@ describe('Browser', () => {
     expect((getByTestId('agent-browser-toggle') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('paints the enabled switch with the agent tint color (lightness 50) derived from the agentId', () => {
+  it('paints the enabled switch with the agent tint color (lightness 50) derived from the form name', () => {
     const { getByTestId } = render(
-      <Wrapper agentId="agent_support" defaultValues={{ browserEnabled: true }}>
+      <Wrapper defaultValues={{ name: 'Support agent', browserEnabled: true }}>
         <Browser />
       </Wrapper>,
     );
 
     // jsdom normalizes inline colors to rgb(...); compare via a probe element fed the same hsl().
     const probe = document.createElement('div');
-    probe.style.backgroundColor = stringToColor('agent_support', 50);
+    probe.style.backgroundColor = stringToColor('Support agent', 50);
     const expected = probe.style.backgroundColor;
     expect(expected).not.toBe('');
 
@@ -103,7 +101,7 @@ describe('Browser', () => {
     expect(toggle.style.backgroundColor).toBe(expected);
     // It must NOT match the foreground (lightness 20) value that the switch previously used.
     const fgProbe = document.createElement('div');
-    fgProbe.style.backgroundColor = stringToColor('agent_support', 20);
+    fgProbe.style.backgroundColor = stringToColor('Support agent', 20);
     expect(toggle.style.backgroundColor).not.toBe(fgProbe.style.backgroundColor);
   });
 

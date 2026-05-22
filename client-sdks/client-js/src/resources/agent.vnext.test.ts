@@ -33,7 +33,6 @@ function sseResponse(chunks: Array<object | string>, { status = 200 }: { status?
 describe('Agent vNext', () => {
   const client = new MastraClient({ baseUrl: 'http://localhost:4111', headers: { Authorization: 'Bearer test-key' } });
   const agent = client.getAgent('agent-1');
-  const traceparent = '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,12 +81,7 @@ describe('Agent vNext', () => {
       { type: 'step-start', payload: { messageId: 'm1' } },
       {
         type: 'tool-call',
-        payload: {
-          toolCallId,
-          toolName: 'weatherTool',
-          args: { location: 'NYC' },
-          observability: { traceparent },
-        },
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
       },
       { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
       { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
@@ -106,10 +100,7 @@ describe('Agent vNext', () => {
       .mockResolvedValueOnce(sseResponse(firstCycle))
       .mockResolvedValueOnce(sseResponse(secondCycle));
 
-    const executeSpy = vi.fn(async (_args, { observe }) => {
-      observe.log('info', 'client weather executed', { location: 'NYC' });
-      return observe.span('read client weather', () => ({ ok: true }), { location: 'NYC' });
-    });
+    const executeSpy = vi.fn(async () => ({ ok: true }));
     const weatherTool = createTool({
       id: 'weatherTool',
       description: 'Weather',
@@ -135,72 +126,6 @@ describe('Agent vNext', () => {
     expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
       2,
     );
-
-    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
-    const recursiveMessagesJson = JSON.stringify(secondCallBody.messages);
-    expect(recursiveMessagesJson).toContain('__mastraObservability');
-    expect(recursiveMessagesJson).toContain(traceparent);
-  });
-
-  it('stream: preserves client observability from streaming tool input without a final tool-call chunk', async () => {
-    const toolCallId = 'call_1';
-
-    const firstCycle = [
-      { type: 'step-start', payload: { messageId: 'm1' } },
-      {
-        type: 'tool-call-input-streaming-start',
-        payload: {
-          toolCallId,
-          toolName: 'weatherTool',
-          providerExecuted: false,
-          observability: { traceparent },
-        },
-      },
-      {
-        type: 'tool-call-delta',
-        payload: {
-          toolCallId,
-          toolName: 'weatherTool',
-          argsTextDelta: '{"location":"NYC"}',
-        },
-      },
-      { type: 'tool-call-input-streaming-end', payload: { toolCallId } },
-      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
-      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
-    ];
-
-    const secondCycle = [
-      { type: 'step-start', payload: { messageId: 'm2' } },
-      { type: 'text-delta', payload: { text: 'Tool handled' } },
-      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
-      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
-    ];
-
-    (global.fetch as any)
-      .mockResolvedValueOnce(sseResponse(firstCycle))
-      .mockResolvedValueOnce(sseResponse(secondCycle));
-
-    const executeSpy = vi.fn(async (_args, { observe }) => {
-      observe.log('info', 'client weather executed', { location: 'NYC' });
-      return observe.span('read client weather', () => ({ ok: true }), { location: 'NYC' });
-    });
-    const weatherTool = createTool({
-      id: 'weatherTool',
-      description: 'Weather',
-      inputSchema: z.object({ location: z.string() }),
-      outputSchema: z.object({ ok: z.boolean() }),
-      execute: executeSpy,
-    });
-
-    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
-
-    await resp.processDataStream({ onChunk: async () => {} });
-
-    expect(executeSpy).toHaveBeenCalledTimes(1);
-    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
-    const recursiveMessagesJson = JSON.stringify(secondCallBody.messages);
-    expect(recursiveMessagesJson).toContain('__mastraObservability');
-    expect(recursiveMessagesJson).toContain(traceparent);
   });
 
   it('resumeStream: omits local seed messages from initial request and preserves them for stateless client-tool recursion', async () => {
@@ -618,7 +543,6 @@ describe('Agent vNext', () => {
             toolCallId,
             toolName: 'weatherTool',
             args: { location: 'NYC' },
-            observability: { traceparent },
           },
         },
       ],
@@ -662,10 +586,7 @@ describe('Agent vNext', () => {
         new Response(JSON.stringify(secondResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
       );
 
-    const executeSpy = vi.fn(async (_args, { observe }) => {
-      observe.log('info', 'client weather executed', { location: 'NYC' });
-      return observe.span('read client weather', () => ({ temperature: 72, condition: 'sunny' }), { location: 'NYC' });
-    });
+    const executeSpy = vi.fn(async () => ({ temperature: 72, condition: 'sunny' }));
     const weatherTool = createTool({
       id: 'weatherTool',
       description: 'Get weather',
@@ -701,76 +622,10 @@ describe('Agent vNext', () => {
             toolCallId,
             toolName: 'weatherTool',
             result: { temperature: 72, condition: 'sunny' },
-            __mastraObservability: expect.objectContaining({
-              parentContext: expect.objectContaining({ traceparent }),
-              payload: expect.objectContaining({
-                toolName: 'weatherTool',
-              }),
-            }),
           }),
         ]),
       }),
     );
-  });
-
-  it('generate: does not attach client observability metadata without a carrier', async () => {
-    const toolCallId = 'call_1';
-    const firstResponse = {
-      finishReason: 'tool-calls',
-      toolCalls: [
-        {
-          payload: {
-            toolCallId,
-            toolName: 'weatherTool',
-            args: { location: 'NYC' },
-          },
-        },
-      ],
-      response: {
-        messages: [
-          {
-            role: 'assistant',
-            content: [
-              {
-                type: 'tool-call',
-                toolCallId,
-                toolName: 'weatherTool',
-                args: { location: 'NYC' },
-              },
-            ],
-          },
-        ],
-      },
-      usage: { totalTokens: 2 },
-    };
-    const secondResponse = {
-      finishReason: 'stop',
-      response: { messages: [{ role: 'assistant', content: 'Done' }] },
-      usage: { totalTokens: 3 },
-    };
-
-    (global.fetch as any)
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(secondResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
-      );
-
-    const executeSpy = vi.fn(async (_args, { observe }) => observe.span('noop weather', () => ({ ok: true })));
-    const weatherTool = createTool({
-      id: 'weatherTool',
-      description: 'Get weather',
-      inputSchema: z.object({ location: z.string() }),
-      outputSchema: z.object({ ok: z.boolean() }),
-      execute: executeSpy,
-    });
-
-    await agent.generate('What is the weather?', { clientTools: { weatherTool } });
-
-    expect(executeSpy).toHaveBeenCalledTimes(1);
-    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
-    expect(JSON.stringify(secondCallBody.messages)).not.toContain('__mastraObservability');
   });
 
   it('generate: handles multiple client tool calls', async () => {

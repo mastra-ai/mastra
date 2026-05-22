@@ -81,7 +81,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
             className="px-6 py-5 flex items-start gap-4 hover:bg-surface3 transition-colors md:items-center"
             data-testid={rowTestId}
           >
-            <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
+            <Avatar name={agent.name ?? ''} src={avatar} />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">

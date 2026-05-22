@@ -2,6 +2,8 @@
 import { stringToColor } from '@mastra/playground-ui';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useFormContext, useWatch } from 'react-hook-form';
+import type { AgentBuilderEditFormValues } from '../schemas';
 
 export type AgentColors = {
   background: string;
@@ -12,20 +14,23 @@ export type AgentColors = {
 export const AgentColorContext = createContext<AgentColors>(null);
 
 interface AgentColorProviderProps {
-  agentId: string;
   children: ReactNode;
 }
 
-export const AgentColorProvider = ({ agentId, children }: AgentColorProviderProps) => {
+export const AgentColorProvider = ({ children }: AgentColorProviderProps) => {
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const name = useWatch({ control, name: 'name' });
+  const trimmed = name?.trim() ?? '';
+
   const value = useMemo<AgentColors>(() => {
-    if (!agentId) return null;
+    if (!trimmed) return null;
 
     return {
-      background: stringToColor(agentId),
-      foreground: stringToColor(agentId, 20),
-      tint: stringToColor(agentId, 50),
+      background: stringToColor(trimmed),
+      foreground: stringToColor(trimmed, 20),
+      tint: stringToColor(trimmed, 50),
     };
-  }, [agentId]);
+  }, [trimmed]);
 
   return <AgentColorContext.Provider value={value}>{children}</AgentColorContext.Provider>;
 };

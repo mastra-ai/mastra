@@ -1,5 +1,10 @@
-import type { ToolExecutionContext } from '@mastra/core/tools';
+import type { ToolCallOptions } from '@internal/ai-sdk-v5';
 import type { z } from 'zod/v4';
+
+// Client-side tool execution context (simplified version without server dependencies)
+export interface ClientToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
+  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : unknown;
+}
 
 // Client-side tool action interface
 export interface ClientToolAction<
@@ -11,8 +16,8 @@ export interface ClientToolAction<
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   execute?: (
-    inputData: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : unknown,
-    context: ToolExecutionContext,
+    context: ClientToolExecutionContext<TSchemaIn>,
+    options?: ToolCallOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
 }
 

@@ -11,27 +11,27 @@ import { ChatComposer } from '../chat-composer';
 const noop = () => {};
 
 interface RenderOptions {
-  agentId?: string;
+  agentName?: string;
 }
 
-const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: React.ReactNode }) => {
+const FormHarness = ({ agentName = '', children }: { agentName?: string; children: React.ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
-    defaultValues: { name: '' } as AgentBuilderEditFormValues,
+    defaultValues: { name: agentName } as AgentBuilderEditFormValues,
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
+      <AgentColorProvider>{children}</AgentColorProvider>
     </FormProvider>
   );
 };
 
 const renderComposer = (
   props: Partial<React.ComponentProps<typeof ChatComposer>> = {},
-  { agentId = 'agent_test' }: RenderOptions = {},
+  { agentName = '' }: RenderOptions = {},
 ) =>
   render(
     <TooltipProvider>
-      <FormHarness agentId={agentId}>
+      <FormHarness agentName={agentName}>
         <ChatComposer
           draft=""
           onDraftChange={noop}
@@ -75,8 +75,8 @@ describe('ChatComposer', () => {
     expect(textarea.disabled).toBe(true);
   });
 
-  it('applies agent-color CSS variables to the composer container when an agentId is set', () => {
-    const { getByTestId } = renderComposer({}, { agentId: 'agent_support' });
+  it('applies agent-color CSS variables to the composer container when a name is set', () => {
+    const { getByTestId } = renderComposer({}, { agentName: 'Support agent' });
     const container = getByTestId('composer-container') as HTMLDivElement;
     expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
     expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
@@ -85,8 +85,8 @@ describe('ChatComposer', () => {
     expect(container.className).not.toContain('focus-within:ring');
   });
 
-  it('uses the default border only when no agentId is provided', () => {
-    const { getByTestId } = renderComposer({}, { agentId: '' });
+  it('uses the default border only when no agent name is set', () => {
+    const { getByTestId } = renderComposer({});
     const container = getByTestId('composer-container') as HTMLDivElement;
     expect(container.style.getPropertyValue('--agent-color-fg')).toBe('');
     expect(container.style.getPropertyValue('--agent-color-bg')).toBe('');

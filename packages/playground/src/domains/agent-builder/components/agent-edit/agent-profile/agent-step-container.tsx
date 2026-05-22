@@ -1,7 +1,7 @@
 import { cn } from '@mastra/playground-ui';
 import type { ReactNode } from 'react';
+import { useFormState } from 'react-hook-form';
 import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
-import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 
 export interface AgentStepContainerProps {
   children: React.ReactNode;
@@ -12,26 +12,21 @@ export interface AgentStepContainerProps {
 
 export const AgentStepContainer = ({ children, cta, title, description }: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
-  const isStreaming = useStreamRunning();
-  const agentGradient = agentColor
-    ? `linear-gradient(to bottom right, ${agentColor.background}, ${agentColor.foreground})`
+  const formState = useFormState();
+  const bannerStyle = agentColor
+    ? {
+        backgroundImage: `linear-gradient(to bottom right, ${agentColor.background}, ${agentColor.foreground})`,
+      }
     : undefined;
+
+  const isDirty = formState.dirtyFields.name;
 
   return (
     <div className="relative w-full h-full border border-border1 rounded-3xl overflow-hidden overflow-y-auto p-4">
       <div
         aria-hidden
-        data-testid="agent-step-container-gradient-default"
-        className={cn(
-          'step-container-gradient step-container-gradient--default',
-          isStreaming && 'step-container-gradient--streaming',
-        )}
-      />
-      <div
-        aria-hidden
-        data-testid="agent-step-container-gradient"
-        className={cn('step-container-gradient', isStreaming && 'step-container-gradient--streaming')}
-        style={{ backgroundImage: agentGradient, opacity: agentColor ? 1 : 0 }}
+        className="absolute inset-0 transition-all duration-500 ease-out pointer-events-none"
+        style={{ ...bannerStyle, opacity: isDirty ? 1 : 0 }}
       />
       <div
         className={cn(
