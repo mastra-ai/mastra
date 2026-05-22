@@ -32,6 +32,10 @@
   --stack-shrink: calc(1 - var(--stack-scale));
   --stack-height: max(0px, calc(var(--drawer-frontmost-height, var(--drawer-height, 0px)) - var(--bleed)));
 
+  /* Combined push-back applied to a stacked drawer (peek lift + scale shrink),
+   * folded into one var so the per-side transforms stay on a single line. */
+  --stack-offset: calc(var(--stack-peek-offset) + (var(--stack-shrink) * var(--stack-height)));
+
   transition:
     transform 450ms cubic-bezier(0.32, 0.72, 0, 1),
     height 450ms cubic-bezier(0.32, 0.72, 0, 1),
@@ -52,14 +56,9 @@
 /* ---- Bottom sheet (swipe down) ---------------------------------------------- */
 
 .drawer-popup[data-swipe-direction='down'] {
+  --live-y: calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px));
   transform-origin: 50% calc(100% - var(--bleed));
-  transform: translateY(
-      calc(
-        var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px) - var(--stack-peek-offset) -
-          (var(--stack-shrink) * var(--stack-height))
-      )
-    )
-    scale(var(--stack-scale));
+  transform: translateY(calc(var(--live-y) - var(--stack-offset))) scale(var(--stack-scale));
 }
 
 .drawer-popup[data-swipe-direction='down'][data-starting-style],
@@ -71,10 +70,7 @@
 
 .drawer-popup[data-swipe-direction='up'] {
   transform-origin: 50% var(--bleed);
-  transform: translateY(
-      calc(var(--drawer-swipe-movement-y, 0px) + var(--stack-peek-offset) + (var(--stack-shrink) * var(--stack-height)))
-    )
-    scale(var(--stack-scale));
+  transform: translateY(calc(var(--drawer-swipe-movement-y, 0px) + var(--stack-offset))) scale(var(--stack-scale));
 }
 
 .drawer-popup[data-swipe-direction='up'][data-starting-style],
