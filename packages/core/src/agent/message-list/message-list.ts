@@ -1424,6 +1424,11 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+
+    if (messageSource === 'response') {
+      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+    }
+
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
@@ -1640,7 +1645,7 @@ export class MessageList {
     }
 
     this.lastCreatedAt = nowTime;
-    return now;
+    return startDate ?? now;
   }
 
   private newMessageId(role?: string): string {

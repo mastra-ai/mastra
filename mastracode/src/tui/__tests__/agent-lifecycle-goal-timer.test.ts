@@ -10,6 +10,7 @@ vi.mock('../prune-chat.js', () => ({
 
 vi.mock('../../utils/project.js', () => ({
   getCurrentGitBranch: vi.fn(() => 'main'),
+  getCurrentGitBranchAsync: vi.fn(() => Promise.resolve('main')),
 }));
 
 import { handleAgentAborted, handleAgentError } from '../handlers/agent-lifecycle.js';

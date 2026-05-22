@@ -8,8 +8,8 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal } from './signals';
-import type { CreatedAgentSignal } from './signals';
+import { createSignal, resolveDeliveryAttributes } from './signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
@@ -55,6 +55,7 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   threadId: string;
   resourceId?: string;
   streamOptions: AgentExecutionOptions<OUTPUT>;
+  createSubscriberStream?: () => ReadableStream<unknown>;
 };
 
 type PreparedThreadRun = {
@@ -209,62 +210,111 @@ export class AgentThreadStreamRuntime {
     });
   }
 
-  #prepareBroadcastSource<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
-    if (this.#getPubSub(pubsub) instanceof EventEmitterPubSub) return;
+  #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
+    const runtime = this;
+    const source = output.fullStream as ReadableStream<unknown> | undefined;
+    if (!source) return { output };
 
-    let source = output.fullStream as any;
-    if (!source) return;
+    const parts: unknown[] = [];
+    const waiters = new Set<() => void>();
+    let started = false;
+    let done = false;
+    let error: unknown;
 
-    if (Object.prototype.hasOwnProperty.call(output, 'fullStream')) {
-      if (typeof source.tee === 'function') {
-        const [broadcastSource, callerSource] = source.tee();
-        source = broadcastSource;
-        Object.defineProperty(output, 'fullStream', {
-          configurable: true,
-          enumerable: true,
-          value: callerSource,
-        });
-      } else {
-        const runtime = this;
-        const fullStream = (async function* () {
-          for await (const part of source) {
-            await runtime.#publishAndWait(pubsub, key, {
+    const wake = () => {
+      const pending = [...waiters];
+      waiters.clear();
+      for (const waiter of pending) waiter();
+    };
+
+    const start = () => {
+      if (started) return;
+      started = true;
+      void (async () => {
+        try {
+          const emitPart = (part: unknown) => {
+            parts.push(part);
+            runtime.#publish(pubsub, key, {
               type: 'stream-part',
               runId: output.runId,
               part,
               sourceId: runtime.#sourceId(),
             });
-            yield part;
+            wake();
+          };
+
+          if (typeof source.getReader === 'function') {
+            const reader = source.getReader();
+            try {
+              while (true) {
+                const { value: part, done: streamDone } = await reader.read();
+                if (streamDone) break;
+                emitPart(part);
+              }
+            } finally {
+              reader.releaseLock();
+            }
+          } else {
+            for await (const part of source as any) {
+              emitPart(part);
+            }
           }
-        })();
-        Object.defineProperty(output, 'fullStream', {
-          configurable: true,
-          enumerable: true,
-          value: fullStream,
-        });
-        return;
-      }
-    }
+        } catch (caught) {
+          error = caught;
+        } finally {
+          done = true;
+          wake();
+        }
+      })();
+    };
 
-    return source;
-  }
-
-  async #broadcastStream<OUTPUT>(
-    output: MastraModelOutput<OUTPUT>,
-    source: AsyncIterable<unknown> | ReadableStream<unknown> | undefined,
-    pubsub: PubSub | undefined,
-    key: string,
-  ) {
-    if (!source) return;
-
-    for await (const part of source) {
-      await this.#publishAndWait(pubsub, key, {
-        type: 'stream-part',
-        runId: output.runId,
-        part,
-        sourceId: this.#sourceId(),
+    const createStream = () => {
+      let index = 0;
+      let closed = false;
+      let waiter: (() => void) | undefined;
+      return new ReadableStream({
+        async pull(controller) {
+          start();
+          while (!closed) {
+            if (index < parts.length) {
+              controller.enqueue(parts[index++]);
+              return;
+            }
+            if (error) {
+              controller.error(error);
+              return;
+            }
+            if (done) {
+              controller.close();
+              return;
+            }
+            await new Promise<void>(resolve => {
+              waiter = resolve;
+              waiters.add(resolve);
+            });
+            if (waiter) {
+              waiters.delete(waiter);
+              waiter = undefined;
+            }
+          }
+        },
+        cancel() {
+          closed = true;
+          if (waiter) {
+            waiters.delete(waiter);
+            waiter();
+            waiter = undefined;
+          }
+        },
       });
-    }
+    };
+
+    Object.defineProperty(output, 'fullStream', {
+      configurable: true,
+      enumerable: true,
+      value: createStream(),
+    });
+    return { output, createSubscriberStream: createStream };
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -776,14 +826,15 @@ export class AgentThreadStreamRuntime {
       state.inflightIdleThreadKeysByRunId.delete(output.runId);
       state.inflightIdleAgentIdsByRunId.delete(output.runId);
     }
-    const broadcastSource = this.#prepareBroadcastSource(output, pubsub, key);
+    const { output: outputForSubscribers, createSubscriberStream } = this.#withBroadcastStream(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
-      output,
+      output: outputForSubscribers,
       runId: output.runId,
       threadId,
       resourceId,
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      createSubscriberStream,
     };
 
     state.threadRunsById.set(output.runId, record);
@@ -799,9 +850,6 @@ export class AgentThreadStreamRuntime {
     }
     const registrationPublish = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId });
     state.registrationPublishesByRunId.set(output.runId, registrationPublish);
-    const broadcast = registrationPublish.then(() => this.#broadcastStream(output, broadcastSource, pubsub, key));
-    state.broadcastsByRunId.set(output.runId, broadcast);
-    void broadcast.catch(() => {});
     return this.#watchThreadRunCompletion(state, pubsub, key, record);
   }
 
@@ -1261,66 +1309,48 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            const fullStream = run.output.fullStream as ReadableStream<unknown> | AsyncIterable<unknown> | undefined;
-            const isTerminalPart = (part: any) =>
-              part?.type === 'finish' ||
-              part?.type === 'error' ||
-              part?.type === 'abort' ||
-              part?.type === 'tool-call-suspended';
-
-            if (fullStream && typeof (fullStream as ReadableStream<unknown>).getReader === 'function') {
-              const reader = (fullStream as ReadableStream<unknown>).getReader();
-              let readerReleased = false;
-              try {
-                while (true) {
-                  const { value: part, done: streamDone } = await reader.read();
-                  if (streamDone) break;
-                  yield part as any;
-                  if (done) break;
-                  if (isTerminalPart(part)) {
-                    // After a terminal chunk, drain remaining stream data in the
-                    // background to prevent backpressure from blocking upstream
-                    // processing (e.g. OM), while allowing the generator to
-                    // immediately serve subsequent runs.
-                    readerReleased = true;
-                    void (async () => {
-                      try {
-                        while (true) {
-                          const { done: d } = await reader.read();
-                          if (d) break;
-                        }
-                      } catch {}
-                      reader.releaseLock();
-                    })();
-                    break;
-                  }
-                }
-              } finally {
-                if (!readerReleased) {
-                  reader.releaseLock();
+            // Local registered runs expose createSubscriberStream, while remote runs are
+            // already per-subscription streams. Do not silently skip locked streams here:
+            // a locked fallback stream means a caller is sharing a non-multicast stream.
+            const subscriberStream = run.createSubscriberStream?.() ?? run.output.fullStream;
+            const reader = subscriberStream.getReader();
+            let readerReleased = false;
+            try {
+              while (true) {
+                const { value: part, done: streamDone } = await reader.read();
+                if (streamDone) break;
+                const typedPart = part as any;
+                yield typedPart;
+                if (done) break;
+                if (
+                  typedPart.type === 'finish' ||
+                  typedPart.type === 'error' ||
+                  typedPart.type === 'abort' ||
+                  typedPart.type === 'tool-call-suspended'
+                ) {
+                  // After a terminal chunk, drain remaining stream data in the
+                  // background to prevent backpressure from blocking upstream
+                  // processing (e.g. OM), while allowing the generator to
+                  // immediately serve subsequent runs.
+                  readerReleased = true;
+                  void (async () => {
+                    try {
+                      while (true) {
+                        const { done: d } = await reader.read();
+                        if (d) break;
+                      }
+                    } catch {}
+                    reader.releaseLock();
+                  })();
+                  break;
                 }
               }
-              continue;
-            }
-
-            const iterator = fullStream?.[Symbol.asyncIterator]?.();
-            if (!iterator) {
-              throw new TypeError('Thread run fullStream must be a ReadableStream or AsyncIterable');
-            }
-            while (true) {
-              const { value: part, done: streamDone } = await iterator.next();
-              if (streamDone) break;
-              yield part as any;
-              if (done) break;
-              if (isTerminalPart(part)) {
-                void (async () => {
-                  try {
-                    while (!(await iterator.next()).done) {}
-                  } catch {}
-                })();
-                break;
+            } finally {
+              if (!readerReleased) {
+                reader.releaseLock();
               }
             }
+            continue;
           }
         } finally {
           unsubscribe();
@@ -1348,7 +1378,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
-    const signal = createSignal(signalInput);
+    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     const callerSignalId = signalInput.id;
     let key: string | undefined;
     let runId = target.runId;
@@ -1430,6 +1460,10 @@ export class AgentThreadStreamRuntime {
       }
       return result;
     };
+
+    // Resolve conditional delivery attributes now that we know the delivery path.
+    const activeAttributes = (target.ifActive as { attributes?: AgentSignalAttributes } | undefined)?.attributes;
+    signal = resolveDeliveryAttributes(signal, isActiveTarget ? activeAttributes : target.ifIdle?.attributes);
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
