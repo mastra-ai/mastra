@@ -287,6 +287,7 @@ export class E2BSandbox extends MastraSandbox {
         },
         timeoutMs: this.timeout,
         allowInternetAccess: true,
+        envs: this.env,
       });
     } catch (createError) {
       // If template not found (404), rebuild it and retry
@@ -306,6 +307,7 @@ export class E2BSandbox extends MastraSandbox {
           },
           timeoutMs: this.timeout,
           allowInternetAccess: true,
+          envs: this.env,
         });
       } else {
         throw createError;

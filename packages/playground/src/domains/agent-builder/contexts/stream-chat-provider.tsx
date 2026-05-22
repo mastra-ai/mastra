@@ -2,6 +2,7 @@ import { useChat } from '@mastra/react';
 import type { MastraUIMessage, SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useDebounce } from 'use-debounce';
 
 import { StreamMessagesContext, StreamRunningContext, StreamSendContext } from './stream-chat-context';
 import type { MessagesContextValue, RunningContextValue, SendContextValue } from './stream-chat-context';
@@ -27,6 +28,7 @@ export interface StreamChatProviderProps {
    * list and is not persisted as a chat turn.
    */
   extraInstructions?: string;
+  debounceTime?: number;
   children: ReactNode;
 }
 
@@ -37,9 +39,13 @@ export const StreamChatProvider = ({
   initialUserMessage,
   clientTools,
   extraInstructions,
+  debounceTime = 0,
   children,
 }: StreamChatProviderProps) => {
   const { messages, isRunning, sendMessage } = useChat({ agentId, initialMessages });
+
+  // temping the fact that client tools open and closes multiple streams making the UI flicker with isStreaming: true, then false for a few MS
+  const [debouncedIsRunning] = useDebounce(isRunning, debounceTime);
 
   const threadIdRef = useRef(threadId);
   threadIdRef.current = threadId;
@@ -85,7 +91,7 @@ export const StreamChatProvider = ({
     send(initialUserMessage);
   }, [initialUserMessage, initialMessages, send]);
 
-  const runningValue = useMemo<RunningContextValue>(() => ({ isRunning }), [isRunning]);
+  const runningValue = useMemo<RunningContextValue>(() => ({ isRunning: debouncedIsRunning }), [debouncedIsRunning]);
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages }), [messages]);
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
 

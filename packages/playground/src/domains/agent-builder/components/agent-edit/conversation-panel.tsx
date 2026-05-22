@@ -116,6 +116,7 @@ export const ConversationPanelProvider = ({
       initialUserMessage={starterMessageReady}
       clientTools={clientTools}
       extraInstructions={extraInstructions}
+      debounceTime={1000}
     >
       <ConversationContext.Provider value={conversationContextValue}>{children}</ConversationContext.Provider>
     </StreamChatProvider>

@@ -19,7 +19,7 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
   };
 
   return (
-    <div className="relative w-full h-full border border-border1 rounded-3xl overflow-hidden overflow-y-auto p-4">
+    <div className="relative w-full h-full min-h-0 border border-border1 rounded-3xl overflow-hidden p-4">
       <div
         aria-hidden
         className={cn(
