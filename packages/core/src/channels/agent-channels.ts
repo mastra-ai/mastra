@@ -31,11 +31,12 @@ import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
-  ChannelAdapterBaseConfig,
   ChannelAdapterConfig,
   ChannelConfig,
   ChannelContext,
   ChannelHandlers,
+  PostableMessage,
+  StreamingConfig,
   ThreadHistoryMessage,
   ToolDisplay,
   ToolDisplayFn,
@@ -128,8 +129,6 @@ export class AgentChannels {
    * platform per AgentChannels instance.
    */
   private warnedToolDisplayFallback = new Set<string>();
-  /** Tracks platforms where we've already logged the deprecated `cards` warning. */
-  private warnedDeprecatedCards = new Set<string>();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -419,6 +418,7 @@ export class AgentChannels {
             adapterConfig?.toolDisplay,
             false,
             adapterConfig?.cards,
+            adapterConfig?.formatToolCall,
           );
           const useCards = clickToolDisplay === 'cards';
 
@@ -1009,6 +1009,7 @@ export class AgentChannels {
       adapterConfig?.toolDisplay,
       this.resolveStreaming(adapterConfig?.streaming).enabled,
       adapterConfig?.cards,
+      adapterConfig?.formatToolCall,
     );
     const canRenderApprovalButtons =
       webhookToolDisplayFn !== undefined ||
@@ -1197,6 +1198,7 @@ export class AgentChannels {
       adapterConfig?.toolDisplay,
       streaming.enabled,
       adapterConfig?.cards,
+      adapterConfig?.formatToolCall,
     );
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
@@ -1265,7 +1267,7 @@ export class AgentChannels {
    * into a flat `{ enabled, options }` shape so call-sites don't have to
    * re-derive both from the raw union.
    */
-  private resolveStreaming(raw: ChannelAdapterBaseConfig['streaming']): {
+  private resolveStreaming(raw: StreamingConfig | undefined): {
     enabled: boolean;
     options?: { updateIntervalMs?: number };
   } {
@@ -1487,25 +1489,42 @@ export class AgentChannels {
     requested: ToolDisplay | undefined,
     streamingEnabled: boolean,
     deprecatedCards?: boolean,
+    deprecatedFormatToolCall?: (info: {
+      toolName: string;
+      args: Record<string, unknown>;
+      result: unknown;
+      isError?: boolean;
+    }) => PostableMessage | null,
   ): { resolved: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden'; fn?: ToolDisplayFn } {
     // Function form: drivers call the fn directly. The resolved mode is
     // the default `'cards'` — drivers use it only for any event the fn
     // doesn't render (returns `undefined`).
-    const fn = typeof requested === 'function' ? requested : undefined;
+    let fn = typeof requested === 'function' ? requested : undefined;
     const requestedMode = typeof requested === 'function' ? undefined : requested;
     // Deprecated `cards: boolean` only applies when `toolDisplay` is not set:
-    // `cards: true` → `'cards'`, `cards: false` → `'text'`. Warn once per
-    // platform so existing users see the deprecation but configs keep working.
-    let fromDeprecatedCards: 'cards' | 'text' | undefined;
-    if (requestedMode === undefined && deprecatedCards !== undefined) {
-      fromDeprecatedCards = deprecatedCards ? 'cards' : 'text';
-      if (!this.warnedDeprecatedCards.has(platform)) {
-        this.warnedDeprecatedCards.add(platform);
-        this.log(
-          'warn',
-          `[${platform}] 'cards' option is deprecated; use toolDisplay: '${fromDeprecatedCards}' instead.`,
-        );
-      }
+    // `cards: true` → `'cards'`, `cards: false` → `'text'`. The `@deprecated`
+    // JSDoc surfaces in IDEs so we don't bother with a runtime warning.
+    const fromDeprecatedCards =
+      requestedMode === undefined && deprecatedCards !== undefined ? (deprecatedCards ? 'cards' : 'text') : undefined;
+    // Deprecated `formatToolCall` is shimmed into a `ToolDisplayFn`. The old
+    // callback only fired on `tool-result`/`tool-error` and returned a
+    // message (or `null` to skip), so the shim mirrors that contract: emit
+    // `{ kind: 'post', message }` for those two events and `undefined` for
+    // everything else so the built-in renderer handles the `running` /
+    // `approval` events.
+    if (!fn && deprecatedFormatToolCall) {
+      fn = event => {
+        if (event.kind !== 'result' && event.kind !== 'error') return undefined;
+        const value = event.kind === 'result' ? event.result : event.error;
+        const message = deprecatedFormatToolCall({
+          toolName: event.toolName,
+          args: (event.args ?? {}) as Record<string, unknown>,
+          result: value,
+          isError: event.kind === 'error' ? true : event.isError,
+        });
+        if (message == null) return undefined;
+        return { kind: 'post', message };
+      };
     }
     // Default is always `'cards'`: `'timeline'`/`'grouped'` need
     // `StreamingPlan` (not supported on every platform) so users opt in

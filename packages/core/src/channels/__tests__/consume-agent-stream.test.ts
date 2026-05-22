@@ -70,6 +70,12 @@ function makeChannels(
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
     cards?: boolean;
+    formatToolCall?: (info: {
+      toolName: string;
+      args: Record<string, unknown>;
+      result: unknown;
+      isError?: boolean;
+    }) => string | Record<string, unknown> | null;
     logger?: any;
   } = {},
 ) {
@@ -81,6 +87,7 @@ function makeChannels(
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
+  if (opts.formatToolCall !== undefined) adapterConfig.formatToolCall = opts.formatToolCall;
   const channels = new AgentChannels({
     adapters: { test: adapterConfig as any },
   });
@@ -607,10 +614,8 @@ describe('consumeAgentStream', () => {
       ]);
     });
 
-    it("deprecated cards: false maps to toolDisplay: 'text' and warns once", async () => {
-      const warn = vi.fn();
-      const logger = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false, cards: false, logger });
+    it("deprecated cards: false maps to toolDisplay: 'text'", async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false, cards: false });
       await drive(
         channels,
         [
@@ -628,19 +633,12 @@ describe('consumeAgentStream', () => {
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts.length).toBeGreaterThan(0);
       expect(posts.every(p => typeof (p as any).arg === 'string')).toBe(true);
-      // Deprecation warning logged with the suggested replacement.
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]![0]).toMatch(/cards.*deprecated.*toolDisplay: 'text'/);
     });
 
-    it('explicit toolDisplay wins over deprecated cards', async () => {
-      const warn = vi.fn();
-      const logger = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+    it('deprecated formatToolCall shims into toolDisplay fn for result events', async () => {
       const { channels, calls, sdkThread } = makeChannels({
         streaming: false,
-        cards: false,
-        toolDisplay: 'cards',
-        logger,
+        formatToolCall: ({ toolName, result }) => `🛠 ${toolName}=${String(result)}`,
       });
       await drive(
         channels,
@@ -655,12 +653,11 @@ describe('consumeAgentStream', () => {
         sdkThread,
       );
 
-      // Explicit `toolDisplay: 'cards'` wins; deprecated `cards: false` is ignored
-      // and the deprecation warning is suppressed (only fires when `toolDisplay` is absent).
+      // The shim only fires on result/error, so the eager "Running…" card from
+      // the built-in renderer is suppressed and we just see the custom result text.
       const posts = calls.filter(c => c.kind === 'post');
-      const hasBlockKit = posts.some(p => typeof (p as any).arg === 'object' && (p as any).arg !== null);
-      expect(hasBlockKit).toBe(true);
-      expect(warn).not.toHaveBeenCalled();
+      const texts = posts.map(p => (p as any).arg).filter((a): a is string => typeof a === 'string');
+      expect(texts).toContain('🛠 weather=sunny');
     });
   });
 

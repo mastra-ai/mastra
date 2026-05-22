@@ -5,6 +5,7 @@ import {
   type ChannelPlatformInfo,
   type ChannelInstallationInfo,
   type ChannelConnectResult,
+  type ChannelAdapterConfig,
   AgentChannels,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
@@ -773,7 +774,7 @@ export class SlackProvider implements ChannelProvider {
       toolDisplay: 'grouped',
       ...filteredAdapterConfig,
       ...filteredTopLevel,
-    } as SlackAdapterChannelConfig;
+    } as unknown as SlackAdapterChannelConfig;
   }
 
   /**
@@ -788,7 +789,12 @@ export class SlackProvider implements ChannelProvider {
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
-    const slackEntry = Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter;
+    // The spread merges fields from a SlackAdapterChannelConfig union; TS can't
+    // confirm which branch the runtime object satisfies, but the merge always
+    // produces a valid ChannelAdapterConfig at runtime.
+    const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
+      | ChannelAdapterConfig
+      | SlackAdapter;
     const existing = agent.getChannels() as AgentChannels | undefined;
     const existingConfig = existing?.channelConfig;
     existing?.close();

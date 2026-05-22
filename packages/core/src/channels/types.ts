@@ -40,20 +40,6 @@ export interface ChannelAdapterBaseConfig {
   formatError?: (error: Error) => PostableMessage;
 
   /**
-   * Stream agent text deltas to this adapter as the agent generates them, instead of
-   * buffering and posting once per step. On adapters with native streaming (e.g. Slack)
-   * this is rendered live; on adapters without it (e.g. Discord) the Chat SDK falls back
-   * to post + edit, which can feel noisy — leave it off there.
-   *
-   * - `false` (default) — buffer text and post once per `step-finish`.
-   * - `true` — stream with default options.
-   * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval.
-   *
-   * @default false
-   */
-  streaming?: boolean | { updateIntervalMs?: number };
-
-  /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).
    *
@@ -177,17 +163,114 @@ export type ToolDisplayResult =
   | undefined
   | void;
 
-/** Per-adapter configuration. */
-export interface ChannelAdapterConfig extends ChannelAdapterBaseConfig {
+/**
+ * Stream agent text deltas to this adapter as the agent generates them, instead of
+ * buffering and posting once per step. On adapters with native streaming (e.g. Slack)
+ * this is rendered live; on adapters without it (e.g. Discord) the Chat SDK falls back
+ * to post + edit, which can feel noisy — leave it off there.
+ *
+ * - `true` — stream with default options.
+ * - `{ updateIntervalMs }` — stream with a custom post-and-edit interval.
+ */
+export type StreamingConfig = boolean | { updateIntervalMs?: number };
+
+/**
+ * `toolDisplay` modes that need a live streaming session (`StreamingPlan`) to
+ * render. Only valid when `streaming: true | { ... }`.
+ */
+export type StreamingOnlyToolDisplay = 'timeline' | 'grouped';
+
+/**
+ * `toolDisplay` modes that post discrete messages and work regardless of
+ * whether streaming is enabled.
+ */
+export type StaticToolDisplay = 'cards' | 'text' | 'hidden' | ToolDisplayFn;
+
+/**
+ * Per-adapter configuration with `streaming: false` (or omitted). Restricts
+ * `toolDisplay` to static modes (`'cards' | 'text' | 'hidden' | ToolDisplayFn`)
+ * since `'timeline'` and `'grouped'` need a live streaming session.
+ */
+export interface ChannelAdapterStaticConfig extends ChannelAdapterBaseConfig {
+  /** @default false */
+  streaming?: false;
+  /** See {@link ToolDisplay} for mode descriptions. */
+  toolDisplay?: StaticToolDisplay;
+  cards?: never;
+  formatToolCall?: never;
+}
+
+/**
+ * Per-adapter configuration with `streaming` enabled. Allows any
+ * `toolDisplay` mode, including the streaming-only `'timeline'` and
+ * `'grouped'` modes that emit `task_update`/`plan_update` chunks into the
+ * active streaming session.
+ */
+export interface ChannelAdapterStreamingConfig extends ChannelAdapterBaseConfig {
+  streaming: Exclude<StreamingConfig, false>;
   /** See {@link ToolDisplay} for mode descriptions. */
   toolDisplay?: ToolDisplay;
+  cards?: never;
+  formatToolCall?: never;
+}
+
+/**
+ * Per-adapter configuration. The `streaming` flag discriminates which
+ * `toolDisplay` modes are allowed: `'timeline'` and `'grouped'` need a
+ * streaming session (`StreamingPlan`), so they're only available when
+ * `streaming` is enabled. `'cards' | 'text' | 'hidden' | ToolDisplayFn`
+ * work in either mode.
+ *
+ * The legacy branch ({@link ChannelAdapterLegacyConfig}) is mutually
+ * exclusive with `toolDisplay` and kept for backwards compatibility.
+ */
+export type ChannelAdapterConfig =
+  | ChannelAdapterStaticConfig
+  | ChannelAdapterStreamingConfig
+  | ChannelAdapterLegacyConfig;
+
+/**
+ * @deprecated Legacy shape: the old `cards` boolean and `formatToolCall`
+ * callback. Both options still work at runtime and are mutually exclusive
+ * with `toolDisplay`. Will be removed in a future major; migrate to
+ * `toolDisplay` instead.
+ */
+export interface ChannelAdapterLegacyConfig extends ChannelAdapterBaseConfig {
+  /** See {@link StreamingConfig}. */
+  streaming?: StreamingConfig;
+  toolDisplay?: never;
   /**
-   * @deprecated Use {@link ChannelAdapterConfig.toolDisplay} instead.
+   * @deprecated Use `toolDisplay` instead.
    * `cards: true` is equivalent to `toolDisplay: 'cards'`,
    * `cards: false` is equivalent to `toolDisplay: 'text'`.
-   * Only applied when `toolDisplay` is not set.
    */
   cards?: boolean;
+  /**
+   * @deprecated Use `toolDisplay` (function form) instead.
+   *
+   * Migration:
+   * ```ts
+   * // before
+   * formatToolCall: ({ toolName, args, result, isError }) => `${toolName}: ${result}`
+   * // after
+   * toolDisplay: event => {
+   *   if (event.kind !== 'result' && event.kind !== 'error') return undefined;
+   *   const value = event.kind === 'result' ? event.result : event.error;
+   *   return { kind: 'post', message: `${event.toolName}: ${value}` };
+   * }
+   * ```
+   *
+   * Custom per-tool result/error renderer. Called once on `tool-result` and
+   * once on `tool-error`. Return a message to post (replacing the eager
+   * "Running…" card), or `null` to skip rendering. When set, the eager
+   * "Running…" card is suppressed.
+   */
+  formatToolCall?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    result: unknown;
+    isError?: boolean;
+  }) => PostableMessage | null;
 }
 
 /**
