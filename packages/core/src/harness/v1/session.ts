@@ -2863,6 +2863,67 @@ export class Session {
               operationType: payload?.operationType === 'reflection' ? 'reflection' : 'observation',
               error: typeof payload?.error === 'string' ? payload.error : 'Unknown error',
             });
+          } else if (chunk.type === 'data-om-activation') {
+            const payload = data as
+              | {
+                  cycleId?: unknown;
+                  operationType?: unknown;
+                  chunksActivated?: unknown;
+                  tokensActivated?: unknown;
+                  observationTokens?: unknown;
+                  messagesActivated?: unknown;
+                  generationCount?: unknown;
+                  triggeredBy?: unknown;
+                  lastActivityAt?: unknown;
+                  ttlExpiredMs?: unknown;
+                  config?: { activateAfterIdle?: unknown };
+                  previousModel?: unknown;
+                  currentModel?: unknown;
+                }
+              | undefined;
+            if (typeof payload?.cycleId === 'string' && payload.cycleId.length > 0) {
+              const triggeredBy =
+                payload.triggeredBy === 'threshold' ||
+                payload.triggeredBy === 'ttl' ||
+                payload.triggeredBy === 'provider_change'
+                  ? payload.triggeredBy
+                  : undefined;
+              this._emitTurnEvent({
+                type: 'om_activation',
+                cycleId: payload.cycleId,
+                operationType: payload.operationType === 'reflection' ? 'reflection' : 'observation',
+                chunksActivated: typeof payload.chunksActivated === 'number' ? payload.chunksActivated : 0,
+                tokensActivated: typeof payload.tokensActivated === 'number' ? payload.tokensActivated : 0,
+                observationTokens: typeof payload.observationTokens === 'number' ? payload.observationTokens : 0,
+                messagesActivated: typeof payload.messagesActivated === 'number' ? payload.messagesActivated : 0,
+                generationCount: typeof payload.generationCount === 'number' ? payload.generationCount : 0,
+                ...(triggeredBy ? { triggeredBy } : {}),
+                ...(typeof payload.lastActivityAt === 'number' ? { lastActivityAt: payload.lastActivityAt } : {}),
+                ...(typeof payload.ttlExpiredMs === 'number' ? { ttlExpiredMs: payload.ttlExpiredMs } : {}),
+                ...(typeof payload.config?.activateAfterIdle === 'number'
+                  ? { activateAfterIdle: payload.config.activateAfterIdle }
+                  : {}),
+                ...(typeof payload.previousModel === 'string' ? { previousModel: payload.previousModel } : {}),
+                ...(typeof payload.currentModel === 'string' ? { currentModel: payload.currentModel } : {}),
+              });
+            }
+          } else if (chunk.type === 'data-om-thread-update') {
+            const payload = data as
+              | { cycleId?: unknown; threadId?: unknown; oldTitle?: unknown; newTitle?: unknown }
+              | undefined;
+            if (typeof payload?.newTitle === 'string' && payload.newTitle.length > 0) {
+              this._emitTurnEvent({
+                type: 'om_thread_title_updated',
+                cycleId:
+                  typeof payload.cycleId === 'string' && payload.cycleId.length > 0 ? payload.cycleId : 'unknown',
+                threadId:
+                  typeof payload.threadId === 'string' && payload.threadId.length > 0
+                    ? payload.threadId
+                    : this._record.threadId,
+                ...(typeof payload.oldTitle === 'string' ? { oldTitle: payload.oldTitle } : {}),
+                newTitle: payload.newTitle,
+              });
+            }
           } else if (chunk.type === 'data-tool-update') {
             const payload = data as { toolCallId?: unknown; partialResult?: unknown } | undefined;
             if (

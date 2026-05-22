@@ -356,6 +356,31 @@ export interface OMBufferingFailedEvent extends HarnessEventBase {
   error: string;
 }
 
+export interface OMActivationEvent extends HarnessEventBase {
+  type: 'om_activation';
+  cycleId: string;
+  operationType: 'observation' | 'reflection';
+  chunksActivated: number;
+  tokensActivated: number;
+  observationTokens: number;
+  messagesActivated: number;
+  generationCount: number;
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+  lastActivityAt?: number;
+  ttlExpiredMs?: number;
+  activateAfterIdle?: number;
+  previousModel?: string;
+  currentModel?: string;
+}
+
+export interface OMThreadTitleUpdatedEvent extends HarnessEventBase {
+  type: 'om_thread_title_updated';
+  cycleId: string;
+  threadId: string;
+  oldTitle?: string;
+  newTitle: string;
+}
+
 export interface ToolEndEvent extends HarnessEventBase {
   type: 'tool_end';
   toolCallId: string;
@@ -661,6 +686,8 @@ export type HarnessEvent =
   | OMBufferingStartEvent
   | OMBufferingEndEvent
   | OMBufferingFailedEvent
+  | OMActivationEvent
+  | OMThreadTitleUpdatedEvent
   | ToolEndEvent
   | AgentEndEvent
   | SuspensionRequiredEvent
@@ -953,6 +980,8 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'om_buffering_start',
   'om_buffering_end',
   'om_buffering_failed',
+  'om_activation',
+  'om_thread_title_updated',
   'tool_input_start',
   'tool_input_delta',
   'tool_input_end',

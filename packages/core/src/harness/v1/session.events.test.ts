@@ -634,6 +634,72 @@ describe('Session events — fullStream drain', () => {
       observations: 'late observations',
     });
   });
+
+  it('bridges OM activation and thread-update writer chunks into typed OM events', async () => {
+    const { harness, agent } = setup();
+    agent.chunks = [
+      {
+        type: 'data-om-activation',
+        data: {
+          cycleId: 'act-1',
+          operationType: 'observation',
+          chunksActivated: 2,
+          tokensActivated: 7300,
+          observationTokens: 400,
+          messagesActivated: 3,
+          generationCount: 5,
+          triggeredBy: 'ttl',
+          lastActivityAt: 1770000000000,
+          ttlExpiredMs: 120_000,
+          config: { activateAfterIdle: 300_000 },
+          previousModel: 'openai/gpt-4o',
+          currentModel: 'anthropic/claude-sonnet-4-5',
+        },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-om-thread-update',
+        data: {
+          cycleId: 'title-1',
+          threadId: 'thread-om-title',
+          oldTitle: 'Old title',
+          newTitle: 'New title',
+        },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'activate observations' });
+
+    expect(events.find(e => e.type === 'om_activation')).toMatchObject({
+      type: 'om_activation',
+      cycleId: 'act-1',
+      operationType: 'observation',
+      chunksActivated: 2,
+      tokensActivated: 7300,
+      observationTokens: 400,
+      messagesActivated: 3,
+      generationCount: 5,
+      triggeredBy: 'ttl',
+      lastActivityAt: 1770000000000,
+      ttlExpiredMs: 120_000,
+      activateAfterIdle: 300_000,
+      previousModel: 'openai/gpt-4o',
+      currentModel: 'anthropic/claude-sonnet-4-5',
+    });
+    expect(events.find(e => e.type === 'om_thread_title_updated')).toMatchObject({
+      type: 'om_thread_title_updated',
+      cycleId: 'title-1',
+      threadId: 'thread-om-title',
+      oldTitle: 'Old title',
+      newTitle: 'New title',
+    });
+  });
 });
 
 describe('Session events — suspension round-trip', () => {
