@@ -71,7 +71,13 @@ export async function runStaticDriver({
     if (toolDisplayFn) {
       const result = toolDisplayFn(event, { mode: 'static', platform });
       if (result == null) return null;
-      if (result.kind === 'post') return result.message ?? null;
+      if (result.kind === 'post') {
+        // Skip blank posts so a fn that intentionally returns "" doesn't
+        // post an empty message into the chat.
+        if (result.message == null) return null;
+        if (typeof result.message === 'string' && result.message.length === 0) return null;
+        return result.message;
+      }
       if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);
       return null;
     }
@@ -194,6 +200,7 @@ export async function runStaticDriver({
 
       const running = renderToolEvent({
         kind: 'running',
+        toolCallId: enr.toolCallId,
         toolName: enr.toolName,
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,
@@ -228,6 +235,7 @@ export async function runStaticDriver({
 
       const result = renderToolEvent({
         kind: 'result',
+        toolCallId: enr.toolCallId,
         toolName: enr.toolName,
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,
@@ -258,6 +266,7 @@ export async function runStaticDriver({
 
       const errored = renderToolEvent({
         kind: 'error',
+        toolCallId: enr.toolCallId,
         toolName: enr.toolName,
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,

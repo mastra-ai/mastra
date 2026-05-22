@@ -365,19 +365,25 @@ export function renderBuiltInToolEvent(event: ToolDisplayEvent, mode: 'cards' | 
  * the static driver when a `ToolDisplayFn` returns `{ kind: 'stream' }` —
  * the static driver has no `StreamingPlan` to push the chunk into, so we
  * flatten it to text so the user still sees the rendered output.
+ *
+ * Returns `null` for chunks that have nothing useful to render in static
+ * mode (e.g. a `text-delta` mid-stream signal, or a `task_update` with no
+ * title/details). Callers should treat `null` as "skip this event" rather
+ * than posting an empty message.
  */
-export function chunkToFallbackMessage(chunk: StreamChunk): string {
+export function chunkToFallbackMessage(chunk: StreamChunk): string | null {
   if (chunk.type === 'markdown_text') {
-    return typeof chunk.text === 'string' ? chunk.text : '';
+    return typeof chunk.text === 'string' && chunk.text.length > 0 ? chunk.text : null;
   }
   if (chunk.type === 'task_update') {
     const status = chunk.status ? ` · ${chunk.status}` : '';
     const head = `${chunk.title ?? ''}${status}`.trim();
     const body = chunk.details ?? chunk.output ?? '';
-    return body ? `${head}\n${body}` : head;
+    const text = body ? `${head}\n${body}` : head;
+    return text.length > 0 ? text : null;
   }
   if (chunk.type === 'plan_update') {
-    return chunk.title ?? '';
+    return chunk.title && chunk.title.length > 0 ? chunk.title : null;
   }
-  return '';
+  return null;
 }

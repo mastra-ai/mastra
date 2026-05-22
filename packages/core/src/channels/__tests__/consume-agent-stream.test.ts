@@ -1081,6 +1081,88 @@ describe('consumeAgentStream', () => {
       expect(edits).toHaveLength(0);
     });
 
+    it("static + toolDisplay fn returning { kind: 'stream' } flattens a renderable chunk to text", async () => {
+      const recording = createRecording();
+      const channels = new AgentChannels({
+        adapters: {
+          test: {
+            adapter: recording.adapter,
+            streaming: false,
+            toolDisplay: event => {
+              if (event.kind !== 'result') return undefined;
+              return {
+                kind: 'stream',
+                chunk: {
+                  type: 'task_update',
+                  id: `tool-${event.toolName}`,
+                  title: `Ran ${event.toolName}`,
+                  status: 'complete',
+                  details: String(event.result),
+                },
+              };
+            },
+          },
+        },
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        recording.sdkThread,
+      );
+      const posts = recording.calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect(posts[0]).toEqual({ kind: 'post', arg: 'Ran weather · complete\nsunny' });
+    });
+
+    it("static + toolDisplay fn returning { kind: 'stream' } with unrenderable chunk skips silently", async () => {
+      const recording = createRecording();
+      const channels = new AgentChannels({
+        adapters: {
+          test: {
+            adapter: recording.adapter,
+            streaming: false,
+            toolDisplay: event => {
+              if (event.kind !== 'result') return undefined;
+              // task_update with no title/details has no fallback text → skip.
+              return {
+                kind: 'stream',
+                chunk: { type: 'task_update', id: 'x' },
+              };
+            },
+          },
+        },
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        recording.sdkThread,
+      );
+      const posts = recording.calls.filter(c => c.kind === 'post');
+      const edits = recording.calls.filter(c => c.kind === 'editMessage');
+      expect(posts).toHaveLength(0);
+      expect(edits).toHaveLength(0);
+    });
+
     it("streaming + toolDisplay: 'cards' uses close/post/reopen lifecycle", async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
       await drive(

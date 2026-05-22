@@ -109,10 +109,20 @@ export type ToolDisplay = 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' |
  */
 export type ToolDisplayFn = (event: ToolDisplayEvent, ctx: ToolDisplayContext) => ToolDisplayResult;
 
-/** Per-event payload passed to {@link ToolDisplayFn}. */
+/**
+ * Per-event payload passed to {@link ToolDisplayFn}.
+ *
+ * Every variant carries `toolCallId` — a stable identifier for this
+ * specific tool invocation. Use it to correlate `running`/`result`/`error`/
+ * `approval` events for the same call (e.g. to edit a previously posted
+ * message, or as the `id` on a streamed `task_update` so the SDK updates
+ * the row in place rather than appending a new one). It is unique even
+ * when the same tool is called in parallel.
+ */
 export type ToolDisplayEvent =
   | {
       kind: 'running';
+      toolCallId: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
@@ -120,6 +130,7 @@ export type ToolDisplayEvent =
     }
   | {
       kind: 'result';
+      toolCallId: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
@@ -131,6 +142,7 @@ export type ToolDisplayEvent =
     }
   | {
       kind: 'error';
+      toolCallId: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
@@ -141,11 +153,11 @@ export type ToolDisplayEvent =
     }
   | {
       kind: 'approval';
+      toolCallId: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
       args: unknown;
-      toolCallId: string;
     };
 
 /** Context about which driver is consuming the function-form result. */

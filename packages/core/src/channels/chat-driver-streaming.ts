@@ -490,6 +490,7 @@ export async function runStreamingDriver({
           // Still call the fn so it can render a "running" view if it wants.
           const { messageId } = await dispatchToolEvent({
             kind: 'running',
+            toolCallId: enr.toolCallId,
             toolName: enr.toolName,
             displayName: enr.displayName,
             argsSummary: enr.argsSummary,
@@ -499,6 +500,7 @@ export async function runStreamingDriver({
         } else {
           const { messageId } = await dispatchToolEvent({
             kind: 'running',
+            toolCallId: enr.toolCallId,
             toolName: enr.toolName,
             displayName: enr.displayName,
             argsSummary: enr.argsSummary,
@@ -545,6 +547,7 @@ export async function runStreamingDriver({
           const result = toolDisplayFn(
             {
               kind: 'result',
+              toolCallId: enr.toolCallId,
               toolName: enr.toolName,
               displayName: enr.displayName,
               argsSummary: enr.argsSummary,
@@ -567,6 +570,7 @@ export async function runStreamingDriver({
         const message = renderBuiltInToolEvent(
           {
             kind: 'result',
+            toolCallId: enr.toolCallId,
             toolName: enr.toolName,
             displayName: enr.displayName,
             argsSummary: enr.argsSummary,
@@ -616,6 +620,7 @@ export async function runStreamingDriver({
           const result = toolDisplayFn(
             {
               kind: 'error',
+              toolCallId: enr.toolCallId,
               toolName: enr.toolName,
               displayName: enr.displayName,
               argsSummary: enr.argsSummary,
@@ -637,6 +642,7 @@ export async function runStreamingDriver({
         const message = renderBuiltInToolEvent(
           {
             kind: 'error',
+            toolCallId: enr.toolCallId,
             toolName: enr.toolName,
             displayName: enr.displayName,
             argsSummary: enr.argsSummary,
