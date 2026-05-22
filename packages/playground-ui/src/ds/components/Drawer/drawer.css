@@ -57,6 +57,7 @@
 
 .drawer-popup[data-swipe-direction='down'] {
   --live-y: calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px));
+
   transform-origin: 50% calc(100% - var(--bleed));
   transform: translateY(calc(var(--live-y) - var(--stack-offset))) scale(var(--stack-scale));
 }
