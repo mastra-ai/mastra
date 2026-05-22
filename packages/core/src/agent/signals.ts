@@ -519,24 +519,9 @@ export function isDataPartType(type: string): boolean {
 export const isDataPartSignalType = isDataPartType;
 
 /**
- * Returns true when a DB message is a persisted data part (as opposed to an agent signal).
- * Data parts use `metadata.dataPart` rather than `metadata.signal`.
- */
-export function isDataPartDBMessage(message: MastraDBMessage): boolean {
-  const metadata = message.content?.metadata;
-  return (
-    message.role === 'signal' &&
-    !!metadata &&
-    typeof metadata === 'object' &&
-    'dataPart' in metadata &&
-    !!metadata.dataPart
-  );
-}
-
-/**
  * Create a DB message for a data part.
- * Persisted with `metadata.dataPart` so the adapter can round-trip them
- * back to the exact `{ type, data }` shape without signal wrapping.
+ * Persisted as an assistant message with the data part in `content.parts`,
+ * matching the same shape that `writer.custom()` produces.
  */
 export function dataPartToDBMessage(
   dataPart: { type: `data-${string}`; data: unknown },
@@ -544,20 +529,14 @@ export function dataPartToDBMessage(
 ): MastraDBMessage {
   return {
     id: crypto.randomUUID(),
-    role: 'signal',
+    role: 'assistant',
     createdAt: new Date(),
     threadId: options.threadId,
     resourceId: options.resourceId,
-    type: dataPart.type,
     content: {
       format: 2,
-      parts: [{ type: 'text', text: '' }],
-      metadata: {
-        dataPart: {
-          type: dataPart.type,
-          data: dataPart.data,
-        },
-      },
+      parts: [{ type: dataPart.type, data: dataPart.data } as any],
+      content: '',
     },
   };
 }

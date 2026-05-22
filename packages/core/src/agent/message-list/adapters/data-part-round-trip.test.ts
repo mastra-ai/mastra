@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { dataPartToDBMessage, isDataPartDBMessage } from '../../signals';
+import { dataPartToDBMessage } from '../../signals';
 import type { MastraDBMessage } from '../state/types';
 import { AIV4Adapter } from './AIV4Adapter';
 import { AIV5Adapter } from './AIV5Adapter';
@@ -17,50 +17,22 @@ describe('data part persistence round-trip', () => {
     resourceId: 'user-1',
   });
 
-  it('dataPartToDBMessage stores under metadata.dataPart (not metadata.signal)', () => {
-    expect(dbMessage.role).toBe('signal');
-    expect(dbMessage.type).toBe('data-om-observation');
-    expect(dbMessage.content.metadata).toHaveProperty('dataPart');
-    expect(dbMessage.content.metadata).not.toHaveProperty('signal');
-    expect((dbMessage.content.metadata as any).dataPart).toEqual({
+  it('dataPartToDBMessage produces an assistant message with the data part in parts', () => {
+    expect(dbMessage.role).toBe('assistant');
+    expect(dbMessage.content.format).toBe(2);
+    expect(dbMessage.content.parts).toHaveLength(1);
+    expect(dbMessage.content.parts[0]).toEqual({
       type: 'data-om-observation',
       data: { observationId: 'obs-1', summary: 'User prefers dark mode' },
     });
-  });
-
-  it('isDataPartDBMessage correctly identifies data-part records', () => {
-    expect(isDataPartDBMessage(dbMessage)).toBe(true);
-
-    const regularSignal: MastraDBMessage = {
-      id: 'sig-1',
-      role: 'signal',
-      createdAt: new Date(),
-      threadId: 'thread-1',
-      type: 'system-reminder',
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: '' }],
-        metadata: {
-          signal: { id: 'sig-1', type: 'system-reminder', createdAt: new Date().toISOString() },
-        },
-      },
-    };
-    expect(isDataPartDBMessage(regularSignal)).toBe(false);
-
-    const userMsg: MastraDBMessage = {
-      id: 'msg-1',
-      role: 'user',
-      createdAt: new Date(),
-      content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
-    };
-    expect(isDataPartDBMessage(userMsg)).toBe(false);
+    expect(dbMessage.content.content).toBe('');
+    expect(dbMessage.content.metadata).toBeUndefined();
   });
 
   it('AIV5Adapter round-trips data parts to exact { type, data } shape', () => {
     const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
-    expect(uiMessage.role).toBe('system');
-    expect(uiMessage.parts).toHaveLength(1);
-    expect(uiMessage.parts[0]).toEqual({
+    expect(uiMessage.role).toBe('assistant');
+    expect(uiMessage.parts).toContainEqual({
       type: 'data-om-observation',
       data: { observationId: 'obs-1', summary: 'User prefers dark mode' },
     });
@@ -68,8 +40,7 @@ describe('data part persistence round-trip', () => {
 
   it('AIV4Adapter round-trips data parts to exact { type, data } shape', () => {
     const uiMessage = AIV4Adapter.toUIMessage(dbMessage);
-    expect(uiMessage.parts).toHaveLength(1);
-    expect(uiMessage.parts![0]).toEqual({
+    expect(uiMessage.parts).toContainEqual({
       type: 'data-om-observation',
       data: { observationId: 'obs-1', summary: 'User prefers dark mode' },
     });
@@ -77,9 +48,8 @@ describe('data part persistence round-trip', () => {
 
   it('AIV6Adapter round-trips data parts to exact { type, data } shape', () => {
     const uiMessage = AIV6Adapter.toUIMessage(dbMessage);
-    expect(uiMessage.role).toBe('system');
-    expect(uiMessage.parts).toHaveLength(1);
-    expect(uiMessage.parts[0]).toEqual({
+    expect(uiMessage.role).toBe('assistant');
+    expect(uiMessage.parts).toContainEqual({
       type: 'data-om-observation',
       data: { observationId: 'obs-1', summary: 'User prefers dark mode' },
     });
@@ -88,9 +58,12 @@ describe('data part persistence round-trip', () => {
   it('does NOT produce data-data-* re-prefixed type on reload', () => {
     for (const adapter of [AIV5Adapter, AIV4Adapter, AIV6Adapter]) {
       const uiMessage = adapter.toUIMessage(dbMessage);
-      const part = uiMessage.parts![0] as { type: string };
-      expect(part.type).toBe('data-om-observation');
-      expect(part.type).not.toMatch(/^data-data-/);
+      for (const part of uiMessage.parts!) {
+        const p = part as { type: string };
+        if (p.type.startsWith('data-')) {
+          expect(p.type).not.toMatch(/^data-data-/);
+        }
+      }
     }
   });
 
@@ -159,9 +132,15 @@ describe('data part persistence round-trip', () => {
           resourceId: 'user-1',
         });
 
+        expect(persisted.role).toBe('assistant');
+
         for (const adapter of [AIV5Adapter, AIV4Adapter, AIV6Adapter]) {
           const uiMessage = adapter.toUIMessage(persisted);
-          const part = uiMessage.parts![0] as { type: string; data: unknown };
+          const part = uiMessage.parts!.find((p: any) => p.type === marker.type) as {
+            type: string;
+            data: unknown;
+          };
+          expect(part).toBeDefined();
           expect(part.type).toBe(marker.type);
           expect(part.data).toEqual(marker.data);
         }

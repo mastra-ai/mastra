@@ -3,7 +3,6 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { isDataPartDBMessage } from '../../signals';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
@@ -41,15 +40,6 @@ function getTextContent(message: MastraDBMessage): string {
   return typeof message.content.content === 'string'
     ? message.content.content
     : (message.content.parts.find(part => part.type === 'text')?.text ?? '');
-}
-
-/**
- * Convert a persisted data part back to the original `{ type, data }` UI part.
- * Data parts are stored with `metadata.dataPart` and round-trip cleanly.
- */
-function toDataPartUIPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
-  const dp = (message.content.metadata as Record<string, unknown>).dataPart as { type: string; data: unknown };
-  return { type: dp.type, data: dp.data } as AIV5Type.DataUIPart<AIV5.UIDataTypes>;
 }
 
 function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
@@ -202,7 +192,7 @@ export class AIV5Adapter {
     const metadata: Record<string, unknown> = { ...(dbMsg.content.metadata || {}) };
 
     if (dbMsg.role === 'signal' && !isUserMessageSignal) {
-      parts.push(isDataPartDBMessage(dbMsg) ? toDataPartUIPart(dbMsg) : toSignalDataPart(dbMsg));
+      parts.push(toSignalDataPart(dbMsg));
     }
 
     // Add Mastra-specific metadata

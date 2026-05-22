@@ -919,6 +919,40 @@ export class AgentThreadStreamRuntime {
   ) {
     const memory = await agent.getMemory();
     if (!memory) return;
+
+    // Try to append to the latest assistant message so the persisted shape
+    // matches what writer.custom() produces. Fall back to a new assistant
+    // message when no assistant message exists or the append fails.
+    try {
+      const memoryStore = await memory.storage.getStore('memory');
+      if (memoryStore) {
+        const { messages } = await memoryStore.listMessages({
+          threadId,
+          perPage: 20,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        const lastAssistant = messages.find(m => m.role === 'assistant');
+        if (lastAssistant) {
+          const existingParts = lastAssistant.content?.parts ?? [];
+          const updatedParts = [...existingParts, { type: dataPart.type, data: dataPart.data }];
+          await memoryStore.updateMessages({
+            messages: [
+              {
+                id: lastAssistant.id,
+                content: {
+                  ...lastAssistant.content,
+                  parts: updatedParts,
+                } as any,
+              },
+            ],
+          });
+          return;
+        }
+      }
+    } catch {
+      // Fall through to creating a new message
+    }
+
     const dbMessage = dataPartToDBMessage(dataPart, { threadId, resourceId });
     await memory.saveMessages({ messages: [dbMessage] });
   }
