@@ -204,8 +204,8 @@ function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[]
   return completed;
 }
 
-function getCurrentStepResponseMessages(messageList: MessageList): MastraDBMessage[] {
-  return messageList.get.response.db();
+function getResponseMessages(messageList: MessageList): MastraDBMessage[] {
+  return messageList.get.all.db().filter(message => message.role === 'assistant');
 }
 
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
@@ -262,8 +262,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
     const messages = messageList.get.all.db();
-    const currentStepResponseMessages = getCurrentStepResponseMessages(messageList);
-    const completedToolCalls = getCompletedToolCalls(currentStepResponseMessages);
+    const responseMessages = getResponseMessages(messageList);
+    const completedToolCalls = getCompletedToolCalls(responseMessages);
     const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
