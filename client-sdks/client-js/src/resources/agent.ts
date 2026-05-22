@@ -435,9 +435,15 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const { clientTools, requestContext, continuationOptions, ...subscribeBody } = params;
-    const processedClientTools = clientTools ? processClientTools(clientTools) : undefined;
-    const processedRequestContext = parseClientRequestContext(requestContext);
+    const {
+      clientTools,
+      requestContext,
+      continuationOptions,
+      getClientTools,
+      getRequestContext,
+      getContinuationOptions,
+      ...subscribeBody
+    } = params;
 
     const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
       method: 'POST',
@@ -465,26 +471,35 @@ export class Agent extends BaseResource {
     }) => {
       const pendingToolCallsByRunId = new Map<
         string,
-        Array<{ toolCallId: string; toolName: string; args?: unknown }>
+        Array<{
+          toolCallId: string;
+          toolName: string;
+          args?: unknown;
+          observability?: ClientToolObservabilityContext;
+        }>
       >();
 
       const wrappedOnChunk: typeof onChunk = async chunk => {
         await onChunk(chunk);
 
-        if (!clientTools) return;
-
         if (chunk.type === 'tool-call') {
-          const payload = (chunk as { payload?: { toolCallId?: string; toolName?: string; args?: unknown } }).payload;
+          const payload = (
+            chunk as {
+              payload?: {
+                toolCallId?: string;
+                toolName?: string;
+                args?: unknown;
+                observability?: ClientToolObservabilityContext;
+              };
+            }
+          ).payload;
           const toolCallId = payload?.toolCallId;
           const toolName = payload?.toolName;
           const runId = (chunk as { runId?: string }).runId;
           if (!toolCallId || !toolName || !runId) return;
 
-          const clientTool = clientTools[toolName] as Tool | undefined;
-          if (!clientTool || typeof clientTool.execute !== 'function') return;
-
           const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
-          pendingToolCalls.push({ toolCallId, toolName, args: payload.args });
+          pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
           pendingToolCallsByRunId.set(runId, pendingToolCalls);
           return;
         }
@@ -504,17 +519,29 @@ export class Agent extends BaseResource {
         pendingToolCallsByRunId.delete(runId);
         if (!pendingToolCalls?.length) return;
 
+        const activeClientTools = getClientTools?.() ?? clientTools;
+        if (!activeClientTools) return;
+
+        const activeRequestContext = getRequestContext?.() ?? requestContext;
+        const activeContinuationOptions = getContinuationOptions?.() ?? continuationOptions;
+        const processedClientTools = processClientTools(activeClientTools);
+        const processedRequestContext = parseClientRequestContext(activeRequestContext);
+
         const toolResultMessages: CoreMessage[] = [];
         for (const toolCall of pendingToolCalls) {
-          const clientTool = clientTools[toolCall.toolName] as Tool | undefined;
+          const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
           if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
           let result: unknown;
+          let observability: ClientToolObservabilityEnvelope | undefined;
           try {
-            result = await clientTool.execute(
-              toolCall.args as never,
-              {
-                requestContext: requestContext as RequestContext,
+            const execution = await executeClientToolWithObservability({
+              clientTool,
+              args: toolCall.args,
+              toolName: toolCall.toolName,
+              parentContext: toolCall.observability,
+              executeContext: {
+                requestContext: activeRequestContext as RequestContext,
                 tracingContext: { currentSpan: undefined },
                 agent: {
                   agentId: agent.agentId,
@@ -524,29 +551,35 @@ export class Agent extends BaseResource {
                   threadId,
                   resourceId,
                 },
-              } as never,
-            );
+              },
+            });
+            result = execution.result;
+            observability = execution.observability;
           } catch (error) {
             result = { error: String(error) };
+          }
+
+          const toolResultContent: Record<string, unknown> = {
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+          };
+
+          if (observability) {
+            toolResultContent.__mastraObservability = observability;
           }
 
           await onChunk({
             type: 'tool-result',
             runId,
-            payload: { toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, result },
+            payload: toolResultContent,
           } as never);
 
           toolResultMessages.push({
             role: 'tool',
-            content: [
-              {
-                type: 'tool-result',
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                result,
-              },
-            ],
-          } as CoreMessage);
+            content: [toolResultContent],
+          } as unknown as CoreMessage);
         }
 
         if (toolResultMessages.length === 0) return;
@@ -556,7 +589,7 @@ export class Agent extends BaseResource {
             [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
             {
               runId: uuid(),
-              ...(continuationOptions ?? {}),
+              ...(activeContinuationOptions ?? {}),
               requestContext: processedRequestContext,
               memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
               clientTools: processedClientTools,

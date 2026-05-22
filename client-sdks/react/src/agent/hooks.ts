@@ -17,6 +17,22 @@ import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserM
 import { useMastraClient } from '@/mastra-client-context';
 
 type ToolsInput = any;
+type SignalContinuationOptions = {
+  maxSteps?: number;
+  modelSettings?: {
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    maxRetries?: number;
+    maxOutputTokens?: number;
+    temperature?: number;
+    topK?: number;
+    topP?: number;
+  };
+  instructions?: ModelSettings['instructions'];
+  providerOptions?: ModelSettings['providerOptions'];
+  requireToolApproval?: boolean;
+  tracingOptions?: TracingOptions;
+};
 
 export interface MastraChatProps {
   agentId: string;
@@ -101,6 +117,8 @@ export const useChat = ({
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
   const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
+  const _clientTools = useRef<ToolsInput | undefined>(hookClientTools);
+  const _continuationOptions = useRef<SignalContinuationOptions | undefined>(undefined);
   // Tracks the active streamUntilIdle request so a subsequent stream() call can
   // abort the previous one. Without this, a still-open prior stream keeps its
   // background-task pubsub subscription alive and fans events into a second
@@ -131,6 +149,10 @@ export const useChat = ({
   useEffect(() => {
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
+
+  useEffect(() => {
+    _clientTools.current = hookClientTools;
+  }, [hookClientTools]);
 
   type SignalContentPart =
     | { type: 'text'; text: string }
@@ -253,13 +275,12 @@ export const useChat = ({
         .subscribeToThread({
           resourceId,
           threadId,
-          // client-js subscribeToThread owns the full client-tool loop:
-          // run execute(), emit a synthetic tool-result chunk, and POST a
-          // streamUntilIdle continuation. React contributes nothing beyond
-          // forwarding these as hook props.
           clientTools: hookClientTools as any,
           requestContext: _requestContext.current,
-        })
+          getClientTools: () => _clientTools.current,
+          getRequestContext: () => _requestContext.current,
+          getContinuationOptions: () => _continuationOptions.current,
+        } as any)
         .then(response => {
           void response
             .processDataStream({
@@ -454,7 +475,25 @@ export const useChat = ({
 
     const resolvedRequestContext = requestContext ?? propsRequestContext;
     const resolvedClientTools = clientTools ?? hookClientTools;
+    const signalContinuationOptions: SignalContinuationOptions = {
+      maxSteps,
+      modelSettings: {
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxOutputTokens: maxTokens,
+        temperature,
+        topK,
+        topP,
+      },
+      instructions,
+      providerOptions: providerOptions as any,
+      requireToolApproval,
+      tracingOptions,
+    };
     _requestContext.current = resolvedRequestContext;
+    _clientTools.current = resolvedClientTools;
+    _continuationOptions.current = signalContinuationOptions;
     setIsRunning(true);
 
     _streamAbortRef.current?.abort();
@@ -537,21 +576,8 @@ export const useChat = ({
         threadId,
         ifIdle: {
           streamOptions: {
-            maxSteps,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              maxOutputTokens: maxTokens,
-              temperature,
-              topK,
-              topP,
-            },
-            instructions,
+            ...signalContinuationOptions,
             requestContext: resolvedRequestContext,
-            providerOptions: providerOptions as any,
-            requireToolApproval,
-            tracingOptions,
             clientTools: resolvedClientTools as any,
           },
         },

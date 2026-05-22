@@ -148,23 +148,40 @@ export interface SubscribeAgentThreadParams {
    * Stream options re-sent on the continuation POST so the run resumes with
    * the same configuration as the original `sendSignal` ifIdle.streamOptions.
    */
-  continuationOptions?: {
-    maxSteps?: number;
-    modelSettings?: {
-      frequencyPenalty?: number;
-      presencePenalty?: number;
-      maxRetries?: number;
-      maxOutputTokens?: number;
-      temperature?: number;
-      topK?: number;
-      topP?: number;
-    };
-    instructions?: AgentInstructions;
-    providerOptions?: AgentStreamOptions['providerOptions'];
-    requireToolApproval?: boolean;
-    tracingOptions?: TracingOptions;
-  };
+  continuationOptions?: SubscribeAgentThreadContinuationOptions;
+  /**
+   * Optional dynamic resolver for long-lived subscriptions. React uses this so
+   * a reused subscription executes tools with the latest per-send client tools.
+   */
+  getClientTools?: () => ToolsInput | undefined;
+  /**
+   * Optional dynamic resolver for long-lived subscriptions. Falls back to
+   * `requestContext` when omitted.
+   */
+  getRequestContext?: () => RequestContext | undefined;
+  /**
+   * Optional dynamic resolver for long-lived subscriptions. Falls back to
+   * `continuationOptions` when omitted.
+   */
+  getContinuationOptions?: () => SubscribeAgentThreadContinuationOptions | undefined;
 }
+
+export type SubscribeAgentThreadContinuationOptions = {
+  maxSteps?: number;
+  modelSettings?: {
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    maxRetries?: number;
+    maxOutputTokens?: number;
+    temperature?: number;
+    topK?: number;
+    topP?: number;
+  };
+  instructions?: AgentInstructions;
+  providerOptions?: AgentStreamOptions['providerOptions'];
+  requireToolApproval?: boolean;
+  tracingOptions?: TracingOptions;
+};
 
 export interface RequestOptions {
   method?: string;

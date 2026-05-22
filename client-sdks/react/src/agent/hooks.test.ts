@@ -19,12 +19,16 @@ const streamUntilIdleMock = vi.fn(async () => ({
 // Controllable subscribe-to-thread stream: each test installs an async chunk
 // producer that simulates the server pushing chunks over the open subscription.
 let nextSubscribeChunks: Array<any> = [];
+let keepSubscriptionOpen = false;
 const subscribeToThreadMock = vi.fn(async (_params: any) => {
   const chunks = nextSubscribeChunks;
   return {
     processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
       for (const chunk of chunks) {
         await onChunk(chunk);
+      }
+      if (keepSubscriptionOpen) {
+        await new Promise(() => {});
       }
     },
   };
@@ -73,6 +77,7 @@ describe('useChat forwards clientTools', () => {
     subscribeToThreadMock.mockClear();
     generateMock.mockClear();
     nextSubscribeChunks = [];
+    keepSubscriptionOpen = false;
   });
 
   afterEach(() => {
@@ -101,7 +106,15 @@ describe('useChat forwards clientTools', () => {
     expect(params.clientTools).toBe(clientTools);
   });
 
-  it('forwards clientTools through thread subscription and sendSignal stream options', async () => {
+  it('keeps thread subscription getters in sync with latest per-send clientTools and continuation options', async () => {
+    keepSubscriptionOpen = true;
+    const perSendClientTools = {
+      testTool: {
+        id: 'testTool',
+        description: 'per-send tool',
+        execute: vi.fn(),
+      },
+    };
     const { result } = renderHook(
       () =>
         useChat({
@@ -117,33 +130,73 @@ describe('useChat forwards clientTools', () => {
     await act(async () => {
       await result.current.sendMessage({
         mode: 'stream',
-        message: 'hi',
+        message: 'first',
         threadId: 'thread-1',
         modelSettings: {
           maxSteps: 3,
-          instructions: 'use the client tool',
+          instructions: 'use the hook tool',
         },
         requestContext: { userId: 'user-123' } as any,
       });
     });
 
     const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
-    expect(subscribeCalls[0]?.[0]).toEqual(
+    const subscribeParams = subscribeCalls[0]?.[0];
+    expect(subscribeParams).toEqual(
       expect.objectContaining({
         resourceId: 'resource-1',
         threadId: 'thread-1',
         clientTools,
       }),
     );
+    expect(subscribeParams.getClientTools()).toBe(clientTools);
+    expect(subscribeParams.getRequestContext()).toEqual({ userId: 'user-123' });
+    expect(subscribeParams.getContinuationOptions()).toEqual(
+      expect.objectContaining({ maxSteps: 3, instructions: 'use the hook tool' }),
+    );
 
-    expect(sendSignalMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'second',
+        threadId: 'thread-1',
+        clientTools: perSendClientTools,
+        modelSettings: {
+          maxSteps: 5,
+          instructions: 'use the per-send tool',
+          temperature: 0.2,
+        },
+        requestContext: { userId: 'user-456' } as any,
+      });
+    });
+
+    expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
+    expect(subscribeParams.getClientTools()).toBe(perSendClientTools);
+    expect(subscribeParams.getRequestContext()).toEqual({ userId: 'user-456' });
+    expect(subscribeParams.getContinuationOptions()).toEqual(
+      expect.objectContaining({
+        maxSteps: 5,
+        instructions: 'use the per-send tool',
+        modelSettings: expect.objectContaining({ temperature: 0.2 }),
+      }),
+    );
+
+    expect(sendSignalMock).toHaveBeenCalledTimes(2);
     const signalCalls = sendSignalMock.mock.calls as unknown as Array<[any]>;
     expect(signalCalls[0]?.[0].ifIdle.streamOptions).toEqual(
       expect.objectContaining({
         maxSteps: 3,
-        instructions: 'use the client tool',
+        instructions: 'use the hook tool',
         requestContext: { userId: 'user-123' },
         clientTools,
+      }),
+    );
+    expect(signalCalls[1]?.[0].ifIdle.streamOptions).toEqual(
+      expect.objectContaining({
+        maxSteps: 5,
+        instructions: 'use the per-send tool',
+        requestContext: { userId: 'user-456' },
+        clientTools: perSendClientTools,
       }),
     );
     expect(streamUntilIdleMock).not.toHaveBeenCalled();
