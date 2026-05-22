@@ -828,6 +828,9 @@ export class AIV5Adapter {
               : toolResultPart.output;
         };
 
+        const fallbackArgs =
+          (toolResultPart as AIV5Type.ToolResultPart & { input?: Record<string, unknown> }).input ?? {};
+
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
@@ -835,7 +838,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: fallbackArgs,
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -853,7 +856,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: fallbackArgs,
               state: 'call',
             },
           };

@@ -1322,7 +1322,9 @@ describe('Agent vNext', () => {
     // Original messages should NOT be present in the recursive call
     expect(hasOriginalUserMessage).toBe(false);
 
-    // But tool result should still be present
+    // But tool result should still be present — either embedded in an
+    // assistant message's tool-invocation, or as a standalone role: 'tool'
+    // message with tool-result content.
     const hasToolResult = secondCallBody.messages.some(
       (msg: any) =>
         (Array.isArray(msg.toolInvocations) &&
@@ -1331,7 +1333,10 @@ describe('Agent vNext', () => {
           msg.parts.some(
             (p: any) =>
               p.type === 'tool-invocation' && p.toolInvocation?.state === 'result' && p.toolInvocation?.result,
-          )),
+          )) ||
+        (msg.role === 'tool' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((p: any) => p.type === 'tool-result' && p.result !== undefined)),
     );
     expect(hasToolResult).toBe(true);
   });
