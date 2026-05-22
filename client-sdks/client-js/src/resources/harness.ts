@@ -100,6 +100,22 @@ function parseSseBlock(block: string): HarnessEvent | null {
   return JSON.parse(data) as HarnessEvent;
 }
 
+function findSseBoundary(buffer: string): { index: number; length: number } | null {
+  const lfIndex = buffer.indexOf('\n\n');
+  const crlfIndex = buffer.indexOf('\r\n\r\n');
+
+  if (lfIndex === -1 && crlfIndex === -1) {
+    return null;
+  }
+  if (lfIndex === -1) {
+    return { index: crlfIndex, length: 4 };
+  }
+  if (crlfIndex === -1 || lfIndex < crlfIndex) {
+    return { index: lfIndex, length: 2 };
+  }
+  return { index: crlfIndex, length: 4 };
+}
+
 export class HarnessEventStream implements AsyncIterable<HarnessEvent> {
   private lastSeenEventId?: string;
 
@@ -128,16 +144,16 @@ export class HarnessEventStream implements AsyncIterable<HarnessEvent> {
         const { done, value } = await reader.read();
         buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-        let boundaryIndex = buffer.indexOf('\n\n');
-        while (boundaryIndex !== -1) {
-          const block = buffer.slice(0, boundaryIndex);
-          buffer = buffer.slice(boundaryIndex + 2);
+        let boundary = findSseBoundary(buffer);
+        while (boundary) {
+          const block = buffer.slice(0, boundary.index);
+          buffer = buffer.slice(boundary.index + boundary.length);
           const event = parseSseBlock(block);
           if (event) {
             this.lastSeenEventId = event.id;
             yield event;
           }
-          boundaryIndex = buffer.indexOf('\n\n');
+          boundary = findSseBoundary(buffer);
         }
 
         if (done) {
