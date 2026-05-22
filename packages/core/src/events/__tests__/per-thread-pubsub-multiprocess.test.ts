@@ -341,4 +341,48 @@ process.send({ type: 'ready', data: { started: true } });
     worker2.send({ type: 'close' });
     worker3.send({ type: 'close' });
   });
+
+  it('no split-brain when many clients recover concurrently after broker death', async () => {
+    const sockPath = threadSocketPath(tempDir, resourceId, threadA);
+    const topic = threadTopic(resourceId, threadA);
+    const clientCount = 4;
+
+    const broker = spawnWorker(sockPath);
+    await waitForMessage(broker, 'ready');
+    broker.send({ type: 'subscribe', topic });
+    await waitForMessage(broker, 'ready');
+
+    const clients: ChildProcess[] = [];
+    for (let i = 0; i < clientCount; i++) {
+      const w = spawnWorker(sockPath);
+      await waitForMessage(w, 'ready');
+      w.send({ type: 'subscribe', topic });
+      await waitForMessage(w, 'ready');
+      clients.push(w);
+    }
+
+    broker.send({ type: 'get-status' });
+    const bStatus = await waitForMessage(broker, 'status');
+    expect(bStatus.data.isBroker).toBe(true);
+    expect(bStatus.data.remoteClientCount).toBe(clientCount);
+
+    broker.kill('SIGKILL');
+
+    await waitForElectedBroker(clients);
+
+    const eventPromises = clients.map(w =>
+      waitForMessage(w, 'event-received', 5000, msg => msg.data?.eventType === 'split-brain-check'),
+    );
+
+    const publisher = clients[clients.length - 1]!;
+    publisher.send({ type: 'publish', topic, event: { type: 'split-brain-check' } });
+    await waitForMessage(publisher, 'ready');
+
+    const results = await Promise.all(eventPromises);
+    for (const r of results) {
+      expect(r.data.eventType).toBe('split-brain-check');
+    }
+
+    for (const w of clients) w.send({ type: 'close' });
+  });
 });
