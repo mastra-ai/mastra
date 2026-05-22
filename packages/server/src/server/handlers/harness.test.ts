@@ -1927,6 +1927,25 @@ describe('Harness server routes', () => {
     });
   });
 
+  it('does not project corrupted inbox response evidence with placeholder fields', async () => {
+    const harness = {
+      lookupInboxResponseResult: vi.fn(async () => ({
+        kind: 'unknown',
+        status: 'applied',
+        responseId: 'response-1',
+        resumeAttemptId: 'response-1',
+        runId: 'run-1',
+      })),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      GET_HARNESS_INBOX_RESPONSE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', responseId: 'response-1' }),
+      ),
+    ).resolves.toEqual({ status: 'not_found', source: 'inbox-response' });
+  });
+
   it('streams live Harness session events and cleans up on disconnect', async () => {
     let listener: ((event: any) => void) | undefined;
     const unsubscribe = vi.fn();
