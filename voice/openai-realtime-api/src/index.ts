@@ -396,10 +396,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     await Promise.all([this.waitForOpen(), this.waitForSessionCreated()]);
 
     const openaiTools = transformTools(this.tools);
-    // GA Realtime nests voice/transcription under `audio.{input,output}` and
-    // rejects the legacy flat `voice` / `input_audio_transcription` fields.
-    // The legacy `OpenAI-Beta: realtime=v1` header is also removed; the
-    // server now identifies the session via `session.type`.
     this.updateConfig({
       type: 'realtime',
       instructions: this.instructions,
@@ -645,8 +641,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('response.output_audio_transcript.delta', handleAudioTranscriptDelta);
     this.client.on('response.audio_transcript.done', handleAudioTranscriptDone);
     this.client.on('response.output_audio_transcript.done', handleAudioTranscriptDone);
-    // GA Realtime renamed `response.text.*` → `response.output_text.*`. Listen
-    // to both so the same handler fires against legacy beta and GA endpoints.
     this.client.on('response.text.delta', handleTextDelta);
     this.client.on('response.output_text.delta', handleTextDelta);
     this.client.on('response.text.done', handleTextDone);

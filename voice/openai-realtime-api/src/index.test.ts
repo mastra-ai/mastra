@@ -86,6 +86,23 @@ describe('OpenAIRealtimeVoice', () => {
     });
   });
 
+  describe('connect', () => {
+    it('should send a GA-shaped session.update', async () => {
+      await voice.connect();
+      const ws = (voice as any).ws;
+      const updates = (ws.send as ReturnType<typeof vi.fn>).mock.calls
+        .map(([raw]: [string]) => JSON.parse(raw))
+        .filter((ev: any) => ev.type === 'session.update');
+      expect(updates).toHaveLength(1);
+      const session = updates[0].session;
+      expect(session.type).toBe('realtime');
+      expect(session.audio?.input?.transcription?.model).toBeDefined();
+      expect(session.audio?.output?.voice).toBeDefined();
+      expect(session).not.toHaveProperty('voice');
+      expect(session).not.toHaveProperty('input_audio_transcription');
+    });
+  });
+
   describe('event handling', () => {
     it('should register and trigger event listeners', () => {
       const mockCallback = vi.fn();
@@ -277,6 +294,56 @@ describe('OpenAIRealtimeVoice', () => {
 
       expect(mockCallback).toHaveBeenCalledWith({ text: 'Hello', response_id: 'item_123', role: 'user' });
       expect(mockCallback).toHaveBeenCalledWith({ text: '\n', response_id: 'item_123', role: 'user' });
+    });
+
+    it('should handle GA OpenAI output text events', () => {
+      let handleMessage: ((message: Buffer) => void) | undefined;
+      (voice as any).ws = {
+        on: vi.fn((event, callback) => {
+          if (event === 'message') handleMessage = callback;
+        }),
+        close: vi.fn(),
+      };
+
+      const writingCallback = vi.fn();
+      voice.on('writing', writingCallback);
+      (voice as any).setupEventListeners();
+
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_text.delta',
+            response_id: 'response_123',
+            item_id: 'item_123',
+            content_index: 0,
+            output_index: 0,
+            delta: 'Hello',
+          }),
+        ),
+      );
+
+      handleMessage?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_text.done',
+            response_id: 'response_123',
+            item_id: 'item_123',
+            content_index: 0,
+            output_index: 0,
+          }),
+        ),
+      );
+
+      expect(writingCallback).toHaveBeenNthCalledWith(1, {
+        text: 'Hello',
+        response_id: 'response_123',
+        role: 'assistant',
+      });
+      expect(writingCallback).toHaveBeenNthCalledWith(2, {
+        text: '\n',
+        response_id: 'response_123',
+        role: 'assistant',
+      });
     });
 
     it('should not duplicate completed OpenAI user transcripts after deltas', () => {
