@@ -1,5 +1,32 @@
 # @mastra/core
 
+## 1.37.0-alpha.2
+
+### Minor Changes
+
+- Added signal delivery option attributes API that conditionally merges branch `attributes` based on whether a signal is delivered to an active agent run (`ifActive.attributes`) or an idle run (`ifIdle.attributes`). This enables contextual signal delivery — for example, tagging user messages as `while-active` when the agent is actively working. ([#16923](https://github.com/mastra-ai/mastra/pull/16923))
+
+### Patch Changes
+
+- Fixed processor workflow steps so `sendSignal` is available when processors inject Agent signals, and updated Observational Memory temporal gap markers to use Agent signals. ([#16927](https://github.com/mastra-ai/mastra/pull/16927))
+
+- Fixed an issue where thread subscriptions could appear idle after a run finished. Subsequent runs now stream promptly, and post-finish signals correctly start from an idle state. ([#16928](https://github.com/mastra-ai/mastra/pull/16928))
+
+## 1.37.0-alpha.1
+
+### Minor Changes
+
+- Client-side tools now appear in your traces when observability is configured. When an agent calls a tool that executes in the browser via `@mastra/client-js`, a `CLIENT_TOOL_CALL` span is recorded on the server trace so you can see which client tools were invoked, what arguments they received, and how they relate to the rest of the agent run. ([#16425](https://github.com/mastra-ai/mastra/pull/16425))
+
+  Tools also gain an `observe` helper on their execution context for recording child spans and logs from inside `execute`:
+
+  ```ts
+  execute: async ({ userId }, { observe }) => {
+    observe.log('info', 'fetching user', { userId });
+    return observe.span('fetch user', () => fetch(`/api/users/${userId}`));
+  };
+  ```
+
 ## 1.36.1-alpha.0
 
 ### Patch Changes

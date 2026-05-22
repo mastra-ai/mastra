@@ -1,5 +1,21 @@
 # @mastra/temporal
 
+## 0.1.7-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67)]:
+  - @mastra/core@1.37.0-alpha.2
+  - @mastra/deployer@1.37.0-alpha.2
+
+## 0.1.7-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+  - @mastra/deployer@1.37.0-alpha.1
+
 ## 0.1.7-alpha.0
 
 ### Patch Changes

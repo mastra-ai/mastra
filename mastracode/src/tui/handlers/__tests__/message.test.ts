@@ -1,5 +1,6 @@
 import { Container, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
+import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
@@ -72,7 +73,7 @@ describe('handleMessageUpdate system reminders', () => {
     expect(rendered).toContain('');
   });
 
-  it('renders a streamed placeholder when reminder content is not available yet', () => {
+  it('renders a streamed loaded instruction path reminder', () => {
     handleMessageUpdate(
       ctx,
       createAssistantMessage([
@@ -90,10 +91,39 @@ describe('handleMessageUpdate system reminders', () => {
     expect(component).toBeInstanceOf(SystemReminderComponent);
     expect(state.allSystemReminderComponents[0]).toBe(component);
 
-    const rendered = (component as SystemReminderComponent).render(80).join('\n');
+    const rendered = stripAnsi((component as SystemReminderComponent).render(80).join('\n'));
 
-    expect(rendered).toContain('Loaded AGENTS.md');
-    expect(rendered).toContain('Loading instruction file contents');
+    expect(rendered).toContain('  loaded /repo/src/agents/nested/AGENTS.md');
+    expect(rendered).not.toContain('Loading instruction file contents');
+  });
+
+  it('keeps spacing when a streamed reminder is inserted before pending assistant text', () => {
+    addUserMessage(state, {
+      id: 'user-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'hello' }],
+    } as HarnessMessage);
+    state.streamingComponent = new AssistantMessageComponent(undefined, false);
+    state.chatContainer.addChild(state.streamingComponent);
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'system_reminder',
+          reminderType: 'dynamic-agents-md',
+          path: '/repo/src/agents/nested/AGENTS.md',
+        } as never,
+      ]),
+    );
+
+    expect(visibleChildren(state)).toEqual([
+      state.messageComponentsById.get('user-1'),
+      state.allSystemReminderComponents[0],
+      state.streamingComponent,
+    ]);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children).toHaveLength(4);
   });
 
   it('deduplicates repeated streamed reminders within the same assistant run', () => {
@@ -261,10 +291,13 @@ describe('handleMessageUpdate system reminders', () => {
       ]),
     );
 
-    expect(state.chatContainer.children).toHaveLength(4);
-    expect(state.chatContainer.children[0]).toBe(earlierUserMessage);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[2]).toBe(optimisticUserMessage);
-    expect(state.chatContainer.children[3]).toBe(streamingMessage);
+    expect(visibleChildren(state)).toEqual([
+      earlierUserMessage,
+      state.allSystemReminderComponents[0],
+      optimisticUserMessage,
+      streamingMessage,
+    ]);
+    expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
   });
 });
