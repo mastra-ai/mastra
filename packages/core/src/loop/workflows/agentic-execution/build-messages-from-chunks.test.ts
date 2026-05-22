@@ -239,8 +239,6 @@ describe('buildMessagesFromChunks', () => {
   });
 
   it('should merge tool-call + errored tool-result into an output-error part', () => {
-    // A provider-executed failure arrives as a tool-result with isError set; it must
-    // persist as output-error, not a successful result (#15569).
     const result = parts([
       {
         type: 'tool-call',
@@ -270,7 +268,7 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
-  it('should merge tool-call + errored nullish tool-result into an output-error part', () => {
+  it('should merge errored tool-result without output', () => {
     const result = parts([
       {
         type: 'tool-call',

@@ -688,7 +688,6 @@ async function processOutputStream<OUTPUT = undefined>({
           const resultToolDef = resolveDirectOrProviderTool(chunk.payload.toolName);
           messageList.updateToolInvocation({
             type: 'tool-invocation',
-            // A failed provider-executed tool sets isError — persist it as output-error.
             toolInvocation: chunk.payload.isError
               ? {
                   state: 'output-error',
