@@ -413,14 +413,14 @@ export class AgentChannels {
           // Resolve the tool display mode so the approve/deny edit matches
           // the original card's rendering (cards → Block Kit, text → plain).
           // Streaming is irrelevant here — we're outside the agent loop.
-          const { resolved: clickToolDisplay } = this.resolveToolDisplay(
+          const { resolved: toolDisplay } = this.resolveToolDisplay(
             platform,
             adapterConfig?.toolDisplay,
             false,
             adapterConfig?.cards,
             adapterConfig?.formatToolCall,
           );
-          const useCards = clickToolDisplay === 'cards';
+          const useCards = toolDisplay === 'cards';
 
           if (!approved) {
             const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
@@ -1004,7 +1004,7 @@ export class AgentChannels {
     // approval card with buttons. Block Kit cards have buttons; plain
     // `'text'` mode has only a "reply approve/deny" hint with no
     // first-class affordance, so we auto-approve to avoid getting stuck.
-    const { resolved: webhookToolDisplay, fn: webhookToolDisplayFn } = this.resolveToolDisplay(
+    const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
       platform,
       adapterConfig?.toolDisplay,
       this.resolveStreaming(adapterConfig?.streaming).enabled,
@@ -1012,11 +1012,11 @@ export class AgentChannels {
       adapterConfig?.formatToolCall,
     );
     const canRenderApprovalButtons =
-      webhookToolDisplayFn !== undefined ||
-      webhookToolDisplay === 'cards' ||
-      webhookToolDisplay === 'timeline' ||
-      webhookToolDisplay === 'grouped' ||
-      webhookToolDisplay === 'hidden';
+      toolDisplayFn !== undefined ||
+      toolDisplay === 'cards' ||
+      toolDisplay === 'timeline' ||
+      toolDisplay === 'grouped' ||
+      toolDisplay === 'hidden';
 
     const { channelContext, attributes, providerOptions } = this.buildEventContext({
       sdkThread,
