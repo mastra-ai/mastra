@@ -147,17 +147,17 @@ function renderRow(text: string, width: number, border: (char: string) => string
   return `${border('│')} ${content}${rightPadding}${border('│')}`;
 }
 
-function resolveReminderMessage(message: string | undefined, _path: string | undefined): string {
+function resolveReminderMessage(message: string | undefined, path: string | undefined): string {
   const trimmedMessage = message?.trim();
   if (trimmedMessage && trimmedMessage !== 'undefined' && !trimmedMessage.startsWith(GENERIC_DYNAMIC_REMINDER_PREFIX)) {
     return trimmedMessage;
   }
 
-  // File content is resolved asynchronously by the component to avoid blocking
-  // the event loop.  Return empty here so the constructor shows a loading state
-  // while the async read completes.
-  if (!_path) {
-    return trimmedMessage && trimmedMessage !== 'undefined' ? trimmedMessage : '';
+  // When a file path is provided, return empty so the constructor shows a
+  // loading state and resolveFromFileAsync() reads the content without
+  // blocking the event loop.
+  if (path) {
+    return '';
   }
 
   return trimmedMessage && trimmedMessage !== 'undefined' ? trimmedMessage : '';
