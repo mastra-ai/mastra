@@ -284,6 +284,61 @@ describe('GithubNotificationPoller', () => {
     expect(reviewCalls()).toHaveLength(3);
   });
 
+  it('refreshes checks and reviews when the PR head SHA changes within the freshness window', async () => {
+    const currentTime = Date.parse('2026-01-01T00:10:00.000Z');
+    const now = () => new Date(currentTime);
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[1] === 'repos/mastra-ai/mastra/pulls/123') {
+        return {
+          stdout: JSON.stringify({
+            title: 'Updated PR',
+            html_url: 'https://github.com/mastra-ai/mastra/pull/123',
+            state: 'open',
+            head: { sha: 'sha-2' },
+          }),
+        };
+      }
+      if (args[1] === 'repos/mastra-ai/mastra/pulls/123/reviews') {
+        return { stdout: JSON.stringify([[{ id: 2, state: 'COMMENTED', submitted_at: '2026-01-01T00:09:00.000Z' }]]) };
+      }
+      if (args[1] === 'repos/mastra-ai/mastra/commits/sha-2/check-runs') {
+        return { stdout: JSON.stringify({ check_runs: [{ name: 'test', conclusion: 'failure' }] }) };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const store = createSharedStore(undefined, now);
+    await store.upsertPrSnapshot('account-1', {
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      title: 'Previous PR',
+      headSha: 'sha-1',
+      failedChecks: [{ name: 'old test', status: 'failure' }],
+      reviews: [{ id: '1', state: 'COMMENTED' }],
+      checkedAt: '2026-01-01T00:00:00.000Z',
+      checksCheckedAt: '2026-01-01T00:09:00.000Z',
+      heavyCheckedAt: '2026-01-01T00:09:00.000Z',
+      updatedAt: '2026-01-01T00:09:00.000Z',
+    });
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now });
+
+    await expect(
+      poller.refreshPullRequestSnapshot('mastra-ai/mastra', 123, {
+        staleBefore: new Date(currentTime - 3 * 60_000).toISOString(),
+        checksStaleBefore: new Date(currentTime - 3 * 60_000).toISOString(),
+        heavyStaleBefore: new Date(currentTime - 15 * 60_000).toISOString(),
+      }),
+    ).resolves.toMatchObject({
+      headSha: 'sha-2',
+      failedChecks: [{ name: 'test', status: 'failure' }],
+      reviews: [{ id: '2', state: 'COMMENTED' }],
+    });
+    expect(commandRunner.mock.calls.map(call => call[0][1])).toEqual([
+      'repos/mastra-ai/mastra/pulls/123',
+      'repos/mastra-ai/mastra/pulls/123/reviews',
+      'repos/mastra-ai/mastra/commits/sha-2/check-runs',
+    ]);
+  });
+
   it('does not run shared PR snapshot refresh commands from a non-master instance', async () => {
     const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
     const store = createSharedStore(url);

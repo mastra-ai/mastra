@@ -207,15 +207,18 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     const { stdout: pullRequestStdout } = await this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}`]);
     const pullRequest = parseJsonObject(pullRequestStdout);
     const headSha = getString(pullRequest, ['head', 'sha']);
+    const headShaChanged = !!previous?.headSha && !!headSha && headSha !== previous.headSha;
+    const refreshCheckFields = options.refreshCheckFields || headShaChanged;
+    const refreshHeavyFields = options.refreshHeavyFields || headShaChanged;
 
     await this.#heartbeatOrAbort();
     const [reviewsStdout, checksStdout] = await Promise.all([
-      options.refreshHeavyFields
+      refreshHeavyFields
         ? this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}/reviews`, '--paginate', '--slurp']).then(
             result => result.stdout,
           )
         : Promise.resolve(undefined),
-      options.refreshCheckFields && headSha
+      refreshCheckFields && headSha
         ? this.#commandRunner(['api', `repos/${repo}/commits/${headSha}/check-runs`]).then(result => result.stdout)
         : Promise.resolve(undefined),
     ]);
@@ -249,8 +252,8 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       failedChecks: checks,
       reviews,
       checkedAt,
-      checksCheckedAt: options.refreshCheckFields ? checkedAt : previous?.checksCheckedAt,
-      heavyCheckedAt: options.refreshHeavyFields ? checkedAt : previous?.heavyCheckedAt,
+      checksCheckedAt: refreshCheckFields ? checkedAt : previous?.checksCheckedAt,
+      heavyCheckedAt: refreshHeavyFields ? checkedAt : previous?.heavyCheckedAt,
       updatedAt: checkedAt,
     };
   }

@@ -943,13 +943,15 @@ describe('GithubSignals', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
+    github.markActive({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
     await github.poll();
+    await github.markIdle({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
     await github.poll();
 
     expect(commandRunner).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
     const calls = sendSignal.mock.calls as any[];
-    expect(calls[0][0]).toMatchObject({
+    expect(calls[1][0]).toMatchObject({
       contents: 'PR #123 has merge conflicts: feat: needs merge work',
       attributes: {
         type: 'github-pr-conflict',
@@ -2313,7 +2315,7 @@ describe('GithubSignals', () => {
       merged: false,
       mergeable: true,
       mergeableState: 'clean',
-      headSha: 'sha-clean',
+      headSha: 'sha-conflict',
       failedChecks: [{ name: 'old-check', status: 'failure', url: 'https://checks/old' }],
       reviews: [{ id: '1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
       checkedAt: '2026-01-02T00:00:00.000Z',

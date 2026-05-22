@@ -606,6 +606,11 @@ function getCachedPrConflictDeliveryKey(notification: GithubInboxNotification) {
   return `pr-conflict:${notification.prMergeableState ?? 'conflict'}:${notification.prHeadSha ?? notification.updatedAt}`;
 }
 
+function getCachedPrConflictFingerprint(notification: GithubInboxNotification) {
+  if (!hasMergeConflict(notification)) return undefined;
+  return getCachedPrConflictDeliveryKey(notification);
+}
+
 function getSnapshotPrConflictFingerprint(snapshot: GithubPRSnapshot) {
   if (!hasSnapshotMergeConflict(snapshot)) return undefined;
   return `pr-conflict:${snapshot.mergeableState ?? snapshot.mergeable ?? 'conflict'}:${snapshot.headSha ?? ''}`;
@@ -1095,7 +1100,20 @@ export class GithubSignals {
 
   markIdleAfterOutput(context: ActiveThreadContext) {
     this.#activeThreads.delete(activeThreadKey(context));
-    setTimeout(() => void this.markIdle(context), 0);
+    setTimeout(() => {
+      void this.markIdle(context).catch(error => {
+        void this.#emitDeferredIdleError(context, error).catch(() => {});
+      });
+    }, 0);
+  }
+
+  async #emitDeferredIdleError(context: ActiveThreadContext, error: unknown) {
+    if (isSqliteBusyError(error)) return;
+    for (const subscription of this.#activeSubscriptions.values()) {
+      if (activeThreadKey(subscription) !== activeThreadKey(context)) continue;
+      const registeredAgent = this.#agents.get(subscription.agentId);
+      if (registeredAgent) await this.#emitCommandError(registeredAgent, subscription, error);
+    }
   }
 
   async poll(context?: ActiveThreadContext, options: { forceSnapshot?: boolean } = {}) {
@@ -1473,13 +1491,22 @@ export class GithubSignals {
     subscription: ActiveSubscription,
     notification: GithubInboxNotification,
   ): Promise<'sent' | 'queued' | 'skipped'> {
-    if (!hasMergeConflict(notification)) return 'skipped';
+    const mergeConflictFingerprint = getCachedPrConflictFingerprint(notification);
+    if (!mergeConflictFingerprint || mergeConflictFingerprint === subscription.lastMergeConflictFingerprint)
+      return 'skipped';
 
+    const acknowledgedSubscription: ActiveSubscription = {
+      ...subscription,
+      lastMergeConflictFingerprint: mergeConflictFingerprint,
+      lastErrorFingerprint: undefined,
+      nextPollAt: undefined,
+      updatedAt: this.#options.now().toISOString(),
+    };
     const deliveryClaim = getCachedDeliveryClaim(
       this.#notificationPoller,
       subscription,
       notification,
-      getCachedPrConflictDeliveryKey(notification),
+      mergeConflictFingerprint,
     );
     if (!this.#activeThreads.has(activeThreadKey(subscription))) {
       const claimed = await this.#claimNotificationDelivery(deliveryClaim);
@@ -1495,9 +1522,14 @@ export class GithubSignals {
         details: `PR #${notification.prNumber} has merge conflicts: ${notification.title}`,
         url: notification.prHtmlUrl ?? notification.subjectUrl ?? notification.url,
       },
-      { deliveryClaim },
+      { acknowledgeAfterDelivery: acknowledgedSubscription, deliveryClaim },
     );
-    return delivery === 'queued' ? 'queued' : 'sent';
+    if (delivery === 'queued') return 'queued';
+
+    Object.assign(subscription, acknowledgedSubscription);
+    this.#activeSubscriptions.set(subscription.key, acknowledgedSubscription);
+    await subscription.persistence?.update(acknowledgedSubscription);
+    return 'sent';
   }
 
   async #emitCachedCheckNotification(
