@@ -644,6 +644,12 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
+            if ((run.output.fullStream as ReadableStream)?.locked) {
+              // Stream is already locked — another consumer (e.g. processStream
+              // during tool-call resumption) is reading from it. Skip this run;
+              // the external consumer handles its chunks.
+              continue;
+            }
             const reader = run.output.fullStream.getReader();
             let readerReleased = false;
             try {
