@@ -1035,6 +1035,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
         previousObserverTokens: obs.previousObserverTokens,
+        observeAttachments: obs.observeAttachments,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {

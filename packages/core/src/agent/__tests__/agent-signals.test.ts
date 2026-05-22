@@ -95,6 +95,20 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 500) {
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 500): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 describe('Agent signals', () => {
   beforeEach(() => {
     agentThreadStreamRuntime.resetForTests();
@@ -126,6 +140,7 @@ describe('Agent signals', () => {
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
+      transient: true,
     });
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
@@ -654,6 +669,152 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('delivers each thread run to multiple same-runtime subscribers', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'multi-subscriber-thread-agent' } as Agent<any, any, any, any>;
+    const threadId = 'multi-subscriber-thread';
+    const resourceId = 'multi-subscriber-user';
+
+    const registerRun = (runNumber: number) => {
+      const runId = `multi-subscriber-run-${runNumber}`;
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const parts = [
+        { type: 'start', runId },
+        { type: 'text-start', runId, payload: { id: `text-${runNumber}` } },
+        { type: 'text-delta', runId, payload: { id: `text-${runNumber}`, text: `response ${runNumber}` } },
+        { type: 'text-end', runId, payload: { id: `text-${runNumber}` } },
+        {
+          type: 'finish',
+          runId,
+          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+        },
+      ];
+      const fullStream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+            finish();
+          }, 25);
+        },
+      });
+
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+      return runId;
+    };
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const firstSubscriberRun1 = readNextRun(firstIterator);
+      const secondSubscriberRun1 = readNextRun(secondIterator);
+      const runId1 = registerRun(1);
+
+      const [run1a, run1b] = await Promise.all([
+        withTimeout(firstSubscriberRun1, 'Timed out waiting for first subscriber to receive run 1'),
+        withTimeout(secondSubscriberRun1, 'Timed out waiting for second subscriber to receive run 1'),
+      ]);
+      expect(run1a.value).toMatchObject({ runId: runId1, text: 'response 1' });
+      expect(run1b.value).toMatchObject({ runId: runId1, text: 'response 1' });
+
+      const firstSubscriberRun2 = readNextRun(firstIterator);
+      const secondSubscriberRun2 = readNextRun(secondIterator);
+      const runId2 = registerRun(2);
+
+      const [run2a, run2b] = await Promise.all([
+        withTimeout(firstSubscriberRun2, 'Timed out waiting for first subscriber to receive run 2'),
+        withTimeout(secondSubscriberRun2, 'Timed out waiting for second subscriber to receive run 2'),
+      ]);
+      expect(run2a.value).toMatchObject({ runId: runId2, text: 'response 2' });
+      expect(run2b.value).toMatchObject({ runId: runId2, text: 'response 2' });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription.unsubscribe();
+    }
+  });
+
+  it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
+    const threadId = 'subscriber-cancel-thread';
+    const resourceId = 'subscriber-cancel-user';
+    const runId = 'subscriber-cancel-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const parts = [
+      { type: 'start', runId },
+      { type: 'text-start', runId, payload: { id: 'text-1' } },
+      { type: 'text-delta', runId, payload: { id: 'text-1', text: 'still running' } },
+      { type: 'text-end', runId, payload: { id: 'text-1' } },
+      {
+        type: 'finish',
+        runId,
+        payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+      },
+    ];
+    const fullStream = new ReadableStream({
+      async start(controller) {
+        for (const part of parts) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          controller.enqueue(part);
+        }
+        controller.close();
+        finish();
+      },
+    });
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const secondRun = readNextRun(secondIterator);
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      const firstPart = await withTimeout(firstIterator.next(), 'Timed out waiting for first subscriber part');
+      expect(firstPart.value).toMatchObject({ type: 'start', runId });
+      await firstIterator.return?.();
+      firstSubscription.unsubscribe();
+
+      await expect(
+        withTimeout(secondRun, 'Timed out waiting for second subscriber to finish run'),
+      ).resolves.toMatchObject({
+        value: { runId, text: 'still running' },
+        done: false,
+      });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription.unsubscribe();
+    }
+  });
+
   it('starts an idle thread run when a user-message signal is sent', async () => {
     const agent = new Agent({
       id: 'idle-signal-agent',
@@ -689,6 +850,7 @@ describe('Agent signals', () => {
       acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
     });
     expect(signalPart?.data.createdAt).toBeDefined();
+    expect(signalPart?.transient).toBe(true);
 
     subscription.unsubscribe();
   });

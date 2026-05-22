@@ -22,7 +22,7 @@ export interface OMSettingsConfig {
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
-  observeAttachments: boolean;
+  observeAttachments: 'auto' | boolean;
 }
 
 export interface OMSettingsCallbacks {
@@ -31,7 +31,7 @@ export interface OMSettingsCallbacks {
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onCavemanObservationsChange: (enabled: boolean) => void;
-  onObserveAttachmentsChange: (enabled: boolean) => void;
+  onObserveAttachmentsChange: (value: 'auto' | boolean) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -323,22 +323,30 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'observe-attachments',
         label: 'Observe attachments',
         description:
-          'Forward image and file attachments to the Observer LLM. ' + 'Turn off if your observer model is text-only',
-        currentValue: config.observeAttachments ? 'On' : 'Off',
-        submenu: (_currentValue, done) =>
-          new BooleanSubmenu(
-            config.observeAttachments,
-            value => {
+          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
+        currentValue: formatAttachmentValue(config.observeAttachments),
+        submenu: (_currentValue, done) => {
+          const items: SelectItem[] = [
+            { value: 'auto', label: '  Auto', description: 'Use model capabilities to decide' },
+            { value: 'on', label: '  On', description: 'Always forward attachments' },
+            { value: 'off', label: '  Off', description: 'Drop attachments (placeholder text only)' },
+          ];
+          const list = new SelectList(items, items.length, getSelectListTheme());
+          const currentIndex = config.observeAttachments === 'auto' ? 0 : config.observeAttachments ? 1 : 2;
+          list.setSelectedIndex(currentIndex);
+          list.onSelect = async (item: SelectItem) => {
+            const value: 'auto' | boolean = item.value === 'auto' ? 'auto' : item.value === 'on';
+            try {
+              await callbacks.onObserveAttachmentsChange(value);
               config.observeAttachments = value;
-              callbacks.onObserveAttachmentsChange(value);
-              done(value ? 'On' : 'Off');
-            },
-            () => done(),
-            {
-              onDescription: 'Forward attachments to the observer',
-              offDescription: 'Drop attachments (placeholder text only)',
-            },
-          ),
+              done(formatAttachmentValue(value));
+            } catch (error) {
+              console.error('Failed to update observe attachments setting:', error);
+            }
+          };
+          list.onCancel = () => done();
+          return list;
+        },
       },
     ];
 
@@ -368,4 +376,9 @@ function getShortModelName(modelId: string): string {
   if (!modelId) return '(none)';
   const parts = modelId.split('/');
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
+}
+
+function formatAttachmentValue(value: 'auto' | boolean): string {
+  if (value === 'auto') return 'Auto';
+  return value ? 'On' : 'Off';
 }
