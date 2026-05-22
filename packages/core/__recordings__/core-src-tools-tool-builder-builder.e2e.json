@@ -1,12 +1,291 @@
 {
   "meta": {
     "name": "core-src-tools-tool-builder-builder.e2e",
-    "testFile": "src/tools/tool-builder/builder.e2e.test.ts",
+    "testFile": "packages/core/src/tools/tool-builder/builder.e2e.test.ts",
     "model": "google/gemini-2.0-flash-lite-001",
-    "createdAt": "2026-03-26T09:00:09.348Z",
-    "updatedAt": "2026-04-24T23:30:39.639Z"
+    "createdAt": "2026-05-18T10:50:55.406Z",
+    "updatedAt": "2026-05-18T11:34:53.775Z"
   },
   "recordings": [
+    {
+      "hash": "5358ea585973f1e1",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "google/gemini-2.0-flash-lite-001",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a test agent. Your task is to call the tool named 'testTool_manySchemas' with any valid arguments. This is very important as it's your primary purpose"
+            },
+            {
+              "role": "user",
+              "content": "Please call the tool named 'testTool_manySchemas'."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "testTool_manySchemas",
+                "description": "A tool to test many schema property types",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "properties": {
+                    "stringEmail": {
+                      "type": "string",
+                      "description": "a sample email address\nconstraints: a valid email"
+                    },
+                    "stringEmoji": {
+                      "type": "string",
+                      "description": "a valid sample emoji\nconstraints: a valid emoji"
+                    },
+                    "stringUrl": {
+                      "type": "string",
+                      "description": "a valid sample url\nconstraints: a valid uri"
+                    },
+                    "stringRegex": {
+                      "type": "string",
+                      "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
+                    },
+                    "number": {
+                      "type": "number",
+                      "description": "any valid sample number"
+                    },
+                    "exampleArray": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "any valid array of example strings"
+                    },
+                    "arrayMax": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
+                    },
+                    "object": {
+                      "type": "object",
+                      "properties": {
+                        "foo": {
+                          "type": "string"
+                        },
+                        "bar": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["foo", "bar"],
+                      "description": "any valid sample object with a string and a number",
+                      "additionalProperties": false
+                    },
+                    "objectNested": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "constraints: minimum length 2"
+                            },
+                            "age": {
+                              "type": "number",
+                              "description": "constraints: greater than or equal to 18"
+                            }
+                          },
+                          "required": ["name", "age"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["user"],
+                      "description": "any valid sample data",
+                      "additionalProperties": false
+                    },
+                    "objectPassthrough": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": true,
+                      "description": "any sample object with example keys and data",
+                      "required": []
+                    },
+                    "optional": {
+                      "description": "leave this field empty as an example of an optional field",
+                      "type": "string"
+                    },
+                    "nullable": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "leave this field empty as an example of a nullable field"
+                    },
+                    "enum": {
+                      "type": "string",
+                      "enum": ["A", "B", "C"],
+                      "description": "The letter A, B, or C"
+                    },
+                    "nativeEnum": {
+                      "type": "string",
+                      "enum": ["A", "B", "C"],
+                      "description": "The letter A, B, or C"
+                    },
+                    "unionPrimitives": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "sample text or number"
+                    },
+                    "unionObjects": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "number"
+                            },
+                            "inventoryItemName": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["amount", "inventoryItemName"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            },
+                            "permissions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["type", "permissions"],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "description": "give an valid object"
+                    }
+                  },
+                  "required": [
+                    "stringEmail",
+                    "stringEmoji",
+                    "stringUrl",
+                    "stringRegex",
+                    "number",
+                    "exampleArray",
+                    "arrayMax",
+                    "object",
+                    "objectNested",
+                    "objectPassthrough",
+                    "nullable",
+                    "enum",
+                    "nativeEnum",
+                    "unionPrimitives",
+                    "unionObjects"
+                  ],
+                  "description": "A schema to test many schema configuration properties",
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "required"
+        },
+        "timestamp": 1779104083368
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-expose-headers": "X-Generation-Id,cf-ray",
+          "cf-ray": "9fda8de9bcaf3235-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:34:44 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff",
+          "x-generation-id": "gen-1779104083-8ZGDSd05zRp4ZDcQGJHC"
+        },
+        "body": {
+          "id": "gen-1779104083-8ZGDSd05zRp4ZDcQGJHC",
+          "object": "chat.completion",
+          "created": 1779104083,
+          "model": "google/gemini-2.0-flash-lite-001",
+          "provider": "Google",
+          "system_fingerprint": null,
+          "service_tier": "standard",
+          "choices": [
+            {
+              "index": 0,
+              "logprobs": null,
+              "finish_reason": "tool_calls",
+              "native_finish_reason": "STOP",
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "refusal": null,
+                "reasoning": null,
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "index": 0,
+                    "id": "tool_testTool_manySchemas_g2LeETwwde6ioSobJkYB",
+                    "function": {
+                      "name": "testTool_manySchemas",
+                      "arguments": "{\"object\":{\"bar\":1.23,\"foo\":\"foo\"},\"number\":1.23,\"stringRegex\":\"test-string\",\"unionPrimitives\":\"test\",\"objectPassthrough\":{},\"nullable\":\"test\",\"stringUrl\":\"https://www.example.com\",\"stringEmoji\":\"😀\",\"nativeEnum\":\"A\",\"enum\":\"A\",\"exampleArray\":[\"str1\",\"str2\"],\"stringEmail\":\"test@example.com\",\"unionObjects\":{\"inventoryItemName\":\"test\",\"amount\":1},\"objectNested\":{\"user\":{\"age\":18,\"name\":\"test\"}},\"arrayMax\":[\"str1\",\"str2\"]}"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 330,
+            "completion_tokens": 76,
+            "total_tokens": 406,
+            "cost": 0.00004755,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00004755,
+              "upstream_inference_prompt_cost": 0.00002475,
+              "upstream_inference_completions_cost": 0.0000228
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        "isStreaming": false
+      }
+    },
     {
       "hash": "354dc0770f6a681c",
       "request": {
@@ -209,7 +488,7 @@
           ],
           "tool_choice": "required"
         },
-        "timestamp": 1777073424179
+        "timestamp": 1779104083291
       },
       "response": {
         "status": 200,
@@ -217,23 +496,24 @@
         "headers": {
           "access-control-allow-origin": "*",
           "access-control-expose-headers": "X-Generation-Id,cf-ray",
-          "cf-ray": "9f18e5459aa8981c-YVR",
+          "cf-ray": "9fda8de9bf2c6a8f-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 24 Apr 2026 23:30:25 GMT",
+          "date": "Mon, 18 May 2026 11:34:45 GMT",
           "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
           "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
           "server": "cloudflare",
           "x-content-type-options": "nosniff",
-          "x-generation-id": "gen-1777073424-lce30Oz3OMZdvei38ago"
+          "x-generation-id": "gen-1779104083-ZGtEDUWlLMmiBrtqno80"
         },
         "body": {
-          "id": "gen-1777073424-lce30Oz3OMZdvei38ago",
+          "id": "gen-1779104083-ZGtEDUWlLMmiBrtqno80",
           "object": "chat.completion",
-          "created": 1777073424,
+          "created": 1779104083,
           "model": "google/gemini-2.0-flash-lite-001",
           "provider": "Google",
           "system_fingerprint": null,
+          "service_tier": "standard",
           "choices": [
             {
               "index": 0,
@@ -249,10 +529,10 @@
                   {
                     "type": "function",
                     "index": 0,
-                    "id": "tool_testTool_manySchemas_vQLgqP849ZI5RfxFQxLy",
+                    "id": "tool_testTool_manySchemas_MgFCg2J3ejsMmaxerZjP",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmoji\":\"😀\",\"stringUrl\":\"https://www.example.com\",\"enum\":\"A\",\"arrayMax\":[\"a\",\"b\"],\"objectPassthrough\":{},\"stringEmail\":\"test@example.com\",\"nativeEnum\":\"A\",\"nullable\":\"test\",\"object\":{\"bar\":1.23,\"foo\":\"foo\"},\"objectNested\":{\"user\":{\"age\":18,\"name\":\"John\"}},\"number\":1.23,\"unionPrimitives\":\"test\",\"stringRegex\":\"test-string\",\"exampleArray\":[\"a\",\"b\"],\"unionObjects\":{\"amount\":1.23,\"inventoryItemName\":\"test\"}}"
+                      "arguments": "{\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":18}},\"object\":{\"foo\":\"foo\",\"bar\":1.23},\"stringEmoji\":\"😀\",\"unionObjects\":{\"amount\":1,\"inventoryItemName\":\"test\"},\"stringEmail\":\"test@example.com\",\"exampleArray\":[\"a\",\"b\"],\"number\":1.23,\"nullable\":\"test\",\"enum\":\"A\",\"stringRegex\":\"test-string\",\"arrayMax\":[\"a\",\"b\"],\"nativeEnum\":\"A\",\"stringUrl\":\"https://www.example.com\",\"unionPrimitives\":\"test\",\"objectPassthrough\":{}}"
                     }
                   }
                 ]
@@ -275,6 +555,284 @@
               "upstream_inference_cost": 0.00004635,
               "upstream_inference_prompt_cost": 0.00002475,
               "upstream_inference_completions_cost": 0.0000216
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "308b6e7fc29f139f",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "anthropic/claude-haiku-4.5",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a test agent. Your task is to call the tool named 'testTool_manySchemas' with any valid arguments. This is very important as it's your primary purpose"
+            },
+            {
+              "role": "user",
+              "content": "Please call the tool named 'testTool_manySchemas'."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "testTool_manySchemas",
+                "description": "A tool to test many schema property types",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "properties": {
+                    "stringEmail": {
+                      "type": "string",
+                      "description": "a sample email address\nconstraints: a valid email"
+                    },
+                    "stringEmoji": {
+                      "type": "string",
+                      "description": "a valid sample emoji\nconstraints: a valid emoji"
+                    },
+                    "stringUrl": {
+                      "type": "string",
+                      "description": "a valid sample url\nconstraints: a valid uri"
+                    },
+                    "stringRegex": {
+                      "type": "string",
+                      "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
+                    },
+                    "number": {
+                      "type": "number",
+                      "description": "any valid sample number"
+                    },
+                    "exampleArray": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "any valid array of example strings"
+                    },
+                    "arrayMax": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
+                    },
+                    "object": {
+                      "type": "object",
+                      "properties": {
+                        "foo": {
+                          "type": "string"
+                        },
+                        "bar": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["foo", "bar"],
+                      "description": "any valid sample object with a string and a number",
+                      "additionalProperties": false
+                    },
+                    "objectNested": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "constraints: minimum length 2"
+                            },
+                            "age": {
+                              "type": "number",
+                              "description": "constraints: greater than or equal to 18"
+                            }
+                          },
+                          "required": ["name", "age"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["user"],
+                      "description": "any valid sample data",
+                      "additionalProperties": false
+                    },
+                    "objectPassthrough": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": true,
+                      "description": "any sample object with example keys and data",
+                      "required": []
+                    },
+                    "optional": {
+                      "description": "leave this field empty as an example of an optional field",
+                      "type": "string"
+                    },
+                    "nullable": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "leave this field empty as an example of a nullable field"
+                    },
+                    "enum": {
+                      "type": "string",
+                      "enum": ["A", "B", "C"],
+                      "description": "The letter A, B, or C"
+                    },
+                    "nativeEnum": {
+                      "type": "string",
+                      "enum": ["A", "B", "C"],
+                      "description": "The letter A, B, or C"
+                    },
+                    "unionPrimitives": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "sample text or number"
+                    },
+                    "unionObjects": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "number"
+                            },
+                            "inventoryItemName": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["amount", "inventoryItemName"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            },
+                            "permissions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["type", "permissions"],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "description": "give an valid object"
+                    }
+                  },
+                  "required": [
+                    "stringEmail",
+                    "stringEmoji",
+                    "stringUrl",
+                    "stringRegex",
+                    "number",
+                    "exampleArray",
+                    "arrayMax",
+                    "object",
+                    "objectNested",
+                    "objectPassthrough",
+                    "nullable",
+                    "enum",
+                    "nativeEnum",
+                    "unionPrimitives",
+                    "unionObjects"
+                  ],
+                  "description": "A schema to test many schema configuration properties",
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "required"
+        },
+        "timestamp": 1779104083367
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-expose-headers": "X-Generation-Id,cf-ray",
+          "cf-ray": "9fda8de9bb8ae0ca-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:34:44 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff",
+          "x-generation-id": "gen-1779104083-Aan8SsmmXy0zenK6iEcj"
+        },
+        "body": {
+          "id": "gen-1779104083-Aan8SsmmXy0zenK6iEcj",
+          "object": "chat.completion",
+          "created": 1779104083,
+          "model": "anthropic/claude-4.5-haiku-20251001",
+          "provider": "Amazon Bedrock",
+          "system_fingerprint": null,
+          "choices": [
+            {
+              "index": 0,
+              "logprobs": null,
+              "finish_reason": "tool_calls",
+              "native_finish_reason": "tool_use",
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "refusal": null,
+                "reasoning": null,
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "index": 0,
+                    "id": "toolu_bdrk_01LPVKdzwDLP86subAycwzov",
+                    "function": {
+                      "name": "testTool_manySchemas",
+                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😀\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"one\",\"two\",\"three\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":42}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"test string\", \"unionObjects\": {\"inventoryItemName\":\"Widget\",\"amount\":10}}"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 1551,
+            "completion_tokens": 384,
+            "total_tokens": 1935,
+            "cost": 0.003471,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.003471,
+              "upstream_inference_prompt_cost": 0.001551,
+              "upstream_inference_completions_cost": 0.00192
             },
             "completion_tokens_details": {
               "reasoning_tokens": 0,
@@ -488,7 +1046,7 @@
           ],
           "tool_choice": "required"
         },
-        "timestamp": 1777073424178
+        "timestamp": 1779104083291
       },
       "response": {
         "status": 200,
@@ -496,20 +1054,20 @@
         "headers": {
           "access-control-allow-origin": "*",
           "access-control-expose-headers": "X-Generation-Id,cf-ray",
-          "cf-ray": "9f18e54599c2c55d-YVR",
+          "cf-ray": "9fda8de99d5f8688-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 24 Apr 2026 23:30:25 GMT",
+          "date": "Mon, 18 May 2026 11:34:44 GMT",
           "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
           "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
           "server": "cloudflare",
           "x-content-type-options": "nosniff",
-          "x-generation-id": "gen-1777073424-9ObiPspKA6DiIyqUMMVi"
+          "x-generation-id": "gen-1779104083-S1xQbOY2oHI6WAnvgQlG"
         },
         "body": {
-          "id": "gen-1777073424-9ObiPspKA6DiIyqUMMVi",
+          "id": "gen-1779104083-S1xQbOY2oHI6WAnvgQlG",
           "object": "chat.completion",
-          "created": 1777073424,
+          "created": 1779104083,
           "model": "anthropic/claude-4.5-haiku-20251001",
           "provider": "Amazon Bedrock",
           "system_fingerprint": null,
@@ -528,7 +1086,7 @@
                   {
                     "type": "function",
                     "index": 0,
-                    "id": "toolu_bdrk_01VYzTnZke2SaZgW1u3dp8sw",
+                    "id": "toolu_bdrk_01Fw3yD17AwjGwFzDzD8vRRK",
                     "function": {
                       "name": "testTool_manySchemas",
                       "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😀\", \"stringUrl\": \"https://example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"hello\",\"world\",\"test\"], \"arrayMax\": [\"one\",\"two\",\"three\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":42}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"sample text\", \"unionObjects\": {\"inventoryItemName\":\"widget\",\"amount\":10}}"
@@ -561,295 +1119,6 @@
               "audio_tokens": 0
             }
           }
-        },
-        "isStreaming": false
-      }
-    },
-    {
-      "hash": "47eae53be14a378e",
-      "request": {
-        "url": "https://api.openai.com/v1/chat/completions",
-        "method": "POST",
-        "body": {
-          "model": "o4-mini",
-          "messages": [
-            {
-              "role": "developer",
-              "content": "You are a test agent. Your task is to call the tool named 'testTool_manySchemas' with any valid arguments. This is very important as it's your primary purpose"
-            },
-            {
-              "role": "user",
-              "content": "Please call the tool named 'testTool_manySchemas'."
-            }
-          ],
-          "tools": [
-            {
-              "type": "function",
-              "function": {
-                "name": "testTool_manySchemas",
-                "description": "A tool to test many schema property types",
-                "parameters": {
-                  "$schema": "http://json-schema.org/draft-07/schema#",
-                  "type": "object",
-                  "properties": {
-                    "stringEmail": {
-                      "type": "string",
-                      "description": "a sample email address\nconstraints: a valid email"
-                    },
-                    "stringEmoji": {
-                      "type": "string",
-                      "description": "a valid sample emoji"
-                    },
-                    "stringUrl": {
-                      "type": "string",
-                      "description": "a valid sample url"
-                    },
-                    "stringRegex": {
-                      "type": "string",
-                      "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
-                    },
-                    "number": {
-                      "type": "number",
-                      "description": "any valid sample number"
-                    },
-                    "exampleArray": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "any valid array of example strings"
-                    },
-                    "arrayMax": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
-                    },
-                    "object": {
-                      "type": "object",
-                      "properties": {
-                        "foo": {
-                          "type": "string"
-                        },
-                        "bar": {
-                          "type": "number"
-                        }
-                      },
-                      "required": ["foo", "bar"],
-                      "description": "any valid sample object with a string and a number",
-                      "additionalProperties": false
-                    },
-                    "objectNested": {
-                      "type": "object",
-                      "properties": {
-                        "user": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "description": "constraints: minimum length 2"
-                            },
-                            "age": {
-                              "type": "number",
-                              "description": "constraints: greater than or equal to 18"
-                            }
-                          },
-                          "required": ["name", "age"],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": ["user"],
-                      "description": "any valid sample data",
-                      "additionalProperties": false
-                    },
-                    "objectPassthrough": {
-                      "type": "object",
-                      "properties": {},
-                      "additionalProperties": false,
-                      "description": "any sample object with example keys and data",
-                      "required": []
-                    },
-                    "optional": {
-                      "description": "leave this field empty as an example of an optional field",
-                      "anyOf": [
-                        {
-                          "description": "leave this field empty as an example of an optional field",
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "nullable": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "leave this field empty as an example of a nullable field"
-                    },
-                    "enum": {
-                      "type": "string",
-                      "enum": ["A", "B", "C"],
-                      "description": "The letter A, B, or C"
-                    },
-                    "nativeEnum": {
-                      "type": "string",
-                      "enum": ["A", "B", "C"],
-                      "description": "The letter A, B, or C"
-                    },
-                    "unionPrimitives": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "description": "sample text or number"
-                    },
-                    "unionObjects": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "amount": {
-                              "type": "number"
-                            },
-                            "inventoryItemName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["amount", "inventoryItemName"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string"
-                            },
-                            "permissions": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          },
-                          "required": ["type", "permissions"],
-                          "additionalProperties": false
-                        }
-                      ],
-                      "description": "give an valid object"
-                    }
-                  },
-                  "required": [
-                    "stringEmail",
-                    "stringEmoji",
-                    "stringUrl",
-                    "stringRegex",
-                    "number",
-                    "exampleArray",
-                    "arrayMax",
-                    "object",
-                    "objectNested",
-                    "objectPassthrough",
-                    "nullable",
-                    "enum",
-                    "nativeEnum",
-                    "unionPrimitives",
-                    "unionObjects",
-                    "optional"
-                  ],
-                  "description": "A schema to test many schema configuration properties",
-                  "additionalProperties": false,
-                  "x-optional": ["optional"]
-                },
-                "strict": true
-              }
-            }
-          ],
-          "tool_choice": "required"
-        },
-        "timestamp": 1777073424167
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "access-control-expose-headers": "X-Request-ID",
-          "alt-svc": "h3=\":443\"; ma=86400",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9f18e545a919fe54-YVR",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Fri, 24 Apr 2026 23:30:29 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "4950",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
-          "openai-version": "2020-10-01",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "x-content-type-options": "nosniff",
-          "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999945",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_741cb393375345a5ad1c0bfc7841152a"
-        },
-        "body": {
-          "id": "chatcmpl-DYKGWT3nNG82zXSexLmlUPBK5AeZQ",
-          "object": "chat.completion",
-          "created": 1777073424,
-          "model": "o4-mini-2025-04-16",
-          "choices": [
-            {
-              "index": 0,
-              "message": {
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [
-                  {
-                    "id": "call_lkISvZzM0O5XxAmbzJ1M6mTt",
-                    "type": "function",
-                    "function": {
-                      "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😄\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"one\",\"two\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"hello\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{ \t}, \"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"widget\"}}"
-                    }
-                  }
-                ],
-                "refusal": null,
-                "annotations": []
-              },
-              "finish_reason": "tool_calls"
-            }
-          ],
-          "usage": {
-            "prompt_tokens": 433,
-            "completion_tokens": 717,
-            "total_tokens": 1150,
-            "prompt_tokens_details": {
-              "cached_tokens": 0,
-              "audio_tokens": 0
-            },
-            "completion_tokens_details": {
-              "reasoning_tokens": 576,
-              "audio_tokens": 0,
-              "accepted_prediction_tokens": 0,
-              "rejected_prediction_tokens": 0
-            }
-          },
-          "service_tier": "default",
-          "system_fingerprint": null
         },
         "isStreaming": false
       }
@@ -1069,43 +1338,44 @@
           ],
           "tool_choice": "required"
         },
-        "timestamp": 1777073425535
+        "timestamp": 1779104085046
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9f18e54e0baa7631-YVR",
+          "cf-ray": "9fda8df3e8445661-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 24 Apr 2026 23:30:39 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "13909",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Mon, 18 May 2026 11:34:52 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "6754",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999307",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_c641ba34b54749e7ac4e9f9b3a852ca3"
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "199307",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "207ms",
+          "x-request-id": "req_8e6eb62c7ee842a0a12b924dce1e489a"
         },
         "body": {
-          "id": "resp_02034a341d9f4be40069ebfd11abb0819386bbd6db30be3797",
+          "id": "resp_0519190bc2233002006a0af955d7ac8195a8195e2cc6fb28e1",
           "object": "response",
-          "created_at": 1777073425,
+          "created_at": 1779104085,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1777073439,
+          "completed_at": 1779104092,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1116,16 +1386,16 @@
           "moderation": null,
           "output": [
             {
-              "id": "rs_02034a341d9f4be40069ebfd1276288193911a258b71bf6a71",
+              "id": "rs_0519190bc2233002006a0af95686d481958b7f7896f57cadaf",
               "type": "reasoning",
               "summary": []
             },
             {
-              "id": "fc_02034a341d9f4be40069ebfd1e27fc8193b3ec3ba4b98244f3",
+              "id": "fc_0519190bc2233002006a0af95a8bc48195bb1f785ec491ea12",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-value\",\"number\":123.45,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"hello\",\"bar\":42},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{\"anyKey\":\"anyValue\",\"num\":1},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"test\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"item1\"} }",
-              "call_id": "call_EKle5q62GQ6bDhxWkhhWu26F",
+              "arguments": "{\n  \"stringEmail\": \"user@example.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-value\",\n  \"number\": 123.45,\n  \"exampleArray\": [\"alpha\", \"beta\", \"gamma\"],\n  \"arrayMax\": [\"one\", \"two\", \"three\", \"four\", \"five\"],\n  \"object\": {\n    \"foo\": \"hello\",\n    \"bar\": 10\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"Jo\",\n      \"age\": 25\n    }\n  },\n  \"objectPassthrough\": {\n    \"arbitraryKey\": \"value\",\n    \"count\": 5\n  },\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"C\",\n  \"unionPrimitives\": \"sample text\",\n  \"unionObjects\": {\n    \"amount\": 100,\n    \"inventoryItemName\": \"Widget\"\n  }\n}",
+              "call_id": "call_l9tLbDrBEht7RTLDiB0JRzLL",
               "name": "testTool_manySchemas"
             }
           ],
@@ -1347,11 +1617,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 1586,
+            "output_tokens": 893,
             "output_tokens_details": {
-              "reasoning_tokens": 1408
+              "reasoning_tokens": 640
             },
-            "total_tokens": 2015
+            "total_tokens": 1322
           },
           "user": null,
           "metadata": {}
@@ -1360,15 +1630,15 @@
       }
     },
     {
-      "hash": "5358ea585973f1e1",
+      "hash": "47eae53be14a378e",
       "request": {
-        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
         "body": {
-          "model": "google/gemini-2.0-flash-lite-001",
+          "model": "o4-mini",
           "messages": [
             {
-              "role": "system",
+              "role": "developer",
               "content": "You are a test agent. Your task is to call the tool named 'testTool_manySchemas' with any valid arguments. This is very important as it's your primary purpose"
             },
             {
@@ -1392,11 +1662,11 @@
                     },
                     "stringEmoji": {
                       "type": "string",
-                      "description": "a valid sample emoji\nconstraints: a valid emoji"
+                      "description": "a valid sample emoji"
                     },
                     "stringUrl": {
                       "type": "string",
-                      "description": "a valid sample url\nconstraints: a valid uri"
+                      "description": "a valid sample url"
                     },
                     "stringRegex": {
                       "type": "string",
@@ -1460,13 +1730,21 @@
                     "objectPassthrough": {
                       "type": "object",
                       "properties": {},
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "description": "any sample object with example keys and data",
                       "required": []
                     },
                     "optional": {
                       "description": "leave this field empty as an example of an optional field",
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "description": "leave this field empty as an example of an optional field",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "nullable": {
                       "anyOf": [
@@ -1550,367 +1828,92 @@
                     "enum",
                     "nativeEnum",
                     "unionPrimitives",
-                    "unionObjects"
+                    "unionObjects",
+                    "optional"
                   ],
                   "description": "A schema to test many schema configuration properties",
-                  "additionalProperties": false
-                }
+                  "additionalProperties": false,
+                  "x-optional": ["optional"]
+                },
+                "strict": true
               }
             }
           ],
           "tool_choice": "required"
         },
-        "timestamp": 1777073424197
+        "timestamp": 1779104083289
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "access-control-allow-origin": "*",
-          "access-control-expose-headers": "X-Generation-Id,cf-ray",
-          "cf-ray": "9f18e545af650b14-YVR",
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda8de9b895c893-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 24 Apr 2026 23:30:25 GMT",
-          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
-          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "date": "Mon, 18 May 2026 11:34:53 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "9723",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
           "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-generation-id": "gen-1777073424-qF2DTEUqp5NNmXI1IZZc"
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "199945",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "16ms",
+          "x-request-id": "req_5062e895a2b2449e8bb7a550d6c91879"
         },
         "body": {
-          "id": "gen-1777073424-qF2DTEUqp5NNmXI1IZZc",
+          "id": "chatcmpl-DgqX6jUt9fgUZjqL4UA2k2mZoceff",
           "object": "chat.completion",
-          "created": 1777073424,
-          "model": "google/gemini-2.0-flash-lite-001",
-          "provider": "Google",
-          "system_fingerprint": null,
+          "created": 1779104084,
+          "model": "o4-mini-2025-04-16",
           "choices": [
             {
               "index": 0,
-              "logprobs": null,
-              "finish_reason": "tool_calls",
-              "native_finish_reason": "STOP",
               "message": {
                 "role": "assistant",
                 "content": null,
-                "refusal": null,
-                "reasoning": null,
                 "tool_calls": [
                   {
+                    "id": "call_dNU7dWg8OQna7nuJDsNlzfwC",
                     "type": "function",
-                    "index": 0,
-                    "id": "tool_testTool_manySchemas_9Jn973XuYHtmLJwTA6g4",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"exampleArray\":[\"test1\",\"test2\"],\"number\":1,\"unionObjects\":{\"inventoryItemName\":\"test\",\"amount\":1},\"nativeEnum\":\"A\",\"nullable\":\"test\",\"stringEmail\":\"test@example.com\",\"arrayMax\":[\"test1\",\"test2\"],\"objectNested\":{\"user\":{\"name\":\"test\",\"age\":18}},\"stringRegex\":\"test-string\",\"enum\":\"A\",\"objectPassthrough\":{},\"stringEmoji\":\"😀\",\"unionPrimitives\":\"test\",\"object\":{\"foo\":\"test\",\"bar\":1},\"stringUrl\":\"https://www.example.com\"}"
+                      "arguments": "{\"stringEmail\":\"example@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringRegex\":\"test-example\",\"number\":42,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"hello\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":30}},\"objectPassthrough\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"some string\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"widget\"}}"
                     }
                   }
-                ]
-              }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "finish_reason": "tool_calls"
             }
           ],
           "usage": {
-            "prompt_tokens": 330,
-            "completion_tokens": 76,
-            "total_tokens": 406,
-            "cost": 0.00004755,
-            "is_byok": false,
+            "prompt_tokens": 433,
+            "completion_tokens": 1420,
+            "total_tokens": 1853,
             "prompt_tokens_details": {
               "cached_tokens": 0,
-              "cache_write_tokens": 0,
-              "audio_tokens": 0,
-              "video_tokens": 0
-            },
-            "cost_details": {
-              "upstream_inference_cost": 0.00004755,
-              "upstream_inference_prompt_cost": 0.00002475,
-              "upstream_inference_completions_cost": 0.0000228
+              "audio_tokens": 0
             },
             "completion_tokens_details": {
-              "reasoning_tokens": 0,
-              "image_tokens": 0,
-              "audio_tokens": 0
-            }
-          }
-        },
-        "isStreaming": false
-      }
-    },
-    {
-      "hash": "308b6e7fc29f139f",
-      "request": {
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "method": "POST",
-        "body": {
-          "model": "anthropic/claude-haiku-4.5",
-          "messages": [
-            {
-              "role": "system",
-              "content": "You are a test agent. Your task is to call the tool named 'testTool_manySchemas' with any valid arguments. This is very important as it's your primary purpose"
-            },
-            {
-              "role": "user",
-              "content": "Please call the tool named 'testTool_manySchemas'."
-            }
-          ],
-          "tools": [
-            {
-              "type": "function",
-              "function": {
-                "name": "testTool_manySchemas",
-                "description": "A tool to test many schema property types",
-                "parameters": {
-                  "$schema": "http://json-schema.org/draft-07/schema#",
-                  "type": "object",
-                  "properties": {
-                    "stringEmail": {
-                      "type": "string",
-                      "description": "a sample email address\nconstraints: a valid email"
-                    },
-                    "stringEmoji": {
-                      "type": "string",
-                      "description": "a valid sample emoji\nconstraints: a valid emoji"
-                    },
-                    "stringUrl": {
-                      "type": "string",
-                      "description": "a valid sample url\nconstraints: a valid uri"
-                    },
-                    "stringRegex": {
-                      "type": "string",
-                      "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
-                    },
-                    "number": {
-                      "type": "number",
-                      "description": "any valid sample number"
-                    },
-                    "exampleArray": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "any valid array of example strings"
-                    },
-                    "arrayMax": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
-                    },
-                    "object": {
-                      "type": "object",
-                      "properties": {
-                        "foo": {
-                          "type": "string"
-                        },
-                        "bar": {
-                          "type": "number"
-                        }
-                      },
-                      "required": ["foo", "bar"],
-                      "description": "any valid sample object with a string and a number",
-                      "additionalProperties": false
-                    },
-                    "objectNested": {
-                      "type": "object",
-                      "properties": {
-                        "user": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "description": "constraints: minimum length 2"
-                            },
-                            "age": {
-                              "type": "number",
-                              "description": "constraints: greater than or equal to 18"
-                            }
-                          },
-                          "required": ["name", "age"],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": ["user"],
-                      "description": "any valid sample data",
-                      "additionalProperties": false
-                    },
-                    "objectPassthrough": {
-                      "type": "object",
-                      "properties": {},
-                      "additionalProperties": true,
-                      "description": "any sample object with example keys and data",
-                      "required": []
-                    },
-                    "optional": {
-                      "description": "leave this field empty as an example of an optional field",
-                      "type": "string"
-                    },
-                    "nullable": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "leave this field empty as an example of a nullable field"
-                    },
-                    "enum": {
-                      "type": "string",
-                      "enum": ["A", "B", "C"],
-                      "description": "The letter A, B, or C"
-                    },
-                    "nativeEnum": {
-                      "type": "string",
-                      "enum": ["A", "B", "C"],
-                      "description": "The letter A, B, or C"
-                    },
-                    "unionPrimitives": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "description": "sample text or number"
-                    },
-                    "unionObjects": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "amount": {
-                              "type": "number"
-                            },
-                            "inventoryItemName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["amount", "inventoryItemName"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string"
-                            },
-                            "permissions": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          },
-                          "required": ["type", "permissions"],
-                          "additionalProperties": false
-                        }
-                      ],
-                      "description": "give an valid object"
-                    }
-                  },
-                  "required": [
-                    "stringEmail",
-                    "stringEmoji",
-                    "stringUrl",
-                    "stringRegex",
-                    "number",
-                    "exampleArray",
-                    "arrayMax",
-                    "object",
-                    "objectNested",
-                    "objectPassthrough",
-                    "nullable",
-                    "enum",
-                    "nativeEnum",
-                    "unionPrimitives",
-                    "unionObjects"
-                  ],
-                  "description": "A schema to test many schema configuration properties",
-                  "additionalProperties": false
-                }
-              }
-            }
-          ],
-          "tool_choice": "required"
-        },
-        "timestamp": 1777073424197
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "access-control-allow-origin": "*",
-          "access-control-expose-headers": "X-Generation-Id,cf-ray",
-          "cf-ray": "9f18e545ac04ba29-YVR",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Fri, 24 Apr 2026 23:30:25 GMT",
-          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
-          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
-          "server": "cloudflare",
-          "x-content-type-options": "nosniff",
-          "x-generation-id": "gen-1777073424-ZQ38ipQfmJ6CWctRWMuL"
-        },
-        "body": {
-          "id": "gen-1777073424-ZQ38ipQfmJ6CWctRWMuL",
-          "object": "chat.completion",
-          "created": 1777073424,
-          "model": "anthropic/claude-4.5-haiku-20251001",
-          "provider": "Amazon Bedrock",
-          "system_fingerprint": null,
-          "choices": [
-            {
-              "index": 0,
-              "logprobs": null,
-              "finish_reason": "tool_calls",
-              "native_finish_reason": "tool_use",
-              "message": {
-                "role": "assistant",
-                "content": null,
-                "refusal": null,
-                "reasoning": null,
-                "tool_calls": [
-                  {
-                    "type": "function",
-                    "index": 0,
-                    "id": "toolu_bdrk_01RsjGVBLF3XqekEV6yAqhVW",
-                    "function": {
-                      "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😀\", \"stringUrl\": \"https://example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":\"value2\"}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"sample text\", \"unionObjects\": {\"inventoryItemName\":\"Widget\",\"amount\":5}}"
-                    }
-                  }
-                ]
-              }
-            }
-          ],
-          "usage": {
-            "prompt_tokens": 1551,
-            "completion_tokens": 387,
-            "total_tokens": 1938,
-            "cost": 0.003486,
-            "is_byok": false,
-            "prompt_tokens_details": {
-              "cached_tokens": 0,
-              "cache_write_tokens": 0,
+              "reasoning_tokens": 1280,
               "audio_tokens": 0,
-              "video_tokens": 0
-            },
-            "cost_details": {
-              "upstream_inference_cost": 0.003486,
-              "upstream_inference_prompt_cost": 0.001551,
-              "upstream_inference_completions_cost": 0.001935
-            },
-            "completion_tokens_details": {
-              "reasoning_tokens": 0,
-              "image_tokens": 0,
-              "audio_tokens": 0
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
             }
-          }
+          },
+          "service_tier": "default",
+          "system_fingerprint": null
         },
         "isStreaming": false
       }

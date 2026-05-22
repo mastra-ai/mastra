@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
-import { getLLMTestMode } from '@internal/llm-recorder';
+import { randomUUID, createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
@@ -13,35 +14,39 @@ import { getOpenAIModel } from './mock-model';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
-const mock = createGatewayMock({
-  transformRequest: ({ url, body }) => {
-    let serialized = JSON.stringify(body);
-    // Normalize UUIDs (runId, subAgentThreadId, etc.)
-    serialized = serialized.replace(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-      '00000000-0000-0000-0000-000000000000',
-    );
-    // Normalize OpenAI function-call IDs (call_xxx)
-    serialized = serialized.replace(/"call_id":"call_[a-zA-Z0-9]+"/g, '"call_id":"call_NORMALIZED"');
-    // Normalize OpenAI item_reference IDs (fc_xxx)
-    serialized = serialized.replace(/"id":"fc_[a-f0-9]+"/g, '"id":"fc_NORMALIZED"');
-    // Normalize toolCallId (AI SDK generated)
-    serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9]+"/g, '"toolCallId":"NORMALIZED"');
-    serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
-    // Normalize escaped call_id inside nested JSON strings (e.g. in function_call_output output)
-    serialized = serialized.replace(/\\"call_id\\":\\"call_[a-zA-Z0-9]+\\"/g, '\\"call_id\\":\\"call_NORMALIZED\\"');
-    // Normalize call_xxx patterns in toolCallId embedded in JSON strings
-    serialized = serialized.replace(
-      /\\"toolCallId\\":\\"call_[a-zA-Z0-9]+\\"/g,
-      '\\"toolCallId\\":\\"call_NORMALIZED\\"',
-    );
-    return { url, body: JSON.parse(serialized) };
-  },
-});
-beforeAll(() => mock.start());
-afterAll(() => mock.saveAndStop());
+function normalizeDynamicRunIds({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
+  let stringifiedBody = JSON.stringify(body);
+  stringifiedBody = stringifiedBody.replaceAll(/"runId":"[^"]+"/g, '"runId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(/\\"runId\\":\\"[^"]+\\"/g, '\\"runId\\":\\"NORMALIZED\\"');
+  stringifiedBody = stringifiedBody.replaceAll(/"suspendedToolRunId":"[^"]+"/g, '"suspendedToolRunId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(
+    /\\"suspendedToolRunId\\":\\"[^"]+\\"/g,
+    '\\"suspendedToolRunId\\":\\"NORMALIZED\\"',
+  );
 
-const mockStorage = new InMemoryStore();
+  return { url, body: JSON.parse(stringifiedBody) };
+}
+
+let mockGateway: any;
+let mockStorage: any;
+beforeEach(async c => {
+  mockStorage = new InMemoryStore();
+  mockGateway = createGatewayMock({
+    maxChunkDelay: 100,
+    name: `test-${Buffer.from(
+      // use stable 8-char hash from c.task.name
+      createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
+    )}`,
+    exactMatch: true,
+    transformRequest: normalizeDynamicRunIds,
+    recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
+  });
+  await mockGateway.start();
+});
+afterEach(async () => {
+  await mockGateway.saveAndStop();
+  mockStorage = null;
+});
 
 export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
   const mockFindUser = vi.fn().mockImplementation(async data => {
@@ -865,6 +870,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             suspendData.suspendedToolName = _chunk.payload.toolName;
           }
         }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
         if (suspendData.suspendPayload) {
           const resumeStream = await agentOne.stream('He is 25 years old', {
             memory,
