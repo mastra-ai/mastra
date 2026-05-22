@@ -77,8 +77,19 @@ export type {
 } from './model/base.types';
 export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
 export { ModelRouterLanguageModel, defaultGateways } from './model/router';
-export { GatewayRegistry, PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
-export type { ModelRouterModelId, Provider, ModelForProvider } from './model/provider-registry.js';
+export {
+  GatewayRegistry,
+  PROVIDER_REGISTRY,
+  parseModelString,
+  getProviderConfig,
+  modelSupportsAttachments,
+} from './model/provider-registry.js';
+export type {
+  ModelRouterModelId,
+  Provider,
+  ModelForProvider,
+  AttachmentCapabilities,
+} from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;

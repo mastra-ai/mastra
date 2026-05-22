@@ -38,7 +38,7 @@ export const researchAgent = new Agent({
     'You are a research specialist. When given a topic, gather key facts, ' +
     'statistics, and information. Present findings as clear bullet points. ' +
     'Include sources when possible. Focus on accuracy and completeness.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 ```
 
@@ -65,7 +65,7 @@ export const writingAgent = new Agent({
     'well-written articles. Use complete paragraphs, clear structure, and ' +
     'engaging language. Maintain a professional yet accessible tone. ' +
     'Ensure the content flows naturally from introduction to conclusion.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 ```
 
@@ -102,7 +102,7 @@ Success criteria:
 - Information is accurate and well-sourced
 - Final output is well-formatted and complete
 - If anything is missing or uncertain, continue gathering information`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: {
     researchAgent,
     writingAgent,
@@ -279,7 +279,7 @@ Success criteria:
 - Information is accurate and well-sourced
 - Final output is well-formatted and complete
 - If anything is missing or uncertain, continue gathering information`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: {
     researchAgent,
     writingAgent,
