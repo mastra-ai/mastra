@@ -6,7 +6,7 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
+import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
@@ -82,10 +82,7 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
   };
 }
 
-function createReminderComponent(
-  reminder: StreamedSystemReminderPart,
-  onUpdated?: () => void,
-): SystemReminderComponent | TemporalGapComponent {
+function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
   if (reminder.reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
       message: reminder.message,
@@ -99,13 +96,12 @@ function createReminderComponent(
     path: reminder.path,
     goalMaxTurns: reminder.goalMaxTurns,
     judgeModelId: reminder.judgeModelId,
-    onUpdated,
   });
 }
 
 function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
   const { state } = ctx;
-  const component = createReminderComponent(reminder, () => state.ui.requestRender());
+  const component = createReminderComponent(reminder);
   component.setExpanded(state.toolOutputExpanded);
   state.allSystemReminderComponents.push(component);
 
@@ -117,8 +113,7 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
     if (latestUserComponent) {
       const idx = state.chatContainer.children.indexOf(latestUserComponent as never);
       if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, component);
-        state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(state.chatContainer, component, idx);
         return;
       }
     }
@@ -127,8 +122,7 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
   if (state.streamingComponent && !reminder.precedesMessageId) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, component);
-      state.chatContainer.invalidate();
+      insertChatComponentWithBoundarySpacing(state.chatContainer, component, idx);
       return;
     }
   }
