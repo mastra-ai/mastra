@@ -92,6 +92,7 @@ import type {
   HarnessEvent,
   HarnessEventListener,
   HarnessEventUnsubscribe,
+  OMBufferedStatus,
   SubagentEndEvent,
   SubagentStartEvent,
   SubagentTextDeltaEvent,
@@ -2703,6 +2704,164 @@ export class Session {
             if (Array.isArray(tasks)) {
               this._emitTurnEvent({ type: 'task_updated', tasks: tasks as TaskUpdatedEvent['tasks'] });
             }
+          } else if (chunk.type === 'data-om-status') {
+            const payload = data as
+              | {
+                  windows?: any;
+                  recordId?: unknown;
+                  threadId?: unknown;
+                  stepNumber?: unknown;
+                  generationCount?: unknown;
+                }
+              | undefined;
+            if (payload?.windows) {
+              const active = payload.windows.active ?? {};
+              const msgs = active.messages ?? {};
+              const obs = active.observations ?? {};
+              const buffObs = payload.windows.buffered?.observations ?? {};
+              const buffRef = payload.windows.buffered?.reflection ?? {};
+              const bufferedStatus = (value: unknown): OMBufferedStatus =>
+                value === 'running' || value === 'complete' ? value : 'idle';
+              this._emitTurnEvent({
+                type: 'om_status',
+                windows: {
+                  active: {
+                    messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
+                    observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
+                  },
+                  buffered: {
+                    observations: {
+                      status: bufferedStatus(buffObs.status),
+                      chunks: buffObs.chunks ?? 0,
+                      messageTokens: buffObs.messageTokens ?? 0,
+                      projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
+                      observationTokens: buffObs.observationTokens ?? 0,
+                    },
+                    reflection: {
+                      status: bufferedStatus(buffRef.status),
+                      inputObservationTokens: buffRef.inputObservationTokens ?? 0,
+                      observationTokens: buffRef.observationTokens ?? 0,
+                    },
+                  },
+                },
+                recordId: typeof payload.recordId === 'string' ? payload.recordId : '',
+                threadId: typeof payload.threadId === 'string' ? payload.threadId : '',
+                stepNumber: typeof payload.stepNumber === 'number' ? payload.stepNumber : 0,
+                generationCount: typeof payload.generationCount === 'number' ? payload.generationCount : 0,
+              });
+            }
+          } else if (chunk.type === 'data-om-observation-start') {
+            const payload = data as
+              | { cycleId?: unknown; operationType?: unknown; tokensToObserve?: unknown }
+              | undefined;
+            if (typeof payload?.cycleId === 'string' && payload.cycleId.length > 0) {
+              if (payload.operationType === 'reflection') {
+                this._emitTurnEvent({
+                  type: 'om_reflection_start',
+                  cycleId: payload.cycleId,
+                  tokensToReflect: typeof payload.tokensToObserve === 'number' ? payload.tokensToObserve : 0,
+                });
+              } else {
+                this._emitTurnEvent({
+                  type: 'om_observation_start',
+                  cycleId: payload.cycleId,
+                  operationType: 'observation',
+                  tokensToObserve: typeof payload.tokensToObserve === 'number' ? payload.tokensToObserve : 0,
+                });
+              }
+            }
+          } else if (chunk.type === 'data-om-observation-end') {
+            const payload = data as
+              | {
+                  cycleId?: unknown;
+                  operationType?: unknown;
+                  durationMs?: unknown;
+                  tokensObserved?: unknown;
+                  observationTokens?: unknown;
+                  observations?: unknown;
+                  currentTask?: unknown;
+                  suggestedResponse?: unknown;
+                }
+              | undefined;
+            if (typeof payload?.cycleId === 'string' && payload.cycleId.length > 0) {
+              if (payload.operationType === 'reflection') {
+                this._emitTurnEvent({
+                  type: 'om_reflection_end',
+                  cycleId: payload.cycleId,
+                  durationMs: typeof payload.durationMs === 'number' ? payload.durationMs : 0,
+                  compressedTokens: typeof payload.observationTokens === 'number' ? payload.observationTokens : 0,
+                  ...(typeof payload.observations === 'string' ? { observations: payload.observations } : {}),
+                });
+              } else {
+                this._emitTurnEvent({
+                  type: 'om_observation_end',
+                  cycleId: payload.cycleId,
+                  durationMs: typeof payload.durationMs === 'number' ? payload.durationMs : 0,
+                  tokensObserved: typeof payload.tokensObserved === 'number' ? payload.tokensObserved : 0,
+                  observationTokens: typeof payload.observationTokens === 'number' ? payload.observationTokens : 0,
+                  ...(typeof payload.observations === 'string' ? { observations: payload.observations } : {}),
+                  ...(typeof payload.currentTask === 'string' ? { currentTask: payload.currentTask } : {}),
+                  ...(typeof payload.suggestedResponse === 'string'
+                    ? { suggestedResponse: payload.suggestedResponse }
+                    : {}),
+                });
+              }
+            }
+          } else if (chunk.type === 'data-om-observation-failed') {
+            const payload = data as
+              | { cycleId?: unknown; operationType?: unknown; error?: unknown; durationMs?: unknown }
+              | undefined;
+            const operationType = payload?.operationType === 'reflection' ? 'reflection' : 'observation';
+            const event = {
+              cycleId: typeof payload?.cycleId === 'string' && payload.cycleId.length > 0 ? payload.cycleId : 'unknown',
+              error: typeof payload?.error === 'string' ? payload.error : 'Unknown error',
+              durationMs: typeof payload?.durationMs === 'number' ? payload.durationMs : 0,
+            };
+            this._emitTurnEvent(
+              operationType === 'reflection'
+                ? { type: 'om_reflection_failed', ...event }
+                : { type: 'om_observation_failed', ...event },
+            );
+          } else if (chunk.type === 'data-om-buffering-start') {
+            const payload = data as
+              | { cycleId?: unknown; operationType?: unknown; tokensToBuffer?: unknown }
+              | undefined;
+            if (typeof payload?.cycleId === 'string' && payload.cycleId.length > 0) {
+              this._emitTurnEvent({
+                type: 'om_buffering_start',
+                cycleId: payload.cycleId,
+                operationType: payload.operationType === 'reflection' ? 'reflection' : 'observation',
+                tokensToBuffer: typeof payload.tokensToBuffer === 'number' ? payload.tokensToBuffer : 0,
+              });
+            }
+          } else if (chunk.type === 'data-om-buffering-end') {
+            const payload = data as
+              | {
+                  cycleId?: unknown;
+                  operationType?: unknown;
+                  tokensBuffered?: unknown;
+                  bufferedTokens?: unknown;
+                  observations?: unknown;
+                }
+              | undefined;
+            if (typeof payload?.cycleId === 'string' && payload.cycleId.length > 0) {
+              this._emitTurnEvent({
+                type: 'om_buffering_end',
+                cycleId: payload.cycleId,
+                operationType: payload.operationType === 'reflection' ? 'reflection' : 'observation',
+                tokensBuffered: typeof payload.tokensBuffered === 'number' ? payload.tokensBuffered : 0,
+                bufferedTokens: typeof payload.bufferedTokens === 'number' ? payload.bufferedTokens : 0,
+                ...(typeof payload.observations === 'string' ? { observations: payload.observations } : {}),
+              });
+            }
+          } else if (chunk.type === 'data-om-buffering-failed') {
+            const payload = data as { cycleId?: unknown; operationType?: unknown; error?: unknown } | undefined;
+            this._emitTurnEvent({
+              type: 'om_buffering_failed',
+              ...(typeof payload?.cycleId === 'string' ? { cycleId: payload.cycleId } : {}),
+              operationType: payload?.operationType === 'reflection' ? 'reflection' : 'observation',
+              error: typeof payload?.error === 'string' ? payload.error : 'Unknown error',
+            });
           } else if (chunk.type === 'data-tool-update') {
             const payload = data as { toolCallId?: unknown; partialResult?: unknown } | undefined;
             if (

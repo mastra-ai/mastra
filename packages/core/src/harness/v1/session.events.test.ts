@@ -446,6 +446,157 @@ describe('Session events — fullStream drain', () => {
 
     expect(events.find(e => e.type === 'task_updated')).toBeUndefined();
   });
+
+  it('bridges a data-om-status writer chunk into an om_status event', async () => {
+    const { harness, agent } = setup();
+    agent.chunks = [
+      {
+        type: 'data-om-status',
+        data: {
+          windows: {
+            active: {
+              messages: { tokens: 41, threshold: 30000 },
+              observations: { tokens: 1200, threshold: 40000 },
+            },
+            buffered: {
+              observations: {
+                status: 'running',
+                chunks: 2,
+                messageTokens: 500,
+                projectedMessageRemoval: 400,
+                observationTokens: 300,
+              },
+              reflection: {
+                status: 'complete',
+                inputObservationTokens: 900,
+                observationTokens: 600,
+              },
+            },
+          },
+          recordId: 'om-record-1',
+          threadId: 'thread-om',
+          stepNumber: 3,
+          generationCount: 4,
+        },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'observe it' });
+
+    const status = events.find(e => e.type === 'om_status');
+    expect(status).toMatchObject({
+      type: 'om_status',
+      windows: {
+        active: {
+          messages: { tokens: 41, threshold: 30000 },
+          observations: { tokens: 1200, threshold: 40000 },
+        },
+        buffered: {
+          observations: { status: 'running', chunks: 2 },
+          reflection: { status: 'complete', observationTokens: 600 },
+        },
+      },
+      recordId: 'om-record-1',
+      threadId: 'thread-om',
+      stepNumber: 3,
+      generationCount: 4,
+    });
+  });
+
+  it('bridges OM lifecycle writer chunks into typed OM events', async () => {
+    const { harness, agent } = setup();
+    agent.chunks = [
+      {
+        type: 'data-om-observation-start',
+        data: { cycleId: 'obs-1', operationType: 'observation', tokensToObserve: 100 },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-om-observation-end',
+        data: {
+          cycleId: 'obs-1',
+          operationType: 'observation',
+          durationMs: 25,
+          tokensObserved: 100,
+          observationTokens: 80,
+          observations: 'found facts',
+          currentTask: 'ship',
+          suggestedResponse: 'done',
+        },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-om-observation-start',
+        data: { cycleId: 'ref-1', operationType: 'reflection', tokensToObserve: 900 },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-om-observation-end',
+        data: { cycleId: 'ref-1', operationType: 'reflection', durationMs: 30, observationTokens: 450 },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-om-buffering-start',
+        data: { cycleId: 'buf-1', operationType: 'observation', tokensToBuffer: 200 },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-om-buffering-end',
+        data: {
+          cycleId: 'buf-1',
+          operationType: 'observation',
+          tokensBuffered: 200,
+          bufferedTokens: 120,
+          observations: 'buffered facts',
+        },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'observe lifecycle' });
+
+    expect(events.find(e => e.type === 'om_observation_start')).toMatchObject({
+      cycleId: 'obs-1',
+      tokensToObserve: 100,
+    });
+    expect(events.find(e => e.type === 'om_observation_end')).toMatchObject({
+      cycleId: 'obs-1',
+      tokensObserved: 100,
+      observationTokens: 80,
+      observations: 'found facts',
+      currentTask: 'ship',
+      suggestedResponse: 'done',
+    });
+    expect(events.find(e => e.type === 'om_reflection_start')).toMatchObject({
+      cycleId: 'ref-1',
+      tokensToReflect: 900,
+    });
+    expect(events.find(e => e.type === 'om_reflection_end')).toMatchObject({
+      cycleId: 'ref-1',
+      compressedTokens: 450,
+    });
+    expect(events.find(e => e.type === 'om_buffering_start')).toMatchObject({
+      cycleId: 'buf-1',
+      tokensToBuffer: 200,
+    });
+    expect(events.find(e => e.type === 'om_buffering_end')).toMatchObject({
+      cycleId: 'buf-1',
+      tokensBuffered: 200,
+      bufferedTokens: 120,
+      observations: 'buffered facts',
+    });
+  });
 });
 
 describe('Session events — suspension round-trip', () => {
