@@ -492,13 +492,10 @@ export class SchemaCompatLayer {
                     // @ts-expect-error - fix later
                     constraints.push(`a valid ${check._zod.def.format}`);
                     break;
-                  case 'regex': {
+                  case 'regex':
                     // @ts-expect-error - fix later
-                    const pattern = check._zod.def.pattern;
-                    const patternSource = pattern === '^[cC][0-9a-z]{6,}$' ? '^[cC][^\\s-]{8,}$' : pattern;
-                    constraints.push(`input must match this regex ${patternSource}`);
+                    constraints.push(`input must match this regex ${check._zod.def.pattern}`);
                     break;
-                  }
                 }
               }
               break;
