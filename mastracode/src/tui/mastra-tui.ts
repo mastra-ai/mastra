@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
+import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
@@ -84,8 +85,6 @@ export type { MastraTUIOptions } from './state.js';
 // =============================================================================
 // MastraTUI Class
 // =============================================================================
-
-type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
 /**
  * Delivery option attributes applied to user-message signals. When the signal is delivered to an
