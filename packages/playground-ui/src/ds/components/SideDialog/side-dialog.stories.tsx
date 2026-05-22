@@ -12,6 +12,18 @@ const meta: Meta<typeof SideDialog> = {
   component: SideDialog,
   parameters: {
     layout: 'fullscreen',
+    docs: {
+      description: {
+        component: [
+          'Modal panel that slides in from the right edge: rendered in a Portal, with a backdrop,',
+          'focus trap, and Escape / click-outside to close. Stacks via the `level` prop (1-3).',
+          '',
+          'Used for full-screen detail/edit flows — datasets, scorers, MCP clients, the agent',
+          'Evaluate tab. For a non-modal panel embedded directly in the page layout (no overlay),',
+          'see `Composite/DataPanel`, which is the pattern used by the observability trace views.',
+        ].join('\n'),
+      },
+    },
   },
 };
 
