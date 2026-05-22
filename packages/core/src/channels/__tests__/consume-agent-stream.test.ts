@@ -507,6 +507,112 @@ describe('consumeAgentStream', () => {
       });
     });
 
+    it("'cards' mode skips OM events entirely (no plan widget for memory-only work)", async () => {
+      // OM events render into the Plan widget, which only makes sense in
+      // 'timeline'/'grouped' where tool calls already live there. In non-plan
+      // modes the OM rows would either flash a phantom plan widget or land
+      // alongside the cards — both inconsistent with the mode contract.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hello' } },
+          {
+            type: 'data-om-buffering-start',
+            data: { cycleId: 'cyc-1', operationType: 'observation' },
+          },
+          {
+            type: 'data-om-buffering-end',
+            data: { cycleId: 'cyc-1', operationType: 'observation', tokensBuffered: 1000, outputTokens: 500 },
+          },
+          {
+            type: 'data-om-activation',
+            data: { cycleId: 'a1', operationType: 'observation', tokensActivated: 1000, observationTokens: 100 },
+          },
+          { type: 'finish', payload: {} },
+        ] as any,
+        sdkThread,
+      );
+
+      const StreamingPlan = (await getChatModule()).StreamingPlan;
+      const posts = calls.filter(c => c.kind === 'post');
+      const planPosts = posts.filter(p => (p as Extract<Call, { kind: 'post' }>).arg instanceof StreamingPlan);
+      // Text streaming still produces a session; OM produces nothing extra.
+      const allDrained = (
+        await Promise.all(planPosts.map(p => drainStreamingPlan((p as Extract<Call, { kind: 'post' }>).arg)))
+      ).flat();
+      const taskUpdates = allDrained.filter(p => typeof p === 'object' && (p as any).type === 'task_update');
+      const planUpdates = allDrained.filter(p => typeof p === 'object' && (p as any).type === 'plan_update');
+      expect(taskUpdates).toHaveLength(0);
+      // No OM-driven "Updating memory" plan title either.
+      expect(planUpdates.find((p: any) => p.title === 'Updating memory')).toBeUndefined();
+    });
+
+    it("'cards' approval does not push plan/task rows (no flash plan widget)", async () => {
+      // The built-in approval handler used to push plan_update + task_update
+      // unconditionally before posting the Block Kit card, which produced a
+      // one-row Plan widget that closed immediately after — visual noise in
+      // modes where tool calls live out-of-band.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call-approval',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+          },
+          { type: 'finish', payload: {} },
+        ] as any,
+        sdkThread,
+      );
+
+      // The approval card should be posted out-of-band, but no Plan widget
+      // (StreamingPlan post) should appear for the approval itself.
+      const StreamingPlan = (await getChatModule()).StreamingPlan;
+      const posts = calls.filter(c => c.kind === 'post');
+      const planPosts = posts.filter(p => (p as Extract<Call, { kind: 'post' }>).arg instanceof StreamingPlan);
+      expect(planPosts).toHaveLength(0);
+      // The approval card itself is posted as a non-StreamingPlan message.
+      expect(posts.length).toBeGreaterThan(0);
+    });
+
+    it("'grouped' approval still pushes plan/task rows (no regression)", async () => {
+      // Plan-rendering modes should keep parking the approval row in the
+      // plan before closing the session and posting the card — otherwise the
+      // SDK plan would close mid-tool with the row still "in progress" and
+      // flip to ⚠.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call-approval',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+          },
+          { type: 'finish', payload: {} },
+        ] as any,
+        sdkThread,
+      );
+
+      const StreamingPlan = (await getChatModule()).StreamingPlan;
+      const posts = calls.filter(c => c.kind === 'post');
+      const planPosts = posts.filter(p => (p as Extract<Call, { kind: 'post' }>).arg instanceof StreamingPlan);
+      expect(planPosts).toHaveLength(1);
+      const drained = await drainStreamingPlan((planPosts[0] as Extract<Call, { kind: 'post' }>).arg);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string; details?: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      const planUpdates = drained.filter(
+        (p): p is { type: 'plan_update'; title: string } => typeof p === 'object' && (p as any).type === 'plan_update',
+      );
+      // One task_update parking the row, one plan_update titled for the
+      // approval request.
+      expect(taskUpdates).toHaveLength(1);
+      expect(taskUpdates[0]).toMatchObject({ id: 't1', status: 'complete', details: 'Requesting user approval…' });
+      expect(planUpdates.some(p => p.title.startsWith('Requesting approval:'))).toBe(true);
+    });
+
     it("'hidden': drops tool-call/result chunks entirely (no card, no task_update)", async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
       await drive(

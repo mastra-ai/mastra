@@ -355,6 +355,14 @@ export async function runStreamingDriver({
       }
       const om = asOmChunk(chunk);
       if (om) {
+        // OM events render into the Plan widget, so they only make sense
+        // when tool calls already live there. In non-plan modes
+        // (`'cards'`/`'text'`/`'hidden'`/fn) we skip them entirely — a
+        // phantom Plan widget showing only memory rows would be inconsistent
+        // with the mode contract ("everything out of band"). If users want
+        // memory visibility in those modes we can expose it through a
+        // separate option later.
+        if (!rendersToolsInPlan) continue;
         // `cycleId` is the stable task ID across start/end/failed events.
         if (om.data.cycleId) {
           // Set a meaningful plan title on first OM event so memory-only
@@ -680,14 +688,19 @@ export async function runStreamingDriver({
         args: chunk.payload.args,
       });
       const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
-      pushToSession({ type: 'plan_update', title: `Requesting approval: ${enr.displayName}` });
-      pushToSession({
-        type: 'task_update',
-        id: enr.toolCallId,
-        title: taskTitle,
-        status: 'complete',
-        details: 'Requesting user approval…',
-      });
+      // Only park the plan row in modes where tool calls are already rendered
+      // in the plan. Non-plan modes (`'cards'`/`'text'`/`'hidden'`) would
+      // otherwise flash a one-row Plan widget that closes immediately after.
+      if (rendersToolsInPlan) {
+        pushToSession({ type: 'plan_update', title: `Requesting approval: ${enr.displayName}` });
+        pushToSession({
+          type: 'task_update',
+          id: enr.toolCallId,
+          title: taskTitle,
+          status: 'complete',
+          details: 'Requesting user approval…',
+        });
+      }
       await closeSession();
       // Approval cards are always rendered as Block Kit (`useCards: true`)
       // so the Approve/Deny buttons render — non-cards modes never opt out
