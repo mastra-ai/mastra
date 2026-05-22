@@ -46,6 +46,8 @@ import type {
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
   HarnessRuntimeDependencyRefs,
+  HarnessSessionEventRecord,
+  HarnessSessionEventReplayState,
 } from '../../storage/domains/harness';
 import {
   HarnessStorageAttachmentInUseError,
@@ -2876,6 +2878,52 @@ export class Harness {
     if (!stored) return null;
     if (stored.closedAt !== undefined && !opts.includeClosed) return null;
     return stored;
+  }
+
+  async getSessionEventReplayState(opts: {
+    sessionId: string;
+    resourceId: string;
+  }): Promise<HarnessSessionEventReplayState | null> {
+    const storage = this._requireStorage('getSessionEventReplayState()');
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!stored || stored.resourceId !== opts.resourceId) return null;
+    try {
+      return await storage.getSessionEventReplayState({
+        harnessName: stored.harnessName,
+        sessionId: stored.id,
+        resourceId: stored.resourceId,
+        threadId: stored.threadId,
+      });
+    } catch (err) {
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) throw err;
+      throw new HarnessStorageError(stored.id, 'load', err);
+    }
+  }
+
+  async listSessionEventsAfter(opts: {
+    sessionId: string;
+    resourceId: string;
+    epoch: string;
+    afterSequence: number;
+    limit: number;
+  }): Promise<HarnessSessionEventRecord[]> {
+    const storage = this._requireStorage('listSessionEventsAfter()');
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!stored || stored.resourceId !== opts.resourceId) return [];
+    try {
+      return await storage.listSessionEvents({
+        harnessName: stored.harnessName,
+        sessionId: stored.id,
+        resourceId: stored.resourceId,
+        threadId: stored.threadId,
+        epoch: opts.epoch,
+        afterSequence: opts.afterSequence,
+        limit: opts.limit,
+      });
+    } catch (err) {
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) throw err;
+      throw new HarnessStorageError(stored.id, 'load', err);
+    }
   }
 
   async lookupMessageResult(opts: {
