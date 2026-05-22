@@ -318,16 +318,7 @@ export class AgentChannels {
           const adapterConfig = this.adapterConfigs[platform];
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
-          // Look up the Mastra thread to find the runId and tool metadata from pending approvals.
-          // chatThread.id encodes channel + threadTs, so it's stable per conversation:
-          // top-level DM, DM thread reply, channel mention, and channel thread reply each get
-          // their own mastra thread (matching "new convo per slack thread" UX).
-          //
-          // See {@link resolveSlackTopLevelThreadId} for the slack-specific
-          // top-level-click workaround.
-          const externalThreadId =
-            resolveSlackTopLevelThreadId({ platform, adapter, chatThreadId: chatThread.id, messageId }) ??
-            chatThread.id;
+          const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
             channelId: chatThread.channelId,
@@ -749,6 +740,27 @@ export class AgentChannels {
    *     the signal envelope. The LLM ignores `providerOptions.mastra.*` since only
    *     provider-keyed entries (openai, anthropic, …) are forwarded to the model.
    */
+  /**
+   * Resolve the external thread id to use when looking up a Mastra thread for
+   * a tool-approval flow. Dispatches to per-platform compat shims that work
+   * around quirks in how adapters surface threading on inbound action events.
+   * Add new platform branches here as their compat shims land in `./compat/*`.
+   */
+  private resolveExternalThreadId(params: { platform: string; chatThread: Thread; messageId?: string }): string {
+    const { platform, chatThread, messageId } = params;
+    const adapter = this.adapters[platform];
+    if (!adapter) return chatThread.id;
+
+    switch (platform) {
+      case 'slack':
+        return (
+          resolveSlackTopLevelThreadId({ platform, adapter, chatThreadId: chatThread.id, messageId }) ?? chatThread.id
+        );
+      default:
+        return chatThread.id;
+    }
+  }
+
   private buildEventContext(params: {
     chatThread: Thread;
     platform: string;
