@@ -817,6 +817,7 @@ export class EventEmitter {
 
   emit(event: EmitInput, overrides?: { sessionId?: string }): HarnessEvent {
     const sessionId = overrides?.sessionId ?? this.scope.sessionId;
+    this.validateCustomEvent(event, sessionId);
     const stamped = {
       ...event,
       id: formatHarnessEventId(this.epochId, this.seq++),
@@ -845,6 +846,16 @@ export class EventEmitter {
   get epochId(): string {
     this.epoch ??= randomUUID();
     return this.epoch;
+  }
+
+  private validateCustomEvent(event: EmitInput, sessionId: string | undefined): void {
+    const eventType = (event as { type?: unknown }).type;
+    if (typeof eventType !== 'string' || RESERVED_EVENT_TYPES.has(eventType)) return;
+
+    assertCustomEventType(eventType);
+    if (Object.prototype.hasOwnProperty.call(event, 'payload')) {
+      assertJsonSerializable(eventType, sessionId, (event as { payload?: unknown }).payload);
+    }
   }
 
   private dispatch(event: HarnessEvent): void {
@@ -932,6 +943,16 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'message_start',
   'message_update',
   'message_end',
+  'om_status',
+  'om_observation_start',
+  'om_observation_end',
+  'om_observation_failed',
+  'om_reflection_start',
+  'om_reflection_end',
+  'om_reflection_failed',
+  'om_buffering_start',
+  'om_buffering_end',
+  'om_buffering_failed',
   'tool_input_start',
   'tool_input_delta',
   'tool_input_end',
@@ -962,6 +983,11 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'permission_granted',
   'permission_revoked',
   'permission_policy_changed',
+  'subagent_start',
+  'subagent_text_delta',
+  'subagent_tool_start',
+  'subagent_tool_end',
+  'subagent_end',
 ]);
 
 /** Prefixes reserved for built-in event families (subagent_*, goal_*, etc.). */
