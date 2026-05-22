@@ -231,6 +231,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   };
 
   #consumptionStarted = false;
+  #consumeStreamPromise?: Promise<void>;
   #returnScorerData = false;
   #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
@@ -1316,21 +1317,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    if (this.#consumptionStarted) {
-      return;
+    if (this.#consumeStreamPromise) {
+      return this.#consumeStreamPromise;
     }
 
     this.#consumptionStarted = true;
 
-    try {
-      await consumeStream({
-        stream: this.#baseStream as globalThis.ReadableStream<any>,
-        onError: options?.onError,
-        logger: this.logger,
-      });
-    } catch (error) {
-      options?.onError?.(error);
-    }
+    this.#consumeStreamPromise = (async () => {
+      try {
+        await consumeStream({
+          stream: this.#baseStream as globalThis.ReadableStream<any>,
+          onError: options?.onError,
+          logger: this.logger,
+        });
+      } catch (error) {
+        options?.onError?.(error);
+      }
+    })();
+
+    return this.#consumeStreamPromise;
   }
 
   /**

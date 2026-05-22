@@ -286,7 +286,11 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    const filtered = this.filterMessagesForPersistence(messages);
+    const filtered = this.filterMessagesForPersistence(messages).map(message => ({
+      ...message,
+      threadId,
+      ...(resourceId ? { resourceId } : {}),
+    }));
 
     if (filtered.length === 0) {
       return;
