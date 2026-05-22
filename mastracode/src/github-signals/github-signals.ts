@@ -1170,7 +1170,6 @@ export class GithubSignals {
 
     try {
       if (this.#notificationPoller && subscription.repo) {
-        await this.#notificationPoller.refreshPullRequestNotifications(subscription.repo, subscription.prNumber);
         const notifications = await this.#notificationPoller.store.readPrNotifications(
           this.#notificationPoller.accountKey,
           subscription.repo,

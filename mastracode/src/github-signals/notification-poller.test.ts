@@ -165,72 +165,6 @@ describe('GithubNotificationPoller', () => {
     expect(commandRunner.mock.calls.filter(call => call[0].includes('/notifications'))).toHaveLength(2);
   });
 
-  it('does not refresh PR notifications from a non-master instance', async () => {
-    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
-    const store = createSharedStore(url);
-    await store.upsertNotifications('account-1', [
-      {
-        id: 'n1',
-        repo: 'mastra-ai/mastra',
-        prNumber: 123,
-        title: 'Stale PR row',
-        subjectType: 'PullRequest',
-        reason: 'author',
-        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
-    await createSharedStore(url).acquireMasterLease('account-1', 45_000);
-    const commandRunner = vi.fn(async (_args: string[]) => ({ stdout: '{}' }));
-    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1' });
-
-    await expect(poller.refreshPullRequestNotifications('mastra-ai/mastra', 123)).resolves.toEqual([]);
-    expect(commandRunner).not.toHaveBeenCalled();
-  });
-
-  it('does not upsert refreshed PR notifications after losing the master lease', async () => {
-    let currentTime = Date.parse('2026-01-01T00:06:00.000Z');
-    const now = () => new Date(currentTime);
-    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
-    const store = createSharedStore(url, now);
-    const competitorStore = createSharedStore(url, now);
-    await store.upsertNotifications('account-1', [
-      {
-        id: 'n1',
-        repo: 'mastra-ai/mastra',
-        prNumber: 123,
-        title: 'Stale PR row',
-        subjectType: 'PullRequest',
-        reason: 'author',
-        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        prMergeable: true,
-        prMergeableState: 'blocked',
-        prHeadSha: 'old-sha',
-        prMergeabilityCheckedAt: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
-    const commandRunner = vi.fn(async (args: string[]) => {
-      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123') {
-        currentTime += 46_000;
-        await competitorStore.acquireMasterLease('account-1', 45_000);
-        return {
-          stdout: JSON.stringify({
-            mergeable: false,
-            mergeable_state: 'dirty',
-          }),
-        };
-      }
-      throw new Error(`Unexpected command: ${args.join(' ')}`);
-    });
-    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now });
-
-    await expect(poller.refreshPullRequestNotifications('mastra-ai/mastra', 123)).resolves.toEqual([]);
-    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
-      { id: 'n1', prMergeable: true, prMergeableState: 'blocked', prHeadSha: 'old-sha' },
-    ]);
-  });
-
   it('leader-gates shared PR snapshot refreshes and reuses fresh cached snapshots', async () => {
     let currentTime = Date.parse('2026-01-01T00:10:00.000Z');
     const now = () => new Date(currentTime);
@@ -639,65 +573,6 @@ describe('GithubNotificationPoller', () => {
         call => call[0][1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/sha-1/check-runs',
       ),
     ).toHaveLength(1);
-  });
-
-  it('refreshes stale mergeability for a subscribed cached PR row', async () => {
-    const store = createSharedStore();
-    await store.upsertNotifications('account-1', [
-      {
-        id: 'n1',
-        repo: 'mastra-ai/mastra',
-        prNumber: 123,
-        title: 'Stale PR row',
-        subjectType: 'PullRequest',
-        reason: 'author',
-        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        prMergeable: true,
-        prMergeableState: 'blocked',
-        prHeadSha: 'old-sha',
-        prMergeabilityCheckedAt: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
-    const commandRunner = vi.fn(async (args: string[]) => {
-      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123') {
-        return {
-          stdout: JSON.stringify({
-            state: 'open',
-            merged: false,
-            html_url: 'https://github.com/mastra-ai/mastra/pull/123',
-            mergeable: false,
-            mergeable_state: 'dirty',
-            head: { sha: 'new-sha' },
-          }),
-        };
-      }
-      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/new-sha/check-runs') {
-        return { stdout: JSON.stringify({ check_runs: [] }) };
-      }
-      throw new Error(`Unexpected command: ${args.join(' ')}`);
-    });
-    const poller = new GithubNotificationPoller({
-      store,
-      commandRunner,
-      accountKey: 'account-1',
-      now: () => new Date('2026-01-01T00:06:00.000Z'),
-    });
-
-    await expect(poller.refreshPullRequestNotifications('mastra-ai/mastra', 123)).resolves.toMatchObject([
-      { id: 'n1', prMergeable: false, prMergeableState: 'dirty', prHeadSha: 'new-sha' },
-    ]);
-
-    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
-      {
-        id: 'n1',
-        failedChecks: [],
-        prMergeable: false,
-        prMergeableState: 'dirty',
-        prHeadSha: 'new-sha',
-        prMergeabilityCheckedAt: '2026-01-01T00:06:00.000Z',
-      },
-    ]);
   });
 
   it('does not send invalid empty ETags for conditional notification polling', async () => {

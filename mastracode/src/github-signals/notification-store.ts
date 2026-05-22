@@ -389,29 +389,6 @@ export class GithubNotificationStore {
     return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
   }
 
-  async readPrNotificationsNeedingMergeabilityRefresh(
-    accountKey: string,
-    repo: string,
-    prNumber: number,
-    staleBefore: string,
-  ): Promise<GithubInboxNotification[]> {
-    await this.init();
-    const minUpdatedAt = new Date(this.#now().getTime() - MAX_NOTIFICATION_AGE_MS).toISOString();
-    const result = await this.#execute({
-      sql: `SELECT * FROM github_notifications
-        WHERE account_key = ?
-          AND repo = ?
-          AND pr_number = ?
-          AND lower(subject_type) = 'pullrequest'
-          AND updated_at >= ?
-          AND (pr_mergeability_checked_at IS NULL OR pr_mergeability_checked_at <= ?)
-        ORDER BY updated_at DESC, notification_id DESC
-        LIMIT ?`,
-      args: [accountKey, repo, prNumber, minUpdatedAt, staleBefore, MAX_NOTIFICATIONS_PER_PR],
-    });
-    return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
-  }
-
   async readPrSnapshot(accountKey: string, repo: string, prNumber: number): Promise<GithubPrSnapshotCache | undefined> {
     await this.init();
     const result = await this.#execute({

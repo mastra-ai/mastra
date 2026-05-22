@@ -11,7 +11,6 @@ import type { GithubInboxNotification, GithubPrSnapshotCache } from './notificat
 const MASTER_LEASE_MS = 45_000;
 const MASTER_HEARTBEAT_INTERVAL_MS = 15_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
-const MERGEABILITY_REFRESH_MS = 5 * 60_000;
 const DEFAULT_SNAPSHOT_REFRESH_MS = 15 * 60_000;
 const RECENT_READ_NOTIFICATION_LOOKBACK_MS = 15 * 60_000;
 const READ_NOTIFICATION_OVERLAP_MS = 2 * 60_000;
@@ -118,29 +117,6 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
         this.emit('rate-limited', { accountKey: this.accountKey, until });
         return { role: 'master', updated: false, notifications: [], rateLimitedUntil: until };
       }
-      throw error;
-    }
-  }
-
-  async refreshPullRequestNotifications(repo: string, prNumber: number): Promise<GithubInboxNotification[]> {
-    const isMaster = await this.store.acquireMasterLease(this.accountKey, MASTER_LEASE_MS);
-    if (!isMaster) return [];
-    try {
-      return await this.#withMasterHeartbeat(async () => {
-        await this.#heartbeatOrAbort();
-        const staleBefore = new Date(this.#now().getTime() - MERGEABILITY_REFRESH_MS).toISOString();
-        const notifications = await this.store.readPrNotificationsNeedingMergeabilityRefresh(
-          this.accountKey,
-          repo,
-          prNumber,
-          staleBefore,
-        );
-        if (notifications.length === 0) return [];
-        await this.#heartbeatOrAbort();
-        return this.#refreshNotifications(notifications);
-      });
-    } catch (error) {
-      if (isLostMasterLeaseError(error)) return [];
       throw error;
     }
   }
