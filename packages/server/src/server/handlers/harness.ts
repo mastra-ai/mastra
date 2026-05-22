@@ -51,6 +51,8 @@ import {
   harnessQueueAdmissionBodySchema,
   harnessQueueAdmissionResponseSchema,
   harnessQueueResultPathParams,
+  harnessSignalBodySchema,
+  harnessSignalResponseSchema,
   harnessOperationResultResponseSchema,
   harnessSessionPathParams,
   harnessSessionSnapshotSchema,
@@ -187,6 +189,27 @@ type HarnessLike = {
       yolo?: boolean;
       attachments?: unknown[];
     }): Promise<{ accepted: true; queuedItemId: string; duplicate: boolean }>;
+    signal(opts: {
+      content: string | Record<string, unknown>[];
+      signalId?: string;
+      mode?: string;
+      ifActive?: { attributes?: Record<string, string | number | boolean | null> };
+      ifIdle?: { attributes?: Record<string, string | number | boolean | null> };
+    }): Promise<{
+      accepted: true;
+      id: string;
+      runId: string;
+      willInterleave: boolean;
+      signal: unknown;
+      result?: Promise<unknown>;
+    }>;
+    injectSystemReminder(
+      content: string,
+      opts?: {
+        attributes?: Record<string, string | number | boolean | null>;
+        metadata?: Record<string, unknown>;
+      },
+    ): Promise<{ accepted: true; id: string; runId: string; willInterleave: boolean; signal: unknown }>;
     switchMode(opts: { mode: string }): Promise<void>;
     models: {
       switch(opts: { model: string }): Promise<void>;
@@ -300,6 +323,21 @@ type QueueAdmissionBody = Omit<Parameters<HarnessSessionLike['admitQueue']>[0], 
   attachments?: WireAttachmentInput[];
   files?: WireAttachmentInput[];
 };
+type SignalBody =
+  | {
+      type: 'user-message';
+      content: string | Record<string, unknown>[];
+      signalId?: string;
+      mode?: string;
+      ifActive?: { attributes?: Record<string, string | number | boolean | null> };
+      ifIdle?: { attributes?: Record<string, string | number | boolean | null> };
+    }
+  | {
+      type: 'system-reminder';
+      contents: string;
+      attributes?: Record<string, string | number | boolean | null>;
+      metadata?: Record<string, unknown>;
+    };
 type OperationLookupResponse =
   | { status: 'pending'; source: 'message' | 'queue'; runId?: string }
   | { status: 'completed'; source: 'message' | 'queue'; runId?: string; result: unknown }
@@ -2089,6 +2127,47 @@ export const POST_HARNESS_QUEUE_ROUTE = createRoute({
       return await session.admitQueue(
         await normalizeQueueAdmissionBody(harness, pathSessionId, resourceId, body, abortSignal),
       );
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const POST_HARNESS_SIGNAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:name/sessions/:sessionId/signals',
+  responseType: 'json',
+  pathParamSchema: harnessSessionPathParams,
+  bodySchema: harnessSignalBodySchema,
+  responseSchema: harnessSignalResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Send a live Harness session signal',
+  description:
+    'Dispatches a live user-message signal or system-reminder signal and returns the routing decision without awaiting run completion.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, requestBody, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const body = objectRequestBody(requestBody, 'Signal dispatch') as SignalBody;
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      if (body.type === 'system-reminder') {
+        return await session.injectSystemReminder(body.contents, {
+          ...(body.attributes ? { attributes: body.attributes } : {}),
+          ...(body.metadata ? { metadata: body.metadata } : {}),
+        });
+      }
+      const { result: _result, ...accepted } = await session.signal({
+        content: body.content,
+        ...(body.signalId ? { signalId: body.signalId } : {}),
+        ...(body.mode ? { mode: body.mode } : {}),
+        ...(body.ifActive ? { ifActive: body.ifActive } : {}),
+        ...(body.ifIdle ? { ifIdle: body.ifIdle } : {}),
+      });
+      return accepted;
     } catch (error) {
       return mapHarnessError(error);
     }

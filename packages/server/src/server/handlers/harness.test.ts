@@ -41,6 +41,7 @@ import {
   POST_HARNESS_ATTACHMENT_ROUTE,
   POST_HARNESS_MESSAGE_ROUTE,
   POST_HARNESS_QUEUE_ROUTE,
+  POST_HARNESS_SIGNAL_ROUTE,
   PUT_HARNESS_GOAL_ROUTE,
   RESPOND_HARNESS_INBOX_ROUTE,
   RESUME_HARNESS_GOAL_ROUTE,
@@ -165,6 +166,7 @@ describe('Harness server routes', () => {
     expect(HARNESS_ROUTES).toContain(DELETE_HARNESS_ATTACHMENT_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_MESSAGE_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_QUEUE_ROUTE);
+    expect(HARNESS_ROUTES).toContain(POST_HARNESS_SIGNAL_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_MESSAGE_RESULT_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_QUEUE_RESULT_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_SESSION_EVENTS_ROUTE);
@@ -196,6 +198,8 @@ describe('Harness server routes', () => {
     expect(POST_HARNESS_MESSAGE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_QUEUE_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_QUEUE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(POST_HARNESS_SIGNAL_ROUTE.requiresAuth).toBe(true);
+    expect(POST_HARNESS_SIGNAL_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_MESSAGE_RESULT_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_MESSAGE_RESULT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_QUEUE_RESULT_ROUTE.requiresAuth).toBe(true);
@@ -1634,6 +1638,94 @@ describe('Harness server routes', () => {
       yolo: true,
     });
     expect(result).toEqual({ accepted: true, queuedItemId: 'queue-1', duplicate: true });
+  });
+
+  it('dispatches a live user-message signal without serializing its completion promise', async () => {
+    const completion = Promise.resolve({ text: 'done' });
+    const session = {
+      signal: vi.fn(async () => ({
+        accepted: true as const,
+        id: 'signal-1',
+        runId: 'run-1',
+        willInterleave: true,
+        signal: { id: 'signal-1', type: 'user-message' },
+        result: completion,
+      })),
+    };
+    const harness = { session: vi.fn(async () => session) };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const result = await POST_HARNESS_SIGNAL_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'query-code',
+        sessionId: 'query-session',
+        requestPathParams: { name: 'code', sessionId: 'session-1' },
+        requestBody: {
+          type: 'user-message',
+          content: [{ type: 'text', text: 'follow up' }],
+          signalId: 'client-signal-1',
+          ifActive: { attributes: { delivery: 'while-active' } },
+          ifIdle: { attributes: { delivery: 'message' } },
+        },
+      }),
+    );
+
+    expect(mastra.getHarness).toHaveBeenCalledWith('code');
+    expect(harness.session).toHaveBeenCalledWith({ sessionId: 'session-1', resourceId: 'resource-1' });
+    expect(session.signal).toHaveBeenCalledWith({
+      content: [{ type: 'text', text: 'follow up' }],
+      signalId: 'client-signal-1',
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
+    });
+    expect(result).toEqual({
+      accepted: true,
+      id: 'signal-1',
+      runId: 'run-1',
+      willInterleave: true,
+      signal: { id: 'signal-1', type: 'user-message' },
+    });
+  });
+
+  it('dispatches a live system-reminder signal through the Harness session', async () => {
+    const session = {
+      injectSystemReminder: vi.fn(async () => ({
+        accepted: true as const,
+        id: 'signal-reminder-1',
+        runId: 'run-1',
+        willInterleave: false,
+        signal: { id: 'signal-reminder-1', type: 'system-reminder' },
+      })),
+    };
+    const harness = { session: vi.fn(async () => session) };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const result = await POST_HARNESS_SIGNAL_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        requestBody: {
+          type: 'system-reminder',
+          contents: 'continue',
+          attributes: { type: 'goal-judge' },
+          metadata: { goalId: 'goal-1' },
+        },
+      }),
+    );
+
+    expect(session.injectSystemReminder).toHaveBeenCalledWith('continue', {
+      attributes: { type: 'goal-judge' },
+      metadata: { goalId: 'goal-1' },
+    });
+    expect(result).toEqual({
+      accepted: true,
+      id: 'signal-reminder-1',
+      runId: 'run-1',
+      willInterleave: false,
+      signal: { id: 'signal-reminder-1', type: 'system-reminder' },
+    });
   });
 
   it('maps queue attachment admission failures to client-actionable errors', async () => {

@@ -441,6 +441,37 @@ export const harnessQueueAdmissionResponseSchema = z.object({
   duplicate: z.boolean(),
 });
 
+const signalAttributesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
+
+export const harnessSignalBodySchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('user-message'),
+      content: z.union([z.string().min(1), z.array(jsonRecordSchema).min(1)]),
+      signalId: z.string().min(1).optional(),
+      mode: z.string().min(1).optional(),
+      ifActive: z.object({ attributes: signalAttributesSchema.optional() }).strict().optional(),
+      ifIdle: z.object({ attributes: signalAttributesSchema.optional() }).strict().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('system-reminder'),
+      contents: z.string().min(1),
+      attributes: signalAttributesSchema.optional(),
+      metadata: jsonRecordSchema.optional(),
+    })
+    .strict(),
+]);
+
+export const harnessSignalResponseSchema = z.object({
+  accepted: z.literal(true),
+  id: z.string(),
+  runId: z.string(),
+  willInterleave: z.boolean(),
+  signal: z.unknown(),
+});
+
 const operationResultBaseSchema = z.object({
   status: z.enum(['pending', 'completed', 'failed', 'expired', 'not_found']),
   source: z.enum(['message', 'queue']),
