@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.37.0-alpha.2
+
+### Minor Changes
+
+- Added signal delivery option attributes API that conditionally merges branch `attributes` based on whether a signal is delivered to an active agent run (`ifActive.attributes`) or an idle run (`ifIdle.attributes`). This enables contextual signal delivery — for example, tagging user messages as `while-active` when the agent is actively working. ([#16923](https://github.com/mastra-ai/mastra/pull/16923))
+
+### Patch Changes
+
+- Fixed processor workflow steps so `sendSignal` is available when processors inject Agent signals, and updated Observational Memory temporal gap markers to use Agent signals. ([#16927](https://github.com/mastra-ai/mastra/pull/16927))
+
+- Fixed an issue where thread subscriptions could appear idle after a run finished. Subsequent runs now stream promptly, and post-finish signals correctly start from an idle state. ([#16928](https://github.com/mastra-ai/mastra/pull/16928))
+
 ## 1.37.0-alpha.1
 
 ### Minor Changes
