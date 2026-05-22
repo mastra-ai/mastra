@@ -418,13 +418,6 @@ html.light {
   ::-webkit-scrollbar-track {
     background: transparent;
   }
-  /* Inset the track so the thumb never reaches the corners. */
-  ::-webkit-scrollbar-track:vertical {
-    margin-block: 6px;
-  }
-  ::-webkit-scrollbar-track:horizontal {
-    margin-inline: 6px;
-  }
   ::-webkit-scrollbar-thumb {
     background-color: color-mix(in oklab, var(--neutral4) 30%, transparent);
     border-radius: 9999px;
