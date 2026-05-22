@@ -338,6 +338,34 @@ describe('resolveModel', () => {
         headers: undefined,
       });
     });
+
+    it('falls back to the Harness per-turn model id when state has not been seeded', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      const values = new Map<string, unknown>();
+      const requestContext = {
+        get: (key: string) => values.get(key),
+        set: (key: string, value: unknown) => values.set(key, value),
+      } as any;
+      requestContext.set('harness', {
+        modelId: 'openai/gpt-5.2',
+        state: {
+          thinkingLevel: 'high',
+        },
+      });
+
+      getDynamicModel({ requestContext });
+
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
+        thinkingLevel: 'high',
+        headers: undefined,
+      });
+    });
   });
 
   describe('other providers', () => {
