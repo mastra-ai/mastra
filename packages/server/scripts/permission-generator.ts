@@ -10,6 +10,7 @@
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { AGENT_BUILDER_ROUTES } from '../src/server/server-adapter/routes/agent-builder.js';
 import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 import { getEffectivePermission } from '../src/server/server-adapter/routes/permissions.js';
 
@@ -119,7 +120,14 @@ export function derivePermissionData(): PermissionData {
   const actionSet = new Set<string>();
   const permissionSet = new Set<string>();
 
-  for (const route of SERVER_ROUTES) {
+  // AGENT_BUILDER_ROUTES are intentionally excluded from SERVER_ROUTES so the
+  // routes barrel does not eagerly import @mastra/agent-builder (Cloudflare
+  // Workers compat — see agent-builder-loading.test.ts). They are still
+  // protected at runtime by `agent-builder:*` permissions, so include them
+  // here when deriving the permission catalog.
+  const routesForPermissions = [...SERVER_ROUTES, ...AGENT_BUILDER_ROUTES];
+
+  for (const route of routesForPermissions) {
     const permission = getEffectivePermission(route);
     if (permission) {
       const perms = Array.isArray(permission) ? permission : [permission];
