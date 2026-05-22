@@ -13416,7 +13416,7 @@ describe('Single-thread replay red tests', () => {
       .join(' | ');
   }
 
-  it('T1-A: messages at exact lastObservedAt boundary should replay on next turn', async () => {
+  it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
     const { messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -13453,7 +13453,7 @@ describe('Single-thread replay red tests', () => {
 
     const remainingText = getModelVisibleText(messageList);
 
-    expect(remainingText).toContain('old-at-boundary');
+    expect(remainingText).not.toContain('old-at-boundary');
     expect(remainingText).toContain('new-after-boundary');
   });
 
