@@ -615,7 +615,7 @@ async function processOutputStream<OUTPUT = undefined>({
         // so the messageList is up-to-date as early as possible.
         // For same-stream results (call + result in one step), no matching part exists yet
         // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
-        if (chunk.payload.result != null) {
+        if (chunk.payload.isError || chunk.payload.result != null) {
           const resultToolDef =
             tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
           messageList.updateToolInvocation({
@@ -630,7 +630,9 @@ async function processOutputStream<OUTPUT = undefined>({
                   errorText:
                     typeof chunk.payload.result === 'string'
                       ? chunk.payload.result
-                      : safeStringify(chunk.payload.result),
+                      : chunk.payload.result == null
+                        ? 'Tool execution failed'
+                        : safeStringify(chunk.payload.result),
                 }
               : {
                   state: 'result',
