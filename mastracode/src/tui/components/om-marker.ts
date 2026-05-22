@@ -166,7 +166,10 @@ function formatMarker(data: OMMarkerData): string {
         data.activationCount && data.activationCount > 1 ? `${data.activationCount} observations` : 'observations';
       const idleSuffix =
         data.activateAfterIdle !== undefined ? ` (${formatDuration(data.activateAfterIdle)} idle timeout)` : '';
-      return theme.fg('success', `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens${idleSuffix}`);
+      return theme.fg(
+        'success',
+        `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens${idleSuffix}`,
+      );
     }
     case 'om_activation_provider_change': {
       return theme.fg('muted', `  Model changed ${data.previousModel} → ${data.currentModel}, activating observations`);
