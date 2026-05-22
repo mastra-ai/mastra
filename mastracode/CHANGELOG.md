@@ -1,5 +1,29 @@
 # mastracode
 
+## 0.20.1-alpha.2
+
+### Patch Changes
+
+- Fixed slash commands so they run immediately while the agent is active instead of being queued, while message-sending slash commands still show pending UI until accepted. ([#16790](https://github.com/mastra-ai/mastra/pull/16790))
+
+  Improved Ctrl+F follow-up queueing for slash commands and replaced synchronous git branch detection with an async version to reduce event loop blocking during streaming.
+
+- Replaced the update notification modal with an inline component so it renders in the conversation flow and is scrollable on any terminal size. Changelog entries now display their full text instead of being truncated, with natural word-wrapping inside the bordered box. ([#16920](https://github.com/mastra-ai/mastra/pull/16920))
+
+- Added signal delivery option attributes API that conditionally merges branch `attributes` based on whether a signal is delivered to an active agent run (`ifActive.attributes`) or an idle run (`ifIdle.attributes`). This enables contextual signal delivery — for example, tagging user messages as `while-active` when the agent is actively working. ([#16923](https://github.com/mastra-ai/mastra/pull/16923))
+
+- Updated dependencies [[`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67)]:
+  - @mastra/core@1.37.0-alpha.2
+  - @mastra/memory@1.19.1-alpha.0
+
+## 0.20.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+  - @mastra/observability@1.14.0-alpha.0
+
 ## 0.20.1-alpha.0
 
 ### Patch Changes
