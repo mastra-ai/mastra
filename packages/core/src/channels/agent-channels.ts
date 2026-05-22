@@ -17,6 +17,7 @@ import { createTool } from '../tools/tool';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import { getChatModule } from './chat-lazy';
+import { resolveSlackTopLevelThreadId } from './compat/slack';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
@@ -322,31 +323,11 @@ export class AgentChannels {
           // top-level DM, DM thread reply, channel mention, and channel thread reply each get
           // their own mastra thread (matching "new convo per slack thread" UX).
           //
-          // Slack-specific workaround: the slack adapter's handleBlockActions falls back to
-          // `messageTs` when the clicked card has no `thread_ts` (i.e. the card was posted at
-          // top level, not inside a thread). That makes the action's chatThread.id point at a
-          // "thread keyed by the card itself" rather than the top-level conversation the user
-          // was actually in, so the pending approval lookup misses. Detect that case by
-          // checking whether the decoded threadTs equals the clicked message id, and if so,
-          // rewrite the externalThreadId to the top-level (empty threadTs) form.
-          let externalThreadId = chatThread.id;
-          if (
-            platform === 'slack' &&
-            messageId &&
-            typeof (adapter as { decodeThreadId?: (id: string) => { channel: string; threadTs: string } })
-              .decodeThreadId === 'function' &&
-            typeof (adapter as { encodeThreadId?: (data: { channel: string; threadTs: string }) => string })
-              .encodeThreadId === 'function'
-          ) {
-            const slackAdapter = adapter as {
-              decodeThreadId: (id: string) => { channel: string; threadTs: string };
-              encodeThreadId: (data: { channel: string; threadTs: string }) => string;
-            };
-            const decoded = slackAdapter.decodeThreadId(chatThread.id);
-            if (decoded.threadTs === messageId) {
-              externalThreadId = slackAdapter.encodeThreadId({ channel: decoded.channel, threadTs: '' });
-            }
-          }
+          // See {@link resolveSlackTopLevelThreadId} for the slack-specific
+          // top-level-click workaround.
+          const externalThreadId =
+            resolveSlackTopLevelThreadId({ platform, adapter, chatThreadId: chatThread.id, messageId }) ??
+            chatThread.id;
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
             channelId: chatThread.channelId,
