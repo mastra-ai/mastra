@@ -3,6 +3,7 @@ import type { ChannelProvider } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/di';
 import { coreFeatures } from '@mastra/core/features';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   channelPlatformPathParams,
@@ -15,7 +16,7 @@ import {
 } from '../schemas/channels';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
-import { assertWriteAccess } from './authorship';
+import { assertWriteAccess, getCallerAuthorId, hasAdminBypass, hasScopedPermission } from './authorship';
 import { handleError } from './error';
 
 // ============================================================================
@@ -40,45 +41,59 @@ function getChannelOrThrow(mastra: Mastra, platform: string): ChannelProvider {
   return channel;
 }
 
-function assertAgentExists(mastra: Mastra, agentId: string): void {
-  const agent = mastra.getAgentById(agentId);
-  if (!agent) {
-    throw new HTTPException(404, {
-      message: `Agent "${agentId}" not found`,
-    });
-  }
-}
-
 /**
- * Attaching/detaching a channel bot is a write to the agent: it changes how
- * that agent receives traffic and which external bot represents it. Gate it
- * with the same ownership rules as editing the stored agent record.
+ * Unified connect/disconnect authorization.
  *
- * If the agent isn't in the stored-agents store (code-defined agent), there
- * is no per-agent ownership metadata to enforce — the route's `requiresAuth`
- * remains the effective gate.
+ * - Stored agent exists → same write access as editing the agent record.
+ * - Code-defined agent (no stored record) → route's `requiresAuth` is the gate.
+ * - Agent doesn't exist anywhere:
+ *   - connect → 404 (can't connect a channel to a non-existent agent)
+ *   - disconnect → orphan cleanup, gated on `channels:write`
  */
 async function assertChannelAgentWriteAccess(
   mastra: Mastra,
   requestContext: RequestContext,
   agentId: string,
+  action: 'connect' | 'disconnect',
 ): Promise<void> {
   const storage = mastra.getStorage();
-  if (!storage) return;
+  const agentsStore = storage ? await storage.getStore('agents') : null;
+  const stored = agentsStore ? await agentsStore.getById(agentId) : null;
 
-  const agentsStore = await storage.getStore('agents');
-  if (!agentsStore) return;
+  if (stored) {
+    assertWriteAccess({
+      requestContext,
+      resource: 'agents',
+      resourceId: agentId,
+      action: 'edit',
+      record: stored,
+    });
+    return;
+  }
 
-  const stored = await agentsStore.getById(agentId);
-  if (!stored) return;
+  // Not in stored-agents (or storage doesn't support it). Check the runtime
+  // registry for a code-defined agent.
+  const codeDefined = mastra.getAgentById(agentId);
+  if (codeDefined) {
+    // Code-defined agents have no owner/ACL — route's requiresAuth /
+    // requiresPermission is the gate. Pass-through.
+    return;
+  }
 
-  assertWriteAccess({
-    requestContext,
-    resource: 'agents',
-    resourceId: agentId,
-    action: 'edit',
-    record: stored,
-  });
+  if (action === 'connect') {
+    throw new HTTPException(404, { message: `Agent "${agentId}" not found` });
+  }
+
+  // Disconnect against an unknown agentId = orphan cleanup (stored agent was
+  // deleted but the channel installation row is still around). Allow it, but
+  // gate on channels:write so this isn't an "any authenticated user" backdoor.
+  // Follow the same no-auth-configured pass-through as assertWriteAccess.
+  const callerAuthorId = getCallerAuthorId(requestContext);
+  if (!callerAuthorId && !requestContext.get(MASTRA_USER_KEY)) return;
+  if (hasAdminBypass(requestContext, 'channels')) return;
+  if (hasScopedPermission({ requestContext, resource: 'channels', action: 'write' })) return;
+
+  throw new HTTPException(404, { message: 'Not found' });
 }
 
 // ============================================================================
@@ -163,7 +178,6 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, platform, agentId, options }) => {
     assertChannelsAvailable();
     try {
-      assertAgentExists(mastra, agentId);
       const channel = getChannelOrThrow(mastra, platform);
 
       if (!channel.connect) {
@@ -172,7 +186,7 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
         });
       }
 
-      await assertChannelAgentWriteAccess(mastra, requestContext, agentId);
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId, 'connect');
 
       return await channel.connect(agentId, options);
     } catch (error) {
@@ -197,7 +211,6 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, platform, agentId }) => {
     assertChannelsAvailable();
     try {
-      assertAgentExists(mastra, agentId);
       const channel = getChannelOrThrow(mastra, platform);
 
       if (!channel.disconnect) {
@@ -206,7 +219,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
         });
       }
 
-      await assertChannelAgentWriteAccess(mastra, requestContext, agentId);
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId, 'disconnect');
 
       await channel.disconnect(agentId);
       return { success: true };
