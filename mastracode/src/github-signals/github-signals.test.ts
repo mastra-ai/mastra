@@ -97,6 +97,10 @@ function createSnapshotCommandRunner(snapshots: TestSnapshot[], permissions: Rec
       throw new Error(`Unexpected command: ${args.join(' ')}`);
     }
 
+    if (args.includes('/notifications')) {
+      return { stdout: 'HTTP/2.0 200 OK\netag: "etag-empty"\n\n[]' };
+    }
+
     const permissionMatch = endpoint.match(/^repos\/([^/]+\/[^/]+)\/collaborators\/([^/]+)\/permission$/);
     if (permissionMatch) {
       const user = permissionMatch[2]!;
@@ -394,7 +398,9 @@ describe('GithubSignals', () => {
     });
 
     expect(result).toEqual({ pendingDelivered: 2 });
-    expect(poll).toHaveBeenCalledWith(expect.objectContaining({ repo: 'mastra-ai/mastra', prNumber: 123 }));
+    expect(poll).toHaveBeenCalledWith(expect.objectContaining({ repo: 'mastra-ai/mastra', prNumber: 123 }), {
+      forceSnapshot: true,
+    });
     expect(deliverPendingNotifications).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceId: 'resource-1',
@@ -853,7 +859,7 @@ describe('GithubSignals', () => {
 
     await github.poll();
 
-    expect(commandRunner).toHaveBeenCalledTimes(3);
+    expect(commandRunner).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledTimes(2);
     const calls = sendSignal.mock.calls as any[];
     expect(calls[0][0]).toMatchObject({
@@ -940,7 +946,7 @@ describe('GithubSignals', () => {
     await github.poll();
     await github.poll();
 
-    expect(commandRunner).toHaveBeenCalledTimes(2);
+    expect(commandRunner).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const calls = sendSignal.mock.calls as any[];
     expect(calls[0][0]).toMatchObject({
@@ -1048,7 +1054,7 @@ describe('GithubSignals', () => {
 
     await github.poll();
 
-    expect(commandRunner).toHaveBeenCalledTimes(1);
+    expect(commandRunner).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         attributes: expect.objectContaining({ type: 'github-ci-failure', checkCount: 1 }),
@@ -1400,8 +1406,6 @@ describe('GithubSignals', () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-03T00:00:00.000Z');
     const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
-    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
-    await blockerStore.acquireMasterLease('account-1', 45_000);
     const commandRunner = createSnapshotCommandRunner([
       createSnapshot({
         title: 'feat: ship it',
@@ -2238,19 +2242,68 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('emits merge conflict notifications from a shared cached PR snapshot without per-process fallback API calls', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertPrSnapshot('account-1', {
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      title: 'Cached PR',
+      url: 'https://github.com/mastra-ai/mastra/pull/123',
+      state: 'open',
+      merged: false,
+      mergeable: false,
+      mergeableState: 'dirty',
+      headSha: 'sha-conflict',
+      failedChecks: [],
+      reviews: [],
+      checkedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+    await new GithubNotificationStore({ client: createClient({ url: dbUrl }), now }).acquireMasterLease(
+      'account-1',
+      45_000,
+    );
+    const commandRunner = vi.fn(async (args: string[]) => {
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      snapshotPollIntervalMs: 15 * 60_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastMergeConflictFingerprint: undefined,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(commandRunner).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: expect.objectContaining({ type: 'github-pr-conflict', pr: 123 }) }),
+      expect.anything(),
+    );
+    github.destroy();
+  });
+
   it('emits real conflicts from the shared-inbox snapshot fallback when no inbox row changes', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');
     const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
-    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
-    await blockerStore.acquireMasterLease('account-1', 45_000);
     const commandRunner = createSnapshotCommandRunner([
-      createSnapshot({
-        title: 'feat: needs main',
-        mergeable: true,
-        mergeableState: 'blocked',
-        headSha: 'sha-blocked',
-      }),
       createSnapshot({
         title: 'feat: needs merge work',
         mergeable: false,
@@ -2297,8 +2350,6 @@ describe('GithubSignals', () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');
     const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
-    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
-    await blockerStore.acquireMasterLease('account-1', 45_000);
     const commandRunner = createSnapshotCommandRunner([
       createSnapshot({
         title: 'feat: needs merge work',

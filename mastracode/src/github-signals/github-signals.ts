@@ -16,7 +16,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v4';
 
 import type { GithubNotificationPoller } from './notification-poller.js';
-import type { GithubInboxNotification } from './notification-store.js';
+import type { GithubInboxNotification, GithubPrSnapshotCache } from './notification-store.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,6 +32,7 @@ const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
+const DEFAULT_SNAPSHOT_POLL_INTERVAL_MS = 15 * 60_000;
 const DEFAULT_PENDING_FLUSH_MS = 5 * 60_000;
 const DEFAULT_GH_COMMAND_TIMEOUT_MS = 30_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
@@ -74,6 +75,7 @@ export type GithubAutoUnsubscribeHandler = (event: GithubAutoUnsubscribeEvent) =
 export interface GithubSignalsOptions {
   repo?: string;
   pollIntervalMs?: number;
+  snapshotPollIntervalMs?: number;
   pendingFlushMs?: number;
   includeTool?: boolean;
   commandRunner?: GithubCommandRunner;
@@ -89,6 +91,7 @@ type NormalizedGithubSignalsOptions = Required<
   Pick<
     GithubSignalsOptions,
     | 'pollIntervalMs'
+    | 'snapshotPollIntervalMs'
     | 'pendingFlushMs'
     | 'includeTool'
     | 'commandRunner'
@@ -256,6 +259,23 @@ interface GithubPRSnapshot {
   failedChecks: Array<{ name: string; status: string; url?: string }>;
   comments: Array<{ id: string; body?: string; author?: string; createdAt?: string; updatedAt?: string; url?: string }>;
   reviews: Array<{ id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string }>;
+}
+
+function prSnapshotCacheToSnapshot(snapshot: GithubPrSnapshotCache): GithubPRSnapshot {
+  return {
+    title: snapshot.title,
+    url: snapshot.url,
+    state: snapshot.state,
+    merged: snapshot.merged,
+    closedAt: snapshot.closedAt,
+    mergedAt: snapshot.mergedAt,
+    mergeable: snapshot.mergeable,
+    mergeableState: snapshot.mergeableState,
+    headSha: snapshot.headSha,
+    failedChecks: snapshot.failedChecks ?? [],
+    comments: [],
+    reviews: snapshot.reviews ?? [],
+  };
 }
 
 export const ghSignals = {
@@ -688,6 +708,7 @@ export class GithubSignals {
     this.#options = {
       repo: options.repo,
       pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+      snapshotPollIntervalMs: options.snapshotPollIntervalMs ?? DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
       pendingFlushMs: options.pendingFlushMs ?? DEFAULT_PENDING_FLUSH_MS,
       includeTool: options.includeTool ?? true,
       commandRunner: options.commandRunner ?? defaultGithubCommandRunner,
@@ -850,7 +871,7 @@ export class GithubSignals {
       repo: options.repo,
       prNumber: options.prNumber,
     };
-    await this.poll(context);
+    await this.poll(context, { forceSnapshot: true });
     const pendingDelivered = await this.deliverPendingNotifications({
       ...context,
       repo: options.repo,
@@ -1073,7 +1094,7 @@ export class GithubSignals {
     setTimeout(() => void this.markIdle(context), 0);
   }
 
-  async poll(context?: ActiveThreadContext) {
+  async poll(context?: ActiveThreadContext, options: { forceSnapshot?: boolean } = {}) {
     if (this.#polling) return;
     this.#polling = true;
     try {
@@ -1095,7 +1116,7 @@ export class GithubSignals {
           if (registeredAgent) await this.#emitCommandError(registeredAgent, subscription, sharedInboxError);
           continue;
         }
-        await this.#pollSubscription(subscription);
+        await this.#pollSubscription(subscription, options);
       }
       await this.#flushExpiredPendingNotifications();
     } finally {
@@ -1137,7 +1158,7 @@ export class GithubSignals {
     await this.poll(context);
   }
 
-  async #pollSubscription(subscription: ActiveSubscription) {
+  async #pollSubscription(subscription: ActiveSubscription, options: { forceSnapshot?: boolean } = {}) {
     const registeredAgent = this.#agents.get(subscription.agentId);
     if (!registeredAgent) return;
 
@@ -1153,8 +1174,11 @@ export class GithubSignals {
         );
         await this.#emitCachedNotifications(registeredAgent, subscription, notifications);
         try {
-          const snapshot = await this.#loadPullRequestSnapshot(subscription);
-          await this.#emitSnapshotReviewAndStateNotifications(registeredAgent, subscription, snapshot);
+          const snapshot = await this.#refreshSharedSnapshot(subscription, options.forceSnapshot === true);
+          if (snapshot) {
+            await this.#emitCheckNotifications(registeredAgent, subscription, snapshot.failedChecks);
+            await this.#emitSnapshotReviewAndStateNotifications(registeredAgent, subscription, snapshot);
+          }
         } catch {
           // Shared inbox delivery still works without the fallback snapshot poll.
         }
@@ -1166,6 +1190,23 @@ export class GithubSignals {
     } catch (error) {
       if (!isSqliteBusyError(error)) await this.#emitCommandError(registeredAgent, subscription, error);
     }
+  }
+
+  async #refreshSharedSnapshot(
+    subscription: ActiveSubscription,
+    force: boolean,
+  ): Promise<GithubPRSnapshot | undefined> {
+    if (!this.#notificationPoller || !subscription.repo) return undefined;
+    const staleBefore = new Date(this.#options.now().getTime() - this.#options.snapshotPollIntervalMs).toISOString();
+    const cachedSnapshot = await this.#notificationPoller.refreshPullRequestSnapshot(
+      subscription.repo,
+      subscription.prNumber,
+      {
+        staleBefore,
+        force,
+      },
+    );
+    return cachedSnapshot ? prSnapshotCacheToSnapshot(cachedSnapshot) : undefined;
   }
 
   async getSubscribeSummary(subscription: GithubPRSubscriptionMetadata): Promise<string | undefined> {

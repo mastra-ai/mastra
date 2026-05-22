@@ -231,6 +231,102 @@ describe('GithubNotificationPoller', () => {
     ]);
   });
 
+  it('leader-gates shared PR snapshot refreshes and reuses fresh cached snapshots', async () => {
+    let currentTime = Date.parse('2026-01-01T00:10:00.000Z');
+    const now = () => new Date(currentTime);
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[1] === 'repos/mastra-ai/mastra/pulls/123') {
+        return {
+          stdout: JSON.stringify({
+            title: 'Cached PR',
+            html_url: 'https://github.com/mastra-ai/mastra/pull/123',
+            state: 'open',
+            merged: false,
+            mergeable: false,
+            mergeable_state: 'dirty',
+            head: { sha: 'sha-1' },
+          }),
+        };
+      }
+      if (args[1] === 'repos/mastra-ai/mastra/pulls/123/reviews') {
+        return {
+          stdout: JSON.stringify([
+            [
+              {
+                id: 1,
+                user: { login: 'coderabbitai[bot]' },
+                state: 'COMMENTED',
+                submitted_at: '2026-01-01T00:05:00.000Z',
+                body: 'Review body',
+                html_url: 'https://github.com/review/1',
+              },
+            ],
+          ]),
+        };
+      }
+      if (args[1] === 'repos/mastra-ai/mastra/commits/sha-1/check-runs') {
+        return {
+          stdout: JSON.stringify({
+            check_runs: [{ name: 'test', conclusion: 'failure', details_url: 'https://checks/test' }],
+          }),
+        };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const first = new GithubNotificationPoller({
+      store: createSharedStore(url, now),
+      commandRunner,
+      accountKey: 'account-1',
+      now,
+    });
+    const second = new GithubNotificationPoller({
+      store: createSharedStore(url, now),
+      commandRunner,
+      accountKey: 'account-1',
+      now,
+    });
+
+    await expect(first.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
+      title: 'Cached PR',
+      mergeableState: 'dirty',
+      headSha: 'sha-1',
+      failedChecks: [{ name: 'test', status: 'failure', url: 'https://checks/test' }],
+      reviews: [{ id: '1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
+    });
+    await expect(second.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
+      headSha: 'sha-1',
+    });
+    expect(commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123')).toHaveLength(1);
+
+    currentTime += 16 * 60_000;
+    await expect(second.refreshPullRequestSnapshot('mastra-ai/mastra', 123)).resolves.toMatchObject({
+      headSha: 'sha-1',
+    });
+    expect(commandRunner.mock.calls.filter(call => call[0][1] === 'repos/mastra-ai/mastra/pulls/123')).toHaveLength(2);
+  });
+
+  it('does not run shared PR snapshot refresh commands from a non-master instance', async () => {
+    const url = `file:${process.cwd()}/.tmp-notification-poller-${Date.now()}-${Math.random()}.db`;
+    const store = createSharedStore(url);
+    await store.upsertPrSnapshot('account-1', {
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      title: 'Existing snapshot',
+      headSha: 'sha-1',
+      checkedAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await createSharedStore(url).acquireMasterLease('account-1', 45_000);
+    const commandRunner = vi.fn(async (_args: string[]) => ({ stdout: '{}' }));
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1' });
+
+    await expect(
+      poller.refreshPullRequestSnapshot('mastra-ai/mastra', 123, { staleBefore: '2026-01-01T00:01:00.000Z' }),
+    ).resolves.toMatchObject({ title: 'Existing snapshot' });
+    expect(commandRunner).not.toHaveBeenCalled();
+  });
+
   it('caches recent read notifications that were cleared outside MastraCode', async () => {
     const commandRunner = vi.fn(async (args: string[]) => {
       if (args.includes('all=true')) return { stdout: ghResponse([notification('read-n1')]) };

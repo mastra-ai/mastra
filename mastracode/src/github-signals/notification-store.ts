@@ -28,6 +28,24 @@ export interface GithubNotificationAccountState {
   };
 }
 
+export interface GithubPrSnapshotCache {
+  repo: string;
+  prNumber: number;
+  title?: string;
+  url?: string;
+  state?: string;
+  merged?: boolean;
+  closedAt?: string;
+  mergedAt?: string;
+  mergeable?: boolean | string | null;
+  mergeableState?: string;
+  headSha?: string;
+  failedChecks?: Array<{ name: string; status: string; url?: string }>;
+  reviews?: Array<{ id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string }>;
+  checkedAt: string;
+  updatedAt: string;
+}
+
 export interface GithubInboxNotification {
   id: string;
   repo: string;
@@ -58,6 +76,24 @@ export interface GithubInboxNotification {
 }
 
 type SqlStatement = string | { sql: string; args?: Array<string | number | null> };
+
+interface GithubPrSnapshotRow {
+  repo: string;
+  pr_number: number;
+  title: string | null;
+  url: string | null;
+  state: string | null;
+  merged: number | null;
+  closed_at: string | null;
+  merged_at: string | null;
+  mergeable_json: string | null;
+  mergeable_state: string | null;
+  head_sha: string | null;
+  failed_checks_json: string | null;
+  reviews_json: string | null;
+  checked_at: string;
+  updated_at: string;
+}
 
 interface GithubNotificationRow {
   notification_id: string;
@@ -372,6 +408,70 @@ export class GithubNotificationStore {
     return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
   }
 
+  async readPrSnapshot(accountKey: string, repo: string, prNumber: number): Promise<GithubPrSnapshotCache | undefined> {
+    await this.init();
+    const result = await this.#execute({
+      sql: `SELECT * FROM github_pr_snapshots WHERE account_key = ? AND repo = ? AND pr_number = ?`,
+      args: [accountKey, repo, prNumber],
+    });
+    const row = result.rows[0] as unknown as GithubPrSnapshotRow | undefined;
+    return row ? rowToPrSnapshot(row) : undefined;
+  }
+
+  async readFreshPrSnapshot(
+    accountKey: string,
+    repo: string,
+    prNumber: number,
+    staleBefore: string,
+  ): Promise<GithubPrSnapshotCache | undefined> {
+    const snapshot = await this.readPrSnapshot(accountKey, repo, prNumber);
+    if (!snapshot) return undefined;
+    return Date.parse(snapshot.checkedAt) > Date.parse(staleBefore) ? snapshot : undefined;
+  }
+
+  async upsertPrSnapshot(accountKey: string, snapshot: GithubPrSnapshotCache): Promise<void> {
+    await this.init();
+    await this.#ensureAccount(accountKey);
+    await this.#execute({
+      sql: `INSERT INTO github_pr_snapshots (
+          account_key, repo, pr_number, title, url, state, merged, closed_at, merged_at, mergeable_json,
+          mergeable_state, head_sha, failed_checks_json, reviews_json, checked_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(account_key, repo, pr_number) DO UPDATE SET
+          title = excluded.title,
+          url = excluded.url,
+          state = excluded.state,
+          merged = excluded.merged,
+          closed_at = excluded.closed_at,
+          merged_at = excluded.merged_at,
+          mergeable_json = excluded.mergeable_json,
+          mergeable_state = excluded.mergeable_state,
+          head_sha = excluded.head_sha,
+          failed_checks_json = excluded.failed_checks_json,
+          reviews_json = excluded.reviews_json,
+          checked_at = excluded.checked_at,
+          updated_at = excluded.updated_at`,
+      args: [
+        accountKey,
+        snapshot.repo,
+        snapshot.prNumber,
+        snapshot.title ?? null,
+        snapshot.url ?? null,
+        snapshot.state ?? null,
+        snapshot.merged === undefined ? null : snapshot.merged ? 1 : 0,
+        snapshot.closedAt ?? null,
+        snapshot.mergedAt ?? null,
+        JSON.stringify(snapshot.mergeable ?? null),
+        snapshot.mergeableState ?? null,
+        snapshot.headSha ?? null,
+        JSON.stringify(snapshot.failedChecks ?? []),
+        JSON.stringify(snapshot.reviews ?? []),
+        snapshot.checkedAt,
+        snapshot.updatedAt,
+      ],
+    });
+  }
+
   async hasNotificationDelivery(input: {
     accountKey: string;
     resourceId: string;
@@ -525,6 +625,29 @@ export class GithubNotificationStore {
     await this.#execute(
       'CREATE INDEX IF NOT EXISTS idx_github_notifications_touched ON github_notifications(touched_at)',
     );
+
+    await this.#execute(`CREATE TABLE IF NOT EXISTS github_pr_snapshots (
+      account_key TEXT NOT NULL,
+      repo TEXT NOT NULL,
+      pr_number INTEGER NOT NULL,
+      title TEXT,
+      url TEXT,
+      state TEXT,
+      merged INTEGER,
+      closed_at TEXT,
+      merged_at TEXT,
+      mergeable_json TEXT,
+      mergeable_state TEXT,
+      head_sha TEXT,
+      failed_checks_json TEXT,
+      reviews_json TEXT,
+      checked_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_key, repo, pr_number)
+    )`);
+    await this.#execute(
+      'CREATE INDEX IF NOT EXISTS idx_github_pr_snapshots_checked ON github_pr_snapshots(account_key, repo, pr_number, checked_at)',
+    );
     await this.#execute(`CREATE TABLE IF NOT EXISTS github_notification_deliveries (
       account_key TEXT NOT NULL,
       resource_id TEXT NOT NULL,
@@ -593,6 +716,26 @@ export class GithubNotificationStore {
   }
 }
 
+function rowToPrSnapshot(row: GithubPrSnapshotRow): GithubPrSnapshotCache {
+  return {
+    repo: row.repo,
+    prNumber: Number(row.pr_number),
+    title: row.title ?? undefined,
+    url: row.url ?? undefined,
+    state: row.state ?? undefined,
+    merged: row.merged === null ? undefined : Number(row.merged) === 1,
+    closedAt: row.closed_at ?? undefined,
+    mergedAt: row.merged_at ?? undefined,
+    mergeable: parseJson(row.mergeable_json) as boolean | string | null | undefined,
+    mergeableState: row.mergeable_state ?? undefined,
+    headSha: row.head_sha ?? undefined,
+    failedChecks: parseFailedChecks(row.failed_checks_json) ?? [],
+    reviews: parseReviews(row.reviews_json) ?? [],
+    checkedAt: row.checked_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function rowToNotification(row: GithubNotificationRow): GithubInboxNotification {
   return {
     id: row.notification_id,
@@ -655,6 +798,21 @@ function parseFailedChecks(value: string | null): Array<{ name: string; status: 
     );
   });
   return checks;
+}
+
+function parseReviews(
+  value: string | null,
+):
+  | Array<{ id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string }>
+  | undefined {
+  const parsed = parseJson(value);
+  if (!Array.isArray(parsed)) return undefined;
+  return parsed.filter(
+    (
+      review,
+    ): review is { id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string } =>
+      !!review && typeof review === 'object' && typeof (review as Record<string, unknown>).id === 'string',
+  );
 }
 
 function parseJson(value: string | null): unknown {

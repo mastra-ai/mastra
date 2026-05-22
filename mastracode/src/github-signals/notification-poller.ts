@@ -6,12 +6,13 @@ import {
   GithubNotificationStore,
   normalizeGithubInboxNotification,
 } from './notification-store.js';
-import type { GithubInboxNotification } from './notification-store.js';
+import type { GithubInboxNotification, GithubPrSnapshotCache } from './notification-store.js';
 
 const MASTER_LEASE_MS = 45_000;
 const MASTER_HEARTBEAT_INTERVAL_MS = 15_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
 const MERGEABILITY_REFRESH_MS = 5 * 60_000;
+const DEFAULT_SNAPSHOT_REFRESH_MS = 15 * 60_000;
 const RECENT_READ_NOTIFICATION_LOOKBACK_MS = 15 * 60_000;
 const READ_NOTIFICATION_OVERLAP_MS = 2 * 60_000;
 
@@ -142,6 +143,108 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
       if (isLostMasterLeaseError(error)) return [];
       throw error;
     }
+  }
+
+  async refreshPullRequestSnapshot(
+    repo: string,
+    prNumber: number,
+    options: { staleBefore?: string; force?: boolean } = {},
+  ): Promise<GithubPrSnapshotCache | undefined> {
+    const state = await this.store.getAccountState(this.accountKey);
+    if (state.rateLimitedUntil && Date.parse(state.rateLimitedUntil) > this.#now().getTime()) {
+      return this.store.readPrSnapshot(this.accountKey, repo, prNumber);
+    }
+
+    const staleBefore =
+      options.staleBefore ?? new Date(this.#now().getTime() - DEFAULT_SNAPSHOT_REFRESH_MS).toISOString();
+    if (!options.force) {
+      const freshSnapshot = await this.store.readFreshPrSnapshot(this.accountKey, repo, prNumber, staleBefore);
+      if (freshSnapshot) return freshSnapshot;
+    }
+
+    const isMaster = await this.store.acquireMasterLease(this.accountKey, MASTER_LEASE_MS);
+    if (!isMaster) return this.store.readPrSnapshot(this.accountKey, repo, prNumber);
+
+    try {
+      return await this.#withMasterHeartbeat(async () => {
+        await this.#heartbeatOrAbort();
+        if (!options.force) {
+          const freshSnapshot = await this.store.readFreshPrSnapshot(this.accountKey, repo, prNumber, staleBefore);
+          if (freshSnapshot) return freshSnapshot;
+        }
+
+        const previous = await this.store.readPrSnapshot(this.accountKey, repo, prNumber);
+        await this.#heartbeatOrAbort();
+        const snapshot = await this.#loadPullRequestSnapshot(repo, prNumber, previous);
+        await this.#heartbeatOrAbort();
+        await this.store.upsertPrSnapshot(this.accountKey, snapshot);
+        return snapshot;
+      });
+    } catch (error) {
+      if (isLostMasterLeaseError(error)) return this.store.readPrSnapshot(this.accountKey, repo, prNumber);
+      if (isRateLimitError(error)) {
+        const until = getRateLimitedUntil(error, this.#now);
+        if (await this.#heartbeatMasterLease()) {
+          await this.store.updateAccountState(this.accountKey, {
+            checkedAt: this.#now().toISOString(),
+            rateLimitedUntil: until,
+          });
+          this.emit('rate-limited', { accountKey: this.accountKey, until });
+        }
+        return this.store.readPrSnapshot(this.accountKey, repo, prNumber);
+      }
+      throw error;
+    }
+  }
+
+  async #loadPullRequestSnapshot(
+    repo: string,
+    prNumber: number,
+    previous: GithubPrSnapshotCache | undefined,
+  ): Promise<GithubPrSnapshotCache> {
+    const { stdout: pullRequestStdout } = await this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}`]);
+    const pullRequest = parseJsonObject(pullRequestStdout);
+    const headSha = getString(pullRequest, ['head', 'sha']);
+
+    await this.#heartbeatOrAbort();
+    const [reviewsStdout, checksStdout] = await Promise.all([
+      this.#commandRunner(['api', `repos/${repo}/pulls/${prNumber}/reviews`, '--paginate', '--slurp']).then(
+        result => result.stdout,
+      ),
+      headSha
+        ? this.#commandRunner(['api', `repos/${repo}/commits/${headSha}/check-runs`]).then(result => result.stdout)
+        : Promise.resolve(undefined),
+    ]);
+
+    const reviews = parseJsonArray(reviewsStdout)
+      .map(normalizeReview)
+      .filter((review): review is NonNullable<ReturnType<typeof normalizeReview>> => !!review);
+    const checks = checksStdout
+      ? getArray(parseJsonObject(checksStdout).check_runs)
+          .map(normalizeCheck)
+          .filter((check): check is { name: string; status: string; url?: string } => {
+            return !!check && isFailedCheckStatus(check.status);
+          })
+      : (previous?.failedChecks ?? []);
+    const checkedAt = this.#now().toISOString();
+
+    return {
+      repo,
+      prNumber,
+      title: getString(pullRequest, ['title']),
+      url: getString(pullRequest, ['html_url']),
+      state: getString(pullRequest, ['state']),
+      merged: getBoolean(pullRequest, ['merged']),
+      closedAt: getString(pullRequest, ['closed_at']),
+      mergedAt: getString(pullRequest, ['merged_at']),
+      mergeable: getNullableBoolean(pullRequest, ['mergeable']) ?? getString(pullRequest, ['mergeable']),
+      mergeableState: getString(pullRequest, ['mergeable_state']) ?? getString(pullRequest, ['mergeStateStatus']),
+      headSha,
+      failedChecks: checks,
+      reviews,
+      checkedAt,
+      updatedAt: checkedAt,
+    };
   }
 
   async #backfillMissingEnrichment(): Promise<GithubInboxNotification[]> {
@@ -364,7 +467,8 @@ function normalizeEtag(etag?: string): string | undefined {
 function parseJsonArray(value: string): unknown[] {
   if (!value.trim()) return [];
   const parsed = JSON.parse(value) as unknown;
-  if (Array.isArray(parsed)) return parsed;
+  if (Array.isArray(parsed))
+    return parsed.every(item => Array.isArray(item)) ? parsed.flatMap(item => item as unknown[]) : parsed;
   if (Array.isArray((parsed as Record<string, unknown>)?.items))
     return (parsed as Record<string, unknown>).items as unknown[];
   return [];
@@ -420,6 +524,23 @@ function normalizeCheck(input: unknown): { name: string; status: string; url?: s
   const status = getString(record, ['conclusion']) ?? getString(record, ['status']);
   if (!name || !status) return undefined;
   return { name, status, url: getString(record, ['html_url']) ?? getString(record, ['details_url']) };
+}
+
+function normalizeReview(
+  input: unknown,
+): { id: string; body?: string; author?: string; submittedAt?: string; state?: string; url?: string } | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const record = input as Record<string, unknown>;
+  const id = String(record.id ?? '');
+  if (!id) return undefined;
+  return {
+    id,
+    body: getString(record, ['body']),
+    author: getString(record, ['user', 'login']) ?? getString(record, ['author']),
+    submittedAt: getString(record, ['submitted_at']) ?? getString(record, ['submittedAt']),
+    state: getString(record, ['state']),
+    url: getString(record, ['html_url']) ?? getString(record, ['url']),
+  };
 }
 
 function isFailedCheckStatus(status: string) {

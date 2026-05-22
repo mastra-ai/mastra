@@ -152,6 +152,43 @@ describe('GithubNotificationStore', () => {
     expect(stored.at(-1)?.id).toBe('n54');
   });
 
+  it('round-trips shared PR snapshot cache rows', async () => {
+    const store = createStore();
+
+    await store.upsertPrSnapshot('account-1', {
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      title: 'Cached PR',
+      url: 'https://github.com/mastra-ai/mastra/pull/123',
+      state: 'open',
+      merged: false,
+      mergeable: false,
+      mergeableState: 'dirty',
+      headSha: 'sha-1',
+      failedChecks: [{ name: 'test', status: 'failure', url: 'https://github.com/checks/test' }],
+      reviews: [{ id: 'r1', author: 'coderabbitai[bot]', state: 'COMMENTED', submittedAt: '2026-01-01T00:01:00.000Z' }],
+      checkedAt: '2026-01-01T00:02:00.000Z',
+      updatedAt: '2026-01-01T00:02:00.000Z',
+    });
+
+    await expect(store.readPrSnapshot('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject({
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      title: 'Cached PR',
+      mergeable: false,
+      mergeableState: 'dirty',
+      headSha: 'sha-1',
+      failedChecks: [{ name: 'test', status: 'failure', url: 'https://github.com/checks/test' }],
+      reviews: [{ id: 'r1', author: 'coderabbitai[bot]', state: 'COMMENTED' }],
+    });
+    await expect(
+      store.readFreshPrSnapshot('account-1', 'mastra-ai/mastra', 123, '2026-01-01T00:01:59.000Z'),
+    ).resolves.toMatchObject({ headSha: 'sha-1' });
+    await expect(
+      store.readFreshPrSnapshot('account-1', 'mastra-ai/mastra', 123, '2026-01-01T00:02:01.000Z'),
+    ).resolves.toBeUndefined();
+  });
+
   it('claims notification delivery once per thread and notification update', async () => {
     const url = createTestDbUrl();
     const first = createStore(undefined, url);
