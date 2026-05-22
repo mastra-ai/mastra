@@ -49,6 +49,21 @@ await harness.selectOrCreateThread()
 await harness.sendMessage({ content: 'Hello!' })
 ```
 
+## Storage compatibility
+
+Harness v1 uses the `harness` storage domain for session records, leases, queue state, attachments, operation evidence, and optional session event replay. A storage adapter can support durable sessions without supporting replay; in that case the session still runs, but rehydrated owners start a fresh live event stream instead of resuming the previous event epoch.
+
+For production Harness surfaces, use a storage provider that implements the Harness storage domain methods listed below:
+
+| Capability | Required for | Behavior when unsupported |
+| - | - | - |
+| `createOrLoadActiveSession`, `loadSession`, `saveSession`, leases, queue/evidence methods | durable Harness sessions, wakeups, close/delete safety | session creation or mutation fails at the call site |
+| `appendSessionEvent`, `getSessionEventReplayState`, `listSessionEvents` | reconnecting clients and rehydrated owners that need event replay continuity | Harness catches `HarnessStorageSessionEventReplayUnsupportedError` and continues without replay |
+| attachment methods | file uploads and attachment lifecycle safety | attachment APIs fail at the call site |
+| workspace action journal methods | durable workspace action replay/reconciliation | workspace action replay APIs fail at the call site |
+
+Score persistence uses the observability storage domain, not the Harness session domain. If you see an error such as `This storage provider does not support batch creating scores`, the configured observability store does not implement `batchCreateScores`; configure a provider with score batch support or disable the score persistence path for that environment. This does not mean Harness session storage or session event replay is broken.
+
 ## Session action catalog
 
 Harness v1 sessions expose a read-only action catalog for desktop command palettes. The catalog combines skill action metadata with MCP tool descriptors. It does not execute actions or grant permissions.
