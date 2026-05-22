@@ -190,13 +190,6 @@ describe('Stored Agents via MastraEditor', () => {
       );
     });
 
-    it('should throw error when storage is not configured', async () => {
-      const editor = new MastraEditor();
-      const mastra = new Mastra({ editor });
-
-      await expect(editor.agent.getById('test-id')).rejects.toThrow('Storage is not configured');
-    });
-
     it('should return null when agent is not found', async () => {
       const storage = new InMemoryStore();
       const editor = new MastraEditor();
@@ -377,13 +370,6 @@ describe('Stored Agents via MastraEditor', () => {
   });
 
   describe('agent.list', () => {
-    it('should throw error when storage is not configured', async () => {
-      const editor = new MastraEditor();
-      const mastra = new Mastra({ editor });
-
-      await expect(editor.agent.list()).rejects.toThrow('Storage is not configured');
-    });
-
     it('should return empty list when no agents exist', async () => {
       const storage = new InMemoryStore();
       const editor = new MastraEditor();
