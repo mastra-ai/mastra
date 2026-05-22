@@ -44,7 +44,7 @@ const agent = new Agent({
   id: 'agent',
   name: 'OpenAI Realtime Agent',
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new OpenAIRealtimeVoice(),
 })
 
@@ -78,7 +78,7 @@ const agent = new Agent({
   name: 'Gemini Live Agent',
   instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
     model: 'gemini-2.0-flash-exp',
@@ -125,7 +125,7 @@ const agent = new Agent({
   name: 'Nova Sonic Agent',
   instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new NovaSonicVoice({
     region: 'us-east-1',
     speaker: 'matthew',

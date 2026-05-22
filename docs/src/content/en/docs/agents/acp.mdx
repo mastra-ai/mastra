@@ -72,7 +72,7 @@ export const codeSupervisor = new Agent({
   id: 'code-supervisor',
   name: 'Code Supervisor',
   instructions: 'Delegate code editing tasks to the code-agent subagent.',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: {
     codeAgent,
   },
@@ -101,7 +101,7 @@ export const codeSupervisor = new Agent({
   id: 'code-supervisor',
   name: 'Code Supervisor',
   instructions: 'Use the code-agent tool when a task requires repository inspection or code edits.',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: {
     codeAgentTool,
   },

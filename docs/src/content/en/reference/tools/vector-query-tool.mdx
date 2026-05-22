@@ -336,7 +336,7 @@ const queryTool = createVectorQueryTool({
   indexName: 'documentation',
   model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   reranker: {
-    model: '__OPENAI_MODEL__',
+    model: '__GATEWAY_OPENAI_MODEL__',
     options: {
       weights: {
         semantic: 0.5, // Semantic relevance weight

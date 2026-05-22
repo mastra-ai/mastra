@@ -162,7 +162,7 @@ export const agent = new Agent({
   id: 'multilingual-agent',
   name: 'multilingual-agent',
   instructions: 'You are a helpful assistant',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new LanguageDetector({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',

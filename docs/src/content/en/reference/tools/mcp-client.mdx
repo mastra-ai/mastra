@@ -933,7 +933,7 @@ const agent = new Agent({
   id: 'multi-tool-agent',
   name: 'Multi-tool Agent',
   instructions: 'You have access to multiple tool servers.',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: await mcp.listTools(),
 })
 
@@ -984,7 +984,7 @@ const agent = new Agent({
   id: 'multi-tool-agent',
   name: 'Multi-tool Agent',
   instructions: 'You help users check stocks and weather.',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Later, configure MCP with user-specific settings

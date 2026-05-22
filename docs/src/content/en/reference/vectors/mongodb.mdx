@@ -396,7 +396,7 @@ export const mongodbAgent = new Agent({
   name: 'mongodb-agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new MongoDBStore({
       id: 'mongodb-storage',

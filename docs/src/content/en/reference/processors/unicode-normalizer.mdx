@@ -106,7 +106,7 @@ export const agent = new Agent({
   id: 'normalized-agent',
   name: 'normalized-agent',
   instructions: 'You are a helpful assistant',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,

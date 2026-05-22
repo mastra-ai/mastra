@@ -54,7 +54,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'file-agent',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   instructions: 'You are a helpful file management assistant.',
   workspace,
 })
@@ -130,7 +130,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'multi-role-agent',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
 })
 ```

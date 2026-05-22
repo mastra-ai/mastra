@@ -39,7 +39,7 @@ const browser = new AgentBrowser({
 export const browserAgent = new Agent({
   id: 'browser-agent',
   name: 'Browser Agent',
-  model: '__OPENAI_MODEL__',
+  model: '__GATEWAY_OPENAI_MODEL__',
   browser,
   instructions: `You are a web automation assistant.
 
