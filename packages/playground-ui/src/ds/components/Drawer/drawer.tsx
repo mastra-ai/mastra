@@ -105,15 +105,17 @@ type DrawerViewportProps = Omit<DrawerPrimitive.Viewport.Props, 'className'> & {
   className?: string;
 };
 
-// `pointer-events-none` lets outside clicks fall through to the backdrop element so
-// click-to-dismiss works; the popup re-enables pointer events for itself.
+// A plain full-screen flex container, exactly like the Base UI examples. It must NOT
+// set `pointer-events: none` for modal drawers — that breaks the swipe gesture. The
+// non-modal opt-out (`pointer-events-none` here + `pointer-events-auto` on the popup)
+// is applied by `DrawerContent` only when there is no backdrop.
 const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(({ className, ...props }, ref) => {
   const side = useDrawerSide();
   return (
     <DrawerPrimitive.Viewport
       ref={ref}
       data-slot="drawer-viewport"
-      className={cn('pointer-events-none fixed inset-0 z-50 flex', viewportSideClasses[side], className)}
+      className={cn('fixed inset-0 z-50 flex', viewportSideClasses[side], className)}
       {...props}
     />
   );
@@ -125,7 +127,7 @@ DrawerViewport.displayName = 'DrawerViewport';
 // just slides; a drawer with nested children behind it scales down and peeks out.
 // Underscores in arbitrary values become spaces — required around calc `+`/`-`.
 const drawerPopupBaseClass = cn(
-  'group/popup pointer-events-auto relative z-50 box-border flex flex-col overflow-y-auto outline-none will-change-transform',
+  'group/popup relative z-50 box-border flex flex-col overflow-y-auto overscroll-contain outline-none [touch-action:auto] will-change-transform',
   'border-border1 bg-surface3 text-neutral5 shadow-dialog',
   '[--bleed:3rem] [--peek:1rem] [--stack-step:0.05]',
   '[--stack-progress:clamp(0,var(--drawer-swipe-progress,0),1)]',
@@ -212,10 +214,15 @@ const HandleBar = () => <div className={cn('mx-auto my-2 h-1 w-12 shrink-0 round
 /**
  * Convenience composition of Portal + Backdrop + Viewport + Popup.
  *
- * Children are wrapped in a plain `<div>`, not Base UI's `Drawer.Content` — the latter
- * marks its subtree as mouse-text-selectable, which makes a mouse drag inside it select
- * text instead of swiping the drawer closed. A plain `<div>` keeps the whole panel
- * draggable-to-dismiss with both pointer and touch, anywhere on its surface.
+ * Children sit in a plain `<div>`, not Base UI's `Drawer.Content`. `Drawer.Content`
+ * marks its subtree as mouse-text-selectable, so a *pointer* drag inside it selects
+ * text instead of swiping (touch still swipes). A plain `<div>` keeps the entire
+ * panel drag-to-dismiss for pointer and touch alike. Pair this with not putting
+ * `pointer-events: none` on a modal viewport — that also blocks the swipe.
+ *
+ * `hideBackdrop` marks the drawer as non-modal: it drops the backdrop and switches the
+ * viewport to `pointer-events: none` (popup re-enables its own) so the page behind
+ * stays interactive — the only case where that opt-out is correct.
  *
  * For layouts that need their own structure, compose the styled parts
  * (`DrawerPortal`, `DrawerBackdrop`, `DrawerViewport`, `DrawerPopup`) directly instead.
@@ -228,8 +235,8 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
     return (
       <DrawerPortal container={container ?? undefined}>
         {!hideBackdrop && <DrawerBackdrop />}
-        <DrawerViewport>
-          <DrawerPopup ref={ref} className={className} {...props}>
+        <DrawerViewport className={hideBackdrop ? 'pointer-events-none' : undefined}>
+          <DrawerPopup ref={ref} className={cn(hideBackdrop && 'pointer-events-auto', className)} {...props}>
             {showHandle && side === 'bottom' && <HandleBar />}
             <div data-slot="drawer-content" className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}>
               {children}
