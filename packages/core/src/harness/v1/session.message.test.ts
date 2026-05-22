@@ -271,6 +271,35 @@ describe('Session.message() — default path', () => {
     expect(agent.calls[0]!.options.requireToolApproval).toBe(true);
   });
 
+  it('exposes per-tool Harness permission resolution on the turn request context', async () => {
+    const agent = new FakeAgent('default');
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      defaultPermissionPolicy: 'allow',
+      toolCategoryResolver: toolName => (toolName === 'run_command' ? 'execute' : null),
+    });
+    const session = await harness.session({ resourceId: 'r-per-tool-perms', threadId: { fresh: true } });
+
+    await session.permissions.setPolicy({ category: 'execute', policy: 'ask' });
+    await session.message({ content: 'hi' });
+    const firstHarnessSlot = agent.calls[0]!.options.requestContext.get('harness');
+
+    expect(agent.calls[0]!.options.requireToolApproval).toBe(true);
+    expect(firstHarnessSlot.resolveToolPermission({ toolName: 'run_command', args: {} })).toBe('ask');
+    expect(firstHarnessSlot.resolveToolPermission({ toolName: 'read_file', args: {} })).toBe('allow');
+
+    await session.permissions.grantCategory({ category: 'execute' });
+    await session.message({ content: 'hi again' });
+    const secondHarnessSlot = agent.calls[1]!.options.requestContext.get('harness');
+
+    expect(agent.calls[1]!.options.requireToolApproval).toBe(true);
+    expect(secondHarnessSlot.resolveToolPermission({ toolName: 'run_command', args: {} })).toBe('allow');
+  });
+
   it('does not require tool approval when per-turn or session yolo is enabled', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'r-yolo', threadId: { fresh: true } });

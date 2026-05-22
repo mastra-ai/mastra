@@ -955,6 +955,61 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
+
+  it('lets Harness allow policy bypass the global approval scheduling flag', async () => {
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn().mockResolvedValue({ ok: true }),
+        requireApproval: false,
+      },
+    };
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'harness-allow-run-id',
+      streamState,
+    });
+    const requestContext = new RequestContext();
+    const resolveToolPermission = vi.fn().mockReturnValue('allow');
+    requestContext.set('__mastra_requireToolApproval', true);
+    requestContext.set('harness', { resolveToolPermission });
+
+    const result = await toolCallStep.execute(makeExecuteParams({ requestContext }));
+
+    expect(resolveToolPermission).toHaveBeenCalledWith({
+      toolName: 'ctx-tool',
+      args: { action: 'delete' },
+    });
+    expect(suspend).not.toHaveBeenCalled();
+    expect(tools['ctx-tool'].execute).toHaveBeenCalled();
+    expect(result.result).toEqual({ ok: true });
+  });
+
+  it('returns a tool error when Harness denies the tool call', async () => {
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: false,
+      },
+    };
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'harness-deny-run-id',
+      streamState,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { resolveToolPermission: vi.fn().mockReturnValue('deny') });
+
+    const result = await toolCallStep.execute(makeExecuteParams({ requestContext }));
+
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error.message).toContain('denied by Harness permissions');
+    expect(suspend).not.toHaveBeenCalled();
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
+  });
 });
 
 describe('createToolCallStep provider-executed tools', () => {

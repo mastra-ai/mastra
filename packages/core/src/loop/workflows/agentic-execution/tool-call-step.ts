@@ -50,7 +50,15 @@ type AddToolMetadataOptions = {
 type HarnessToolContextSlot = {
   registerQuestion?: (params: Record<string, unknown>) => Promise<void>;
   registerPlanApproval?: (params: Record<string, unknown>) => Promise<void>;
+  resolveToolPermission?: (params: {
+    toolName: string;
+    args: Record<string, unknown>;
+  }) => 'allow' | 'ask' | 'deny' | Promise<'allow' | 'ask' | 'deny'>;
 };
+
+function isHarnessToolPermissionPolicy(value: unknown): value is 'allow' | 'ask' | 'deny' {
+  return value === 'allow' || value === 'ask' || value === 'deny';
+}
 
 function buildToolRequestContext(
   requestContext: RequestContext,
@@ -482,10 +490,39 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           await removeToolMetadata(inputData.toolName, 'approval');
         }
 
+        const harness = requestContext.get('harness') as HarnessToolContextSlot | undefined;
+        let harnessToolPermission: 'allow' | 'ask' | 'deny' | undefined;
+        if (harness?.resolveToolPermission) {
+          try {
+            const resolved = await harness.resolveToolPermission({
+              toolName: inputData.toolName,
+              args: args ?? {},
+            });
+            if (isHarnessToolPermissionPolicy(resolved)) {
+              harnessToolPermission = resolved;
+            } else {
+              logger?.error(`Invalid Harness tool permission policy for tool ${inputData.toolName}:`, resolved);
+              harnessToolPermission = 'ask';
+            }
+          } catch (error) {
+            logger?.error(`Error resolving Harness tool permission for tool ${inputData.toolName}:`, error);
+            harnessToolPermission = 'ask';
+          }
+        }
+
+        if (harnessToolPermission === 'deny') {
+          await removeToolMetadata(inputData.toolName, 'approval');
+
+          return {
+            ...inputData,
+            error: new Error(`Tool "${inputData.toolName}" was denied by Harness permissions.`),
+          };
+        }
+
         const toolRequiresApproval = await resolveToolRequiresApproval({
           tool,
           args,
-          requireToolApproval: Boolean(requireToolApproval),
+          requireToolApproval: harnessToolPermission ? harnessToolPermission === 'ask' : Boolean(requireToolApproval),
           requestContext,
           workspace: _internal?.stepWorkspace,
           logger,
