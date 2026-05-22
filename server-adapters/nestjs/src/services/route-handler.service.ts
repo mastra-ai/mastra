@@ -36,6 +36,8 @@ export interface RouteHandlerParams {
   requestContext: RequestContext;
   /** Abort signal for request cancellation */
   abortSignal: AbortSignal;
+  /** Header lookup for routes that need transport headers such as If-Match or Last-Event-ID. */
+  getHeader?: (name: string) => string | undefined;
 }
 
 export interface RouteHandlerResult {
@@ -216,6 +218,7 @@ export class RouteHandlerService {
       registeredTools: this.options.tools,
       taskStore: this.options.taskStore,
       abortSignal: params.abortSignal,
+      getHeader: params.getHeader,
       routePrefix: this.options.prefix,
     };
 

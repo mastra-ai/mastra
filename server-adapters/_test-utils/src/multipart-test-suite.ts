@@ -256,6 +256,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
                   'registeredTools',
                   'routePrefix',
                   'request',
+                  'getHeader',
                 ].includes(k),
             ),
           };

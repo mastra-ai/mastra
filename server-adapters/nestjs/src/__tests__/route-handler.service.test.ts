@@ -101,4 +101,37 @@ describe('RouteHandlerService', () => {
     expect(handlerParams.abortSignal).toBe(abortSignal);
     expect(handlerParams.routePrefix).toBe('/api');
   });
+
+  it('forwards request headers through getHeader', async () => {
+    const context = await createDefaultTestContext();
+    const service = new RouteHandlerService(context.mastra, { mastra: context.mastra, prefix: '/api' });
+
+    const route = {
+      method: 'GET',
+      path: '/test',
+      responseType: 'json' as const,
+      handler: vi.fn(async ({ getHeader }) => ({
+        ifMatch: getHeader?.('if-match') ?? null,
+        lastEventId: getHeader?.('last-event-id') ?? null,
+      })),
+    };
+
+    const result = await service.executeHandler(route, {
+      pathParams: {},
+      queryParams: {},
+      body: undefined,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+      getHeader: name =>
+        ({
+          'if-match': '"7"',
+          'last-event-id': 'harness-v1:epoch-1:4',
+        })[name],
+    });
+
+    expect(result.data).toEqual({
+      ifMatch: '"7"',
+      lastEventId: 'harness-v1:epoch-1:4',
+    });
+  });
 });

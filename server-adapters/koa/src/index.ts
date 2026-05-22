@@ -458,6 +458,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       ...(route.path.startsWith('/harness/')
         ? { requestBody: params.body, requestPathParams: params.urlParams, requestQueryParams: params.queryParams }
         : {}),
+      getHeader: (name: string) => ctx.get(name),
       requestContext: ctx.state.requestContext,
       mastra: this.mastra,
       tools: ctx.state.tools,

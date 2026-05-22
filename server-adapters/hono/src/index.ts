@@ -505,6 +505,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...(route.path.startsWith('/harness/')
             ? { requestBody: params.body, requestPathParams: params.urlParams, requestQueryParams: params.queryParams }
             : {}),
+          getHeader: (name: string) => c.req.header(name),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,
           registeredTools: c.get('registeredTools'),
