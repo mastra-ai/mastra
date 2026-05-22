@@ -11,27 +11,33 @@ import { ChatComposer } from '../chat-composer';
 const noop = () => {};
 
 interface RenderOptions {
-  agentName?: string;
+  agentId?: string;
 }
 
-const FormHarness = ({ agentName = '', children }: { agentName?: string; children: React.ReactNode }) => {
+const FormHarness = ({
+  agentId = 'agent_test',
+  children,
+}: {
+  agentId?: string;
+  children: React.ReactNode;
+}) => {
   const methods = useForm<AgentBuilderEditFormValues>({
-    defaultValues: { name: agentName } as AgentBuilderEditFormValues,
+    defaultValues: {} as AgentBuilderEditFormValues,
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
     </FormProvider>
   );
 };
 
 const renderComposer = (
   props: Partial<React.ComponentProps<typeof ChatComposer>> = {},
-  { agentName = '' }: RenderOptions = {},
+  { agentId = 'agent_test' }: RenderOptions = {},
 ) =>
   render(
     <TooltipProvider>
-      <FormHarness agentName={agentName}>
+      <FormHarness agentId={agentId}>
         <ChatComposer
           draft=""
           onDraftChange={noop}
@@ -75,24 +81,13 @@ describe('ChatComposer', () => {
     expect(textarea.disabled).toBe(true);
   });
 
-  it('applies agent-color CSS variables to the composer container when a name is set', () => {
-    const { getByTestId } = renderComposer({}, { agentName: 'Support agent' });
+  it('applies agent-color CSS variables to the composer container derived from the agentId', () => {
+    const { getByTestId } = renderComposer({}, { agentId: 'agent_support' });
     const container = getByTestId('composer-container') as HTMLDivElement;
     expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
     expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
     expect(container.className).toContain('border-border1');
     expect(container.className).toContain('focus-within:border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-within:ring');
-  });
-
-  it('uses the default border only when no agent name is set', () => {
-    const { getByTestId } = renderComposer({});
-    const container = getByTestId('composer-container') as HTMLDivElement;
-    expect(container.style.getPropertyValue('--agent-color-fg')).toBe('');
-    expect(container.style.getPropertyValue('--agent-color-bg')).toBe('');
-    expect(container.className).toContain('border-border1');
-    expect(container.className).not.toContain('border-accent1Dark');
-    expect(container.className).not.toContain('border-accent5Dark');
-    expect(container.className).not.toContain('focus-within:border-[var(--agent-color-bg)]');
   });
 });

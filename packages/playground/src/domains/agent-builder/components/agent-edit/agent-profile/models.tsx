@@ -201,16 +201,15 @@ const ProviderFilterBadges = ({ providers, isProviderChecked, onToggle, disabled
     <div className="flex flex-wrap gap-2 shrink-0" data-testid="model-provider-filter">
       {providers.map(({ providerId, providerName }) => {
         const checked = isProviderChecked(providerId);
-        const useAgentColors = checked && agentColor !== null;
 
-        const labelStyle: CSSProperties | undefined = useAgentColors
+        const labelStyle: CSSProperties | undefined = checked
           ? {
               borderColor: agentColor.background,
               color: agentColor.background,
             }
           : undefined;
 
-        const checkboxStyle: CSSProperties | undefined = useAgentColors
+        const checkboxStyle: CSSProperties | undefined = checked
           ? {
               backgroundColor: agentColor.background,
               borderColor: agentColor.background,
@@ -226,15 +225,12 @@ const ProviderFilterBadges = ({ providers, isProviderChecked, onToggle, disabled
             style={labelStyle}
             className={cn(
               'inline-flex items-center gap-2 rounded-full border px-2.5 h-badge-default text-ui-sm font-mono cursor-pointer select-none transition-colors',
-              !useAgentColors &&
-                (checked
-                  ? 'border-accent1 bg-surface4 text-neutral6'
-                  : 'border-border1 bg-surface3 text-neutral5 hover:bg-surface4'),
+              !checked && 'border-border1 bg-surface3 text-neutral5 hover:bg-surface4',
               disabled && 'cursor-not-allowed opacity-60',
             )}
           >
             <Checkbox
-              variant={useAgentColors ? 'neutral' : 'primary'}
+              variant="neutral"
               checked={checked}
               disabled={disabled}
               onCheckedChange={() => onToggle(providerId)}

@@ -38,9 +38,7 @@ export const AgentProfileTabs = ({
   const { data: channelPlatforms = [] } = useChannelPlatforms();
   const agentColor = useAgentColor();
 
-  const tabListStyle: CSSProperties | undefined = agentColor
-    ? ({ '--tab-indicator-color': agentColor.background } as CSSProperties)
-    : undefined;
+  const tabListStyle = { '--tab-indicator-color': agentColor.background } as CSSProperties;
 
   const modelTabEnabled = features.model || policy.active;
   const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;

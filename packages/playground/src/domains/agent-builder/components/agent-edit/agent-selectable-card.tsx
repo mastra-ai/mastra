@@ -27,17 +27,13 @@ export const AgentSelectableCard = ({
   checkTestId,
 }: AgentSelectableCardProps) => {
   const agentColor = useAgentColor();
-  const hasAgentColor = agentColor !== null;
-  const useAgentColors = isSelected && hasAgentColor;
 
-  const containerStyle: CSSProperties | undefined = hasAgentColor
-    ? {
-        ['--agent-color-bg' as string]: agentColor.background,
-        ...(isSelected ? { borderColor: agentColor.background } : null),
-      }
-    : undefined;
+  const containerStyle: CSSProperties = {
+    ['--agent-color-bg' as string]: agentColor.background,
+    ...(isSelected ? { borderColor: agentColor.background } : null),
+  };
 
-  const checkStyle: CSSProperties | undefined = useAgentColors
+  const checkStyle: CSSProperties | undefined = isSelected
     ? {
         borderColor: agentColor.background,
         backgroundColor: agentColor.background,
@@ -56,15 +52,9 @@ export const AgentSelectableCard = ({
       style={containerStyle}
       className={cn(
         'flex items-center gap-3 rounded-lg border bg-surface3 p-4 text-left transition-colors cursor-pointer active:opacity-90',
-        hasAgentColor
-          ? 'focus-visible:!border-[var(--agent-color-bg)] focus-visible:outline-none'
-          : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
-        hasAgentColor && 'hover:bg-surface4',
-        isSelected
-          ? useAgentColors
-            ? 'bg-surface4'
-            : 'border-accent1 bg-surface4 ring-1 ring-accent1'
-          : 'border-border1',
+        'focus-visible:!border-[var(--agent-color-bg)] focus-visible:outline-none',
+        'hover:bg-surface4',
+        isSelected ? 'bg-surface4' : 'border-border1',
         disabled && 'cursor-not-allowed opacity-60',
       )}
     >
@@ -85,11 +75,7 @@ export const AgentSelectableCard = ({
         style={checkStyle}
         className={cn(
           'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-          isSelected
-            ? useAgentColors
-              ? ''
-              : 'border-accent1 bg-accent1 text-surface1'
-            : 'border-border1 bg-transparent',
+          !isSelected && 'border-border1 bg-transparent',
         )}
       >
         {isSelected && <Check className="h-3 w-3" />}

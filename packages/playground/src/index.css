@@ -178,12 +178,36 @@ th:has(header) {
     animation: skill-panel-slide-in 320ms var(--ease-out-custom) both;
   }
 
+  .agent-step-banner {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 200%;
+    aspect-ratio: 1 / 1;
+    transform: translate(-50%, -50%) rotate(0deg);
+    transition: transform 500ms ease-out;
+  }
+
+  @keyframes agent-step-banner-spin {
+    from {
+      transform: translate(-50%, -50%) rotate(0deg);
+    }
+    to {
+      transform: translate(-50%, -50%) rotate(360deg);
+    }
+  }
+
+  .agent-step-banner-rotating {
+    animation: agent-step-banner-spin 8s linear infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
     .starter-chip,
-    .skill-panel-slide-in {
+    .skill-panel-slide-in,
+    .agent-step-banner-rotating {
       animation: none;
     }
   }

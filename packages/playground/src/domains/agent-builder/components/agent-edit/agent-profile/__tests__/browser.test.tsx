@@ -10,9 +10,11 @@ import { Browser } from '../browser';
 const Wrapper = ({
   children,
   defaultValues,
+  agentId = 'agent_test',
 }: {
   children: React.ReactNode;
   defaultValues?: Partial<AgentBuilderEditFormValues>;
+  agentId?: string;
 }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
@@ -28,7 +30,7 @@ const Wrapper = ({
   return (
     <TooltipProvider>
       <FormProvider {...methods}>
-        <AgentColorProvider>{children}</AgentColorProvider>
+        <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
       </FormProvider>
     </TooltipProvider>
   );
@@ -84,16 +86,17 @@ describe('Browser', () => {
     expect((getByTestId('agent-browser-toggle') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('paints the enabled switch with the agent tint color (lightness 50) derived from the form name', () => {
+  it('paints the enabled switch with the agent tint color (lightness 50) derived from the agentId', () => {
+    const agentId = 'agent_support';
     const { getByTestId } = render(
-      <Wrapper defaultValues={{ name: 'Support agent', browserEnabled: true }}>
+      <Wrapper agentId={agentId} defaultValues={{ browserEnabled: true }}>
         <Browser />
       </Wrapper>,
     );
 
     // jsdom normalizes inline colors to rgb(...); compare via a probe element fed the same hsl().
     const probe = document.createElement('div');
-    probe.style.backgroundColor = stringToColor('Support agent', 50);
+    probe.style.backgroundColor = stringToColor(agentId, 50);
     const expected = probe.style.backgroundColor;
     expect(expected).not.toBe('');
 
@@ -101,13 +104,13 @@ describe('Browser', () => {
     expect(toggle.style.backgroundColor).toBe(expected);
     // It must NOT match the foreground (lightness 20) value that the switch previously used.
     const fgProbe = document.createElement('div');
-    fgProbe.style.backgroundColor = stringToColor('Support agent', 20);
+    fgProbe.style.backgroundColor = stringToColor(agentId, 20);
     expect(toggle.style.backgroundColor).not.toBe(fgProbe.style.backgroundColor);
   });
 
   it('does not apply an inline background color to the switch when browserEnabled is false', () => {
     const { getByTestId } = render(
-      <Wrapper defaultValues={{ name: 'Support agent', browserEnabled: false }}>
+      <Wrapper defaultValues={{ browserEnabled: false }}>
         <Browser />
       </Wrapper>,
     );

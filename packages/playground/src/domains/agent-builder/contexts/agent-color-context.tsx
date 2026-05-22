@@ -2,37 +2,40 @@
 import { stringToColor } from '@mastra/playground-ui';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
-import type { AgentBuilderEditFormValues } from '../schemas';
 
 export type AgentColors = {
   background: string;
   foreground: string;
   tint: string;
-} | null;
+};
 
-export const AgentColorContext = createContext<AgentColors>(null);
+const AgentColorContext = createContext<AgentColors | null>(null);
 
 interface AgentColorProviderProps {
+  agentId: string;
   children: ReactNode;
 }
 
-export const AgentColorProvider = ({ children }: AgentColorProviderProps) => {
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-  const name = useWatch({ control, name: 'name' });
-  const trimmed = name?.trim() ?? '';
-
+export const AgentColorProvider = ({ agentId, children }: AgentColorProviderProps) => {
   const value = useMemo<AgentColors>(() => {
-    if (!trimmed) return null;
+    if (!agentId) {
+      throw new Error('AgentColorProvider requires a non-empty agentId');
+    }
 
     return {
-      background: stringToColor(trimmed),
-      foreground: stringToColor(trimmed, 20),
-      tint: stringToColor(trimmed, 50),
+      background: stringToColor(agentId),
+      foreground: stringToColor(agentId, 20),
+      tint: stringToColor(agentId, 50),
     };
-  }, [trimmed]);
+  }, [agentId]);
 
   return <AgentColorContext.Provider value={value}>{children}</AgentColorContext.Provider>;
 };
 
-export const useAgentColor = (): AgentColors => useContext(AgentColorContext);
+export const useAgentColor = (): AgentColors => {
+  const value = useContext(AgentColorContext);
+  if (value === null) {
+    throw new Error('useAgentColor must be used inside an AgentColorProvider');
+  }
+  return value;
+};

@@ -3,6 +3,7 @@ import { TooltipProvider } from '@mastra/playground-ui';
 import { cleanup, render } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { AgentProfileTabs } from '../agent-profile-tabs';
 
@@ -64,7 +65,9 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => {
   });
   return (
     <TooltipProvider>
-      <FormProvider {...methods}>{children}</FormProvider>
+      <FormProvider {...methods}>
+        <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+      </FormProvider>
     </TooltipProvider>
   );
 };

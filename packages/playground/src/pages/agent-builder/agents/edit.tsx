@@ -60,13 +60,13 @@ const EditPageGate = () => {
 };
 
 const EditPageForm = () => {
-  const { storedAgent } = useAgentPrimitives();
+  const { agentId, storedAgent } = useAgentPrimitives();
   const [defaultValues] = useState(() => storedAgentToFormValues(storedAgent));
   const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
 
   return (
     <FormProvider {...formMethods}>
-      <AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>
         <EditPageBody />
       </AgentColorProvider>
     </FormProvider>

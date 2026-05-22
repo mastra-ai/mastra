@@ -1,4 +1,4 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
@@ -39,23 +39,19 @@ export const ChatComposer = ({
     textareaRef.current?.focus();
   }, []);
 
-  const containerStyle = useMemo<CSSProperties>(() => {
-    const base: CSSProperties = { viewTransitionName: 'chat-composer' };
-    if (!agentColor) return base;
-    return {
-      ...base,
+  const containerStyle = useMemo<CSSProperties>(
+    () => ({
+      viewTransitionName: 'chat-composer',
       ['--agent-color-fg' as string]: agentColor.foreground,
       ['--agent-color-bg' as string]: agentColor.background,
-    };
-  }, [agentColor]);
+    }),
+    [agentColor],
+  );
 
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className={cn(
-          'rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors',
-          agentColor && 'focus-within:border-[var(--agent-color-bg)]',
-        )}
+        className="rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
         style={containerStyle}
         data-testid={containerTestId}
       >

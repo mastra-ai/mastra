@@ -1,7 +1,7 @@
 import { cn } from '@mastra/playground-ui';
-import type { ReactNode } from 'react';
-import { useFormState } from 'react-hook-form';
+import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
+import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 
 export interface AgentStepContainerProps {
   children: React.ReactNode;
@@ -12,21 +12,21 @@ export interface AgentStepContainerProps {
 
 export const AgentStepContainer = ({ children, cta, title, description }: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
-  const formState = useFormState();
-  const bannerStyle = agentColor
-    ? {
-        backgroundImage: `linear-gradient(to bottom right, ${agentColor.background}, ${agentColor.foreground})`,
-      }
-    : undefined;
+  const isStreaming = useStreamRunning();
 
-  const isDirty = formState.dirtyFields.name;
+  const bannerStyle: CSSProperties = {
+    backgroundImage: `conic-gradient(from 0deg at 50% 50%, ${agentColor.background}, ${agentColor.foreground}, ${agentColor.background})`,
+  };
 
   return (
     <div className="relative w-full h-full border border-border1 rounded-3xl overflow-hidden overflow-y-auto p-4">
       <div
         aria-hidden
-        className="absolute inset-0 transition-all duration-500 ease-out pointer-events-none"
-        style={{ ...bannerStyle, opacity: isDirty ? 1 : 0 }}
+        className={cn(
+          'agent-step-banner pointer-events-none',
+          isStreaming && 'agent-step-banner-rotating',
+        )}
+        style={bannerStyle}
       />
       <div
         className={cn(
