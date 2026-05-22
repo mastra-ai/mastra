@@ -29,6 +29,7 @@ const COMMON_BINARIES = [
 ] as const;
 
 let cachedBinaries: CommonBinary[] | null = null;
+let inFlightPromise: Promise<CommonBinary[]> | null = null;
 
 function resolveBinary(name: string): string | null {
   const command = process.platform === 'win32' ? 'where' : 'which';
@@ -64,13 +65,16 @@ export function detectCommonBinaries(): CommonBinary[] {
 
 export async function detectCommonBinariesAsync(): Promise<CommonBinary[]> {
   if (cachedBinaries) return cachedBinaries;
+  if (inFlightPromise) return inFlightPromise;
 
-  cachedBinaries = await Promise.all(
+  inFlightPromise = Promise.all(
     COMMON_BINARIES.map(async name => ({
       name,
       path: await resolveBinaryAsync(name),
     })),
   );
+  cachedBinaries = await inFlightPromise;
+  inFlightPromise = null;
 
   return cachedBinaries;
 }
