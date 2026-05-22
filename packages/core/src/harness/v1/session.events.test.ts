@@ -597,6 +597,43 @@ describe('Session events — fullStream drain', () => {
       observations: 'buffered facts',
     });
   });
+
+  it('bridges OM writer chunks that arrive after the stream terminal before agent_end', async () => {
+    const { harness, agent } = setup();
+    agent.chunks = [
+      { type: 'finish', runId: 'fake-run', finishReason: 'stop' },
+      {
+        type: 'data-om-observation-end',
+        data: {
+          cycleId: 'late-obs',
+          operationType: 'observation',
+          durationMs: 25,
+          tokensObserved: 100,
+          observationTokens: 80,
+          observations: 'late observations',
+        },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'observe after terminal' });
+
+    const eventTypes = events.map(e => e.type);
+    const omIndex = eventTypes.indexOf('om_observation_end');
+    const agentEndIndex = eventTypes.indexOf('agent_end');
+    expect(omIndex).toBeGreaterThanOrEqual(0);
+    expect(agentEndIndex).toBeGreaterThan(omIndex);
+    expect(events[omIndex]).toMatchObject({
+      type: 'om_observation_end',
+      cycleId: 'late-obs',
+      observations: 'late observations',
+    });
+  });
 });
 
 describe('Session events — suspension round-trip', () => {
