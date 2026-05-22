@@ -16,6 +16,7 @@ import type { PubSubDeliveryMode, Event, EventCallback, SubscribeOptions } from 
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
   readonly #sockets = new Map<string, UnixSocketPubSub>();
+  readonly #pending = new Map<string, Promise<UnixSocketPubSub>>();
   #closed = false;
 
   constructor(resourceId: string) {
@@ -60,13 +61,26 @@ class SignalsPubSub extends PubSub {
 
   async #getOrCreate(topic: string): Promise<UnixSocketPubSub> {
     if (this.#closed) throw new Error('SignalsPubSub is closed');
-    let socket = this.#sockets.get(topic);
-    if (!socket) {
-      const socketPath = await this.#socketPath(topic);
-      socket = new UnixSocketPubSub(socketPath);
-      this.#sockets.set(topic, socket);
+    const existing = this.#sockets.get(topic);
+    if (existing) return existing;
+    // Deduplicate concurrent callers so only one socket is created per topic.
+    let inflight = this.#pending.get(topic);
+    if (!inflight) {
+      inflight = this.#initSocket(topic);
+      this.#pending.set(topic, inflight);
     }
-    return socket;
+    return inflight;
+  }
+
+  async #initSocket(topic: string): Promise<UnixSocketPubSub> {
+    try {
+      const socketPath = await this.#socketPath(topic);
+      const socket = new UnixSocketPubSub(socketPath);
+      this.#sockets.set(topic, socket);
+      return socket;
+    } finally {
+      this.#pending.delete(topic);
+    }
   }
 
   async #socketPath(topic: string): Promise<string> {
@@ -83,10 +97,14 @@ class SignalsPubSub extends PubSub {
     const prefix = 'agent.thread-stream.';
     if (topic.startsWith(prefix)) {
       const encoded = topic.slice(prefix.length);
-      const decoded = decodeURIComponent(encoded);
-      const separatorIdx = decoded.indexOf('\0');
-      if (separatorIdx !== -1) {
-        return decoded.slice(separatorIdx + 1);
+      try {
+        const decoded = decodeURIComponent(encoded);
+        const separatorIdx = decoded.indexOf('\0');
+        if (separatorIdx !== -1) {
+          return decoded.slice(separatorIdx + 1);
+        }
+      } catch {
+        // Malformed URI — fall through to sanitized fallback.
       }
     }
     // Fallback: use the topic directly (sanitized for filesystem)
