@@ -117,6 +117,15 @@ export async function runStreamingDriver({
   // iterations of the for-await loop).
   const sessionRef: { current: StreamingSession | null } = { current: null };
 
+  // Tracks OM cycles currently in `'in_progress'` so we can flush them as
+  // `'complete'` before closing the session. OM buffering runs async in the
+  // background — without this, a session that closes before `buffering-end`
+  // leaves the "Saving to memory…" task visually flipped to error by the
+  // chat-SDK plan widget. Keyed by the same stable id (`om-buffer:<cycleId>`)
+  // that `renderOmTaskUpdate` uses, so `buffering-end`/`failed` arriving
+  // later (in a new session) still replace the entry by id.
+  const pendingOmTasks = new Map<string, { title: string }>();
+
   const openSession = (): StreamingSession => {
     let buffer: (string | StreamChunk)[] = [];
     let closed = false;
@@ -201,6 +210,15 @@ export async function runStreamingDriver({
   const closeSession = async () => {
     const s = sessionRef.current;
     if (!s) return;
+    // OM buffering is background work that often finishes after the session
+    // closes. The chat-SDK plan widget flips any still-`in_progress` task to
+    // an error icon at stream end, so optimistically mark pending OM tasks
+    // complete. If `buffering-failed` arrives later it will overwrite the
+    // entry by stable id in a future session.
+    for (const [id, { title }] of pendingOmTasks) {
+      s.push({ type: 'task_update', id, title, status: 'complete' });
+    }
+    pendingOmTasks.clear();
     sessionRef.current = null;
     s.close();
     await s.done;
@@ -316,7 +334,17 @@ export async function runStreamingDriver({
       if (om) {
         // `cycleId` is the stable task ID across start/end/failed events.
         if (om.data.cycleId) {
-          pushToSession(renderOmTaskUpdate(om));
+          const update = renderOmTaskUpdate(om);
+          if (update.type === 'task_update') {
+            if (update.status === 'in_progress') {
+              pendingOmTasks.set(update.id, { title: update.title ?? '' });
+            } else {
+              // `complete` or `error` resolves the cycle — drop it from
+              // the pending set so closeSession doesn't double-write.
+              pendingOmTasks.delete(update.id);
+            }
+          }
+          pushToSession(update);
         }
         continue;
       }

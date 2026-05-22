@@ -346,6 +346,41 @@ describe('consumeAgentStream', () => {
       expect(new Set(taskUpdates.map(t => t.id))).toEqual(new Set(['t1', 't2']));
     });
 
+    it("flushes pending OM tasks as 'complete' before closing the session", async () => {
+      // OM buffering runs async in the background — if the session closes
+      // before `buffering-end` arrives, the chat-SDK plan widget flips any
+      // still-`in_progress` task to an error icon. The streaming driver
+      // optimistically marks pending OM tasks complete on close so the
+      // "Saving to memory…" row doesn't visually error out.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hello' } },
+          {
+            type: 'data-om-buffering-start',
+            data: { cycleId: 'cyc-1', operationType: 'observation' },
+          },
+          // No buffering-end before finish — the background work hasn't
+          // resolved by the time the stream closes.
+          { type: 'finish', payload: {} },
+        ] as any,
+        sdkThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      const planArg = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      const drained = await drainStreamingPlan(planArg);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string; title: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      const omUpdates = taskUpdates.filter(t => t.id === 'om-buffer:cyc-1');
+      expect(omUpdates).toHaveLength(2);
+      expect(omUpdates[0]).toMatchObject({ status: 'in_progress', title: 'Saving to memory…' });
+      expect(omUpdates[1]).toMatchObject({ status: 'complete', title: 'Saving to memory…' });
+    });
+
     it("'hidden': drops tool-call/result chunks entirely (no card, no task_update)", async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
       await drive(
