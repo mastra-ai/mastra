@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed AGENTS.md autoloading after file listing tool results are saved.
+Fixed processor workflow steps so `sendSignal` is available when processors inject Agent signals.
