@@ -3116,12 +3116,26 @@ describe('InternalMastraMCPClient - onclose transport cleanup (issue #16693)', (
       transport?: { close: () => Promise<void>; onclose?: () => void };
     };
     const transportBeforeClose = internals.transport!;
-    const closeSpy = vi.spyOn(transportBeforeClose, 'close');
 
-    // Re-entry guard: transport.close() typically fires the transport's own
-    // onclose again -> client.onclose. The snapshot-and-clear ordering means
-    // the second pass sees this.transport === undefined and skips the
-    // recursive close() — so close() runs exactly once, not N times.
+    // Deterministically force the re-entry path: make close() itself fire
+    // onclose again (once), exactly as StreamableHTTPClientTransport.close()
+    // does. Whether a given transport re-fires onclose from close() is
+    // transport-dependent in @modelcontextprotocol/sdk, so we don't rely on
+    // the real implementation to reproduce it.
+    let reentered = false;
+    const closeSpy = vi
+      .spyOn(transportBeforeClose, 'close')
+      .mockImplementation(async () => {
+        if (!reentered) {
+          reentered = true;
+          transportBeforeClose.onclose?.();
+        }
+      });
+
+    // Re-entry guard: close() fires the transport's onclose again ->
+    // client.onclose. The snapshot-and-clear ordering means the second pass
+    // sees this.transport === undefined and skips the recursive close() — so
+    // close() runs exactly once, not N times.
     transportBeforeClose.onclose?.();
     await new Promise(resolve => setTimeout(resolve, 10));
 
