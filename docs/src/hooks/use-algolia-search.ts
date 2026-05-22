@@ -1,6 +1,7 @@
 import { algoliasearch, type SearchClient } from 'algoliasearch'
 import { useEffect, useRef, useState } from 'react'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import { sanitizeSearchHtml } from '../lib/sanitize-search-html'
 
 /**
  * Options that can be passed to Algolia search.
@@ -326,7 +327,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
               return 'Untitled'
             }
 
-            const displayTitle = buildHierarchicalTitle()
+            const displayTitle = sanitizeSearchHtml(buildHierarchicalTitle())
 
             // Prioritize snippet result, then highlighted content, then fallback
             let excerpt = ''
@@ -343,6 +344,9 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
             } else {
               excerpt = displayTitle
             }
+
+            // Algolia highlight HTML is untrusted; strip everything except <mark> before rendering
+            excerpt = sanitizeSearchHtml(excerpt)
 
             // Single result per hit (Algolia already handles ranking and deduplication)
             const subResults: AlgoliaResult['sub_results'] = [
@@ -500,9 +504,10 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
             return 'Untitled'
           }
 
-          const displayTitle = buildHierarchicalTitle()
-          const excerpt =
-            typedHit._snippetResult?.content?.value || typedHit._highlightResult?.content?.value || displayTitle
+          const displayTitle = sanitizeSearchHtml(buildHierarchicalTitle())
+          const excerpt = sanitizeSearchHtml(
+            typedHit._snippetResult?.content?.value || typedHit._highlightResult?.content?.value || displayTitle,
+          )
 
           return {
             objectID: typedHit.objectID,
