@@ -1429,6 +1429,13 @@ export interface MessageOverrides {
    * surface without changing persisted mode config.
    */
   prepareStep?: AgentExecutionOptionsBase<unknown>['prepareStep'];
+
+  /**
+   * Auto-approve tool-approval interrupts for this turn. Runtime adapters
+   * also commonly mirror a persistent `state.yolo === true` setting into the
+   * session state; the session treats either source as approval opt-out.
+   */
+  yolo?: boolean;
 }
 
 type RequireAtLeastOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &

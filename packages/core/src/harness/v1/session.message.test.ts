@@ -262,6 +262,27 @@ describe('Session.message() — default path', () => {
     });
   });
 
+  it('requires tool approval by default for message turns', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'r-approval', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi' });
+
+    expect(agent.calls[0]!.options.requireToolApproval).toBe(true);
+  });
+
+  it('does not require tool approval when per-turn or session yolo is enabled', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'r-yolo', threadId: { fresh: true } });
+
+    await session.message({ content: 'turn yolo', yolo: true });
+    await session.setState({ yolo: true });
+    await session.message({ content: 'state yolo' });
+
+    expect(agent.calls[0]!.options.requireToolApproval).toBeUndefined();
+    expect(agent.calls[1]!.options.requireToolApproval).toBeUndefined();
+  });
+
   it('forwards the caller-supplied abortSignal (chained into the per-turn signal)', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

@@ -3050,6 +3050,7 @@ export class Session {
       requestContext,
       ...(toolsets ? { toolsets } : {}),
       ...(opts.prepareStep ? { prepareStep: opts.prepareStep } : {}),
+      ...(this._shouldRequireToolApproval(opts.yolo) ? { requireToolApproval: true } : {}),
       ...(mode.instructions ? { instructions: mode.instructions } : {}),
     };
 
@@ -3928,6 +3929,7 @@ export class Session {
             ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
             ...(opts.model !== undefined ? { model: opts.model } : {}),
           }),
+      ...(opts.yolo === true ? { yolo: true } : {}),
       attachments: (opts.attachments ?? []).map(attachment => ({
         attachmentId: attachment.attachmentId,
         resourceId: attachment.resourceId,
@@ -3950,6 +3952,18 @@ export class Session {
           : {}),
       })),
     };
+  }
+
+  private _shouldRequireToolApproval(turnYolo?: boolean): boolean {
+    if (turnYolo === true) return false;
+    const state = this._record.state as { yolo?: unknown } | undefined;
+    if (state?.yolo === true) return false;
+    if (this._harness._getDefaultPermissionPolicy() !== 'allow') return true;
+    const rules = this._record.permissionRules;
+    return (
+      Object.values(rules.categories).some(policy => policy !== 'allow') ||
+      Object.values(rules.tools).some(policy => policy !== 'allow')
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -6908,6 +6922,7 @@ export class Session {
         abortSignal: turnAbortController.signal,
         requestContext,
         ...(toolsets ? { toolsets } : {}),
+        ...(this._shouldRequireToolApproval(item.yolo) ? { requireToolApproval: true } : {}),
         ...(mode.instructions ? { instructions: mode.instructions } : {}),
       };
 
