@@ -385,6 +385,101 @@ describe('HarnessPG', () => {
     await expect(listIds({ harnessName: 'other-harness' })).resolves.toEqual(['other-namespace']);
   });
 
+  it('filters workspace action journal rows by request and affected path', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'write-readme',
+        requestId: 'turn-1',
+        path: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/README.md',
+          relativePath: 'README.md',
+        },
+        action: { kind: 'file', operation: 'write', path: 'README.md' },
+        createdAt: 1000,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'rename-source',
+        requestId: 'turn-1',
+        operation: 'rename',
+        action: { kind: 'file', operation: 'rename', path: 'src/old.ts', toPath: 'src/new.ts' },
+        path: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/src/old.ts',
+          relativePath: 'src/old.ts',
+        },
+        toPath: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/src/new.ts',
+          relativePath: 'src/new.ts',
+        },
+        createdAt: 1100,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'write-docs-readme',
+        requestId: 'turn-2',
+        path: {
+          rootId: 'project',
+          rootPath: '/workspace',
+          path: '/workspace/docs/README.md',
+          relativePath: 'docs/README.md',
+        },
+        action: { kind: 'file', operation: 'write', path: 'docs/README.md' },
+        createdAt: 1200,
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'run-command',
+        requestId: 'turn-1',
+        actionKind: 'command',
+        operation: 'run',
+        action: { kind: 'command', operation: 'run', command: 'pnpm test' },
+        path: undefined,
+        createdAt: 1300,
+      }),
+    );
+
+    type HarnessJournalListInput = Parameters<NonNullable<typeof harness>['listWorkspaceActionJournalEntries']>[0];
+    const listIds = async (overrides: Partial<HarnessJournalListInput>): Promise<string[]> =>
+      (
+        await harness!.listWorkspaceActionJournalEntries({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          limit: 10,
+          ...overrides,
+        })
+      ).map(entry => entry.id);
+
+    await expect(listIds({ requestId: 'turn-1' })).resolves.toEqual(['write-readme', 'rename-source', 'run-command']);
+    await expect(listIds({ requestId: 'turn-2', affectedPath: { relativePath: 'docs/README.md' } })).resolves.toEqual([
+      'write-docs-readme',
+    ]);
+    await expect(listIds({ affectedPath: { rootId: 'project', relativePath: 'README.md' } })).resolves.toEqual([
+      'write-readme',
+    ]);
+    await expect(listIds({ affectedPath: { path: '/workspace/src/old.ts' } })).resolves.toEqual(['rename-source']);
+    await expect(listIds({ affectedPath: { relativePath: 'src/new.ts' } })).resolves.toEqual([]);
+    await expect(listIds({ affectedPath: { relativePath: 'src/new.ts', includeToPath: true } })).resolves.toEqual([
+      'rename-source',
+    ]);
+    await expect(listIds({ affectedPath: { rootId: 'other', relativePath: 'README.md' } })).resolves.toEqual([]);
+    await expect(listIds({ affectedPath: {} })).resolves.toEqual([]);
+    await expect(listIds({ affectedPath: { includeToPath: true } })).resolves.toEqual([]);
+  });
+
   it('ignores duplicate or mismatched workspace action journal appends and deletes rows with the session', async () => {
     const harness = store.stores.harness;
     expect(harness).toBeDefined();

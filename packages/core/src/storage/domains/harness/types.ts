@@ -512,11 +512,22 @@ export interface AppendWorkspaceActionJournalEntryResult {
   created: boolean;
 }
 
+export interface WorkspaceActionJournalPathFilter {
+  rootId?: string;
+  path?: string;
+  relativePath?: string;
+  includeToPath?: boolean;
+}
+
 /**
  * Session-scoped workspace action journal query. `resourceId` is required as a
  * tenant/resource isolation fence; `threadId` narrows the session's observed
  * thread when the caller wants that exact committed identity. Pagination is a
- * stable `(createdAt, id)` cursor in ascending order.
+ * stable `(createdAt, id)` cursor in ascending order. `affectedPath` requires
+ * at least one concrete selector (`rootId`, `path`, or `relativePath`) and
+ * matches those selectors with AND semantics against the source `path` by
+ * default; set `includeToPath` when rename/move destinations should also be
+ * considered affected. Command `cwd` is not an affected path.
  */
 export interface ListWorkspaceActionJournalInput {
   harnessName?: string;
@@ -526,6 +537,8 @@ export interface ListWorkspaceActionJournalInput {
   actionKind?: WorkspaceActionJournalEntry['actionKind'];
   operation?: string;
   policyDecision?: WorkspaceActionJournalEntry['policyDecision'];
+  requestId?: string;
+  affectedPath?: WorkspaceActionJournalPathFilter;
   after?: {
     createdAt: number;
     id: string;
