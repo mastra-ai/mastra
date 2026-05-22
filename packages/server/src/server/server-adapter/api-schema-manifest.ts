@@ -61,7 +61,7 @@ function inferResponseShape(responseSchema: JSONSchema7 | undefined): ApiSchemaR
 }
 
 function isManifestRoute(route: ServerRoute): boolean {
-  return route.responseType === 'json' && !route.deprecated;
+  return route.responseType === 'json';
 }
 
 export function buildApiSchemaManifest(routes: readonly ServerRoute[] = SERVER_ROUTES): ApiSchemaManifest {
