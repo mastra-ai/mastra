@@ -241,6 +241,30 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.destroy();
   });
 
+  it('passes yolo to initial Harness v1 message turns when enabled', async () => {
+    const runtime = createRuntime({ initialState: { yolo: true } });
+    const message = vi.fn(async () => undefined);
+    (runtime as any).session = {
+      message,
+      models: {
+        current: () => 'anthropic/claude-haiku-4-5',
+        switch: vi.fn(async () => undefined),
+      },
+      setState: vi.fn(async () => undefined),
+    };
+
+    await runtime.sendMessage({ content: 'run without approval prompts' });
+
+    expect(message).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'run without approval prompts',
+        yolo: true,
+      }),
+    );
+
+    await runtime.destroy();
+  });
+
   it('filters active tools through prepareStep for non-admission messages', async () => {
     const runtime = createRuntime({ disabledTools: ['blocked_tool'] });
     const message = vi.fn(async () => undefined);
@@ -345,6 +369,7 @@ describe('MastraCodeHarnessRuntime', () => {
           description: 'Read-only exploration',
           instructions: 'explore',
           defaultModelId: 'openai/gpt-4o-mini',
+          forked: true,
         },
       ],
     });
@@ -354,6 +379,7 @@ describe('MastraCodeHarnessRuntime', () => {
       agentId: 'subagent-explore',
       modeId: 'mastracode-subagent-explore',
       defaultModelId: 'openai/gpt-4o-mini',
+      forked: true,
       workspace: 'inherit',
     });
     expect(runtime.getMastra().getAgent('subagent-explore' as never)).toBe(exploreAgent);

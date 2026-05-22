@@ -133,10 +133,11 @@ export function toHarnessV1Subagents(subagents: LegacyHarnessSubagent[]): Record
         modeId: subagentModeId(subagent.id),
         description: subagent.description,
         defaultModelId: subagent.defaultModelId,
+        forked: subagent.forked,
         tools: subagent.tools,
         allowedWorkspaceTools: subagent.allowedWorkspaceTools,
         workspace: 'inherit',
-      } satisfies SubagentDefinition,
+      },
     ]),
   );
 }

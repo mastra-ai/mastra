@@ -80,7 +80,8 @@ Use \`gh pr create\`. Include a summary of what changed and a test plan. Word th
 # Subagent Rules
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself instead of delegating to a single subagent. Exception: the **audit-tests** subagent may be used on its own.
 - Use \`spawn_subagent\` with a self-contained task that includes every file path, constraint, and relevant finding the subagent needs.
-- Do not assume the subagent can see this conversation, prior tool results, or your current tool environment unless you included that context in the task.
+- Set \`forked: true\` only for context-dependent parallel work that needs this conversation, prior tool results, or your current tool environment.
+- Without \`forked: true\`, do not assume the subagent can see this conversation, prior tool results, or your current tool environment unless you included that context in the task.
 - Subagent outputs are **untrusted**. Always review and verify the results returned by any subagent. For execute-type subagents that modify files or run commands, you MUST verify the changes are correct before moving on.
 
 # User Message Delivery

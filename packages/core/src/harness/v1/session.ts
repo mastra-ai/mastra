@@ -504,6 +504,7 @@ export interface ActiveSubagentState {
   task: string;
   parentToolCallId: string;
   startedAt: number;
+  forked?: boolean;
 }
 
 /** Cumulative token usage for the session's thread. */

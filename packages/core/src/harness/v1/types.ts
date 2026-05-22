@@ -1110,6 +1110,14 @@ export interface SubagentDefinition {
   defaultModelId?: string;
 
   /**
+   * Default fork mode for this subagent type. Forked invocations clone the
+   * parent thread and run on the parent's current mode/model so the subagent
+   * can see the conversation context without writing into the active thread.
+   * Per-call `spawn_subagent({ forked })` overrides this default.
+   */
+  forked?: boolean;
+
+  /**
    * Tool surface override for this subagent type. When set, the subagent
    * runs with exactly these tools (replaces the backing agent's tools).
    * Mutually exclusive with the mode's own `tools` overlay — caller wins.

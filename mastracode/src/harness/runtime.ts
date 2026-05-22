@@ -980,6 +980,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     await this.syncSessionControls();
     await session.message({
       content: messageContents(content, files),
+      ...((this.state as Record<string, unknown>).yolo === true ? { yolo: true } : {}),
       ...(admissionId ? { admissionId } : {}),
       ...(admissionId ? {} : { prepareStep: this.prepareActiveToolsStep }),
     } as never);

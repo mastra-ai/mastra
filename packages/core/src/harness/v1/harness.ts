@@ -769,6 +769,9 @@ export class Harness {
         if (typeof def.description !== 'string' || def.description.length === 0) {
           throw new HarnessConfigError(`subagents.types["${agentType}"].description`, 'is required');
         }
+        if (def.forked !== undefined && typeof def.forked !== 'boolean') {
+          throw new HarnessConfigError(`subagents.types["${agentType}"].forked`, 'must be a boolean when provided');
+        }
         subagentTypes.set(agentType, def);
       }
       this._subagentMaxDepth = config.subagents.maxDepth ?? DEFAULT_SUBAGENT_MAX_DEPTH;
