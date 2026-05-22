@@ -213,11 +213,12 @@ export class AgentThreadStreamRuntime {
   #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
     const runtime = this;
     const source = output.fullStream as ReadableStream<unknown> | undefined;
-    if (!source) return { output };
+    if (!source) return { output, startBroadcast: () => {} };
 
     const parts: unknown[] = [];
     const waiters = new Set<() => void>();
     let started = false;
+    let broadcast: Promise<void> | undefined;
     let done = false;
     let error: unknown;
 
@@ -227,36 +228,36 @@ export class AgentThreadStreamRuntime {
       for (const waiter of pending) waiter();
     };
 
-    const start = () => {
-      if (started) return;
-      started = true;
-      void (async () => {
-        try {
-          const emitPart = (part: unknown) => {
-            parts.push(part);
-            runtime.#publish(pubsub, key, {
-              type: 'stream-part',
-              runId: output.runId,
-              part,
-              sourceId: runtime.#sourceId(),
-            });
-            wake();
-          };
+    const emitPart = async (part: unknown) => {
+      parts.push(part);
+      await runtime.#publishAndWait(pubsub, key, {
+        type: 'stream-part',
+        runId: output.runId,
+        part,
+        sourceId: runtime.#sourceId(),
+      });
+      wake();
+    };
 
+    const start = () => {
+      if (started) return broadcast;
+      started = true;
+      broadcast = (async () => {
+        try {
           if (typeof source.getReader === 'function') {
             const reader = source.getReader();
             try {
               while (true) {
                 const { value: part, done: streamDone } = await reader.read();
                 if (streamDone) break;
-                emitPart(part);
+                await emitPart(part);
               }
             } finally {
               reader.releaseLock();
             }
           } else {
             for await (const part of source as any) {
-              emitPart(part);
+              await emitPart(part);
             }
           }
         } catch (caught) {
@@ -266,6 +267,7 @@ export class AgentThreadStreamRuntime {
           wake();
         }
       })();
+      return broadcast;
     };
 
     const createStream = () => {
@@ -274,7 +276,7 @@ export class AgentThreadStreamRuntime {
       let waiter: (() => void) | undefined;
       return new ReadableStream({
         async pull(controller) {
-          start();
+          void start();
           while (!closed) {
             if (index < parts.length) {
               controller.enqueue(parts[index++]);
@@ -314,7 +316,8 @@ export class AgentThreadStreamRuntime {
       enumerable: true,
       value: createStream(),
     });
-    return { output, createSubscriberStream: createStream };
+
+    return { output, createSubscriberStream: createStream, startBroadcast: start };
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -826,7 +829,11 @@ export class AgentThreadStreamRuntime {
       state.inflightIdleThreadKeysByRunId.delete(output.runId);
       state.inflightIdleAgentIdsByRunId.delete(output.runId);
     }
-    const { output: outputForSubscribers, createSubscriberStream } = this.#withBroadcastStream(output, pubsub, key);
+    const {
+      output: outputForSubscribers,
+      createSubscriberStream,
+      startBroadcast,
+    } = this.#withBroadcastStream(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
@@ -850,6 +857,8 @@ export class AgentThreadStreamRuntime {
     }
     const registrationPublish = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId });
     state.registrationPublishesByRunId.set(output.runId, registrationPublish);
+    const broadcast = registrationPublish.then(startBroadcast, startBroadcast);
+    state.broadcastsByRunId.set(output.runId, broadcast);
     return this.#watchThreadRunCompletion(state, pubsub, key, record);
   }
 
