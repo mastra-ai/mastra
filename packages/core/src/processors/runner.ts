@@ -43,6 +43,37 @@ import type {
   ToolCallInfo,
 } from './index';
 
+type SystemMessage = ReturnType<MessageList['getAllSystemMessages']>[number];
+
+function getTaggedSystemMessages(messageList: MessageList): SystemMessage[] {
+  const untaggedSystemMessages = messageList.getSystemMessages();
+  return messageList
+    .getAllSystemMessages()
+    .filter(message => !untaggedSystemMessages.some(untaggedMessage => untaggedMessage === message));
+}
+
+function applyReturnedSystemMessages(
+  messageList: MessageList,
+  systemMessages: SystemMessage[],
+  previousSystemMessages: SystemMessage[],
+): void {
+  const taggedSystemMessages = getTaggedSystemMessages(messageList);
+  const previousTaggedIndexes = new Set(
+    previousSystemMessages
+      .map((message, index) => ({ message, index }))
+      .filter(({ message }) => taggedSystemMessages.some(taggedMessage => taggedMessage === message))
+      .map(({ index }) => index),
+  );
+  const untaggedSystemMessages = systemMessages.filter(
+    (message, index) =>
+      !previousTaggedIndexes.has(index) &&
+      !taggedSystemMessages.some(taggedMessage => messagesAreEqual(taggedMessage, message)),
+  );
+
+  messageList.clearSystemMessages();
+  messageList.addSystem(untaggedSystemMessages);
+}
+
 /**
  * Safely invoke a processor's onViolation callback when a TripWire is caught.
  * Errors from the callback are silently caught.
@@ -929,8 +960,9 @@ export class ProcessorRunner {
           // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
 
-          // Replace system messages with the modified ones
-          messageList.replaceAllSystemMessages(result.systemMessages);
+          // Returned systemMessages replace only untagged system messages.
+          // Tagged messages are owned by the processors that added them via messageList.addSystem(..., tag).
+          applyReturnedSystemMessages(messageList, result.systemMessages, inputSystemMessagesBefore);
 
           // Handle regular messages
           const regularMessages = result.messages;
@@ -1219,7 +1251,7 @@ export class ProcessorRunner {
           ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
         }
         if (systemMessages) {
-          messageList.replaceAllSystemMessages(systemMessages);
+          applyReturnedSystemMessages(messageList, systemMessages, inputData.systemMessages);
         }
         Object.assign(stepInput, rest);
 

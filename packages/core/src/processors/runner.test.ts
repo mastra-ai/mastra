@@ -427,16 +427,21 @@ describe('ProcessorRunner', () => {
 
         const result = await runner.runInputProcessors(messageList);
 
-        // After processing, the system messages should be modified
+        // After processing, only untagged system messages are modified through returned systemMessages.
+        // Tagged system messages remain owned by their original tags.
         const allMessages = await result.get.all.aiV5.prompt();
         const systemMessages = allMessages.filter((m: any) => m.role === 'system');
 
-        // Verify system messages were trimmed
+        // Verify the untagged system message was trimmed, while tagged memory context stayed tagged and unmodified.
         expect(systemMessages).toHaveLength(2);
-        systemMessages.forEach((msg: any) => {
-          const content = typeof msg.content === 'string' ? msg.content : msg.content[0]?.text;
-          expect(content.length).toBeLessThanOrEqual(24); // 20 chars + '...'
-        });
+        const systemTexts = systemMessages.map((msg: any) =>
+          typeof msg.content === 'string' ? msg.content : msg.content[0]?.text,
+        );
+        expect(systemTexts).toContain('Original system prom...');
+        expect(systemTexts).toContain('Memory context that is too long and needs trimming.');
+        expect(messageList.getSystemMessages('memory').map(message => message.content)).toEqual([
+          'Memory context that is too long and needs trimming.',
+        ]);
       });
 
       it('should continue to allow adding new system messages via return array (existing behavior)', async () => {

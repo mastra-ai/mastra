@@ -1741,6 +1741,49 @@ describe('processInputStep', () => {
       const systemMessages = messageList.getAllSystemMessages();
       expect(systemMessages.length).toBe(3);
     });
+
+    it('should preserve tagged system messages when processor returns systemMessages', async () => {
+      const processor: Processor = {
+        id: 'system-modifier',
+        processInputStep: async ({ systemMessages }) => {
+          return {
+            systemMessages: [...systemMessages, { role: 'system' as const, content: 'Additional instruction' }],
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User message')], 'input');
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('Memory context', 'observational-memory');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(messageList.getSystemMessages('observational-memory').map(message => message.content)).toEqual([
+        'Memory context',
+      ]);
+      expect(messageList.getSystemMessages().map(message => message.content)).toEqual([
+        'Original instruction',
+        'Additional instruction',
+      ]);
+      expect(messageList.getAllSystemMessages().map(message => message.content)).toEqual([
+        'Original instruction',
+        'Additional instruction',
+        'Memory context',
+      ]);
+    });
   });
 
   describe('abort functionality', () => {
