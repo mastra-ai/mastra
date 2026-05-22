@@ -30,9 +30,6 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "ky": "^1.14.3"
-  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
