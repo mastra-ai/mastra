@@ -69,6 +69,8 @@ function makeChannels(
     streaming?: boolean | { updateIntervalMs?: number };
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
+    cards?: boolean;
+    logger?: any;
   } = {},
 ) {
   const recording = createRecording();
@@ -78,9 +80,11 @@ function makeChannels(
   };
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
+  if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
   const channels = new AgentChannels({
     adapters: { test: adapterConfig as any },
   });
+  if (opts.logger) (channels as any).__setLogger(opts.logger);
   return { channels, ...recording };
 }
 
@@ -447,6 +451,62 @@ describe('consumeAgentStream', () => {
         't1:complete',
         't2:complete',
       ]);
+    });
+
+    it("deprecated cards: false maps to toolDisplay: 'text' and warns once", async () => {
+      const warn = vi.fn();
+      const logger = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false, cards: false, logger });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      // `'text'` mode posts plain-text running and result messages, not Block Kit cards.
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts.length).toBeGreaterThan(0);
+      expect(posts.every(p => typeof (p as any).arg === 'string')).toBe(true);
+      // Deprecation warning logged with the suggested replacement.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toMatch(/cards.*deprecated.*toolDisplay: 'text'/);
+    });
+
+    it('explicit toolDisplay wins over deprecated cards', async () => {
+      const warn = vi.fn();
+      const logger = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+      const { channels, calls, sdkThread } = makeChannels({
+        streaming: false,
+        cards: false,
+        toolDisplay: 'cards',
+        logger,
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+
+      // Explicit `toolDisplay: 'cards'` wins; deprecated `cards: false` is ignored
+      // and the deprecation warning is suppressed (only fires when `toolDisplay` is absent).
+      const posts = calls.filter(c => c.kind === 'post');
+      const hasBlockKit = posts.some(p => typeof (p as any).arg === 'object' && (p as any).arg !== null);
+      expect(hasBlockKit).toBe(true);
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 

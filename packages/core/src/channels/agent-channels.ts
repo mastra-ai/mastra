@@ -128,6 +128,8 @@ export class AgentChannels {
    * platform per AgentChannels instance.
    */
   private warnedToolDisplayFallback = new Set<string>();
+  /** Tracks platforms where we've already logged the deprecated `cards` warning. */
+  private warnedDeprecatedCards = new Set<string>();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -412,7 +414,12 @@ export class AgentChannels {
           // Resolve the tool display mode so the approve/deny edit matches
           // the original card's rendering (cards → Block Kit, text → plain).
           // Streaming is irrelevant here — we're outside the agent loop.
-          const { resolved: clickToolDisplay } = this.resolveToolDisplay(platform, adapterConfig?.toolDisplay, false);
+          const { resolved: clickToolDisplay } = this.resolveToolDisplay(
+            platform,
+            adapterConfig?.toolDisplay,
+            false,
+            adapterConfig?.cards,
+          );
           const useCards = clickToolDisplay === 'cards';
 
           if (!approved) {
@@ -1001,6 +1008,7 @@ export class AgentChannels {
       platform,
       adapterConfig?.toolDisplay,
       this.resolveStreaming(adapterConfig?.streaming).enabled,
+      adapterConfig?.cards,
     );
     const canRenderApprovalButtons =
       webhookToolDisplayFn !== undefined ||
@@ -1188,6 +1196,7 @@ export class AgentChannels {
       platform,
       adapterConfig?.toolDisplay,
       streaming.enabled,
+      adapterConfig?.cards,
     );
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
@@ -1477,18 +1486,33 @@ export class AgentChannels {
     platform: string,
     requested: ToolDisplay | undefined,
     streamingEnabled: boolean,
+    deprecatedCards?: boolean,
   ): { resolved: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden'; fn?: ToolDisplayFn } {
     // Function form: drivers call the fn directly. The resolved mode is
     // the default `'cards'` — drivers use it only for any event the fn
     // doesn't render (returns `undefined`).
     const fn = typeof requested === 'function' ? requested : undefined;
     const requestedMode = typeof requested === 'function' ? undefined : requested;
+    // Deprecated `cards: boolean` only applies when `toolDisplay` is not set:
+    // `cards: true` → `'cards'`, `cards: false` → `'text'`. Warn once per
+    // platform so existing users see the deprecation but configs keep working.
+    let fromDeprecatedCards: 'cards' | 'text' | undefined;
+    if (requestedMode === undefined && deprecatedCards !== undefined) {
+      fromDeprecatedCards = deprecatedCards ? 'cards' : 'text';
+      if (!this.warnedDeprecatedCards.has(platform)) {
+        this.warnedDeprecatedCards.add(platform);
+        this.log(
+          'warn',
+          `[${platform}] 'cards' option is deprecated; use toolDisplay: '${fromDeprecatedCards}' instead.`,
+        );
+      }
+    }
     // Default is always `'cards'`: `'timeline'`/`'grouped'` need
     // `StreamingPlan` (not supported on every platform) so users opt in
     // explicitly. `'cards'` works under both streaming and static modes
     // — the streaming driver closes the session, posts the card, and
     // reopens on the next chunk.
-    const toolDisplay = requestedMode ?? 'cards';
+    const toolDisplay = requestedMode ?? fromDeprecatedCards ?? 'cards';
 
     // `'timeline'` and `'grouped'` push `task_update`/`plan_update` chunks
     // that only render inside a chat-SDK `StreamingPlan`. Without streaming

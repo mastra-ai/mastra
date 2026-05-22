@@ -181,6 +181,13 @@ export type ToolDisplayResult =
 export interface ChannelAdapterConfig extends ChannelAdapterBaseConfig {
   /** See {@link ToolDisplay} for mode descriptions. */
   toolDisplay?: ToolDisplay;
+  /**
+   * @deprecated Use {@link ChannelAdapterConfig.toolDisplay} instead.
+   * `cards: true` is equivalent to `toolDisplay: 'cards'`,
+   * `cards: false` is equivalent to `toolDisplay: 'text'`.
+   * Only applied when `toolDisplay` is not set.
+   */
+  cards?: boolean;
 }
 
 /**
