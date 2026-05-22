@@ -225,7 +225,7 @@ describe('spawn_subagent tool — execution', () => {
   });
 
   it('uses a session subagent model override before the subagent type default', async () => {
-    const { harness, storage } = setup();
+    const { harness, storage, childAgent } = setup();
     const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     await parent.models.setSubagent({ agentType: 'explore', model: 'anthropic/claude-opus-4-6' });
     const tool = createSpawnSubagentTool(parent)!;
@@ -241,6 +241,9 @@ describe('spawn_subagent tool — execution', () => {
     const start = events.find(e => e.type === 'subagent_start');
     expect(childRecord?.modelId).toBe('anthropic/claude-opus-4-6');
     expect((start as any).modelId).toBe('anthropic/claude-opus-4-6');
+    expect(childAgent.lastStreamOptions.requestContext.get('harness')).toMatchObject({
+      modelId: 'anthropic/claude-opus-4-6',
+    });
   });
 
   it('emits subagent_start + subagent_end on the parent session', async () => {
