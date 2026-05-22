@@ -4,7 +4,7 @@
 
 Added a Drawer component — a panel that slides in from any edge of the screen with swipe-to-dismiss gestures.
 
-Built on Base UI, the Drawer supports four anchor sides, snap points, nested stacking, controlled state, non-modal mode, swipe-to-open areas, and detached triggers.
+The Drawer can be anchored to any of the four screen edges and supports snap points, nested stacking, controlled state, non-modal mode, swipe-to-open areas, and detached triggers.
 
 ```tsx
 import {
