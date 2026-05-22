@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-murf",
-  "version": "0.12.0",
+  "version": "0.12.1-alpha.0",
   "description": "Mastra Murf voice integration",
   "type": "module",
   "files": [
@@ -30,9 +30,6 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "ky": "^1.14.3"
-  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

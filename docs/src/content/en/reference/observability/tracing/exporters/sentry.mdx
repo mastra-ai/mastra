@@ -195,6 +195,7 @@ The exporter sets these standard OpenTelemetry attributes:
 
 - `sentry.origin`: `auto.ai.mastra` (identifies spans from Mastra)
 - `ai.span.type`: Mastra span type
+- `gen_ai.conversation.id`: Chat thread identifier, set from `metadata.threadId` to group spans in Sentry's Conversations view
 
 **MODEL\_GENERATION spans:**
 

@@ -7,14 +7,14 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
+import { finishStreamingAssistantMessage, toUIMessage } from '../lib/ai-sdk';
+import { resolveInitialMessages } from '../lib/ai-sdk/memory/resolveInitialMessages';
+import { AISdkNetworkTransformer } from '../lib/ai-sdk/transformers/AISdkNetworkTransformer';
+import { fromCoreUserMessageToUIMessage } from '../lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import { useMastraClient } from '../mastra-client-context';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
-import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
-import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
-import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
-import { useMastraClient } from '@/mastra-client-context';
 
 type ToolsInput = any;
 type SignalContinuationOptions = {
