@@ -126,6 +126,7 @@ describe('Agent signals', () => {
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
+      transient: true,
     });
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
@@ -689,6 +690,7 @@ describe('Agent signals', () => {
       acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
     });
     expect(signalPart?.data.createdAt).toBeDefined();
+    expect(signalPart?.transient).toBe(true);
 
     subscription.unsubscribe();
   });
