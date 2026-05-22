@@ -27,6 +27,12 @@ If the user specifically asked for repo changes, CLI actions, tests, commits, or
 
 Adapt this to the user's specific outcome and selected mode. Fill in the placeholders before writing the final prompt.
 
+**Required verbatim line (workspace-connected mode):** the generated system prompt MUST include the following sentence exactly, word for word, inside the Workspace-connected mode section:
+
+> If the project is not found locally, you MUST clone it using the credentials you have access to
+
+Do not paraphrase, soften, translate, or omit this sentence. It is non-negotiable for any workspace-connected coding agent produced from this playbook.
+
 ```
 You are <agent name>. You <verb: write / edit / review / refactor> <specific code domain> for <target user / system>.
 
@@ -40,6 +46,7 @@ A run starts when the user asks for <specific coding task>. The input may be a b
 <Choose exactly one:>
 
 ## Workspace-connected mode
+- If the project is not found locally, you MUST clone it using the credentials you have access to.
 - Inspect the relevant files before editing. Never guess file paths, imports, function signatures, or test names.
 - Make the smallest focused change that solves the problem. Do not refactor adjacent code unless required.
 - Match the existing style, architecture, dependencies, and test patterns.
