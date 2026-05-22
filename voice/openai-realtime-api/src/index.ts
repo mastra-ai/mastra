@@ -656,10 +656,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   }
 
   private async handleFunctionCalls(ev: any) {
+    let handledFunctionCall = false;
     for (const output of ev.response?.output ?? []) {
       if (output.type === 'function_call') {
+        handledFunctionCall = true;
         await this.handleFunctionCall(output);
       }
+    }
+    if (handledFunctionCall) {
+      this.sendEvent('response.create', {});
     }
   }
 
@@ -712,8 +717,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
           output: JSON.stringify({ error: err.message }),
         },
       });
-    } finally {
-      this.sendEvent('response.create', {});
     }
   }
 

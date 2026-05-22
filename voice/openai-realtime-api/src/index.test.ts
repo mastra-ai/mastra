@@ -103,6 +103,53 @@ describe('OpenAIRealtimeVoice', () => {
     });
   });
 
+  describe('function call dispatch', () => {
+    it('should send exactly one response.create after multiple function_calls', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      voice.addTools({
+        tool_a: {
+          description: 'A',
+          inputSchema: undefined,
+          execute: vi.fn().mockResolvedValue({ ok: 'a' }),
+        },
+        tool_b: {
+          description: 'B',
+          inputSchema: undefined,
+          execute: vi.fn().mockResolvedValue({ ok: 'b' }),
+        },
+      } as any);
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [
+            { type: 'function_call', name: 'tool_a', call_id: '1', arguments: '{}' },
+            { type: 'function_call', name: 'tool_b', call_id: '2', arguments: '{}' },
+          ],
+        },
+      });
+
+      const sent = ((voice as any).ws.send as ReturnType<typeof vi.fn>).mock.calls.map(([raw]: [string]) =>
+        JSON.parse(raw),
+      );
+      expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(1);
+    });
+
+    it('should not send response.create when there are no function_call outputs', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [{ type: 'message', role: 'assistant', content: [] }],
+        },
+      });
+
+      const sent = ((voice as any).ws.send as ReturnType<typeof vi.fn>).mock.calls.map(([raw]: [string]) =>
+        JSON.parse(raw),
+      );
+      expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(0);
+    });
+  });
+
   describe('event handling', () => {
     it('should register and trigger event listeners', () => {
       const mockCallback = vi.fn();
