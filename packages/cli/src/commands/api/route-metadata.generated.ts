@@ -3263,6 +3263,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /harness/:name/sessions/:sessionId/signals": {
+    "method": "POST",
+    "path": "/harness/:name/sessions/:sessionId/signals",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /harness/:name/sessions/:sessionId/message-results/:signalId": {
     "method": "GET",
     "path": "/harness/:name/sessions/:sessionId/message-results/:signalId",

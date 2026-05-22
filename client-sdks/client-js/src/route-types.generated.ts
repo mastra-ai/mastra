@@ -21057,6 +21057,99 @@ export interface PostHarnessNameSessionsSessionIdQueue_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /harness/:name/sessions/:sessionId/signals
+// ============================================================================
+export type PostHarnessNameSessionsSessionIdSignals_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+type PostHarnessNameSessionsSessionIdSignals_Body_Auxiliary_1 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessionsSessionIdSignals_Body_Auxiliary_1[]
+  | {
+      [key: string]: PostHarnessNameSessionsSessionIdSignals_Body_Auxiliary_1;
+    };
+
+export type PostHarnessNameSessionsSessionIdSignals_Body =
+  | {
+      type: 'user-message';
+      content:
+        | string
+        | {
+            [key: string]: PostHarnessNameSessionsSessionIdSignals_Body_Auxiliary_1;
+          }[];
+      signalId?: string | undefined;
+      mode?: string | undefined;
+      ifActive?:
+        | {
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null;
+                }
+              | undefined;
+          }
+        | undefined;
+    }
+  | {
+      type: 'system-reminder';
+      contents: string;
+      attributes?:
+        | {
+            [key: string]: string | number | boolean | null;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: PostHarnessNameSessionsSessionIdSignals_Body_Auxiliary_1;
+          }
+        | undefined;
+    };
+
+export type PostHarnessNameSessionsSessionIdSignals_Response = {
+  accepted: true;
+  id: string;
+  runId: string;
+  willInterleave: boolean;
+  signal: unknown;
+};
+
+export type PostHarnessNameSessionsSessionIdSignals_Request = Simplify<
+  (PostHarnessNameSessionsSessionIdSignals_PathParams extends never
+    ? {}
+    : { params: PostHarnessNameSessionsSessionIdSignals_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessNameSessionsSessionIdSignals_Body extends never
+      ? {}
+      : {} extends PostHarnessNameSessionsSessionIdSignals_Body
+        ? { body?: PostHarnessNameSessionsSessionIdSignals_Body }
+        : { body: PostHarnessNameSessionsSessionIdSignals_Body })
+>;
+
+export interface PostHarnessNameSessionsSessionIdSignals_RouteContract {
+  pathParams: PostHarnessNameSessionsSessionIdSignals_PathParams;
+  queryParams: never;
+  body: PostHarnessNameSessionsSessionIdSignals_Body;
+  request: PostHarnessNameSessionsSessionIdSignals_Request;
+  response: PostHarnessNameSessionsSessionIdSignals_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /harness/:name/sessions/:sessionId/message-results/:signalId
 // ============================================================================
 export type GetHarnessNameSessionsSessionIdMessageResultsSignalId_PathParams = {
@@ -79082,6 +79175,7 @@ export interface RouteTypes {
   'DELETE /harness/:name/sessions/:sessionId/attachments/:attachmentId': DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_RouteContract;
   'POST /harness/:name/sessions/:sessionId/messages': PostHarnessNameSessionsSessionIdMessages_RouteContract;
   'POST /harness/:name/sessions/:sessionId/queue': PostHarnessNameSessionsSessionIdQueue_RouteContract;
+  'POST /harness/:name/sessions/:sessionId/signals': PostHarnessNameSessionsSessionIdSignals_RouteContract;
   'GET /harness/:name/sessions/:sessionId/message-results/:signalId': GetHarnessNameSessionsSessionIdMessageResultsSignalId_RouteContract;
   'GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result': GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteContract;
   'GET /harness/:name/sessions/:sessionId/events': GetHarnessNameSessionsSessionIdEvents_RouteContract;
@@ -79541,6 +79635,9 @@ export interface Client {
   };
   '/harness/:name/sessions/:sessionId/queue/:queuedItemId/result': {
     GET: GetHarnessNameSessionsSessionIdQueueQueuedItemIdResult_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId/signals': {
+    POST: PostHarnessNameSessionsSessionIdSignals_RouteContract;
   };
   '/harness/:name/sessions/:sessionId/state': {
     GET: GetHarnessNameSessionsSessionIdState_RouteContract;
