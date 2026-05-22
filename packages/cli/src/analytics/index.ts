@@ -104,7 +104,7 @@ export class PosthogAnalytics {
 
   private static isTelemetryEnabled(): boolean {
     const value = process.env.MASTRA_TELEMETRY_DISABLED;
-    if (value && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())) {
+    if (value && ['1', 'true', 'yes'].includes(value.trim().toLowerCase())) {
       return false;
     }
     return true;

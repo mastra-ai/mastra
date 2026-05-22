@@ -31,19 +31,16 @@ describe('EE PostHog telemetry', () => {
     resetEETelemetryForTests();
   });
 
-  it.each(['1', 'true', 'TRUE', 'yes', 'on', ' True '])(
-    'suppresses events when MASTRA_TELEMETRY_DISABLED=%s',
-    value => {
-      process.env['MASTRA_TELEMETRY_DISABLED'] = value;
+  it.each(['1', 'true', 'TRUE', 'yes', ' True '])('suppresses events when MASTRA_TELEMETRY_DISABLED=%s', value => {
+    process.env['MASTRA_TELEMETRY_DISABLED'] = value;
 
-      captureEEEvent('ee_license_check', 'user-1', { license_hash: 'safe' });
+    captureEEEvent('ee_license_check', 'user-1', { license_hash: 'safe' });
 
-      expect(PostHog).not.toHaveBeenCalled();
-      expect(capture).not.toHaveBeenCalled();
-    },
-  );
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
+  });
 
-  it.each(['0', 'false', 'no', 'off'])('still sends events when MASTRA_TELEMETRY_DISABLED=%s', value => {
+  it.each(['0', 'false', 'no', 'off', 'on'])('still sends events when MASTRA_TELEMETRY_DISABLED=%s', value => {
     process.env['MASTRA_TELEMETRY_DISABLED'] = value;
 
     captureEEEvent('ee_license_check', 'user-1', { license_hash: 'safe' });

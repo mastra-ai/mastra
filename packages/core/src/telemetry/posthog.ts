@@ -4,7 +4,7 @@ import { PostHog } from 'posthog-node';
 
 const POSTHOG_API_KEY = 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT';
 const POSTHOG_HOST = 'https://us.posthog.com';
-const TRUTHY_DISABLED_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const TRUTHY_DISABLED_VALUES = new Set(['1', 'true', 'yes']);
 
 let client: PostHog | null = null;
 

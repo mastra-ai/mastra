@@ -3,7 +3,7 @@ import posthog from 'posthog-js';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
-const TRUTHY_DISABLED_VALUES = ['1', 'true', 'yes', 'on'];
+const TRUTHY_DISABLED_VALUES = ['1', 'true', 'yes'];
 
 function isTelemetryDisabled(): boolean {
   const value = window.MASTRA_TELEMETRY_DISABLED;
