@@ -4,9 +4,9 @@ import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
 
 const experimentsListColumns = [
-  { name: 'experimentId', label: 'ID', size: '6rem' },
-  { name: 'status', label: 'Status', size: '4rem' },
-  { name: 'targetType', label: 'Type', size: '4rem' },
+  { name: 'experimentId', label: 'ID', size: '7rem' },
+  { name: 'status', label: 'Status', size: '5rem' },
+  { name: 'targetType', label: 'Type', size: '6rem' },
   { name: 'target', label: 'Target', size: 'minmax(0,1fr)' },
   { name: 'counts', label: 'Counts', size: '7rem' },
   { name: 'date', label: 'Created', size: '10rem' },
@@ -67,7 +67,7 @@ export function DatasetExperimentsList({
 
         const rowCells = (
           <>
-            <DataList.MonoCell>{experiment.id}</DataList.MonoCell>
+            <DataList.IdCell id={experiment.id} />
             <DataList.Cell height="compact">
               {experiment.status && (
                 <Tooltip>
