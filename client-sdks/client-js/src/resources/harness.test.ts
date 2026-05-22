@@ -164,6 +164,23 @@ describe('Harnesses Resource', () => {
     );
   });
 
+  it('streams Harness events from CRLF-delimited SSE frames', async () => {
+    mockSseResponse([
+      ': keepalive\r\n\r\n',
+      'id: harness-v1:epoch-1:2\r\nevent: model_changed\r\ndata: {"id":"harness-v1:epoch-1:2","type":"model_changed","sessionId":"session-1","timestamp":1,"modelId":"openai/gpt-5.5"}\r\n\r\n',
+      'id: harness-v1:epoch-1:3\r\nevent: state_changed\r\ndata: {"id":"harness-v1:epoch-1:3","type":"state_changed","sessionId":"session-1","timestamp":2,"patch":{"mode":"build"}}\r\n\r\n',
+    ]);
+
+    const stream = await client.harnesses.session('code', 'session-1').events();
+    const events = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+
+    expect(events.map(event => event.id)).toEqual(['harness-v1:epoch-1:2', 'harness-v1:epoch-1:3']);
+    expect(stream.lastEventId).toBe('harness-v1:epoch-1:3');
+  });
+
   it('exposes reconnect result lookups without re-admitting work', async () => {
     mockJsonResponse({
       source: 'inbox-response',
