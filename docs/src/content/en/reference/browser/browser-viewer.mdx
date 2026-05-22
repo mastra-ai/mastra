@@ -30,7 +30,7 @@ const workspace = new Workspace({
 
 const browserAgent = new Agent({
   id: 'browser-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
   instructions: 'You are a web automation assistant.',
 })
