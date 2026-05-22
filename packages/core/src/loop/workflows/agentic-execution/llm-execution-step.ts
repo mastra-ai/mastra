@@ -44,7 +44,7 @@ import {
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
-import { makeCoreTool } from '../../../utils';
+import { makeCoreTool, safeStringify } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -630,7 +630,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   errorText:
                     typeof chunk.payload.result === 'string'
                       ? chunk.payload.result
-                      : JSON.stringify(chunk.payload.result),
+                      : safeStringify(chunk.payload.result),
                 }
               : {
                   state: 'result',

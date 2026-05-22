@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed tool execution errors being stored as successful results, which caused failed tool calls to reappear as successes when a conversation was reloaded from history. When a tool throws (or a provider-executed tool reports a failure), the result is now persisted as `state: "output-error"` with `errorText` instead of `state: "result"`, so the error survives history reload via `toAISdkV5Messages()` and matches the live streaming behavior. Fixes #15569.
+Fixed failed tool calls showing up as successful when a conversation is reloaded from history. Previously a tool that threw an error displayed correctly while the agent was running, but reappeared as a successful result once the conversation was loaded from memory. The error is now preserved and displayed on reload, matching what you see during the live run. Fixes #15569.
