@@ -1138,6 +1138,12 @@ export interface SubagentDefinition {
    * remain available.
    */
   allowedWorkspaceTools?: string[];
+
+  /** Optional maximum number of steps for this subagent's execution loop. */
+  maxSteps?: AgentExecutionOptionsBase<unknown>['maxSteps'];
+
+  /** Optional stop condition for this subagent's execution loop. */
+  stopWhen?: AgentExecutionOptionsBase<unknown>['stopWhen'];
 }
 
 /**
@@ -1437,6 +1443,12 @@ export interface MessageOverrides {
    * surface without changing persisted mode config.
    */
   prepareStep?: AgentExecutionOptionsBase<unknown>['prepareStep'];
+
+  /** Optional per-turn maximum number of agent execution steps. */
+  maxSteps?: AgentExecutionOptionsBase<unknown>['maxSteps'];
+
+  /** Optional per-turn stop condition. */
+  stopWhen?: AgentExecutionOptionsBase<unknown>['stopWhen'];
 
   /**
    * Auto-approve tool-approval interrupts for this turn. Runtime adapters
@@ -1870,6 +1882,19 @@ export interface HarnessRequestContext<TState = unknown> {
    * approval gate.
    */
   resolveToolPermission?: (params: { toolName: string; args: Record<string, unknown> }) => PermissionPolicy;
+  /**
+   * Internal audit hook used by the agent tool dispatcher to journal
+   * workspace actions after the final permission decision is known.
+   */
+  recordWorkspaceAction?: (params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    policyDecision: PermissionPolicy;
+    runId?: string;
+    toolCallId?: string;
+    result?: unknown;
+    error?: unknown;
+  }) => Promise<void>;
 
   /** Depth of the session in the subagent tree. `0` for the parent. */
   subagentDepth: number;

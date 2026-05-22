@@ -678,6 +678,8 @@ export class Harness {
   private readonly _defaultModeId?: string;
   private readonly _liveSessions = new Map<string, Session>();
   private readonly _leaseTtlMs: number;
+  private _leaseRenewalTimer?: ReturnType<typeof setInterval>;
+  private _leaseRenewing = false;
   private readonly _maxQueueDepth: number;
   private readonly _closeTimeoutMs: number;
   private readonly _fileConfig: Readonly<HarnessFileConfig>;
@@ -2191,6 +2193,7 @@ export class Harness {
     // events keep their original id/timestamp/sessionId.
     const bridge = session._subscribeInternal(event => this._emitter.forward(event));
     this._sessionEventBridges.set(record.id, bridge);
+    this._ensureLeaseRenewalLoop();
 
     if (opts.emitCreated) {
       // Surface session creation to harness-level subscribers AFTER the bridge
@@ -2224,6 +2227,92 @@ export class Harness {
     }
 
     return session;
+  }
+
+  private _ensureLeaseRenewalLoop(): void {
+    if (this._shutdown) return;
+    if (this._leaseRenewalTimer !== undefined) return;
+    const intervalMs = Math.max(1_000, Math.floor(this._leaseTtlMs / 3));
+    this._leaseRenewalTimer = setInterval(() => {
+      void this._renewLiveSessionLeases();
+    }, intervalMs);
+    this._leaseRenewalTimer.unref?.();
+  }
+
+  private _stopLeaseRenewalLoop(): void {
+    if (this._leaseRenewalTimer === undefined) return;
+    clearInterval(this._leaseRenewalTimer);
+    this._leaseRenewalTimer = undefined;
+  }
+
+  private _stopLeaseRenewalLoopIfIdle(): void {
+    if (this._liveSessions.size > 0) return;
+    this._stopLeaseRenewalLoop();
+  }
+
+  private async _renewLiveSessionLeases(): Promise<void> {
+    if (this._leaseRenewing) return;
+    if (this._shutdown || this._liveSessions.size === 0) {
+      this._stopLeaseRenewalLoopIfIdle();
+      return;
+    }
+    this._leaseRenewing = true;
+    const storage = this._requireStorage('session lease renewal');
+    const sessions = Array.from(this._liveSessions.values());
+    try {
+      await Promise.all(
+        sessions.map(async session => {
+          if (session.lifecycleState !== 'live' && session.lifecycleState !== 'closing') return;
+          try {
+            const record = session.getRecord();
+            const lease = await storage.renewSessionLease({
+              harnessName: record.harnessName,
+              sessionId: session.id,
+              ownerId: this.ownerId,
+              ttlMs: this._leaseTtlMs,
+            });
+            session._markLeaseRenewed(lease.expiresAt);
+          } catch (err) {
+            if (err instanceof HarnessStorageLeaseConflictError || err instanceof HarnessStorageSessionNotFoundError) {
+              await this._evictLiveSession(session, 'lease_lost');
+              return;
+            }
+            console.error('[harness/v1] session lease renewal failed:', err);
+          }
+        }),
+      );
+    } finally {
+      this._leaseRenewing = false;
+      this._stopLeaseRenewalLoopIfIdle();
+    }
+  }
+
+  private async _evictLiveSession(session: Session, reason: 'lease_lost' | 'shutdown'): Promise<void> {
+    if (this._liveSessions.get(session.id) !== session) return;
+    session._emit({ type: 'session_evicted', reason });
+    try {
+      await session._flushEventPersistence();
+    } catch {
+      // Best-effort: lease loss may also mean event persistence is no longer available.
+    }
+    session._markEvicted(session.getRecord() as SessionRecord);
+    const bridge = this._sessionEventBridges.get(session.id);
+    if (bridge) {
+      bridge();
+      this._sessionEventBridges.delete(session.id);
+    }
+    this._liveSessions.delete(session.id);
+    this._stopLeaseRenewalLoopIfIdle();
+
+    try {
+      if (this._workspaceKind === 'per-session') {
+        await this._workspaceRegistry.releasePerSession({ sessionId: session.id });
+      } else if (this._workspaceKind === 'per-resource') {
+        await this._workspaceRegistry.releasePerResource({ resourceId: session.resourceId });
+      }
+    } catch {
+      // Best-effort — registry surfaces errors via workspace_error event.
+    }
   }
 
   private async _eventReplaySeedFor(
@@ -2616,6 +2705,7 @@ export class Harness {
         this._liveSessions.delete(node.record.id);
       }
     }
+    this._stopLeaseRenewalLoopIfIdle();
   }
 
   private _emitSessionClosing(session: Session | undefined, record: SessionRecord): void {
@@ -2685,6 +2775,7 @@ export class Harness {
       this._sessionEventBridges.delete(record.id);
     }
     this._liveSessions.delete(record.id);
+    this._stopLeaseRenewalLoopIfIdle();
 
     if (eventPersistenceError !== undefined) {
       throw new HarnessStorageError(record.id, 'flush', eventPersistenceError);
@@ -2850,6 +2941,7 @@ export class Harness {
       this._sessionEventBridges.delete(node.record.id);
     }
     this._liveSessions.delete(node.record.id);
+    this._stopLeaseRenewalLoopIfIdle();
     return live;
   }
 
@@ -2992,6 +3084,8 @@ export class Harness {
       await Promise.allSettled(pendingCloses);
     }
 
+    this._stopLeaseRenewalLoop();
+
     // Release every held lease. We keep the records active in storage —
     // shutdown is not a close.
     const sessions = Array.from(this._liveSessions.values());
@@ -3016,6 +3110,8 @@ export class Harness {
       } catch {
         // Best-effort: leases TTL out anyway.
       }
+
+      session._markEvicted(session.getRecord() as SessionRecord);
 
       const bridge = this._sessionEventBridges.get(session.id);
       if (bridge) {

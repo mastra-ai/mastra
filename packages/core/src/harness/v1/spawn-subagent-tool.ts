@@ -306,6 +306,7 @@ export function createSpawnSubagentTool(parent: Session) {
               agentType,
               innerToolCallId: event.toolCallId,
               toolName: event.toolName,
+              args: event.args,
               depth: childDepth,
             });
             break;
@@ -362,6 +363,8 @@ export function createSpawnSubagentTool(parent: Session) {
           abortSignal: ctx.abortSignal,
           ...(runAsForked ? { yolo: true } : {}),
           ...(prepareStep ? { prepareStep } : {}),
+          maxSteps: def.maxSteps ?? (def.stopWhen ? undefined : 50),
+          ...(def.stopWhen ? { stopWhen: def.stopWhen } : {}),
         });
       } catch (err) {
         isError = true;

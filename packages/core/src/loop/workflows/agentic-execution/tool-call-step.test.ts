@@ -972,8 +972,9 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
     });
     const requestContext = new RequestContext();
     const resolveToolPermission = vi.fn().mockReturnValue('allow');
+    const recordWorkspaceAction = vi.fn().mockResolvedValue(undefined);
     requestContext.set('__mastra_requireToolApproval', true);
-    requestContext.set('harness', { resolveToolPermission });
+    requestContext.set('harness', { resolveToolPermission, recordWorkspaceAction });
 
     const result = await toolCallStep.execute(makeExecuteParams({ requestContext }));
 
@@ -983,6 +984,14 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
     });
     expect(suspend).not.toHaveBeenCalled();
     expect(tools['ctx-tool'].execute).toHaveBeenCalled();
+    expect(recordWorkspaceAction).toHaveBeenCalledWith({
+      toolName: 'ctx-tool',
+      args: { action: 'delete' },
+      policyDecision: 'allow',
+      runId: 'harness-allow-run-id',
+      toolCallId: 'ctx-call-id',
+      result: { ok: true },
+    });
     expect(result.result).toEqual({ ok: true });
   });
 
@@ -1001,12 +1010,21 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
       streamState,
     });
     const requestContext = new RequestContext();
-    requestContext.set('harness', { resolveToolPermission: vi.fn().mockReturnValue('deny') });
+    const recordWorkspaceAction = vi.fn().mockResolvedValue(undefined);
+    requestContext.set('harness', { resolveToolPermission: vi.fn().mockReturnValue('deny'), recordWorkspaceAction });
 
     const result = await toolCallStep.execute(makeExecuteParams({ requestContext }));
 
     expect(result.error).toBeInstanceOf(Error);
     expect(result.error.message).toContain('denied by Harness permissions');
+    expect(recordWorkspaceAction).toHaveBeenCalledWith({
+      toolName: 'ctx-tool',
+      args: { action: 'delete' },
+      policyDecision: 'deny',
+      runId: 'harness-deny-run-id',
+      toolCallId: 'ctx-call-id',
+      error: 'Tool "ctx-tool" was denied by Harness permissions.',
+    });
     expect(suspend).not.toHaveBeenCalled();
     expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
   });
