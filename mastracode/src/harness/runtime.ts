@@ -21,6 +21,7 @@ import type {
   HarnessEvent as HarnessV1Event,
   HarnessMessageContentPart,
   Session,
+  SessionDisplayState,
   ThreadRecord,
 } from '@mastra/core/harness/v1';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
@@ -44,6 +45,11 @@ import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
 const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 const FILE_MUTATION_TOOLS = new Set(['string_replace_lsp', 'write_file', 'ast_smart_edit']);
+const HARNESS_SESSION_LIFECYCLE_ERROR_NAMES = new Set([
+  'HarnessSessionClosedError',
+  'HarnessSessionClosingError',
+  'HarnessSessionDeletedError',
+]);
 type MastraCodeOMEvent = Extract<
   HarnessEvent,
   {
@@ -126,6 +132,10 @@ function messageContents(content: string, files?: unknown[]): string | HarnessMe
     }
   }
   return parts;
+}
+
+function isHarnessSessionLifecycleError(error: unknown): boolean {
+  return error instanceof Error && HARNESS_SESSION_LIFECYCLE_ERROR_NAMES.has(error.name);
 }
 
 function toLegacyThread(thread: ThreadRecord): HarnessThread {
@@ -338,7 +348,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     );
 
     this.core.subscribe(event => {
-      void this.handleCoreEvent(event);
+      void this.handleCoreEvent(event).catch(error => {
+        if (isHarnessSessionLifecycleError(error)) return;
+        this.emitError(error);
+      });
     });
 
     for (const handler of config.heartbeatHandlers ?? []) {
@@ -375,7 +388,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private async handleCoreEvent(event: HarnessV1Event): Promise<void> {
     if ('runId' in event && typeof event.runId === 'string') this.currentRunId = event.runId;
     if ('traceId' in event && typeof event.traceId === 'string') this.currentTraceId = event.traceId;
-    this.currentTraceId = this.session?.getDisplayState().currentTraceId ?? this.currentTraceId;
+    this.currentTraceId = this.getSessionDisplayState()?.currentTraceId ?? this.currentTraceId;
     if (event.type === 'state_changed' && this.session) {
       this.state = { ...this.state, ...((await this.session.getState<TState>()) as TState) };
     }
@@ -832,8 +845,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     if (!agentType) return (this.state.subagentModelId as string | undefined) ?? null;
     return (
+      this.requireSession().models.getSubagent({ agentType }) ??
       (this.state[`subagentModelId_${agentType}`] as string | undefined) ??
-      this.requireSession().models.getSubagent({ agentType })
+      null
     );
   }
 
@@ -1116,7 +1130,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   getDisplayState(): Readonly<HarnessDisplayState> {
-    const sessionState = this.session?.getDisplayState();
+    const sessionState = this.getSessionDisplayState();
     const base = defaultDisplayState();
     const pending = sessionState?.pending as
       | {
@@ -1669,5 +1683,14 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       error: error instanceof Error ? error : new Error(String(error)),
       message: error instanceof Error ? error.message : String(error),
     } as unknown as HarnessEvent);
+  }
+
+  private getSessionDisplayState(): SessionDisplayState | undefined {
+    try {
+      return this.session?.getDisplayState();
+    } catch (error) {
+      if (isHarnessSessionLifecycleError(error)) return undefined;
+      throw error;
+    }
   }
 }

@@ -248,6 +248,28 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.destroy();
   });
 
+  it('keeps projecting late Harness v1 events after the session is closed', async () => {
+    const runtime = createRuntime();
+    const closed = new Error('Session "closed" is closed');
+    closed.name = 'HarnessSessionClosedError';
+    (runtime as any).session = {
+      isRunning: () => false,
+      getDisplayState: () => {
+        throw closed;
+      },
+    };
+
+    await expect(
+      (runtime as any).handleCoreEvent({
+        type: 'task_updated',
+        tasks: [{ id: 'late-task', title: 'Late task', status: 'completed' }],
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(runtime.getDisplayState().tasks).toEqual([{ id: 'late-task', title: 'Late task', status: 'completed' }]);
+    await runtime.destroy();
+  });
+
   it('passes initial-message files through to Harness v1 message content parts', async () => {
     const runtime = createRuntime();
     const message = vi.fn(async () => undefined);
@@ -477,6 +499,8 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.init();
 
     expect((runtime as any).session.models.getSubagent({ agentType: 'explore' })).toBe('anthropic/claude-haiku-4-5');
+    await (runtime as any).session.models.setSubagent({ agentType: 'explore', model: 'openai/gpt-4o-mini' });
+    expect(runtime.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-4o-mini');
     await runtime.destroy();
   });
 
