@@ -471,6 +471,91 @@ describe('InMemoryHarness admission storage contract', () => {
     ).resolves.toEqual([]);
   });
 
+  it('filters workspace action journal rows by thread, kind, operation, and policy decision', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession(), { ownerId: 'h-1', ifVersion: 0 });
+    await storage.saveSession(sampleSession({ harnessName: 'other-harness' }), { ownerId: 'h-1', ifVersion: 0 });
+
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({ id: 'wrong-thread', threadId: 'thread-2' }),
+      ),
+    ).resolves.toEqual({ created: false });
+    await storage.appendWorkspaceActionJournalEntry(sampleWorkspaceActionJournalEntry({ id: 'a', createdAt: 1000 }));
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'b',
+        operation: 'read',
+        action: { kind: 'file', operation: 'read', path: 'notes.md' },
+        policyDecision: 'allow',
+        createdAt: 1000,
+      }),
+    );
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'c',
+        actionKind: 'command',
+        operation: 'run',
+        action: { kind: 'command', operation: 'run', command: 'pnpm test' },
+        policyDecision: 'deny',
+        path: undefined,
+        createdAt: 1100,
+      }),
+    );
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'd',
+        actionKind: 'mcp',
+        operation: 'call',
+        action: { kind: 'mcp', operation: 'call', serverKey: 'filesystem' },
+        policyDecision: 'allow',
+        path: undefined,
+        createdAt: 1200,
+      }),
+    );
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'e',
+        actionKind: 'network',
+        operation: 'fetch',
+        action: { kind: 'network', operation: 'fetch', url: 'https://example.test' },
+        path: undefined,
+        createdAt: 1300,
+      }),
+    );
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        harnessName: 'other-harness',
+        id: 'other-namespace',
+        createdAt: 900,
+      }),
+    );
+
+    const listIds = async (
+      overrides: Partial<Parameters<typeof storage.listWorkspaceActionJournalEntries>[0]>,
+    ): Promise<string[]> =>
+      (
+        await storage.listWorkspaceActionJournalEntries({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          limit: 10,
+          ...overrides,
+        })
+      ).map(entry => entry.id);
+
+    await expect(listIds({ threadId: 'thread-1' })).resolves.toEqual(['a', 'b', 'c', 'd', 'e']);
+    await expect(listIds({ threadId: 'thread-2' })).resolves.toEqual([]);
+    await expect(listIds({ sessionId: 'other-session' })).resolves.toEqual([]);
+    await expect(listIds({ resourceId: 'other-resource' })).resolves.toEqual([]);
+    await expect(listIds({ actionKind: 'file' })).resolves.toEqual(['a', 'b']);
+    await expect(listIds({ operation: 'write' })).resolves.toEqual(['a']);
+    await expect(listIds({ policyDecision: 'ask' })).resolves.toEqual(['a', 'e']);
+    await expect(listIds({ actionKind: 'mcp', policyDecision: 'allow' })).resolves.toEqual(['d']);
+    await expect(listIds({ actionKind: 'command', operation: 'run', policyDecision: 'deny' })).resolves.toEqual(['c']);
+    await expect(listIds({ actionKind: 'file', after: { createdAt: 1000, id: 'a' } })).resolves.toEqual(['b']);
+    await expect(listIds({ harnessName: 'other-harness' })).resolves.toEqual(['other-namespace']);
+  });
+
   it('ignores duplicate or mismatched workspace action journal appends and deletes rows with the session', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
     await storage.saveSession(sampleSession({ closedAt: 2000, lastActivityAt: 2000 }), {
