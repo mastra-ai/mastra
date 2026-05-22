@@ -1937,5 +1937,3 @@ describe('agent.create with builder defaults', () => {
     ).rejects.toThrow(/model/i);
   });
 });
-
-

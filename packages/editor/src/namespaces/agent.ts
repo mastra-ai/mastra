@@ -554,10 +554,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // If any is conditional, the combined result must be a dynamic function.
     const hasIntegrationTools = storedAgent.integrationTools != null;
     const isDynamicTools =
-      hasConditionalTools ||
-      hasConditionalMCPClients ||
-      hasConditionalIntegrationTools ||
-      hasIntegrationTools;
+      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
