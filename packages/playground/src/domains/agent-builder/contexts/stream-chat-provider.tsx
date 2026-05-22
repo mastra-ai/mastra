@@ -1,5 +1,5 @@
 import { useChat } from '@mastra/react';
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraUIMessage, SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 
@@ -30,13 +30,6 @@ export interface StreamChatProviderProps {
   children: ReactNode;
 }
 
-type SendPayload = {
-  message: string;
-  threadId: string;
-  clientTools?: Record<string, unknown>;
-  modelSettings?: { instructions?: string };
-};
-
 export const StreamChatProvider = ({
   agentId,
   threadId,
@@ -60,9 +53,15 @@ export const StreamChatProvider = ({
       const tools = clientToolsRef.current;
       const instructions = instructionsRef.current;
 
-      const payload: SendPayload = {
+      const payload: SendMessageArgs = {
         message,
         threadId: threadIdRef.current,
+        modelSettings: {
+          maxRetries: 3,
+          maxSteps: 100,
+          maxTokens: 1000,
+          temperature: 1,
+        },
       };
 
       if (tools !== undefined) {
