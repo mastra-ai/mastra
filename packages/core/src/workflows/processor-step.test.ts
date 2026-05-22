@@ -295,6 +295,39 @@ describe('createStep with Processor', () => {
       expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder' }));
     });
 
+    it('should provide sendSignal when phase is inputStep and messageList is synthesized', async () => {
+      const processInputStepMock = vi.fn(async ({ messageList, sendSignal }) => {
+        await sendSignal?.({
+          type: 'system-reminder',
+          contents: 'Use synthesized message list instructions',
+          attributes: { type: 'dynamic-agents-md', path: '/repo/AGENTS.md' },
+        });
+        return messageList;
+      });
+
+      const processor: Processor = {
+        id: 'synthesized-signal-input-step-processor',
+        processInputStep: processInputStepMock,
+      };
+
+      const step = createStep(processor);
+      const rotateResponseMessageId = vi.fn(() => 'response-2');
+      const inputData = {
+        phase: 'inputStep' as const,
+        messages: [{ id: '1', role: 'user', content: 'test', createdAt: new Date() }],
+        stepNumber: 1,
+        systemMessages: [],
+        rotateResponseMessageId,
+      };
+
+      const result = await step.execute({ inputData } as any);
+      const messages = result?.messageList?.get.all.db() ?? [];
+
+      expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
+      expect(messages.some(message => message.role === 'signal')).toBe(true);
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    });
+
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
       const processOutputStreamMock = async ({ part }) => {
         return { ...part, processed: true };
