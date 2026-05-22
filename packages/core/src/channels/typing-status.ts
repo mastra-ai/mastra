@@ -23,6 +23,10 @@ export interface TypingStatusContext {
   toolCalls: ReadonlyMap<string, { toolName: string; args: unknown; startedAt: number }>;
   /** Status string currently displayed (last value set), or `undefined` if none. */
   currentStatus: string | undefined;
+  /**
+   * Names of the built-in channel tools available in the current thread.
+   */
+  channelTools: ReadonlySet<string>;
 }
 
 /**
@@ -58,7 +62,7 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  * | `tool-call-approval`  | `is requesting approval for ${toolName}…`        |
  * | _everything else_     | _no change_                       |
  */
-export function defaultTypingStatus(chunk: AgentChunkType<any>, _ctx: TypingStatusContext): TypingStatusReturn {
+export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatusContext): TypingStatusReturn {
   if (chunk.type.startsWith('data-om-')) {
     const t = chunk.type as string;
     if (t === 'data-om-buffering-start') {
@@ -81,9 +85,11 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, _ctx: TypingStat
     case 'start':
       return 'is working…';
     case 'tool-call':
+      if (ctx.channelTools.has(chunk.payload.toolName)) return undefined;
       return `is calling ${chunk.payload.toolName}…`;
 
     case 'tool-call-approval':
+      if (ctx.channelTools.has(chunk.payload.toolName)) return undefined;
       return `is requesting approval for ${chunk.payload.toolName}…`;
 
     default:

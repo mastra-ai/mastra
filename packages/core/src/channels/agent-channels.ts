@@ -1303,6 +1303,7 @@ export class AgentChannels {
             threadId: sdkThread.id,
             toolCalls: new Map(),
             currentStatus: currentTypingStatus,
+            channelTools: this.channelToolNames,
           };
           result = typingStatusFn(chunk, ctx);
         } catch (e) {

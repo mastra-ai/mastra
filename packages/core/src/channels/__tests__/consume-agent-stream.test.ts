@@ -476,6 +476,31 @@ describe('consumeAgentStream', () => {
       expect(typingStatuses).toEqual(['is thinking…', 'is typing…', 'is calling weather…', 'is typing…']);
     });
 
+    it('does not surface channel tools (e.g. add_reaction) in the typing indicator', async () => {
+      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'ok ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 'r1', toolName: 'add_reaction', args: { emoji: 'thumbsup' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 'r1', toolName: 'add_reaction', args: { emoji: 'thumbsup' }, result: 'ok' },
+          },
+          { type: 'text-delta', payload: { text: 'done' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        sdkThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      // Should NEVER contain "is calling add_reaction…"
+      expect(typingStatuses).toEqual(['is typing…']);
+    });
+
     it('emits "is working…" on the start chunk before other activity', async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: false });
       await drive(
