@@ -68,6 +68,51 @@ function createTurnEndedUpdate(): InteractionUpdate {
   } as InteractionUpdate;
 }
 
+function createCursorToolStartedUpdate(): InteractionUpdate {
+  return {
+    type: 'tool-call-started',
+    callId: 'cursor-weather-call',
+    toolCall: {
+      type: 'mcp',
+      args: {
+        providerIdentifier: 'weather',
+        toolName: 'get_temperature',
+        args: {
+          location: 'London',
+        },
+      },
+    },
+  } as InteractionUpdate;
+}
+
+function createCursorToolCompletedUpdate(): InteractionUpdate {
+  return {
+    type: 'tool-call-completed',
+    callId: 'cursor-weather-call',
+    toolCall: {
+      type: 'mcp',
+      args: {
+        providerIdentifier: 'weather',
+        toolName: 'get_temperature',
+        args: {
+          location: 'London',
+        },
+      },
+      result: {
+        status: 'success',
+        value: {
+          content: [
+            {
+              type: 'text',
+              text: 'London: 72F and clear.',
+            },
+          ],
+        },
+      },
+    },
+  } as InteractionUpdate;
+}
+
 function createCursorRun({
   id = 'cursor-run',
   model = { id: 'gpt-5.5' },
@@ -105,12 +150,14 @@ function createCursorRun({
   } as Run;
 }
 
-function createCursorSDKAgent(run: Run): SDKAgent {
+function createCursorSDKAgent(run: Run, updates: InteractionUpdate[] = [createTurnEndedUpdate()]): SDKAgent {
   return {
     agentId: 'cursor-sdk-agent',
     model: { id: 'gpt-5.5' },
     send: vi.fn(async (_message: string, options?: { onDelta?: (args: { update: InteractionUpdate }) => void }) => {
-      await options?.onDelta?.({ update: createTurnEndedUpdate() });
+      for (const update of updates) {
+        await options?.onDelta?.({ update });
+      }
       return run;
     }),
     close: vi.fn(),
@@ -168,6 +215,61 @@ function createClaudeResultMessage(result: string): ClaudeSDKMessage {
     },
     permission_denials: [],
     uuid: 'message-uuid',
+    session_id: 'session-id',
+  } as ClaudeSDKMessage;
+}
+
+function createClaudeToolUseMessage(): ClaudeSDKMessage {
+  return {
+    type: 'assistant',
+    message: {
+      id: 'assistant-tool-message',
+      type: 'message',
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool_use',
+          id: 'toolu-weather',
+          name: 'mcp__weather__get_temperature',
+          input: {
+            location: 'London',
+          },
+        },
+      ],
+      model: 'claude-sonnet-4-6',
+      stop_reason: null,
+      stop_sequence: null,
+      usage: {
+        input_tokens: 1,
+        output_tokens: 1,
+      },
+    },
+    parent_tool_use_id: null,
+    uuid: 'assistant-tool-uuid',
+    session_id: 'session-id',
+  } as ClaudeSDKMessage;
+}
+
+function createClaudeToolResultMessage(): ClaudeSDKMessage {
+  return {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: 'toolu-weather',
+          content: [
+            {
+              type: 'text',
+              text: 'London: 72F and clear.',
+            },
+          ],
+        },
+      ],
+    },
+    parent_tool_use_id: null,
+    uuid: 'user-tool-result-uuid',
     session_id: 'session-id',
   } as ClaudeSDKMessage;
 }
@@ -284,6 +386,61 @@ describe('SDK agent observability', () => {
     expect(agentSpan.end).toHaveBeenCalledWith({ output: { text: 'streamed text' } });
   });
 
+  it('records Cursor SDK MCP tool call spans from interaction updates', async () => {
+    const rootSpan = createMockSpan();
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      agent: createCursorSDKAgent(
+        createCursorRun({
+          id: 'cursor-tool-run',
+          result: 'London: 72F and clear.',
+        }),
+        [createCursorToolStartedUpdate(), createCursorToolCompletedUpdate(), createTurnEndedUpdate()],
+      ),
+    });
+
+    const result = await agent.generate('Use the weather tool', {
+      runId: 'cursor-tool-run',
+      tracingContext: { currentSpan: rootSpan },
+    });
+
+    const agentSpan = rootSpan.children[0];
+    const toolSpan = agentSpan.children.find(span => span.options.type === SpanType.MCP_TOOL_CALL);
+
+    expect(result.text).toBe('London: 72F and clear.');
+    expect(toolSpan?.options).toMatchObject({
+      type: SpanType.MCP_TOOL_CALL,
+      name: "mcp_tool: 'mcp__weather__get_temperature' on 'weather'",
+      input: {
+        location: 'London',
+      },
+      entityId: 'mcp__weather__get_temperature',
+      entityName: 'mcp__weather__get_temperature',
+      attributes: {
+        mcpServer: 'weather',
+      },
+      metadata: {
+        runId: 'cursor-tool-run',
+        sdkAgent: true,
+        sdkProvider: '@cursor/sdk',
+        sdkMethod: 'generate',
+        toolCallId: 'cursor-weather-call',
+      },
+    });
+    expect(toolSpan?.end).toHaveBeenCalledWith({
+      output: {
+        content: [
+          {
+            type: 'text',
+            text: 'London: 72F and clear.',
+          },
+        ],
+      },
+      attributes: { success: true },
+    });
+  });
+
   it('marks Cursor generate spans as errored when the SDK send fails', async () => {
     const rootSpan = createMockSpan();
     const sdkError = new Error('Cursor SDK failed');
@@ -365,6 +522,61 @@ describe('SDK agent observability', () => {
       }),
     );
     expect(agentSpan.end).toHaveBeenCalledWith({ output: { text: 'generated text' } });
+  });
+
+  it('records Claude SDK MCP tool call spans from transcript messages', async () => {
+    const rootSpan = createMockSpan();
+    const query = vi.fn<ClaudeQueryFunction>(() =>
+      createClaudeQuery([
+        createClaudeToolUseMessage(),
+        createClaudeToolResultMessage(),
+        createClaudeResultMessage('London: 72F and clear.'),
+      ]),
+    );
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      agent: query,
+      model: 'claude-sonnet-4-6',
+    });
+
+    const result = await agent.generate('Use the weather tool', {
+      runId: 'tool-run',
+      tracingContext: { currentSpan: rootSpan },
+    });
+
+    const agentSpan = rootSpan.children[0];
+    const toolSpan = agentSpan.children.find(span => span.options.type === SpanType.MCP_TOOL_CALL);
+
+    expect(result.text).toBe('London: 72F and clear.');
+    expect(toolSpan?.options).toMatchObject({
+      type: SpanType.MCP_TOOL_CALL,
+      name: "mcp_tool: 'mcp__weather__get_temperature' on 'weather'",
+      input: {
+        location: 'London',
+      },
+      entityId: 'mcp__weather__get_temperature',
+      entityName: 'mcp__weather__get_temperature',
+      attributes: {
+        mcpServer: 'weather',
+      },
+      metadata: {
+        runId: 'tool-run',
+        sdkAgent: true,
+        sdkProvider: '@anthropic-ai/claude-agent-sdk',
+        sdkMethod: 'generate',
+        toolCallId: 'toolu-weather',
+      },
+    });
+    expect(toolSpan?.end).toHaveBeenCalledWith({
+      output: [
+        {
+          type: 'text',
+          text: 'London: 72F and clear.',
+        },
+      ],
+      attributes: { success: true },
+    });
   });
 
   it('records Claude stream spans after the stream finishes', async () => {

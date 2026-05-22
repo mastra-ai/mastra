@@ -126,6 +126,9 @@ describe('ClaudeSDKAgent', () => {
       tools: ['Read', 'Bash'],
       allowedTools: ['Read'],
       disallowedTools: ['Bash'],
+      mcpServers: {
+        weather: { type: 'sdk', name: 'weather' },
+      },
       env: {
         CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
       },
@@ -164,6 +167,9 @@ describe('ClaudeSDKAgent', () => {
         tools: ['Read', 'Bash'],
         allowedTools: ['Read'],
         disallowedTools: ['Bash'],
+        mcpServers: {
+          weather: { type: 'sdk', name: 'weather' },
+        },
         env: {
           CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
         },

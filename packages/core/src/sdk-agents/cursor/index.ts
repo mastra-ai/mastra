@@ -34,7 +34,7 @@ import {
   toFullOutput,
   toLanguageModelUsage,
 } from '../shared';
-import type { SDKAgentRunOptions, SDKModelGenerateResult, V3Usage } from '../shared';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '../shared';
 
 const PROVIDER = '@cursor/sdk';
 const MODEL_ID = 'cursor-agent-sdk';
@@ -45,6 +45,8 @@ type CursorUsageTotals = {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
 };
+
+type CursorToolTelemetry = Pick<SDKAgentTelemetry, 'startToolCall' | 'endToolCall'>;
 
 export type CursorAgentFactory = (options: CursorCreateOptions) => SDKAgent | Promise<SDKAgent>;
 export type CursorAgentInput = SDKAgent | Promise<SDKAgent> | CursorAgentFactory;
@@ -170,7 +172,7 @@ export class CursorSDKAgent extends Agent {
     });
     let result: SDKModelGenerateResult;
     try {
-      result = await telemetry.execute(() => runCursorGenerate(prompt, this.options, sdkAgent));
+      result = await telemetry.execute(() => runCursorGenerate(prompt, this.options, sdkAgent, telemetry));
       telemetry.endGenerate(result);
     } catch (error) {
       telemetry.fail(error);
@@ -213,7 +215,7 @@ export class CursorSDKAgent extends Agent {
       runId,
       modelId,
       provider: PROVIDER,
-      stream: telemetry.wrapStream(runCursorAsMastraStream(prompt, this.options, sdkAgent, runId)),
+      stream: telemetry.wrapStream(runCursorAsMastraStream(prompt, this.options, sdkAgent, runId, telemetry)),
       options: telemetry.outputOptions(),
     });
   }
@@ -231,9 +233,10 @@ async function runCursorGenerate(
   prompt: string,
   options: CursorAgentOptions,
   agent: SDKAgent,
+  telemetry: CursorToolTelemetry,
 ): Promise<SDKModelGenerateResult> {
   const usage = createCursorUsageCollector();
-  const run = await agent.send(prompt, createCursorSendOptions(options, usage));
+  const run = await agent.send(prompt, createCursorSendOptions(options, usage, telemetry));
   const result = await run.wait();
 
   if (result.status === 'error' || result.status === 'cancelled') {
@@ -269,6 +272,7 @@ function runCursorAsMastraStream(
   options: CursorAgentOptions,
   agent: SDKAgent,
   runId: string,
+  telemetry: CursorToolTelemetry,
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start: async controller => {
@@ -277,7 +281,7 @@ function runCursorAsMastraStream(
       let text = '';
 
       try {
-        const run = await agent.send(prompt, createCursorSendOptions(options, usage));
+        const run = await agent.send(prompt, createCursorSendOptions(options, usage, telemetry));
         const responseId = run.id;
         const responseModel = getModelId(run.model ?? getRequestedModel(options) ?? agent.model);
 
@@ -383,7 +387,11 @@ function toCursorCreateOptions(options: CursorAgentOptions): CursorCreateOptions
   return createOptions;
 }
 
-function createCursorSendOptions(options: CursorAgentOptions, usage: CursorUsageCollector): SendOptions {
+function createCursorSendOptions(
+  options: CursorAgentOptions,
+  usage: CursorUsageCollector,
+  telemetry: CursorToolTelemetry,
+): SendOptions {
   const sendOptions = {
     ...options.sendOptions,
     mcpServers: options.sendOptions?.mcpServers ?? options.mcpServers,
@@ -394,6 +402,7 @@ function createCursorSendOptions(options: CursorAgentOptions, usage: CursorUsage
     ...sendOptions,
     onDelta: async args => {
       usage.record(args.update);
+      recordCursorToolTelemetry(args.update, telemetry);
       await originalOnDelta?.(args);
     },
   };
@@ -518,4 +527,103 @@ function getTextFromCursorMessage(message: SDKMessage): string {
   }
 
   return '';
+}
+
+function recordCursorToolTelemetry(update: InteractionUpdate, telemetry: CursorToolTelemetry): void {
+  const updateRecord = toRecord(update);
+  if (!updateRecord) {
+    return;
+  }
+
+  const updateType = typeof updateRecord?.type === 'string' ? updateRecord.type : undefined;
+
+  if (
+    updateType !== 'tool-call-started' &&
+    updateType !== 'partial-tool-call' &&
+    updateType !== 'tool-call-completed'
+  ) {
+    return;
+  }
+
+  const toolCall = getCursorToolCall(updateRecord);
+  if (!toolCall) {
+    return;
+  }
+
+  if (updateType === 'tool-call-started' || updateType === 'partial-tool-call') {
+    telemetry.startToolCall({
+      toolCallId: toolCall.toolCallId,
+      toolName: toolCall.toolName,
+      input: toolCall.input,
+    });
+    return;
+  }
+
+  telemetry.startToolCall({
+    toolCallId: toolCall.toolCallId,
+    toolName: toolCall.toolName,
+    input: toolCall.input,
+  });
+  telemetry.endToolCall({
+    toolCallId: toolCall.toolCallId,
+    output: toolCall.output,
+    isError: toolCall.isError,
+  });
+}
+
+function getCursorToolCall(update: Record<string, unknown>):
+  | {
+      toolCallId: string;
+      toolName: string;
+      input?: unknown;
+      output?: unknown;
+      isError?: boolean;
+    }
+  | undefined {
+  const toolCallId = typeof update.callId === 'string' ? update.callId : undefined;
+  const toolCall = toRecord(update.toolCall);
+  if (!toolCallId || !toolCall) {
+    return undefined;
+  }
+
+  if (toolCall.type === 'mcp') {
+    const args = toRecord(toolCall.args);
+    if (!args) {
+      return undefined;
+    }
+
+    const providerIdentifier = typeof args?.providerIdentifier === 'string' ? args.providerIdentifier : undefined;
+    const toolName = typeof args?.toolName === 'string' ? args.toolName : undefined;
+    if (!providerIdentifier || !toolName) {
+      return undefined;
+    }
+
+    const result = toRecord(toolCall.result);
+
+    return {
+      toolCallId,
+      toolName: `mcp__${providerIdentifier}__${toolName}`,
+      input: args.args,
+      output: result?.value ?? toolCall.result,
+      isError: result?.status === 'error' || result?.status === 'failed',
+    };
+  }
+
+  const toolName =
+    typeof toolCall.name === 'string' ? toolCall.name : typeof toolCall.type === 'string' ? toolCall.type : undefined;
+  if (!toolName) {
+    return undefined;
+  }
+
+  return {
+    toolCallId,
+    toolName,
+    input: 'args' in toolCall ? toolCall.args : undefined,
+    output: 'result' in toolCall ? toolCall.result : undefined,
+    isError: toolCall.status === 'error',
+  };
+}
+
+function toRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }

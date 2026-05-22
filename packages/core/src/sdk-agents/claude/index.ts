@@ -22,7 +22,7 @@ import {
   toFullOutput,
   toLanguageModelUsage,
 } from '../shared';
-import type { SDKAgentRunOptions, SDKModelGenerateResult, V3Usage } from '../shared';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '../shared';
 
 const PROVIDER = '@anthropic-ai/claude-agent-sdk';
 const MODEL_ID = 'claude-agent-sdk';
@@ -48,6 +48,7 @@ export type ClaudeQueryOptions = {
   tools?: string[] | { type: 'preset'; preset: 'claude_code' };
   allowedTools?: string[];
   disallowedTools?: string[];
+  mcpServers?: Record<string, unknown>;
   env?: Record<string, string>;
   pathToClaudeCodeExecutable?: string;
 };
@@ -104,6 +105,11 @@ export type ClaudeAgentOptions = {
    */
   disallowedTools?: string[];
   /**
+   * MCP servers made available to Claude Agent SDK, including SDK MCP servers
+   * created with `createSdkMcpServer`.
+   */
+  mcpServers?: Record<string, unknown>;
+  /**
    * Environment variables passed to the Claude Agent SDK process.
    */
   env?: Record<string, string>;
@@ -159,7 +165,7 @@ export class ClaudeSDKAgent extends Agent {
     let result: SDKModelGenerateResult;
     try {
       result = await telemetry.execute(() =>
-        runClaudeGenerate(prompt, this.options, options?.abortSignal ?? options?.signal),
+        runClaudeGenerate(prompt, this.options, telemetry, options?.abortSignal ?? options?.signal),
       );
       telemetry.endGenerate(result);
     } catch (error) {
@@ -203,16 +209,17 @@ export class ClaudeSDKAgent extends Agent {
       modelId,
       provider: PROVIDER,
       stream: telemetry.wrapStream(
-        runClaudeAsMastraStream(prompt, this.options, runId, options?.abortSignal ?? options?.signal),
+        runClaudeAsMastraStream(prompt, this.options, runId, telemetry, options?.abortSignal ?? options?.signal),
       ),
       options: telemetry.outputOptions(),
     });
   }
 }
 
-async function runClaudeGenerate(
+async function runClaudeGenerate<OUTPUT>(
   prompt: string,
   options: ClaudeAgentOptions,
+  telemetry: SDKAgentTelemetry<OUTPUT>,
   signal?: AbortSignal,
 ): Promise<SDKModelGenerateResult> {
   let text = '';
@@ -220,6 +227,7 @@ async function runClaudeGenerate(
 
   for await (const message of runClaude(prompt, options, signal)) {
     usage.record(message);
+    recordClaudeToolTelemetry(message, telemetry);
     if (message.type === 'result') {
       if (message.subtype !== 'success') {
         throw new Error(message.errors.join('\n') || `Claude Agent SDK failed with ${message.subtype}`);
@@ -245,10 +253,11 @@ async function runClaudeGenerate(
   };
 }
 
-function runClaudeAsMastraStream(
+function runClaudeAsMastraStream<OUTPUT>(
   prompt: string,
   options: ClaudeAgentOptions,
   runId: string,
+  telemetry: SDKAgentTelemetry<OUTPUT>,
   signal?: AbortSignal,
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
@@ -272,6 +281,7 @@ function runClaudeAsMastraStream(
 
         for await (const message of runClaude(prompt, options, signal)) {
           usage.record(message);
+          recordClaudeToolTelemetry(message, telemetry);
           const delta = getTextDelta(message);
           if (delta) {
             sawDelta = true;
@@ -333,11 +343,64 @@ function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSi
       tools: options.tools,
       allowedTools: options.allowedTools,
       disallowedTools: options.disallowedTools,
+      mcpServers: options.mcpServers,
       env: options.env,
       pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
       abortController,
     },
   }) as AsyncIterable<SDKMessage>;
+}
+
+function recordClaudeToolTelemetry<OUTPUT>(message: SDKMessage, telemetry: SDKAgentTelemetry<OUTPUT>): void {
+  for (const toolCall of getClaudeToolCalls(message)) {
+    telemetry.startToolCall(toolCall);
+  }
+
+  for (const toolResult of getClaudeToolResults(message)) {
+    telemetry.endToolCall(toolResult);
+  }
+}
+
+function getClaudeToolCalls(message: SDKMessage): Array<{ toolCallId: string; toolName: string; input?: unknown }> {
+  if (message.type !== 'assistant') {
+    return [];
+  }
+
+  return getContentBlocks(message.message)
+    .filter(isRecord)
+    .filter(block => block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string')
+    .map(block => ({
+      toolCallId: block.id as string,
+      toolName: block.name as string,
+      input: block.input,
+    }));
+}
+
+function getClaudeToolResults(message: SDKMessage): Array<{ toolCallId: string; output?: unknown; isError?: boolean }> {
+  if (message.type !== 'user') {
+    return [];
+  }
+
+  return getContentBlocks(message.message)
+    .filter(isRecord)
+    .filter(block => block.type === 'tool_result' && typeof block.tool_use_id === 'string')
+    .map(block => ({
+      toolCallId: block.tool_use_id as string,
+      output: block.content,
+      isError: block.is_error === true,
+    }));
+}
+
+function getContentBlocks(message: unknown): unknown[] {
+  if (!isRecord(message)) {
+    return [];
+  }
+
+  return Array.isArray(message.content) ? message.content : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
 }
 
 function createAbortController(signal: AbortSignal | undefined): AbortController | undefined {

@@ -202,8 +202,22 @@ export type SDKAgentTelemetry<OUTPUT = unknown> = {
   execute<T>(fn: () => Promise<T>): Promise<T>;
   endGenerate(result: SDKModelGenerateResult): void;
   fail(error: unknown): void;
+  startToolCall(input: SDKAgentToolCallInput): void;
+  endToolCall(output: SDKAgentToolCallOutput): void;
   wrapStream(stream: ReadableStream<ChunkType>): ReadableStream<ChunkType>;
   outputOptions(): Partial<MastraModelOutputOptions<OUTPUT>>;
+};
+
+export type SDKAgentToolCallInput = {
+  toolCallId: string;
+  toolName: string;
+  input?: unknown;
+};
+
+export type SDKAgentToolCallOutput = {
+  toolCallId: string;
+  output?: unknown;
+  isError?: boolean;
 };
 
 export function createSDKAgentTelemetry<OUTPUT>({
@@ -265,8 +279,98 @@ export function createSDKAgentTelemetry<OUTPUT>({
     requestContext,
   });
   const modelSpanTracker = getModelSpanTracker(modelSpan);
+  const toolSpans = new Map<string, Span<SpanType.TOOL_CALL> | Span<SpanType.MCP_TOOL_CALL>>();
 
   let ended = false;
+
+  const startToolCall = ({ toolCallId, toolName, input }: SDKAgentToolCallInput) => {
+    if (toolSpans.has(toolCallId)) {
+      return;
+    }
+
+    const parentSpan = agentSpan ?? modelSpan;
+    if (!parentSpan) {
+      return;
+    }
+
+    const mcp = parseMcpToolName(toolName);
+    const span = mcp
+      ? parentSpan.createChildSpan({
+          type: SpanType.MCP_TOOL_CALL,
+          name: `mcp_tool: '${toolName}' on '${mcp.serverName}'`,
+          input,
+          entityType: EntityType.TOOL,
+          entityId: toolName,
+          entityName: toolName,
+          attributes: {
+            mcpServer: mcp.serverName,
+          },
+          metadata: {
+            runId,
+            sdkAgent: true,
+            sdkProvider: provider,
+            sdkMethod: method,
+            toolCallId,
+          },
+          requestContext,
+        })
+      : parentSpan.createChildSpan({
+          type: SpanType.TOOL_CALL,
+          name: `tool: '${toolName}'`,
+          input,
+          entityType: EntityType.TOOL,
+          entityId: toolName,
+          entityName: toolName,
+          attributes: {
+            toolType: 'tool',
+          },
+          metadata: {
+            runId,
+            sdkAgent: true,
+            sdkProvider: provider,
+            sdkMethod: method,
+            toolCallId,
+          },
+          requestContext,
+        });
+
+    toolSpans.set(toolCallId, span);
+  };
+
+  const endToolCall = ({ toolCallId, output, isError }: SDKAgentToolCallOutput) => {
+    const span = toolSpans.get(toolCallId);
+    if (!span) {
+      return;
+    }
+
+    toolSpans.delete(toolCallId);
+    if (isError) {
+      span.error({
+        error:
+          output instanceof Error ? output : new Error(typeof output === 'string' ? output : 'SDK tool call failed'),
+        attributes: { success: false },
+      });
+      return;
+    }
+
+    span.end({
+      output,
+      attributes: { success: true },
+    });
+  };
+
+  const closeOpenToolSpans = (success: boolean, error?: unknown) => {
+    for (const [toolCallId, span] of toolSpans) {
+      toolSpans.delete(toolCallId);
+      if (success) {
+        span.end({ attributes: { success: true } });
+        continue;
+      }
+
+      const normalized = error instanceof Error ? error : new Error(String(error ?? 'SDK agent run failed'));
+      span.error({ error: normalized, attributes: { success: false } });
+    }
+  };
 
   const endModel = ({
     text,
@@ -330,6 +434,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
     }
 
     ended = true;
+    closeOpenToolSpans(true);
     endModel(result);
     agentSpan?.end({
       output: {
@@ -345,6 +450,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
 
     ended = true;
     const normalized = error instanceof Error ? error : new Error(String(error));
+    closeOpenToolSpans(false, normalized);
     if (modelSpanTracker) {
       modelSpanTracker.reportGenerationError({ error: normalized });
     } else {
@@ -367,6 +473,8 @@ export function createSDKAgentTelemetry<OUTPUT>({
       });
     },
     fail,
+    startToolCall,
+    endToolCall,
     wrapStream(stream) {
       const trackedStream = (modelSpanTracker?.wrapStream(stream) ?? stream) as ReadableStream<ChunkType>;
       return wrapStreamForAgentSpan(trackedStream, {
@@ -382,6 +490,18 @@ export function createSDKAgentTelemetry<OUTPUT>({
         tracingContext: agentSpan ? { currentSpan: agentSpan } : options?.tracingContext,
       };
     },
+  };
+}
+
+function parseMcpToolName(toolName: string): { serverName: string; toolName: string } | undefined {
+  const match = /^mcp__([^_].*?)__(.+)$/.exec(toolName);
+  if (!match?.[1] || !match[2]) {
+    return undefined;
+  }
+
+  return {
+    serverName: match[1],
+    toolName: match[2],
   };
 }
 
