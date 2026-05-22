@@ -35,9 +35,24 @@ export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
 
+type ReminderMetadata = Record<string, string | number | boolean | null | undefined>;
+
 type MessageWithAttributes = HarnessMessage & {
-  attributes?: Record<string, string | number | boolean | null | undefined>;
+  attributes?: ReminderMetadata;
 };
+
+function getStringMetadata(metadata: ReminderMetadata | undefined, key: string): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getNumberMetadata(metadata: ReminderMetadata | undefined, key: string): number | undefined {
+  const value = metadata?.[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return undefined;
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 function getUserMessageLabel(message: MessageWithAttributes, fallbackLabel?: string): string | undefined {
   if (message.attributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
@@ -341,29 +356,19 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & {
-      goalMaxTurns?: number;
-      judgeModelId?: string;
-      repo?: string;
-      prNumber?: number;
-      user?: string;
-      reviewState?: string;
-      url?: string;
-      kind?: string;
-      title?: string;
-      checkCount?: number;
-      count?: number;
-    };
-    if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-subscribe') {
+    const reminderMetadata = reminderPart.metadata;
+    const repo = getStringMetadata(reminderMetadata, 'repo');
+    const prNumber = getNumberMetadata(reminderMetadata, 'prNumber') ?? getNumberMetadata(reminderMetadata, 'pr');
+    if (prNumber && reminderPart.reminderType === 'github-pr-subscribe') {
       state.activeGithubPrSubscriptions = addGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
-        prNumber: goalMetadata.prNumber,
-        ...(goalMetadata.repo ? { repo: goalMetadata.repo } : {}),
+        prNumber,
+        ...(repo ? { repo } : {}),
       });
       updateStatusLine(state);
-    } else if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-unsubscribe') {
+    } else if (prNumber && reminderPart.reminderType === 'github-pr-unsubscribe') {
       state.activeGithubPrSubscriptions = removeGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
-        prNumber: goalMetadata.prNumber,
-        ...(goalMetadata.repo ? { repo: goalMetadata.repo } : {}),
+        prNumber,
+        ...(repo ? { repo } : {}),
       });
       updateStatusLine(state);
     }
@@ -372,17 +377,17 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
       message: reminderPart.message,
       path: reminderPart.path,
       gapText: reminderPart.gapText,
-      goalMaxTurns: goalMetadata.goalMaxTurns,
-      judgeModelId: goalMetadata.judgeModelId,
-      repo: goalMetadata.repo,
-      prNumber: goalMetadata.prNumber,
-      user: goalMetadata.user,
-      reviewState: goalMetadata.reviewState,
-      url: goalMetadata.url,
-      kind: goalMetadata.kind,
-      title: goalMetadata.title,
-      checkCount: goalMetadata.checkCount,
-      count: goalMetadata.count,
+      goalMaxTurns: reminderPart.goalMaxTurns,
+      judgeModelId: reminderPart.judgeModelId,
+      repo,
+      prNumber,
+      user: getStringMetadata(reminderMetadata, 'user'),
+      reviewState: getStringMetadata(reminderMetadata, 'reviewState'),
+      url: getStringMetadata(reminderMetadata, 'url'),
+      kind: getStringMetadata(reminderMetadata, 'kind'),
+      title: getStringMetadata(reminderMetadata, 'title'),
+      checkCount: getNumberMetadata(reminderMetadata, 'checkCount'),
+      count: getNumberMetadata(reminderMetadata, 'count'),
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);

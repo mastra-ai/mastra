@@ -101,19 +101,20 @@ function getStringValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function getNumberValue(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function getPrimitiveRecordValue(
+  ...values: Array<Record<string, unknown> | undefined>
+): Record<string, string | number | boolean | null | undefined> | undefined {
+  const entries = values.flatMap(value =>
+    Object.entries(value ?? {}).filter(
+      (entry): entry is [string, string | number | boolean | null | undefined] =>
+        ['string', 'number', 'boolean', 'undefined'].includes(typeof entry[1]) || entry[1] === null,
+    ),
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
@@ -167,25 +168,7 @@ function toSystemReminderContent(
           ? metadata.goalMaxTurns
           : undefined,
     judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
-    repo: getStringValue(payload.repo) ?? getStringValue(attributes?.repo) ?? getStringValue(metadata?.repo),
-    prNumber:
-      getNumberValue(payload.prNumber) ??
-      getNumberValue(attributes?.prNumber) ??
-      getNumberValue(attributes?.pr) ??
-      getNumberValue(metadata?.prNumber),
-    user: getStringValue(payload.user) ?? getStringValue(attributes?.user) ?? getStringValue(metadata?.user),
-    reviewState:
-      getStringValue(payload.reviewState) ??
-      getStringValue(attributes?.reviewState) ??
-      getStringValue(metadata?.reviewState),
-    url: getStringValue(payload.url) ?? getStringValue(attributes?.url) ?? getStringValue(metadata?.url),
-    kind: getStringValue(payload.kind) ?? getStringValue(attributes?.kind) ?? getStringValue(metadata?.kind),
-    title: getStringValue(payload.title) ?? getStringValue(attributes?.title) ?? getStringValue(metadata?.title),
-    checkCount:
-      getNumberValue(payload.checkCount) ??
-      getNumberValue(attributes?.checkCount) ??
-      getNumberValue(metadata?.checkCount),
-    count: getNumberValue(payload.count) ?? getNumberValue(attributes?.count) ?? getNumberValue(metadata?.count),
+    metadata: getPrimitiveRecordValue(attributes, metadata),
   };
 }
 

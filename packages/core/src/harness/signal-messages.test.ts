@@ -112,6 +112,9 @@ describe('Harness signal messages', () => {
             gapText: undefined,
             gapMs: undefined,
             timestamp: undefined,
+            goalMaxTurns: undefined,
+            judgeModelId: undefined,
+            metadata: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md' },
           },
         ],
         createdAt: new Date('2026-05-04T00:00:00.000Z'),
@@ -119,7 +122,7 @@ describe('Harness signal messages', () => {
     ]);
   });
 
-  it('ignores blank numeric reminder attributes', async () => {
+  it('preserves custom system reminder attributes as generic metadata', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const thread = await harness.createThread();
@@ -127,10 +130,10 @@ describe('Harness signal messages', () => {
     await storage.stores.memory!.saveMessages({
       messages: [
         createSignal({
-          id: 'signal-blank-numeric',
+          id: 'signal-custom-metadata',
           type: 'system-reminder',
           contents: 'No queued notifications',
-          attributes: { type: 'github-pending-notifications', prNumber: '', checkCount: ' ', count: '' },
+          attributes: { type: 'github-pending-notifications', repo: 'mastra-ai/mastra', prNumber: 16515, count: 2 },
           createdAt: new Date('2026-05-04T00:00:00.000Z'),
         }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
       ],
@@ -141,9 +144,12 @@ describe('Harness signal messages', () => {
         content: [
           expect.objectContaining({
             type: 'system_reminder',
-            prNumber: undefined,
-            checkCount: undefined,
-            count: undefined,
+            metadata: {
+              type: 'github-pending-notifications',
+              repo: 'mastra-ai/mastra',
+              prNumber: 16515,
+              count: 2,
+            },
           }),
         ],
       }),
