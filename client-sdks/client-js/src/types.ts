@@ -9,12 +9,7 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type {
-  BuilderModelPolicy,
-  DefaultModelEntry,
-  ModelPolicy,
-  ProviderModelEntry,
-} from '@mastra/core/agent-builder/ee';
+import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { LogLevel } from '@mastra/core/logger';
@@ -1109,64 +1104,6 @@ export interface StoredMCPClientToolsConfig {
 }
 
 /**
- * One pinned connection on a `toolProviders[providerId].connections[toolkit]` bucket.
- * Part of the Agent Builder / CMS tool-providers shape
- * (`StoredAgentSnapshot.toolProviders`).
- */
-export interface StoredToolProviderConnection {
-  /**
-   * Identity binding kind.
-   *
-   * - `'author'` — uses the agent author's connection (v1 default).
-   * - `'invoker'` — uses the end-user's connection (v1.5, reserved).
-   * - `'platform'` — uses a shared platform account (v2, reserved).
-   */
-  kind: 'author' | 'invoker' | 'platform';
-  /** Parent toolkit slug. Denormalized for callsite clarity. */
-  toolkit: string;
-  /**
-   * Provider-opaque identifier for the OAuth bucket.
-   *
-   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
-   */
-  connectionId: string;
-  /**
-   * Display label and LLM disambiguator. Optional when this is the only
-   * connection on a `toolkit`; required (non-empty, ≤ 32 chars,
-   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once ≥ 2 connections share
-   * the same `toolkit`.
-   */
-  label?: string;
-  /**
-   * Ownership scope of the underlying OAuth bucket.
-   *
-   * - `'per-author'` (default) — bucketed under the agent author's id.
-   * - `'shared'` — bucketed under a constant shared id; visible to and
-   *   usable by anyone with edit access.
-   * - `'caller-supplied'` — bucketed under the request-context
-   *   `MASTRA_RESOURCE_ID_KEY` value at runtime. Used for multi-tenant
-   *   deployments where the host app sets the user id per request.
-   */
-  scope?: 'per-author' | 'shared' | 'caller-supplied';
-}
-
-/** Per-tool override stored alongside the selected tool slug. */
-export interface StoredToolProviderToolMeta {
-  /**
-   * Toolkit this slug belongs to. The runtime groups selected slugs
-   * by this field when fanning out across connections.
-   */
-  toolkit?: string;
-  description?: string;
-}
-
-/** Stored shape for one tool provider's configuration on one agent. */
-export interface StoredToolProviderConfig {
-  tools: Record<string, StoredToolProviderToolMeta>;
-  connections: Record<string, StoredToolProviderConnection[]>;
-}
-
-/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -1249,7 +1186,6 @@ export interface StoredAgentResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1350,7 +1286,6 @@ export interface CreateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1384,7 +1319,6 @@ export interface UpdateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1650,7 +1584,6 @@ export interface AgentVersionResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -2368,46 +2301,6 @@ export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-provide
 export type GetToolProviderToolSchemaResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
 
-// ── v2 surface: authorize / connections / fields / status / health ──────────
-
-export type AuthorizeToolProviderParams = GeneratedRequest<Body<'POST /tool-providers/:providerId/authorize'>>;
-
-export type AuthorizeToolProviderResponse = GeneratedResponse<'POST /tool-providers/:providerId/authorize'>;
-
-export type ToolProviderAuthStatusResponse = GeneratedResponse<'GET /tool-providers/:providerId/auth-status/:authId'>;
-
-export type ToolProviderConnectionStatusParams = GeneratedRequest<
-  Body<'POST /tool-providers/:providerId/connection-status'>
->;
-
-export type ToolProviderConnectionStatusResponse =
-  GeneratedResponse<'POST /tool-providers/:providerId/connection-status'>;
-
-export type ListToolProviderConnectionsParams = GeneratedRequest<
-  QueryParams<'GET /tool-providers/:providerId/connections'>
->;
-
-export type ListToolProviderConnectionsResponse = GeneratedResponse<'GET /tool-providers/:providerId/connections'>;
-
-export type ListToolProviderConnectionFieldsParams = GeneratedRequest<
-  QueryParams<'GET /tool-providers/:providerId/connection-fields'>
->;
-
-export type ListToolProviderConnectionFieldsResponse =
-  GeneratedResponse<'GET /tool-providers/:providerId/connection-fields'>;
-
-export type DisconnectToolProviderConnectionParams = GeneratedRequest<
-  QueryParams<'DELETE /tool-providers/:providerId/connections/:connectionId'>
->;
-
-export type DisconnectToolProviderConnectionResponse =
-  GeneratedResponse<'DELETE /tool-providers/:providerId/connections/:connectionId'>;
-
-export type GetToolProviderConnectionUsageResponse =
-  GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;
-
-export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/:providerId/health'>;
-
 // ============================================================================
 // Processor Provider Types
 // ============================================================================
@@ -2991,7 +2884,7 @@ export interface BuilderAgentFeatures {
  * Re-exported from `@mastra/core/agent-builder/ee` so SDK consumers don't need
  * a second import for admin model configuration types. Owned by core.
  */
-export type { BuilderModelPolicy, DefaultModelEntry, ModelPolicy, ProviderModelEntry, ModelProviderId };
+export type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry, ModelProviderId };
 
 /**
  * Response from GET /editor/builder/settings

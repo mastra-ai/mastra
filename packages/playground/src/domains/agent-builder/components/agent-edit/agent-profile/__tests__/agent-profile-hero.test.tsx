@@ -13,7 +13,7 @@ const FormHarness = ({ agentName = '', children }: { agentName?: string; childre
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
     </FormProvider>
   );
 };

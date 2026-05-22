@@ -1,6 +1,6 @@
 import { Spinner } from '@mastra/playground-ui';
 import { useState } from 'react';
-import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
@@ -60,13 +60,13 @@ const EditPageGate = () => {
 };
 
 const EditPageForm = () => {
-  const { storedAgent } = useAgentPrimitives();
+  const { agentId, storedAgent } = useAgentPrimitives();
   const [defaultValues] = useState(() => storedAgentToFormValues(storedAgent));
   const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
 
   return (
     <FormProvider {...formMethods}>
-      <AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>
         <EditPageBody />
       </AgentColorProvider>
     </FormProvider>
@@ -148,7 +148,6 @@ const ProfileSlot = () => {
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
-  const { dirtyFields } = useFormState();
   const { step } = useWizard();
 
   const heroActions = (
@@ -163,11 +162,8 @@ const ProfileSlot = () => {
   );
 
   if (step === 'initial') {
-    const isReady = dirtyFields.name && dirtyFields.description;
-
     return (
       <AgentProfileInitialStep
-        isPreparing={!isReady}
         avatar={<AgentProfileAvatar disabled={isRunning} />}
         details={<AgentProfileDetails mode="highlighted" disabled={isRunning} />}
       />

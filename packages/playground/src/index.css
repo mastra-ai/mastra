@@ -80,29 +80,6 @@ th:has(header) {
 
 @layer base {
   /*
-   * Keep both the height AND the snapshot scale stable during the
-   * edit ↔ view transition. The UA animation would otherwise stretch
-   * the captured raster to fill the tweening group box, making inner
-   * content appear to scale as the width changes. Rendering the snapshot
-   * at its natural pixel size with `object-fit: none` and a top-left
-   * anchor means it simply gets clipped / reveals empty area as the
-   * group's width morphs — no scaling, no vertical motion.
-   */
-  ::view-transition-group(agent-builder-frame) {
-    animation-duration: 320ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    height: 100%;
-  }
-  ::view-transition-old(agent-builder-frame),
-  ::view-transition-new(agent-builder-frame) {
-    animation-duration: 220ms;
-    height: 100%;
-    width: 100%;
-    object-fit: none;
-    object-position: top left;
-  }
-
-  /*
    * Agent builder starter page — editorial serif minimal motion.
    * A slow aurora-like gradient drifts behind the content, and the
    * headline / prompt / chips stagger in on mount. Low contrast on
@@ -178,12 +155,49 @@ th:has(header) {
     animation: skill-panel-slide-in 320ms var(--ease-out-custom) both;
   }
 
+  /*
+   * Agent builder step container — rotating gradient layer that animates
+   * only while a chat response is streaming. The layer is overscaled so
+   * its corners stay covered as it rotates inside the rounded container.
+   *
+   * Two layers are stacked: a default neutral gradient that is always
+   * present, and an agent-color gradient that fades in on top once the
+   * agent's color has resolved. Both rotate together while streaming.
+   */
+  @keyframes step-container-gradient-rotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .step-container-gradient {
+    position: absolute;
+    inset: -50%;
+    width: 200%;
+    height: 200%;
+    pointer-events: none;
+    will-change: transform;
+    transition: opacity 600ms var(--ease-out-custom, ease-out);
+  }
+
+  .step-container-gradient--default {
+    background-image: linear-gradient(to bottom right, var(--neutral2), var(--neutral4));
+  }
+
+  .step-container-gradient--streaming {
+    animation: step-container-gradient-rotate 8s linear infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
     .starter-chip,
-    .skill-panel-slide-in {
+    .skill-panel-slide-in,
+    .step-container-gradient--streaming {
       animation: none;
     }
   }

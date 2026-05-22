@@ -28,7 +28,7 @@ const FormWrapper = ({
     <MemoryRouter>
       <TooltipProvider>
         <FormProvider {...methods}>
-          <AgentColorProvider>{children}</AgentColorProvider>
+          <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
         </FormProvider>
       </TooltipProvider>
     </MemoryRouter>

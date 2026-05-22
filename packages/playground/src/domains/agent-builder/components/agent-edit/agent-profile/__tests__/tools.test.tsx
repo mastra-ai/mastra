@@ -8,7 +8,15 @@ import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
 import { Tools } from '../tools';
 
-const FormHarness = ({ agentName = '', children }: { agentName?: string; children: ReactNode }) => {
+const FormHarness = ({
+  agentName = '',
+  agentId = 'agent_test',
+  children,
+}: {
+  agentName?: string;
+  agentId?: string;
+  children: ReactNode;
+}) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: agentName,
@@ -19,7 +27,7 @@ const FormHarness = ({ agentName = '', children }: { agentName?: string; childre
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
     </FormProvider>
   );
 };
@@ -57,9 +65,9 @@ describe('Tools', () => {
     expect(check.className).not.toContain('bg-accent1');
   });
 
-  it('falls back to accent classes for selected tiles when no agent name is set', () => {
+  it('falls back to accent classes for selected tiles when no agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness>
+      <FormHarness agentId="">
         <Tools availableAgentTools={availableTools} />
       </FormHarness>,
     );
@@ -194,9 +202,9 @@ describe('Tools', () => {
     expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
   });
 
-  it('does not apply an inline style to the filter checkbox when no agent name is set', () => {
+  it('does not apply an inline style to the filter checkbox when no agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness>
+      <FormHarness agentId="">
         <Tools availableAgentTools={availableTools} />
       </FormHarness>,
     );

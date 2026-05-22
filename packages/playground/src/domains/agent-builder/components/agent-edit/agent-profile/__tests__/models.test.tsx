@@ -31,7 +31,15 @@ vi.mock('@/domains/llm', () => ({
   }),
 }));
 
-const FormHarness = ({ agentName = '', children }: { agentName?: string; children: ReactNode }) => {
+const FormHarness = ({
+  agentName = '',
+  agentId = 'agent_test',
+  children,
+}: {
+  agentName?: string;
+  agentId?: string;
+  children: ReactNode;
+}) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: agentName,
@@ -40,7 +48,7 @@ const FormHarness = ({ agentName = '', children }: { agentName?: string; childre
   });
   return (
     <FormProvider {...methods}>
-      <AgentColorProvider>{children}</AgentColorProvider>
+      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
     </FormProvider>
   );
 };
@@ -72,9 +80,9 @@ describe('Models', () => {
     expect(check.className).not.toContain('bg-accent1');
   });
 
-  it('falls back to accent classes for selected models when no agent name is set', () => {
+  it('falls back to accent classes for selected models when no agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness>
+      <FormHarness agentId="">
         <Models />
       </FormHarness>,
     );
@@ -209,9 +217,9 @@ describe('Models', () => {
     expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
   });
 
-  it('falls back to accent classes on the checked provider badge when no agent name is set', () => {
+  it('falls back to accent classes on the checked provider badge when no agentId is provided', () => {
     const { getByTestId } = render(
-      <FormHarness>
+      <FormHarness agentId="">
         <Models />
       </FormHarness>,
     );
