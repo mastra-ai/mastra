@@ -157,7 +157,7 @@ const agent = new Agent({
     type: 'boolean',
     isOptional: true,
     description:
-      '**Deprecated** — use `toolDisplay` instead. When `toolDisplay` is not set, `cards: true` maps to `toolDisplay: "cards"` and `cards: false` maps to `toolDisplay: "text"` (with a one-time deprecation warning).',
+      '**Deprecated** — use `toolDisplay` instead. When `toolDisplay` is not set, `cards: true` maps to `toolDisplay: "cards"` and `cards: false` maps to `toolDisplay: "text"`. IDEs flag the field with a strikethrough; runtime behavior is preserved.',
   },
   {
     name: 'cors',
@@ -173,6 +173,13 @@ const agent = new Agent({
     defaultValue: '"❌ Error: <error.message>"',
     description:
       'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
+  },
+  {
+    name: 'formatToolCall',
+    type: '(args: { toolName: string; args: unknown; result: unknown; isError: boolean }) => PostableMessage | null',
+    isOptional: true,
+    description:
+      '**Deprecated** — use `toolDisplay` (function form) instead. When set, runs as a `ToolDisplayFn` that only fires on `result`/`error` events; `running` and `approval` events fall through to no render. Mutually exclusive with `toolDisplay` at the type level.',
   },
   {
     name: 'streaming',
