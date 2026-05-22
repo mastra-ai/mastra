@@ -11,7 +11,7 @@ import type { z } from 'zod';
 
 import type { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
-import type { CreatedAgentSignal } from '../../agent/signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import type { ChannelProvider } from '../../channels';
 import type { Mastra } from '../../mastra';
@@ -1123,6 +1123,13 @@ export interface SubagentDefinition {
    * accepted now so configs don't need to change later.
    */
   workspace?: 'inherit' | 'fresh';
+
+  /**
+   * Workspace tool keys the subagent may see. When set, workspace tools not
+   * in the list are hidden for the subagent turn while non-workspace tools
+   * remain available.
+   */
+  allowedWorkspaceTools?: string[];
 }
 
 /**
@@ -1415,14 +1422,75 @@ export interface MessageOverrides {
    * `HarnessMode.additionalTools` semantics.
    */
   additionalTools?: ToolsInput;
+
+  /**
+   * Optional per-turn tool preparation hook forwarded to the backing agent.
+   * Runtime compatibility layers use this to adjust the model-visible tool
+   * surface without changing persisted mode config.
+   */
+  prepareStep?: AgentExecutionOptionsBase<unknown>['prepareStep'];
 }
+
+type RequireAtLeastOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
+  {
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Omit<Pick<T, Keys>, K>>;
+  }[Keys];
+
+export type HarnessMessageContentPart =
+  | { type: 'text'; text: string }
+  | ({
+      type: 'image';
+      mediaType?: string;
+    } & RequireAtLeastOne<
+      {
+        image?: unknown;
+        image_url?: string | { url: string; detail?: string };
+      },
+      'image' | 'image_url'
+    >)
+  | ({
+      type: 'file';
+      mediaType?: string;
+      mimeType?: string;
+    } & RequireAtLeastOne<
+      {
+        data?: string;
+        file?: unknown;
+        url?: string;
+      },
+      'data' | 'file' | 'url'
+    >)
+  | ({
+      type: 'tool-call';
+      args?: unknown;
+    } & RequireAtLeastOne<
+      {
+        toolCall?: unknown;
+        toolCallId?: string;
+        toolName?: string;
+      },
+      'toolCall' | 'toolCallId' | 'toolName'
+    >)
+  | ({
+      type: 'tool-result';
+      toolName?: string;
+      isError?: boolean;
+    } & RequireAtLeastOne<
+      {
+        toolResult?: unknown;
+        toolCallId?: string;
+        result?: unknown;
+      },
+      'toolResult' | 'toolCallId' | 'result'
+    >)
+  | { type: 'reasoning'; reasoning: string };
 
 /**
  * Common fields shared by every `message()` call.
  */
 interface MessageOptionsBase extends MessageOverrides {
   /** Free-form user content. The only required field. */
-  content: string;
+  content: string | HarnessMessageContentPart[];
 
   /** Optional idempotency key for retry-safe signal-driven messages. */
   admissionId?: string;
@@ -1582,7 +1650,10 @@ export interface ListMessagesOptions {
 /** Options accepted by `Session.signal(...)`. */
 export interface SessionSignalOptions {
   /** Free-form user content. Matches `message().content`. */
-  content: string;
+  content: string | HarnessMessageContentPart[];
+
+  /** Optional caller-supplied signal id for optimistic host UI reconciliation. */
+  signalId?: string;
 
   /** Per-turn mode override (same semantics as `message().mode`). */
   mode?: string;
@@ -1592,6 +1663,16 @@ export interface SessionSignalOptions {
    * turn. Mirrors `message().additionalTools` semantics.
    */
   additionalTools?: ToolsInput;
+
+  /** Attributes merged onto the signal when it drains into an active run. */
+  ifActive?: {
+    attributes?: AgentSignalAttributes;
+  };
+
+  /** Attributes merged onto the signal when it wakes an idle run. */
+  ifIdle?: {
+    attributes?: AgentSignalAttributes;
+  };
 
   /**
    * Forwarded to the underlying agent run when the signal wakes a fresh
@@ -1699,6 +1780,8 @@ export interface RegisterQuestionParams {
   question: string;
   options?: Array<{ label: string; description?: string }>;
   selectionMode?: 'single_select' | 'multi_select';
+  runId?: string;
+  toolCallId?: string;
 }
 
 /** Parameters accepted by `ctx.registerPlanApproval(...)` from a suspending tool. */
@@ -1741,6 +1824,20 @@ export interface HarnessRequestContext<TState = unknown> {
   getState: () => TState;
   /** Persisted shallow merge (object form) or atomic read-modify-write (functional form). */
   setState: SetStateFn<TState>;
+  /**
+   * Legacy-compatible atomic state helper. Kept on the v1 request-context slot
+   * so shared Harness tools can mutate state and emit turn events without
+   * depending on a specific Session implementation.
+   */
+  updateState?: <TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: Array<Record<string, unknown>>; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: Array<Record<string, unknown>>; result: TResult }>,
+  ) => Promise<TResult>;
+  /** Emit a Harness turn event from a tool. Primarily used by shared built-ins. */
+  emitEvent?: (event: Record<string, unknown>) => void;
 
   /** Turn abort signal. Fires for the four reasons enumerated in §4.5. */
   abortSignal: AbortSignal;

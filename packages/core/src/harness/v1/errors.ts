@@ -314,7 +314,7 @@ export class HarnessSkillArgsValidationError extends Error {
 }
 
 /**
- * A per-turn override (e.g. `mode`, `additionalTools`) was supplied on a
+ * A per-turn override (e.g. `mode`, `additionalTools`, `prepareStep`) was supplied on a
  * signal that drains into an already-active run. The active run's surface
  * (model/mode/toolset) was committed when the run started and cannot be
  * changed mid-flight; silently ignoring the override would be a footgun,
@@ -324,7 +324,7 @@ export class HarnessOverrideConflictError extends Error {
   readonly name = 'HarnessOverrideConflictError';
   constructor(
     public readonly sessionId: string,
-    public readonly field: 'mode' | 'additionalTools' | 'model',
+    public readonly field: 'mode' | 'additionalTools' | 'model' | 'prepareStep',
     public readonly reason: string,
   ) {
     super(`HarnessOverrideConflictError on session "${sessionId}" for "${field}": ${reason}`);

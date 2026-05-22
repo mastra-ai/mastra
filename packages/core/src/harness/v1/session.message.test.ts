@@ -18,7 +18,9 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
 import { buildFakeOutput, extractSignalContents } from './__test-utils__/fake-output';
-import { HarnessAdmissionConflictError, HarnessValidationError } from './errors';
+import { MockAgent } from './__test-utils__/mock-agent';
+import { setupHarness } from './__test-utils__/setup';
+import { HarnessAdmissionConflictError, HarnessOverrideConflictError, HarnessValidationError } from './errors';
 import { Harness } from './harness';
 
 // ---------------------------------------------------------------------------
@@ -34,6 +36,12 @@ interface FakeCall {
 
 function nextTick() {
   return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+async function waitForStreamCalls(agent: MockAgent, expected: number): Promise<void> {
+  for (let i = 0; i < 100 && agent.streamCalls.length < expected; i++) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
 }
 
 class FakeAgent extends Agent<any, any, any> {
@@ -1183,7 +1191,43 @@ describe('Session.message() — per-turn overrides', () => {
 
     const tools = { extra: { id: 'extra' } as any };
     await session.message({ content: 'hi', additionalTools: tools });
-    expect(agent.calls[0]!.options.toolsets).toEqual({ 'call:additional': tools });
+    expect(agent.calls[0]!.options.toolsets).toEqual(
+      expect.objectContaining({
+        'call:additional': tools,
+        'harness:builtin': expect.objectContaining({
+          ask_user: expect.anything(),
+          submit_plan: expect.anything(),
+          task_write: expect.anything(),
+          task_update: expect.anything(),
+          task_complete: expect.anything(),
+          task_check: expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it('rejects prepareStep when message delivery drains into an active run', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    const hold = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = session.message({ content: 'first' });
+    await waitForStreamCalls(agent, 1);
+
+    await expect(
+      session.message({
+        content: 'second',
+        prepareStep: () => ({ activeTools: [] }),
+      }),
+    ).rejects.toBeInstanceOf(HarnessOverrideConflictError);
+
+    release();
+    await first;
   });
 });
 

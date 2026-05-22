@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto';
 import {
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageProviderCallbackBindingTransitionError,
   HarnessStorageThreadDeleteFenceConflictError,
+  TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS,
   TABLE_HARNESS_SESSION_EVENTS,
 } from '@mastra/core/storage';
-import type { SessionRecord } from '@mastra/core/storage';
+import type { HarnessProviderCallbackBinding, SessionRecord } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { exportSchemas, HarnessPG, PostgresStore } from '../..';
@@ -36,9 +38,11 @@ describe('HarnessPG', () => {
     expect(ddl).toContain('mastra_harness_sessions');
     expect(ddl).toContain('mastra_harness_attachments');
     expect(ddl).toContain('mastra_harness_channel_inbox');
+    expect(ddl).toContain(TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS);
     expect(ddl).toContain('mastra_harness_wakeups');
     expect(ddl).toContain(TABLE_HARNESS_SESSION_EVENTS);
     expect(ddl).toContain('idx_harness_sessions_active_key');
+    expect(ddl).toContain('idx_harness_provider_callback_active_selector');
     expect(ddl).toContain('idx_harness_session_events_replay');
     expect(ddl).toContain('idx_harness_channel_outbox_idempotency');
 
@@ -52,6 +56,8 @@ describe('HarnessPG', () => {
           'idx_harness_sessions_active_key',
           'idx_harness_channel_inbox_idempotency',
           'idx_harness_channel_outbox_idempotency',
+          'idx_harness_provider_callback_active_selector',
+          'idx_harness_provider_callback_selector_status',
           'idx_harness_session_events_replay',
           'idx_harness_wakeups_idempotency',
         ],
@@ -60,6 +66,8 @@ describe('HarnessPG', () => {
     expect(indexes.map(row => row.indexname)).toEqual([
       'idx_harness_channel_inbox_idempotency',
       'idx_harness_channel_outbox_idempotency',
+      'idx_harness_provider_callback_active_selector',
+      'idx_harness_provider_callback_selector_status',
       'idx_harness_session_events_replay',
       'idx_harness_sessions_active_key',
       'idx_harness_wakeups_idempotency',
@@ -330,6 +338,96 @@ describe('HarnessPG', () => {
     });
   });
 
+  it('persists provider callback binding claims and replacements', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await expect(harness!.resolveProviderCallbackBinding(sampleProviderCallbackBinding())).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      binding: { id: 'callback-binding-1', status: 'active' },
+    });
+    await expect(
+      harness!.resolveProviderCallbackBinding(sampleProviderCallbackBinding({ id: 'callback-binding-retry' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      binding: { id: 'callback-binding-1' },
+    });
+    await expect(
+      harness!.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-conflict',
+          channelId: 'sales',
+          origin: { route: 'sales-events' },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      binding: { id: 'callback-binding-1', channelId: 'support' },
+    });
+    await expect(
+      harness!.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-owned',
+          selectorValue: 'installation-2',
+          channelId: 'owned',
+          origin: { route: 'owned-events' },
+        }),
+      ),
+    ).resolves.toMatchObject({ duplicate: false, conflict: false });
+    await expect(
+      harness!.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-owned',
+          channelId: 'sales',
+          origin: { route: 'sales-events' },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+    await expect(
+      harness!.resolveProviderCallbackBinding(
+        sampleProviderCallbackBinding({
+          id: 'callback-binding-2',
+          harnessName: 'support-v2',
+          channelId: 'support-v2',
+          createdAt: 2000,
+          updatedAt: 2000,
+          origin: { route: 'support-events-v2' },
+        }),
+        { replaceBindingId: 'callback-binding-1' },
+      ),
+    ).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      replacedBindingId: 'callback-binding-1',
+      binding: { id: 'callback-binding-2', harnessName: 'support-v2', status: 'active' },
+    });
+    await expect(
+      harness!.loadProviderCallbackBindingBySelector({
+        providerId: 'slack',
+        selectorKind: 'installation',
+        selectorValue: 'installation-1',
+      }),
+    ).resolves.toMatchObject({ id: 'callback-binding-2', status: 'active' });
+    await expect(
+      harness!.markProviderCallbackBindingStatus({
+        bindingId: 'callback-binding-2',
+        status: 'undeliverable',
+        updatedAt: 3000,
+        lastError: { code: 'worker_unavailable', message: 'provider missing', retryable: true },
+      }),
+    ).resolves.toMatchObject({ status: 'undeliverable', lastError: { code: 'worker_unavailable' } });
+    await expect(
+      harness!.markProviderCallbackBindingStatus({
+        bindingId: 'callback-binding-1',
+        status: 'active',
+        updatedAt: 4000,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageProviderCallbackBindingTransitionError);
+  });
+
   it('atomically claims channel inbox and wakeup rows with PG claim metadata', async () => {
     const harness = store.stores.harness;
     expect(harness).toBeDefined();
@@ -565,6 +663,24 @@ function createSampleSessionRecord(overrides: Partial<SessionRecord> = {}): Sess
     createdAt: 1000,
     lastActivityAt: 1000,
     version: 0,
+    ...overrides,
+  };
+}
+
+function sampleProviderCallbackBinding(
+  overrides: Partial<HarnessProviderCallbackBinding> = {},
+): HarnessProviderCallbackBinding {
+  return {
+    id: 'callback-binding-1',
+    providerId: 'slack',
+    selectorKind: 'installation',
+    selectorValue: 'installation-1',
+    harnessName: 'default',
+    channelId: 'support',
+    origin: { route: 'support-events' },
+    status: 'active',
+    createdAt: 1000,
+    updatedAt: 1000,
     ...overrides,
   };
 }

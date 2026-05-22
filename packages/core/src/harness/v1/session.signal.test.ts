@@ -58,17 +58,23 @@ describe('Session.signal()', () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-    const handle = await session.signal({ content: 'hi' });
+    const handle = await session.signal({ content: 'hi', ifIdle: { attributes: { delivery: 'message' } } });
     await handle.result;
 
     expect(agent.streamCalls).toHaveLength(1);
     const call = agent.streamCalls[0]!;
     expect((call.options as { runId: string }).runId).toBe(handle.runId);
 
-    const messages = call.messages as { __isCreatedSignal?: boolean; type?: string; contents?: unknown };
+    const messages = call.messages as {
+      __isCreatedSignal?: boolean;
+      type?: string;
+      contents?: unknown;
+      attributes?: Record<string, unknown>;
+    };
     expect(messages.__isCreatedSignal).toBe(true);
     expect(messages.type).toBe('user-message');
     expect(messages.contents).toBe('hi');
+    expect(messages.attributes).toEqual({ delivery: 'message' });
   });
 
   it('active-delivery dispatch returns willInterleave: true and reuses the in-flight runId', async () => {
@@ -84,9 +90,14 @@ describe('Session.signal()', () => {
     const firstPromise = session.message({ content: 'first' });
     await waitForStreamCalls(agent, 1);
 
-    const second = await session.signal({ content: 'second' });
+    const second = await session.signal({
+      content: 'second',
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
+    });
 
     expect(second.willInterleave).toBe(true);
+    expect(second.signal.attributes).toEqual({ delivery: 'while-active' });
 
     releaseFirst();
     const firstResult = await firstPromise;
