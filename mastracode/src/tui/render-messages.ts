@@ -154,7 +154,13 @@ function renderTaskTransitionFromHistory(
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+  options: {
+    message?: string;
+    path?: string;
+    gapText?: string;
+    goalMaxTurns?: number;
+    judgeModelId?: string;
+  },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -352,6 +358,60 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
 
+  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
+  if (slashCommandMatch) {
+    const commandName = slashCommandMatch[1]!;
+    const commandContent = slashCommandMatch[2]!.trim();
+    const pending = state.pendingSignalMessageComponentsById.get(message.id);
+    if (pending) {
+      state.chatContainer.removeChild(pending.component as never);
+      state.pendingSignalMessageComponentsById.delete(message.id);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    }
+    const existingSlashComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSlashComp) {
+      state.messageComponentsById.set(message.id, existingSlashComp);
+      state.ui.requestRender();
+      return;
+    }
+
+    const slashComp = new SlashCommandComponent(commandName, commandContent);
+    state.allSlashCommandComponents.push(slashComp);
+    state.chatContainer.addChild(slashComp);
+    state.ui.requestRender();
+    return;
+  }
+
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const pending = state.pendingSignalMessageComponentsById.get(message.id);
+    if (pending) {
+      state.chatContainer.removeChild(pending.component as never);
+      state.pendingSignalMessageComponentsById.delete(message.id);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    }
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      state.ui.requestRender();
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
+    state.ui.requestRender();
+    return;
+  }
+
   if (state.pendingSignalMessageComponentsById.has(message.id)) {
     confirmPendingUserMessage(state, message.id, displayText);
     return;
@@ -379,48 +439,6 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     state.allSystemReminderComponents.push(reminderComponent);
 
     addChildBeforeMessageOrFollowUps(state, reminderComponent, precedesMessageId);
-    state.ui.requestRender();
-    return;
-  }
-
-  // Check for persisted slash command tags.
-  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
-  if (slashCommandMatch) {
-    const commandName = slashCommandMatch[1]!;
-    const commandContent = slashCommandMatch[2]!.trim();
-    const existingSlashComp = state.allSlashCommandComponents.find(
-      component =>
-        component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
-    );
-    if (existingSlashComp) {
-      state.messageComponentsById.set(message.id, existingSlashComp);
-      return;
-    }
-
-    const slashComp = new SlashCommandComponent(commandName, commandContent);
-    state.allSlashCommandComponents.push(slashComp);
-    state.chatContainer.addChild(slashComp);
-    state.ui.requestRender();
-    return;
-  }
-
-  // Check for persisted skill activation tags.
-  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
-  if (skillMatch) {
-    const commandName = `skill/${skillMatch[1]!}`;
-    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
-    const existingSkillComp = state.allSlashCommandComponents.find(
-      component =>
-        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
-    );
-    if (existingSkillComp) {
-      state.messageComponentsById.set(message.id, existingSkillComp);
-      return;
-    }
-
-    const skillComp = new SlashCommandComponent(commandName, skillContent);
-    state.allSlashCommandComponents.push(skillComp);
-    state.chatContainer.addChild(skillComp);
     state.ui.requestRender();
     return;
   }
