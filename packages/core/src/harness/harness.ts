@@ -1592,12 +1592,27 @@ export class Harness<TState = {}> {
     if (this.followUpQueue.length === 0) return;
 
     const next = this.followUpQueue.shift()!;
-    await this.sendMessage({
-      content: next.content,
-      requestContext: next.requestContext,
-      tracingContext: options?.tracingContext,
-      tracingOptions: options?.tracingOptions,
-    });
+    if (this.agentThreadSubscription) {
+      // When called from processSubscribedThreadStream → finishSubscribedStreamRun,
+      // sendMessage would deadlock: it waits for the new run to finish via
+      // waitForCurrentThreadStreamIdle, but the subscription consumer is blocked
+      // here and cannot advance the generator to process that run. Send the
+      // signal directly and let the subscription handle the run lifecycle.
+      const signal = this.sendSignal({
+        content: next.content,
+        requestContext: next.requestContext,
+        tracingContext: options?.tracingContext,
+        tracingOptions: options?.tracingOptions,
+      });
+      await signal.accepted;
+    } else {
+      await this.sendMessage({
+        content: next.content,
+        requestContext: next.requestContext,
+        tracingContext: options?.tracingContext,
+        tracingOptions: options?.tracingOptions,
+      });
+    }
   }
 
   private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {

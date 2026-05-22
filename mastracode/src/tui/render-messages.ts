@@ -154,7 +154,13 @@ function renderTaskTransitionFromHistory(
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+  options: {
+    message?: string;
+    path?: string;
+    gapText?: string;
+    goalMaxTurns?: number;
+    judgeModelId?: string;
+  },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({

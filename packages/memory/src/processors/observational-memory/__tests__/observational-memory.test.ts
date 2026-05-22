@@ -14354,6 +14354,40 @@ describe('Single-thread replay red tests', () => {
     await savePromise;
   });
 
+  it('T4-D: preserves current step messages during observed-message filtering', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'already-observed',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already seen' }] },
+      createdAt: t0,
+    } as any;
+    const currentInput = {
+      id: 'current-input',
+      threadId,
+      resourceId,
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'current turn input' }] },
+      createdAt: t0,
+    } as any;
+
+    messageList.add(observed, 'memory');
+    messageList.add(currentInput, 'input');
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['already-observed'], lastObservedAt: t0 } as any,
+      preserveMessageIds: new Set(['current-input']),
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(['current-input']);
+  });
+
   it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 

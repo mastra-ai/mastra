@@ -2810,7 +2810,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       },
                     ],
                   },
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.002Z,
                   "id": "msg-0",
                   "role": "assistant",
                 },
@@ -7520,6 +7520,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
+                          "text": "test-input",
+                          "type": "text",
+                        },
+                      ],
+                      "role": "user",
+                    },
+                    {
+                      "content": [
+                        {
+                          "providerOptions": undefined,
                           "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
@@ -7540,16 +7550,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                       ],
                       "role": "assistant",
-                    },
-                    {
-                      "content": [
-                        {
-                          "providerOptions": undefined,
-                          "text": "test-input",
-                          "type": "text",
-                        },
-                      ],
-                      "role": "user",
                     },
                   ],
                   "nonUser": [
@@ -7701,6 +7701,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
+                          "text": "test-input",
+                          "type": "text",
+                        },
+                      ],
+                      "role": "user",
+                    },
+                    {
+                      "content": [
+                        {
+                          "providerOptions": undefined,
                           "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
@@ -7721,16 +7731,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                       ],
                       "role": "assistant",
-                    },
-                    {
-                      "content": [
-                        {
-                          "providerOptions": undefined,
-                          "text": "test-input",
-                          "type": "text",
-                        },
-                      ],
-                      "role": "user",
                     },
                   ],
                   "nonUser": [
