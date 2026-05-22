@@ -43,6 +43,7 @@ import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 
 type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
 const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
+const FILE_MUTATION_TOOLS = new Set(['string_replace_lsp', 'write_file', 'ast_smart_edit']);
 type MastraCodeOMEvent = Extract<
   HarnessEvent,
   {
@@ -271,6 +272,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private stateUpdateQueue: Promise<void> = Promise.resolve();
   private previousDisplayTasks: TaskItemSnapshot[] = [];
   private currentDisplayTasks: TaskItemSnapshot[] = [];
+  private readonly activeToolCalls = new Map<string, { name: string; args?: unknown }>();
+  private readonly modifiedFiles = new Map<string, { operations: string[]; firstModified: Date }>();
   private browser: unknown;
 
   readonly actions = Object.freeze({
@@ -392,8 +395,34 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       this.previousDisplayTasks = [...this.currentDisplayTasks];
       this.currentDisplayTasks = cloneTasks((event as { tasks?: unknown }).tasks);
     }
+    this.applyModifiedFileEvent(event);
     this.applyOMEvent(event as HarnessV1Event | MastraCodeOMEvent);
     await this.projector.project(event);
+  }
+
+  private applyModifiedFileEvent(event: HarnessV1Event): void {
+    if (event.type === 'tool_start') {
+      this.activeToolCalls.set(event.toolCallId, { name: event.toolName, args: event.args });
+      return;
+    }
+    if (event.type !== 'tool_end') return;
+
+    const tool = this.activeToolCalls.get(event.toolCallId);
+    this.activeToolCalls.delete(event.toolCallId);
+    if (!tool || event.isError || !FILE_MUTATION_TOOLS.has(tool.name)) return;
+
+    const filePath = (tool.args as { path?: unknown } | undefined)?.path;
+    if (typeof filePath !== 'string' || filePath.length === 0) return;
+
+    const existing = this.modifiedFiles.get(filePath);
+    if (existing) {
+      existing.operations.push(tool.name);
+      return;
+    }
+    this.modifiedFiles.set(filePath, {
+      operations: [tool.name],
+      firstModified: new Date(),
+    });
   }
 
   private applyOMEvent(event: HarnessV1Event | MastraCodeOMEvent): void {
@@ -1103,7 +1132,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       activeTools: recordToMap((sessionState as { activeTools?: unknown } | undefined)?.activeTools),
       toolInputBuffers: recordToMap((sessionState as { toolInputBuffers?: unknown } | undefined)?.toolInputBuffers),
       activeSubagents: recordToMap((sessionState as { activeSubagents?: unknown } | undefined)?.activeSubagents),
-      modifiedFiles: recordToMap((sessionState as { modifiedFiles?: unknown } | undefined)?.modifiedFiles),
+      modifiedFiles: this.modifiedFiles,
       pendingApproval:
         pending?.kind === 'tool-approval'
           ? {

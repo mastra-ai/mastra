@@ -499,6 +499,75 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(display.toolInputBuffers.get('tool_1')).toEqual({ toolName: 'read_file', text: '{"path"' });
   });
 
+  it('tracks modified files from v1 file mutation tool events for /diff parity', async () => {
+    const runtime = createRuntime();
+
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_start',
+      toolCallId: 'tool-1',
+      toolName: 'write_file',
+      args: { path: 'src/app.ts' },
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_end',
+      toolCallId: 'tool-1',
+      result: 'ok',
+      isError: false,
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_start',
+      toolCallId: 'tool-2',
+      toolName: 'string_replace_lsp',
+      args: { path: 'src/app.ts' },
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_end',
+      toolCallId: 'tool-2',
+      result: 'ok',
+      isError: false,
+    });
+
+    expect(runtime.getDisplayState().modifiedFiles.get('src/app.ts')).toMatchObject({
+      operations: ['write_file', 'string_replace_lsp'],
+    });
+
+    runtime.getDisplayState().modifiedFiles.clear();
+    expect(runtime.getDisplayState().modifiedFiles.size).toBe(0);
+    await runtime.destroy();
+  });
+
+  it('does not track errored or non-mutating tools as modified files', async () => {
+    const runtime = createRuntime();
+
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_start',
+      toolCallId: 'tool-1',
+      toolName: 'write_file',
+      args: { path: 'src/app.ts' },
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_end',
+      toolCallId: 'tool-1',
+      result: 'fail',
+      isError: true,
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_start',
+      toolCallId: 'tool-2',
+      toolName: 'execute_command',
+      args: { command: 'touch src/other.ts' },
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_end',
+      toolCallId: 'tool-2',
+      result: 'ok',
+      isError: false,
+    });
+
+    expect(runtime.getDisplayState().modifiedFiles.size).toBe(0);
+    await runtime.destroy();
+  });
+
   it('restores replayed task display snapshots for TUI history replay', () => {
     const runtime = createRuntime({
       initialState: { tasks: [{ id: 'old', content: 'Old', status: 'pending', activeForm: 'Doing old' }] },
