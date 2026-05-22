@@ -8,7 +8,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal } from './signals';
+import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
@@ -707,7 +707,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
-    const signal = createSignal({ ...signalInput, acceptedAt: new Date() });
+    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -739,6 +739,12 @@ export class AgentThreadStreamRuntime {
     );
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
+
+    // Resolve conditional delivery attributes now that we know the delivery path.
+    signal = resolveDeliveryAttributes(
+      signal,
+      isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
+    );
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
