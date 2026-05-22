@@ -42,8 +42,7 @@ export async function syncGateways(force = false): Promise<void> {
     await getRegistry().syncGateways(true);
   } catch {
     // Silently ignore — the bundled registry already contains all model
-    // data so a failed network fetch is non-critical. Stop retrying.
-    stopGatewaySync();
+    // data so a failed network fetch is non-critical.
   } finally {
     isSyncing = false;
   }

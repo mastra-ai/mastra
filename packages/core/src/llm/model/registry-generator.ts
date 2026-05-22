@@ -59,7 +59,10 @@ export async function atomicWriteFile(
 }
 
 /**
- * Fetch providers from all enabled gateways (single attempt per gateway, no retries).
+ * Fetch providers from all enabled gateways with silent retry logic.
+ * Retries up to 3 times per gateway with exponential backoff. If all
+ * retries are exhausted the gateway is silently skipped (no error logging)
+ * since the bundled registry already contains all model data.
  * @param gateways - Array of gateway instances to fetch from
  * @returns Object containing providers and models records
  */
@@ -80,8 +83,26 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
   const allModels: Record<string, string[]> = {};
   const allAttachmentCapabilities: AttachmentCapabilities = {};
 
+  const maxRetries = 3;
+
   for (const gateway of enabledGateways) {
-    const providers = await gateway.fetchProviders();
+    let providers: Record<string, ProviderConfig> | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        providers = await gateway.fetchProviders();
+        break;
+      } catch {
+        if (attempt < maxRetries) {
+          const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    // If all retries failed, silently skip this gateway — the bundled
+    // registry already contains all model data.
+    if (!providers) continue;
 
     // models.dev is a provider registry, not a true gateway - don't prefix its providers
     const isProviderRegistry = gateway.id === 'models.dev';

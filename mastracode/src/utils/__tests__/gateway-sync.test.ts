@@ -72,24 +72,12 @@ describe('gateway-sync wrapper', () => {
     expect(registrySyncGateways).toHaveBeenCalledWith(true);
   });
 
-  it('does not throw when the registry sync rejects and stops periodic sync', async () => {
-    vi.useFakeTimers();
+  it('does not throw when the registry sync rejects', async () => {
     registrySyncGateways.mockRejectedValueOnce(new Error('boom'));
-    registryGetLastRefreshTime.mockReturnValue(null);
-    const { syncGateways, startGatewaySync, stopGatewaySync } = await import('../gateway-sync.js');
+    const { syncGateways } = await import('../gateway-sync.js');
 
-    startGatewaySync(1_000);
-    await vi.advanceTimersByTimeAsync(0);
-
-    // The initial sync fails — should not throw and should stop periodic sync
+    // Should resolve without throwing even when the underlying sync rejects
     await expect(syncGateways(true)).resolves.toBeUndefined();
-
-    // Advancing timers should not trigger additional syncs since the interval was stopped
-    registrySyncGateways.mockClear();
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(registrySyncGateways).not.toHaveBeenCalled();
-
-    stopGatewaySync();
   });
 
   it('startGatewaySync schedules a periodic sync that clears on stop', async () => {
