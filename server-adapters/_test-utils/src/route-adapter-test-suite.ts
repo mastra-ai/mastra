@@ -35,6 +35,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
   describe(suiteName, () => {
     let context: AdapterTestContext;
+    let adapter: any;
     let app: any;
 
     beforeEach(async () => {
@@ -48,6 +49,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
       // Setup adapter and app
       const setup = await setupAdapter(context);
+      adapter = setup.adapter;
       app = setup.app;
     });
 
@@ -482,6 +484,35 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
     // Additional cross-route tests
     describe('Cross-Route Tests', () => {
+      it('should forward request headers to route handlers through getHeader', async () => {
+        const testRoute: ServerRoute = {
+          method: 'GET',
+          path: '/test/header-forwarding',
+          responseType: 'json',
+          handler: async ({ getHeader }) => ({
+            ifMatch: getHeader?.('if-match') ?? null,
+            lastEventId: getHeader?.('last-event-id') ?? null,
+          }),
+        };
+        await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+        const response = await executeHttpRequest(app, {
+          method: 'GET',
+          path: '/test/header-forwarding',
+          headers: {
+            'if-match': '"7"',
+            'last-event-id': 'harness-v1:epoch-1:4',
+          },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.type).toBe('json');
+        expect(response.data).toEqual({
+          ifMatch: '"7"',
+          lastEventId: 'harness-v1:epoch-1:4',
+        });
+      });
+
       // Test array query parameters for ALL GET routes
       const getRoutes = SERVER_ROUTES.filter(r => r.method === 'GET' && !isExcluded(r));
       getRoutes.forEach(route => {

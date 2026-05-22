@@ -526,6 +526,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...(route.path.startsWith('/harness/')
             ? { requestBody: params.body, requestPathParams: params.urlParams, requestQueryParams: params.queryParams }
             : {}),
+          getHeader: (name: string) => {
+            const value = req.headers[name.toLowerCase()];
+            return Array.isArray(value) ? value[0] : value;
+          },
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
           registeredTools: res.locals.registeredTools,

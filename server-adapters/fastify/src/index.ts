@@ -616,6 +616,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(route.path.startsWith('/harness/')
           ? { requestBody: params.body, requestPathParams: params.urlParams, requestQueryParams: params.queryParams }
           : {}),
+        getHeader: (name: string) => {
+          const value = request.headers[name.toLowerCase()];
+          return Array.isArray(value) ? value[0] : value;
+        },
         requestContext: request.requestContext,
         mastra: this.mastra,
         registeredTools: request.registeredTools,
