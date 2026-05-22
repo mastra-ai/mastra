@@ -6874,9 +6874,6 @@ importers:
 
   voice/murf:
     dependencies:
-      ky:
-        specifier: ^1.14.3
-        version: 1.14.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -23252,10 +23249,6 @@ packages:
 
   kubernetes-types@1.30.0:
     resolution: {integrity: sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q==}
-
-  ky@1.14.3:
-    resolution: {integrity: sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw==}
-    engines: {node: '>=18'}
 
   kysely@0.28.8:
     resolution: {integrity: sha512-QUOgl5ZrS9IRuhq5FvOKFSsD/3+IA6MLE81/bOOTRA/YQpKDza2sFdN5g6JCB9BOpqMJDGefLCQ9F12hRS13TA==}
@@ -49004,8 +48997,6 @@ snapshots:
   kolorist@1.8.0: {}
 
   kubernetes-types@1.30.0: {}
-
-  ky@1.14.3: {}
 
   kysely@0.28.8: {}
 
