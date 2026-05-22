@@ -240,15 +240,24 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
 
   // "Evaluate Trace" jumps to the anchor span (trace root or branch anchor) and switches
-  // to the scoring tab.
+  // to the scoring tab. Both params are set in a single setSearchParams call to avoid the
+  // race where two sequential navigations use the same stale location.search base.
   const handleEvaluateTrace = useCallback(() => {
     const anchorSpan = anchorSpanId
       ? lightSpans?.find(s => s.spanId === anchorSpanId)
       : lightSpans?.find(s => s.parentSpanId == null);
     if (!anchorSpan) return;
-    url.handleSpanChange(anchorSpan.spanId);
-    url.handleSpanTabChange('scoring');
-  }, [lightSpans, anchorSpanId, url]);
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.set('spanId', anchorSpan.spanId);
+        next.set('tab', 'scoring');
+        next.delete('scoreId');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [lightSpans, anchorSpanId, setSearchParams]);
 
   const filtersApplied =
     !!url.selectedEntityOption ||
