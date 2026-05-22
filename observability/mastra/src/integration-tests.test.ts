@@ -1309,6 +1309,11 @@ describe('Tracing Integration Tests', () => {
       // Auto-extracted model metrics (token counts, duration)
       const modelDuration = testExporter.getMetricsByName('mastra_model_duration_ms');
       expect(modelDuration.length).toBeGreaterThanOrEqual(1);
+      expect(
+        modelDuration.some(
+          metric => metric.costContext?.provider === 'mock-provider' && metric.costContext?.model === 'mock-model-id',
+        ),
+      ).toBe(true);
 
       const inputTokens = testExporter.getMetricsByName('mastra_model_total_input_tokens');
       expect(inputTokens.length).toBeGreaterThanOrEqual(1);

@@ -387,7 +387,7 @@ describe('AutoExtractedMetrics', () => {
     expect(metricNames).not.toContain('mastra_model_output_reasoning_tokens');
   });
 
-  it('should still emit token metrics when cost estimation throws', () => {
+  it('should still emit token metrics with provider+model when cost estimation throws', () => {
     setup();
     vi.spyOn(estimatorModule, 'estimateCosts').mockImplementation(() => {
       throw new Error('boom');
@@ -413,8 +413,92 @@ describe('AutoExtractedMetrics', () => {
     expect(outputTokens).toBeDefined();
     expect(inputTokens!.metric.value).toBe(100);
     expect(outputTokens!.metric.value).toBe(50);
+    expect(inputTokens!.metric.costContext).toEqual({ provider: 'openai', model: 'gpt-4o-mini' });
+    expect(outputTokens!.metric.costContext).toEqual({ provider: 'openai', model: 'gpt-4o-mini' });
+  });
+
+  it('should emit token metrics without costContext when provider and model are both missing', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+      },
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    const outputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_output_tokens');
     expect(inputTokens!.metric.costContext).toBeUndefined();
     expect(outputTokens!.metric.costContext).toBeUndefined();
+  });
+
+  it('should tag mastra_model_duration_ms with provider+model from span attributes', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+      },
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const duration = emittedMetrics.find(m => m.metric.name === 'mastra_model_duration_ms');
+    expect(duration).toBeDefined();
+    expect(duration!.metric.costContext).toEqual({ provider: 'openai', model: 'gpt-4o-mini' });
+    expect(duration!.metric.labels).toEqual({ status: 'ok' });
+  });
+
+  it('should prefer responseModel over model for mastra_model_duration_ms costContext', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o',
+        responseModel: 'gpt-4o-2024-08-06',
+        provider: 'openai',
+      },
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const duration = emittedMetrics.find(m => m.metric.name === 'mastra_model_duration_ms');
+    expect(duration!.metric.costContext).toEqual({ provider: 'openai', model: 'gpt-4o-2024-08-06' });
+  });
+
+  it('should not attach costContext to non-model duration metrics', () => {
+    setup();
+    const agentSpan = createMockSpan({
+      type: SpanType.AGENT_RUN,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+    });
+    emitAutoExtractedMetrics(agentSpan, createMetricsContext(agentSpan));
+
+    const agentDuration = emittedMetrics.find(m => m.metric.name === 'mastra_agent_duration_ms');
+    expect(agentDuration!.metric.costContext).toBeUndefined();
+  });
+
+  it('should omit duration costContext when MODEL_GENERATION span has neither provider nor model', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {},
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const duration = emittedMetrics.find(m => m.metric.name === 'mastra_model_duration_ms');
+    expect(duration!.metric.costContext).toBeUndefined();
   });
 
   it('should keep total output cost only when no output detail row has a successful cost', () => {

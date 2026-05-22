@@ -22,9 +22,18 @@ export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): voi
   }
 
   const durationMs = span.endTime.getTime() - span.startTime.getTime();
-  metrics.emit(durationMetricName, durationMs, {
-    status: span.errorInfo ? 'error' : 'ok',
-  });
+  const labels = { status: span.errorInfo ? 'error' : 'ok' };
+
+  // Tag MODEL_GENERATION duration with provider+model so the metric row carries
+  // the same model dimension as the token metrics emitted alongside it. Other
+  // span types intentionally skip this — a single agent/workflow/tool run can
+  // involve multiple models, so attributing the duration to one is misleading.
+  const costContext =
+    span.type === SpanType.MODEL_GENERATION
+      ? deriveBaseCostContext(span.attributes as ModelGenerationAttributes | undefined)
+      : undefined;
+
+  metrics.emit(durationMetricName, durationMs, labels, costContext ? { costContext } : undefined);
 }
 
 /** Emit token usage metrics for a model-generation span. */
@@ -70,6 +79,8 @@ function emitUsageMetrics(
   usage: NonNullable<ModelGenerationAttributes['usage']>,
   metrics: MetricsContext,
 ): void {
+  const baseCostContext = deriveBaseCostContext(attrs);
+
   let metricCosts = new Map<TokenMetrics, CostContext>();
   try {
     const provider = attrs.provider;
@@ -87,7 +98,10 @@ function emitUsageMetrics(
   }
 
   const emit = (name: TokenMetrics, value: number) => {
-    const costContext = metricCosts.get(name);
+    // Fall back to a provider+model-only context so the metric row keeps the
+    // model dimension queryable even when pricing lookup is skipped (no model)
+    // or throws.
+    const costContext = metricCosts.get(name) ?? baseCostContext;
     if (!costContext) {
       metrics.emit(name, value);
       return;
@@ -99,6 +113,13 @@ function emitUsageMetrics(
   for (const sample of getTokenMetricSamples(usage)) {
     emit(sample.name, sample.value);
   }
+}
+
+function deriveBaseCostContext(attrs: ModelGenerationAttributes | undefined): CostContext | undefined {
+  const provider = attrs?.provider;
+  const model = attrs?.responseModel ?? attrs?.model;
+  if (!provider && !model) return undefined;
+  return { provider, model };
 }
 
 function getDurationMetricName(span: AnySpan): string | null {
