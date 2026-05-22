@@ -341,6 +341,14 @@ export class MastraTUI {
     this.state.messageComponentsById.set(signalId, component);
   }
 
+  private remapSignalMessageId(previousId: string, signalId: string): void {
+    this.remapOptimisticUserMessage(previousId, signalId);
+    const pending = this.state.pendingSignalMessageComponentsById.get(previousId);
+    if (!pending || previousId === signalId) return;
+    this.state.pendingSignalMessageComponentsById.delete(previousId);
+    this.state.pendingSignalMessageComponentsById.set(signalId, pending);
+  }
+
   private createPendingNewThread(): Promise<void> | undefined {
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
@@ -365,11 +373,15 @@ export class MastraTUI {
       });
 
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const optimisticSignalId = signal.id;
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
-      signal.accepted.catch((error: unknown) => {
-        this.removeOptimisticUserMessage(signal.id);
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
+      signal.accepted
+        .then(() => this.remapSignalMessageId(optimisticSignalId, signal.id))
+        .catch((error: unknown) => {
+          this.removeOptimisticUserMessage(signal.id);
+          this.removeOptimisticUserMessage(optimisticSignalId);
+          showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        });
     };
 
     const pendingThread = this.createPendingNewThread();
@@ -390,6 +402,7 @@ export class MastraTUI {
     const send = () => {
       this.clearIdleCounter();
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const optimisticSignalId = signal.id;
 
       if (hasActiveRun) {
         addPendingUserMessage(this.state, signal.id, content, images);
@@ -397,14 +410,18 @@ export class MastraTUI {
         addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
       }
 
-      signal.accepted.catch((error: unknown) => {
-        if (hasActiveRun) {
-          removePendingUserMessage(this.state, signal.id);
-        } else {
-          this.removeOptimisticUserMessage(signal.id);
-        }
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
+      signal.accepted
+        .then(() => this.remapSignalMessageId(optimisticSignalId, signal.id))
+        .catch((error: unknown) => {
+          if (hasActiveRun) {
+            removePendingUserMessage(this.state, signal.id);
+            removePendingUserMessage(this.state, optimisticSignalId);
+          } else {
+            this.removeOptimisticUserMessage(signal.id);
+            this.removeOptimisticUserMessage(optimisticSignalId);
+          }
+          showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        });
     };
 
     const pendingThread = this.createPendingNewThread();

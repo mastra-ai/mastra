@@ -1123,6 +1123,13 @@ export interface SubagentDefinition {
    * accepted now so configs don't need to change later.
    */
   workspace?: 'inherit' | 'fresh';
+
+  /**
+   * Workspace tool keys the subagent may see. When set, workspace tools not
+   * in the list are hidden for the subagent turn while non-workspace tools
+   * remain available.
+   */
+  allowedWorkspaceTools?: string[];
 }
 
 /**
@@ -1415,14 +1422,36 @@ export interface MessageOverrides {
    * `HarnessMode.additionalTools` semantics.
    */
   additionalTools?: ToolsInput;
+
+  /**
+   * Optional per-turn tool preparation hook forwarded to the backing agent.
+   * Runtime compatibility layers use this to adjust the model-visible tool
+   * surface without changing persisted mode config.
+   */
+  prepareStep?: AgentExecutionOptionsBase<unknown>['prepareStep'];
 }
+
+export type HarnessMessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; image?: unknown; image_url?: string | { url: string; detail?: string }; mediaType?: string }
+  | { type: 'file'; data?: string; file?: unknown; mediaType?: string; mimeType?: string; url?: string }
+  | { type: 'tool-call'; toolCall?: unknown; toolCallId?: string; toolName?: string; args?: unknown }
+  | {
+      type: 'tool-result';
+      toolResult?: unknown;
+      toolCallId?: string;
+      toolName?: string;
+      result?: unknown;
+      isError?: boolean;
+    }
+  | { type: 'reasoning'; reasoning: string };
 
 /**
  * Common fields shared by every `message()` call.
  */
 interface MessageOptionsBase extends MessageOverrides {
   /** Free-form user content. The only required field. */
-  content: string;
+  content: string | HarnessMessageContentPart[];
 
   /** Optional idempotency key for retry-safe signal-driven messages. */
   admissionId?: string;
@@ -1582,7 +1611,10 @@ export interface ListMessagesOptions {
 /** Options accepted by `Session.signal(...)`. */
 export interface SessionSignalOptions {
   /** Free-form user content. Matches `message().content`. */
-  content: string;
+  content: string | HarnessMessageContentPart[];
+
+  /** Optional caller-supplied signal id for optimistic host UI reconciliation. */
+  signalId?: string;
 
   /** Per-turn mode override (same semantics as `message().mode`). */
   mode?: string;
