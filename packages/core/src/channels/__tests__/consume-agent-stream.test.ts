@@ -454,6 +454,52 @@ describe('consumeAgentStream', () => {
       expect(planUpdates.some(p => p.title === 'Updating memory')).toBe(true);
     });
 
+    it('resets the recall aggregator when a non-observation chunk interrupts the sequence', async () => {
+      // Two separate activation bursts separated by a text-delta should not
+      // be merged into one row — the aggregator must reset on any non-
+      // observation-activation chunk.
+      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'a' } },
+          {
+            type: 'data-om-activation',
+            data: { cycleId: 'a1', operationType: 'observation', tokensActivated: 1000, observationTokens: 100 },
+          },
+          {
+            type: 'data-om-activation',
+            data: { cycleId: 'a2', operationType: 'observation', tokensActivated: 2000, observationTokens: 200 },
+          },
+          // Interruption — recall sequence must reset here.
+          { type: 'text-delta', payload: { text: 'b' } },
+          {
+            type: 'data-om-activation',
+            data: { cycleId: 'a3', operationType: 'observation', tokensActivated: 500, observationTokens: 50 },
+          },
+          { type: 'finish', payload: {} },
+        ] as any,
+        sdkThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg as any);
+      const activations = drained.filter(
+        (p): p is { type: 'task_update'; id: string; title: string; details?: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update' && (p as any).id === 'om-activation',
+      );
+      // 3 pushes: 2 from first burst (1x, 2x), 1 from post-interrupt burst.
+      expect(activations).toHaveLength(3);
+      expect(activations[0]).toMatchObject({ title: 'Recalled memory' });
+      expect(activations[1]).toMatchObject({ title: 'Recalled memory (2x)' });
+      // After the text-delta interrupt, recall starts from 1x again with only
+      // the new totals — not 3x with merged totals from the prior burst.
+      expect(activations[2]).toMatchObject({
+        title: 'Recalled memory',
+        details: '-0.5k message tokens, +0.1k memory tokens',
+      });
+    });
+
     it("'hidden': drops tool-call/result chunks entirely (no card, no task_update)", async () => {
       const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
       await drive(

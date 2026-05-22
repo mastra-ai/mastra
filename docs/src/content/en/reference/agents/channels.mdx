@@ -188,7 +188,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: "'cards' ('grouped' for Slack)",
     description:
-      'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the active streaming widget, or `undefined` to fall back to the built-in renderer. Approve/deny prompts always render as a separate card regardless of mode.',
+      'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the active streaming widget, or `undefined` to skip rendering that event. Approve/deny prompts always render as a separate card regardless of mode.',
   },
   {
     name: 'typingStatus',
@@ -221,8 +221,7 @@ Pass a function to `toolDisplay` for fully custom rendering. The function
 receives a `ToolDisplayEvent` (`running` / `result` / `error` / `approval`)
 and a `ToolDisplayContext` (`{ mode, platform }`); return `{ kind: 'post',
 message }` for a discrete post/edit, `{ kind: 'stream', chunk }` to push into
-the active streaming widget, or `undefined` to fall back to the built-in
-renderer for that mode.
+the active streaming widget, or `undefined` to skip rendering that event.
 
 Approve/deny prompts (`requireApproval`) always render as a separate card
 regardless of mode, because inline task entries can't carry interactive

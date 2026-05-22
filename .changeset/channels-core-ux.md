@@ -30,28 +30,30 @@ Improved agent channels UX:
 ```ts
 import { Agent } from '@mastra/core/agent';
 import { defaultTypingStatus } from '@mastra/core/channels';
+import { createDiscordAdapter } from '@mastra/discord';
 
 const agent = new Agent({
   name: 'support-bot',
   channels: {
-    slack: {
-      streaming: true,
-      toolDisplay: 'grouped', // 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn
-      typingStatus: false, // suppress typing indicator when the widget already shows progress
-    },
-    discord: {
-      // Custom typing status per chunk; fall back to defaults for everything else.
-      typingStatus: (chunk, ctx) => {
-        if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
-          return 'is searching docs…';
-        }
-        return defaultTypingStatus(chunk, ctx);
-      },
-      // Custom tool rendering via the function form: skip the running message,
-      // post a single line on result.
-      toolDisplay: event => {
-        if (event.kind !== 'result') return undefined;
-        return { kind: 'post', message: `🛠 ${event.toolName} → ${event.resultText}` };
+    adapters: {
+      discord: {
+        adapter: createDiscordAdapter(),
+        streaming: true,
+        toolDisplay: 'grouped', // 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn
+        typingStatus: false, // suppress typing indicator when the widget already shows progress
+        // Custom typing status per chunk; fall back to defaults for everything else.
+        // typingStatus: (chunk, ctx) => {
+        //   if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
+        //     return 'is searching docs…';
+        //   }
+        //   return defaultTypingStatus(chunk, ctx);
+        // },
+        // Custom tool rendering via the function form: skip the running message,
+        // post a single line on result. `undefined` skips rendering that event.
+        // toolDisplay: event => {
+        //   if (event.kind !== 'result') return undefined;
+        //   return { kind: 'post', message: `🛠 ${event.toolName} → ${event.resultText}` };
+        // },
       },
     },
   },

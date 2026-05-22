@@ -334,6 +334,16 @@ export async function runStreamingDriver({
   };
 
   for await (const chunk of stream) {
+    // Reset the recall aggregator the moment anything other than an
+    // observation activation appears. Without this, separate activation
+    // bursts (text/tool calls in between) would merge into a single row.
+    if (aggregatedRecallRef.current) {
+      const probe = asOmChunk(chunk);
+      const isObsActivation = probe?.type === 'data-om-activation' && probe.data.operationType === 'observation';
+      if (!isObsActivation) {
+        aggregatedRecallRef.current = null;
+      }
+    }
     // --- data-* parts: signal echo + OM lifecycle ---
     const chunkType = chunk.type as string;
     if (typeof chunkType === 'string' && chunkType.startsWith('data-')) {
@@ -357,6 +367,8 @@ export async function runStreamingDriver({
           // Coalesce consecutive observation activations into a single
           // aggregated row. Each activation chunk has its own `cycleId`,
           // so without this we'd render N stacked "Recalled memory" rows.
+          // The top-of-loop reset breaks the sequence on any non-observation
+          // chunk so separate bursts don't merge.
           if (om.type === 'data-om-activation' && om.data.operationType === 'observation') {
             const prev = aggregatedRecallRef.current;
             aggregatedRecallRef.current = {

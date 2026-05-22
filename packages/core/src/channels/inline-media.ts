@@ -74,7 +74,11 @@ export function extractUrls(text: string): string[] {
  */
 export async function headContentType(url: string, logger?: IMastraLogger): Promise<string | undefined> {
   try {
-    const res = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    const res = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(3_000),
+    });
     if (!res.ok) return undefined;
     const ct = res.headers.get('content-type');
     // Strip parameters (e.g. 'image/png; charset=utf-8' → 'image/png')

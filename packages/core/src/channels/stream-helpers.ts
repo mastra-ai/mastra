@@ -218,14 +218,18 @@ export async function postStreamError(args: {
   const { chunk, sdkThread, platform, logger, formatError } = args;
   const errPayload = chunk.payload as { error?: unknown };
   const rawError = errPayload.error;
-  const message =
-    rawError instanceof Error
-      ? rawError.message
-      : typeof rawError === 'string'
-        ? rawError
-        : rawError != null
-          ? String(rawError)
-          : 'Unknown error';
+  // Reuse extractErrorMessage so structured errors (MastraError, plain
+  // objects with `message`/`details.errorMessage`) don't render as
+  // "[object Object]".
+  const extracted = extractErrorMessage(rawError);
+  let message: string;
+  if (typeof extracted === 'string' && extracted.length > 0) {
+    message = extracted;
+  } else if (extracted == null) {
+    message = 'Unknown error';
+  } else {
+    message = String(extracted);
+  }
   const display = message.length > 500 ? message.slice(0, 500) + '…' : message;
   logger?.error?.(`[${platform}] Stream completed with error`, { error: display });
   const postable = formatError
