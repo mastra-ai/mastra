@@ -2769,6 +2769,9 @@ export class Session {
     if (opts.admissionId !== undefined && opts.additionalTools !== undefined) {
       throw new HarnessValidationError('message().admissionId', 'admissionId cannot be combined with additionalTools');
     }
+    if (opts.admissionId !== undefined && opts.prepareStep !== undefined) {
+      throw new HarnessValidationError('message().admissionId', 'admissionId cannot be combined with prepareStep');
+    }
     if (opts.admissionId !== undefined && opts.admissionId.length === 0) {
       throw new HarnessValidationError('message().admissionId', 'admissionId must be a non-empty string');
     }
@@ -2876,6 +2879,7 @@ export class Session {
       abortSignal: turnAbortSignal,
       requestContext,
       ...(toolsets ? { toolsets } : {}),
+      ...(opts.prepareStep ? { prepareStep: opts.prepareStep } : {}),
       ...(mode.instructions ? { instructions: mode.instructions } : {}),
     };
 
@@ -2888,7 +2892,7 @@ export class Session {
     if (opts.output !== undefined && opts.sync === true) {
       try {
         const result = await Promise.race([
-          agent.generate(opts.content, {
+          agent.generate(opts.content as never, {
             ...baseExecOptions,
             structuredOutput: { schema: opts.output as never },
           }),
@@ -3793,8 +3797,11 @@ export class Session {
   // -------------------------------------------------------------------------
   async signal(opts: SessionSignalOptions): Promise<SessionSignalResult> {
     this._assertLive('signal()');
-    if (typeof opts.content !== 'string') {
-      throw new HarnessValidationError('signal()', '`content` must be a string');
+    if (typeof opts.content !== 'string' && !Array.isArray(opts.content)) {
+      throw new HarnessValidationError('signal()', '`content` must be a string or content part array');
+    }
+    if (opts.signalId !== undefined && (typeof opts.signalId !== 'string' || opts.signalId.length === 0)) {
+      throw new HarnessValidationError('signal().signalId', 'signalId must be a non-empty string');
     }
 
     // Resolve effective mode + backing agent.
@@ -3871,11 +3878,11 @@ export class Session {
         this._emitTurnEvent({ type: 'agent_start' });
 
         dispatched = agent.sendSignal(
-          { type: 'user-message', contents: opts.content as never },
+          { ...(opts.signalId ? { id: opts.signalId } : {}), type: 'user-message', contents: opts.content as never },
           {
             resourceId: this.resourceId,
             threadId: this.threadId,
-            ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+            ifIdle: { behavior: 'wake', attributes: opts.ifIdle?.attributes, streamOptions: baseExecOptions as never },
           },
         );
       } catch (err) {
@@ -3929,11 +3936,12 @@ export class Session {
     // bookkeeping owned here; the in-flight run owns its own completion.
     // Pass empty streamOptions — the runtime ignores them when active.
     const dispatched = agent.sendSignal(
-      { type: 'user-message', contents: opts.content as never },
+      { ...(opts.signalId ? { id: opts.signalId } : {}), type: 'user-message', contents: opts.content as never },
       {
         resourceId: this.resourceId,
         threadId: this.threadId,
-        ifIdle: { behavior: 'wake', streamOptions: {} as never },
+        ifActive: { attributes: opts.ifActive?.attributes },
+        ifIdle: { behavior: 'wake', attributes: opts.ifIdle?.attributes, streamOptions: {} as never },
       },
     );
 

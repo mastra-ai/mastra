@@ -19,6 +19,7 @@
 import { z } from 'zod';
 
 import { createTool } from '../../tools/tool';
+import { createWorkspaceTools } from '../../workspace/tools';
 import { HarnessSubagentDepthExceededError, HarnessValidationError } from './errors';
 import type { Session } from './session';
 import type { SubagentDefinition } from './types';
@@ -165,6 +166,43 @@ export function createSpawnSubagentTool(parent: Session) {
       const subagentWorkspaceMode = def.workspace ?? 'inherit';
       child._subagentInheritWorkspace = subagentWorkspaceMode === 'inherit';
 
+      const allowedWorkspaceTools = def.allowedWorkspaceTools ? new Set(def.allowedWorkspaceTools) : undefined;
+      let workspaceToolNames: Set<string> | undefined;
+      try {
+        workspaceToolNames =
+          allowedWorkspaceTools && ctx.workspace
+            ? new Set(
+                Object.keys(
+                  await createWorkspaceTools(ctx.workspace, {
+                    requestContext: ctx.requestContext ?? {},
+                    workspace: ctx.workspace,
+                  }),
+                ),
+              )
+            : undefined;
+      } catch (err) {
+        try {
+          await child.close();
+        } catch {
+          // ignore
+        }
+        return {
+          isError: true,
+          errorName: err instanceof Error ? err.name : 'Error',
+          message: err instanceof Error ? err.message : String(err),
+          subagentSessionId: child.id,
+          result: undefined,
+        };
+      }
+      const prepareStep =
+        allowedWorkspaceTools && workspaceToolNames
+          ? ({ tools }: { tools?: Record<string, unknown> }) => ({
+              activeTools: Object.keys(tools ?? {}).filter(
+                name => !workspaceToolNames.has(name) || allowedWorkspaceTools.has(name),
+              ),
+            })
+          : undefined;
+
       // Bridge the child's per-turn events into the parent's subscriber
       // stream as `subagent_*`. `_emitSubagentEvent` stamps `parentId` and
       // `queuedItemId` automatically. Track inner tool names by call id so
@@ -252,7 +290,11 @@ export function createSpawnSubagentTool(parent: Session) {
       let result: unknown;
       let isError = false;
       try {
-        result = await child.message({ content: task, abortSignal: ctx.abortSignal });
+        result = await child.message({
+          content: task,
+          abortSignal: ctx.abortSignal,
+          ...(prepareStep ? { prepareStep } : {}),
+        });
       } catch (err) {
         isError = true;
         result = err instanceof Error ? err.message : String(err);

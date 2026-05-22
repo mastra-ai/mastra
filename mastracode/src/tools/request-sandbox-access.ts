@@ -19,8 +19,31 @@ function expandTilde(p: string): string {
 }
 
 type MastraCodeState = z.infer<typeof stateSchema>;
+type ToolExecutionContext = {
+  agent?: {
+    runId?: string;
+    toolCallId?: string;
+    resumeData?: unknown;
+    suspend?: (payload: unknown) => Promise<never>;
+  };
+  requestContext?: {
+    get: (key: string) => unknown;
+  };
+  workspace?: {
+    filesystem?: unknown;
+  };
+};
 
 let requestCounter = 0;
+
+function answerApproved(answer: HarnessQuestionAnswer | unknown): boolean {
+  const value =
+    typeof answer === 'object' && answer !== null && 'answer' in answer
+      ? (answer as { answer: HarnessQuestionAnswer }).answer
+      : answer;
+  const answerText = Array.isArray(value) ? value.join(', ') : String(value ?? '');
+  return answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
+}
 
 export const requestSandboxAccessTool = createTool({
   id: 'request_access',
@@ -31,7 +54,9 @@ export const requestSandboxAccessTool = createTool({
   }),
   execute: async ({ path: requestedPath, reason }, context) => {
     try {
+      const toolContext = context as ToolExecutionContext | undefined;
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+      const resumeData = toolContext?.agent?.resumeData;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
       const expanded = expandTilde(requestedPath);
@@ -47,7 +72,7 @@ export const requestSandboxAccessTool = createTool({
         };
       }
 
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
+      if (!harnessCtx?.registerQuestion) {
         return {
           content: `Cannot request sandbox access: TUI context not available. The user should manually run /sandbox add ${absolutePath}`,
           isError: true,
@@ -55,28 +80,42 @@ export const requestSandboxAccessTool = createTool({
       }
 
       const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
+      let answer: HarnessQuestionAnswer | unknown = resumeData;
 
-      // Create a promise that resolves when the user answers in the TUI
-      const answer = await new Promise<HarnessQuestionAnswer>(resolve => {
-        // Register the resolver so respondToQuestion() can resolve it
-        harnessCtx.registerQuestion!({
-          questionId,
-          resolve: answer => {
-            resolve(Array.isArray(answer) ? answer.join(',') : answer);
-          },
+      if (answer === undefined && harnessCtx.emitEvent) {
+        // Legacy Harness path: emit directly and resolve through the in-memory callback registry.
+        answer = await new Promise<HarnessQuestionAnswer>(resolve => {
+          harnessCtx.registerQuestion!({
+            questionId,
+            resolve: value => {
+              resolve(Array.isArray(value) ? value.join(',') : value);
+            },
+          });
+
+          harnessCtx.emitEvent!({
+            type: 'sandbox_access_request',
+            questionId,
+            path: absolutePath,
+            reason,
+          });
         });
-
-        // Emit event — TUI will show the dialog
-        harnessCtx.emitEvent!({
-          type: 'sandbox_access_request',
+      } else if (answer === undefined && toolContext?.agent?.suspend) {
+        // Harness v1 path: park the tool through the durable question suspension surface.
+        await harnessCtx.registerQuestion({
           questionId,
-          path: absolutePath,
-          reason,
-        });
-      });
+          question: `Allow Mastra Code to access ${absolutePath}?\n\n${reason}`,
+          options: [
+            { label: 'Yes', description: 'Grant access for this session.' },
+            { label: 'No', description: 'Deny this access request.' },
+          ],
+          selectionMode: 'single_select',
+          runId: toolContext.agent.runId,
+          toolCallId: toolContext.agent.toolCallId ?? questionId,
+        } as never);
+        await toolContext.agent.suspend({});
+      }
 
-      const answerText = Array.isArray(answer) ? answer.join(', ') : answer;
-      const approved = answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
+      const approved = answerApproved(answer);
       if (approved) {
         // Add to allowed paths in harness state (persists across turns)
         const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];

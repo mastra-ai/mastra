@@ -28,6 +28,7 @@ vi.mock('@mariozechner/pi-tui', () => ({
       autocompleteProviders.push({ commands });
     }
   },
+  Container: class {},
   Spacer: class {},
   Text: class {},
 }));

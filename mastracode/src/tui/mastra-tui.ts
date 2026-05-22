@@ -5,7 +5,6 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
-import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
@@ -81,6 +80,8 @@ import { updateStatusLine } from './status-line.js';
 
 export type { MastraTUIOptions } from './state.js';
 
+type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
+
 // =============================================================================
 // MastraTUI Class
 // =============================================================================
@@ -91,8 +92,8 @@ export type { MastraTUIOptions } from './state.js';
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
 const USER_SIGNAL_DELIVERY_OPTIONS: {
-  ifActive: { attributes: AgentSignalAttributes };
-  ifIdle: { attributes: AgentSignalAttributes };
+  ifActive: { attributes: SignalDeliveryAttributes };
+  ifIdle: { attributes: SignalDeliveryAttributes };
 } = {
   ifActive: { attributes: { delivery: 'while-active' } },
   ifIdle: { attributes: { delivery: 'message' } },
@@ -358,6 +359,14 @@ export class MastraTUI {
     this.state.messageComponentsById.set(signalId, component);
   }
 
+  private remapSignalMessageId(previousId: string, signalId: string): void {
+    this.remapOptimisticUserMessage(previousId, signalId);
+    const pending = this.state.pendingSignalMessageComponentsById.get(previousId);
+    if (!pending || previousId === signalId) return;
+    this.state.pendingSignalMessageComponentsById.delete(previousId);
+    this.state.pendingSignalMessageComponentsById.set(signalId, pending);
+  }
+
   private createPendingNewThread(): Promise<void> | undefined {
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
@@ -385,11 +394,15 @@ export class MastraTUI {
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
+      const optimisticSignalId = signal.id;
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
-      signal.accepted.catch((error: unknown) => {
-        this.removeOptimisticUserMessage(signal.id);
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
+      signal.accepted
+        .then(() => this.remapSignalMessageId(optimisticSignalId, signal.id))
+        .catch((error: unknown) => {
+          this.removeOptimisticUserMessage(signal.id);
+          this.removeOptimisticUserMessage(optimisticSignalId);
+          showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        });
     };
 
     const pendingThread = this.createPendingNewThread();
@@ -413,6 +426,7 @@ export class MastraTUI {
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
+      const optimisticSignalId = signal.id;
 
       if (hasActiveRun) {
         addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
@@ -420,14 +434,18 @@ export class MastraTUI {
         addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
       }
 
-      signal.accepted.catch((error: unknown) => {
-        if (hasActiveRun) {
-          removePendingUserMessage(this.state, signal.id);
-        } else {
-          this.removeOptimisticUserMessage(signal.id);
-        }
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
+      signal.accepted
+        .then(() => this.remapSignalMessageId(optimisticSignalId, signal.id))
+        .catch((error: unknown) => {
+          if (hasActiveRun) {
+            removePendingUserMessage(this.state, signal.id);
+            removePendingUserMessage(this.state, optimisticSignalId);
+          } else {
+            this.removeOptimisticUserMessage(signal.id);
+            this.removeOptimisticUserMessage(optimisticSignalId);
+          }
+          showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        });
     };
 
     const pendingThread = this.createPendingNewThread();

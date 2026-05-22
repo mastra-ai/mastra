@@ -177,4 +177,80 @@ describe('request_access', () => {
     expect(result.isError).toBe(false);
     expect(result.content).toContain('Access granted');
   });
+
+  it('registers a Harness v1 durable question when no legacy event emitter is present', async () => {
+    const registerQuestion = vi.fn(async () => undefined);
+    const suspend = vi.fn(async () => {
+      throw new Error('suspended');
+    });
+
+    const context = {
+      agent: {
+        runId: 'run-1',
+        toolCallId: 'tool-1',
+        suspend,
+      },
+      requestContext: {
+        get: (key: string) =>
+          key === 'harness'
+            ? {
+                registerQuestion,
+                getState: () => ({ sandboxAllowedPaths: [] }),
+                setState: vi.fn(),
+              }
+            : undefined,
+      },
+      workspace: {},
+    };
+
+    await (requestSandboxAccessTool as any).execute(
+      { path: '/outside/project/dir', reason: 'need to read config' },
+      context,
+    );
+
+    expect(registerQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questionId: expect.stringMatching(/^sandbox_/),
+        question: expect.stringContaining('/outside/project/dir'),
+        runId: 'run-1',
+        toolCallId: 'tool-1',
+        selectionMode: 'single_select',
+      }),
+    );
+    expect(suspend).toHaveBeenCalledWith({}, undefined);
+  });
+
+  it('resumes a Harness v1 sandbox question from agent resumeData', async () => {
+    const { fs, setAllowedPaths } = createMockLocalFilesystem();
+    const setState = vi.fn();
+
+    const context = {
+      agent: {
+        resumeData: { answer: 'yes' },
+      },
+      requestContext: {
+        get: (key: string) =>
+          key === 'harness'
+            ? {
+                registerQuestion: vi.fn(),
+                getState: () => ({ sandboxAllowedPaths: [] }),
+                setState,
+              }
+            : undefined,
+      },
+      workspace: {
+        filesystem: fs,
+      },
+    };
+
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: '/outside/project/dir', reason: 'need to read config' },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('Access granted');
+    expect(setState).toHaveBeenCalledWith({ sandboxAllowedPaths: ['/outside/project/dir'] });
+    expect(setAllowedPaths).toHaveBeenCalledTimes(1);
+  });
 });

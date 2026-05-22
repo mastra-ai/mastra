@@ -27,6 +27,7 @@ import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagen
 
 class FakeAgent extends Agent<any, any, any> {
   chunks: any[] = [];
+  lastStreamOptions: any;
   fullOutput: any = {
     text: 'child-result',
     usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -59,6 +60,7 @@ class FakeAgent extends Agent<any, any, any> {
   }
 
   async stream(_messages: any, options?: any): Promise<any> {
+    this.lastStreamOptions = options;
     const out = buildFakeOutput({
       runId: options?.runId ?? this.fullOutput.runId,
       fullOutput: this.fullOutput,
@@ -77,7 +79,7 @@ class FakeAgent extends Agent<any, any, any> {
   }
 }
 
-function setup(opts?: { maxDepth?: number; chunks?: any[] }) {
+function setup(opts?: { maxDepth?: number; chunks?: any[]; allowedWorkspaceTools?: string[] }) {
   const parentAgent = new FakeAgent('parent-agent');
   const childAgent = new FakeAgent('child-agent');
   if (opts?.chunks) childAgent.chunks = opts.chunks;
@@ -98,6 +100,7 @@ function setup(opts?: { maxDepth?: number; chunks?: any[] }) {
           modeId: 'explore-mode',
           description: 'Read-only codebase exploration',
           defaultModelId: 'openai/gpt-4o-mini',
+          allowedWorkspaceTools: opts?.allowedWorkspaceTools,
           workspace: 'inherit',
         },
       },
@@ -115,6 +118,20 @@ function execCtx(toolCallId = 'tc-1') {
     tracingContext: {} as any,
     requestContext: { get: () => undefined } as any,
     mastra: undefined,
+  } as any;
+}
+
+function execCtxWithWorkspace(toolCallId = 'tc-1') {
+  return {
+    ...execCtx(toolCallId),
+    workspace: {
+      getToolsConfig: () => ({
+        mastra_workspace_read_file: { name: 'view' },
+        mastra_workspace_list_files: { name: 'find_files' },
+        mastra_workspace_write_file: { name: 'write_file' },
+      }),
+      filesystem: { readOnly: false },
+    },
   } as any;
 }
 
@@ -272,6 +289,52 @@ describe('spawn_subagent tool — execution', () => {
 
     const childId = result.subagentSessionId as string;
     const childRecord = await storage.loadSession({ sessionId: childId });
+    expect(childRecord?.closedAt).toBeDefined();
+  });
+
+  it('filters model-visible workspace tools for subagents with allowedWorkspaceTools', async () => {
+    const { harness, childAgent } = setup({ allowedWorkspaceTools: ['view', 'find_files'] });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    await tool.execute!({ agentType: 'explore', task: 'read only' }, execCtxWithWorkspace('tc-ws-filter'));
+
+    expect(childAgent.lastStreamOptions?.prepareStep).toBeTypeOf('function');
+    const result = childAgent.lastStreamOptions.prepareStep({
+      tools: {
+        view: {},
+        find_files: {},
+        write_file: {},
+        shell: {},
+      },
+    });
+    expect(result.activeTools).toEqual(expect.arrayContaining(['view', 'find_files', 'shell']));
+    expect(result.activeTools).not.toContain('write_file');
+  });
+
+  it('returns a tool error when workspace tool construction fails', async () => {
+    const { harness, storage } = setup({ allowedWorkspaceTools: ['view'] });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read only' }, {
+      ...execCtx('tc-ws-error'),
+      workspace: {
+        getToolsConfig: () => {
+          throw new Error('workspace unavailable');
+        },
+        filesystem: { readOnly: false },
+      },
+    } as any)) as any;
+
+    expect(result).toMatchObject({
+      isError: true,
+      errorName: 'Error',
+      message: 'workspace unavailable',
+      result: undefined,
+    });
+    expect(result.subagentSessionId).toBeTruthy();
+    const childRecord = await storage.loadSession({ sessionId: result.subagentSessionId });
     expect(childRecord?.closedAt).toBeDefined();
   });
 });
