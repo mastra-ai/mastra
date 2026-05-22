@@ -154,7 +154,14 @@ function renderTaskTransitionFromHistory(
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+  options: {
+    message?: string;
+    path?: string;
+    gapText?: string;
+    goalMaxTurns?: number;
+    judgeModelId?: string;
+    onUpdated?: () => void;
+  },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -169,6 +176,7 @@ function createReminderComponent(
     path: options.path,
     goalMaxTurns: options.goalMaxTurns,
     judgeModelId: options.judgeModelId,
+    onUpdated: options.onUpdated,
   });
 }
 
@@ -322,6 +330,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
       gapText: reminderPart.gapText,
       goalMaxTurns: goalMetadata.goalMaxTurns,
       judgeModelId: goalMetadata.judgeModelId,
+      onUpdated: () => state.ui.requestRender(),
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
@@ -428,6 +437,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
       message: reminderText,
       path,
       gapText: reminderType === 'temporal-gap' ? reminderText.split(' — ')[0]?.trim() : undefined,
+      onUpdated: () => state.ui.requestRender(),
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);

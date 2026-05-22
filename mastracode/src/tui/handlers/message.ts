@@ -82,7 +82,10 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
   };
 }
 
-function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
+function createReminderComponent(
+  reminder: StreamedSystemReminderPart,
+  onUpdated?: () => void,
+): SystemReminderComponent | TemporalGapComponent {
   if (reminder.reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
       message: reminder.message,
@@ -96,12 +99,13 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     path: reminder.path,
     goalMaxTurns: reminder.goalMaxTurns,
     judgeModelId: reminder.judgeModelId,
+    onUpdated,
   });
 }
 
 function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
   const { state } = ctx;
-  const component = createReminderComponent(reminder);
+  const component = createReminderComponent(reminder, () => state.ui.requestRender());
   component.setExpanded(state.toolOutputExpanded);
   state.allSystemReminderComponents.push(component);
 

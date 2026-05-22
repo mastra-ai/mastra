@@ -3,7 +3,7 @@
  * inline with a bordered amber notice style.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
@@ -22,18 +22,19 @@ export interface SystemReminderOptions {
 }
 
 export class SystemReminderComponent extends Container {
-  private readonly messageLines: string[];
+  private messageLines: string[];
   private readonly reminderType?: string;
   private readonly path?: string;
   private readonly goalMaxTurns?: number;
   private readonly judgeModelId?: string;
   private expanded = false;
+  private onUpdated?: () => void;
 
   isExpanded(): boolean {
     return this.expanded;
   }
 
-  constructor(options: SystemReminderOptions) {
+  constructor(options: SystemReminderOptions & { onUpdated?: () => void }) {
     super();
 
     const resolvedMessage = resolveReminderMessage(options.message, options.path);
@@ -47,8 +48,32 @@ export class SystemReminderComponent extends Container {
     this.path = options.path;
     this.goalMaxTurns = options.goalMaxTurns;
     this.judgeModelId = options.judgeModelId;
+    this.onUpdated = options.onUpdated;
 
     this.rebuild();
+
+    // If the message was not resolved synchronously, try reading the file async
+    if (!resolvedMessage.length && options.path) {
+      this.resolveFromFileAsync(options.path);
+    }
+  }
+
+  private resolveFromFileAsync(filePath: string): void {
+    readFile(filePath, 'utf-8')
+      .then(content => {
+        const trimmed = content.trim();
+        if (trimmed.length > 0) {
+          this.messageLines = trimmed
+            .split('\n')
+            .map(line => line.trimEnd())
+            .filter(line => line.length > 0);
+          this.rebuild();
+          this.onUpdated?.();
+        }
+      })
+      .catch(() => {
+        // File unavailable — keep the loading/fallback message
+      });
   }
 
   setExpanded(expanded: boolean): void {
@@ -122,23 +147,17 @@ function renderRow(text: string, width: number, border: (char: string) => string
   return `${border('│')} ${content}${rightPadding}${border('│')}`;
 }
 
-function resolveReminderMessage(message: string | undefined, path: string | undefined): string {
+function resolveReminderMessage(message: string | undefined, _path: string | undefined): string {
   const trimmedMessage = message?.trim();
   if (trimmedMessage && trimmedMessage !== 'undefined' && !trimmedMessage.startsWith(GENERIC_DYNAMIC_REMINDER_PREFIX)) {
     return trimmedMessage;
   }
 
-  if (!path) {
+  // File content is resolved asynchronously by the component to avoid blocking
+  // the event loop.  Return empty here so the constructor shows a loading state
+  // while the async read completes.
+  if (!_path) {
     return trimmedMessage && trimmedMessage !== 'undefined' ? trimmedMessage : '';
-  }
-
-  try {
-    const fileContent = readFileSync(path, 'utf-8').trim();
-    if (fileContent.length > 0) {
-      return fileContent;
-    }
-  } catch {
-    // Fall back to streamed/persisted message when local file content is unavailable.
   }
 
   return trimmedMessage && trimmedMessage !== 'undefined' ? trimmedMessage : '';
