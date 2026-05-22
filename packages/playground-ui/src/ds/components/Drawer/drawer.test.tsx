@@ -123,4 +123,41 @@ describe('Drawer', () => {
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(popup?.getAttribute('data-swipe-direction')).toBe('right');
   });
+
+  // Regression guard: a modal drawer's viewport must not carry `pointer-events-none`.
+  // Base UI applies that only to non-modal drawers; on a modal drawer it swallows the
+  // pointer stream and the swipe-to-dismiss gesture stops working.
+  it('keeps pointer events on the viewport for a modal drawer', () => {
+    render(
+      <Drawer defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Modal drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
+    expect(popup?.classList.contains('pointer-events-auto')).toBe(false);
+  });
+
+  // Regression guard: a non-modal drawer (`hideBackdrop`) must opt the viewport out of
+  // pointer events so the page behind stays interactive, with the popup re-enabling
+  // its own — and it must not render a backdrop.
+  it('opts the viewport out of pointer events for a non-modal drawer', () => {
+    render(
+      <Drawer defaultOpen>
+        <DrawerContent hideBackdrop>
+          <DrawerTitle>Non-modal drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(viewport?.classList.contains('pointer-events-none')).toBe(true);
+    expect(popup?.classList.contains('pointer-events-auto')).toBe(true);
+    expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeNull();
+  });
 });
