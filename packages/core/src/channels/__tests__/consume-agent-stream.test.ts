@@ -9,7 +9,7 @@ import { getChatModule } from '../chat-lazy';
 //
 // `consumeAgentStream` is the heart of the channels rendering pipeline: it
 // turns an `AsyncIterable<AgentChunkType>` (from `agent.subscribeToThread()`)
-// into a sequence of platform calls (`sdkThread.post()`, `startTyping()`,
+// into a sequence of platform calls (`chatThread.post()`, `startTyping()`,
 // `adapter.editMessage()`, ...). These tests drive it directly with canned
 // chunk streams and assert against a flat recording of every platform call.
 
@@ -44,7 +44,7 @@ function createRecording() {
     userName: 'TestBot',
   };
 
-  const sdkThread: any = {
+  const chatThread: any = {
     id: 'test:c1:t1',
     channelId: 'test:c1',
     isDM: false,
@@ -57,7 +57,7 @@ function createRecording() {
     }),
   };
 
-  return { calls, adapter, sdkThread };
+  return { calls, adapter, chatThread };
 }
 
 async function* chunkStream(chunks: any[]): AsyncIterable<any> {
@@ -98,10 +98,10 @@ function makeChannels(
 async function drive(
   channels: AgentChannels,
   chunks: any[],
-  sdkThread: any,
+  chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
 ) {
-  await (channels as any).consumeAgentStream(chunkStream(chunks), sdkThread, 'test', approvalContext);
+  await (channels as any).consumeAgentStream(chunkStream(chunks), chatThread, 'test', approvalContext);
 }
 
 // Drain a StreamingPlan's underlying iterable so we can assert on the
@@ -127,7 +127,7 @@ describe('consumeAgentStream', () => {
 
   describe('buffered text (streaming disabled)', () => {
     it('accumulates text-deltas and posts once on step-finish', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -137,7 +137,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -145,7 +145,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('strips zero-width characters before posting', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -153,13 +153,13 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'Hi' }]);
     });
 
     it('skips empty/whitespace-only buffers', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -167,7 +167,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
     });
@@ -175,7 +175,7 @@ describe('consumeAgentStream', () => {
 
   describe('streaming session (streaming enabled)', () => {
     it('opens a StreamingPlan on first text-delta and feeds it pieces until step-finish', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
       await drive(
         channels,
         [
@@ -184,7 +184,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -195,7 +195,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('forwards updateIntervalMs onto the StreamingPlan options', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: { updateIntervalMs: 250 } });
+      const { channels, calls, chatThread } = makeChannels({ streaming: { updateIntervalMs: 250 } });
       await drive(
         channels,
         [
@@ -203,14 +203,14 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const plan = (calls.find(c => c.kind === 'post') as Extract<Call, { kind: 'post' }>).arg as any;
       expect(plan.options.updateIntervalMs).toBe(250);
     });
 
     it('opens a fresh session for each step (closes on step-finish)', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
       await drive(
         channels,
         [
@@ -220,7 +220,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const plans = calls.filter(c => c.kind === 'post');
       expect(plans).toHaveLength(2);
@@ -234,7 +234,7 @@ describe('consumeAgentStream', () => {
       // on every platform, so users opt in explicitly. With streaming on,
       // `'cards'` closes the streaming session, posts the card, and reopens
       // on the next chunk.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
       await drive(
         channels,
         [
@@ -249,7 +249,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       // Tool renders as discrete cards (post + edit), not as task_updates.
       const edits = calls.filter(c => c.kind === 'editMessage');
@@ -259,7 +259,7 @@ describe('consumeAgentStream', () => {
 
   describe('toolDisplay modes', () => {
     it("'timeline': emits task_update chunks into the streaming session (one task per tool)", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
       await drive(
         channels,
         [
@@ -275,7 +275,7 @@ describe('consumeAgentStream', () => {
           { type: 'text-delta', payload: { text: 'done' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -313,7 +313,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("'grouped': renders task_updates inside a single plan block (groupTasks: 'plan')", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
@@ -335,7 +335,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -359,7 +359,7 @@ describe('consumeAgentStream', () => {
       // still-`in_progress` task to an error icon. The streaming driver
       // optimistically marks pending OM tasks complete on close so the
       // "Saving to memory…" row doesn't visually error out.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
@@ -372,7 +372,7 @@ describe('consumeAgentStream', () => {
           // resolved by the time the stream closes.
           { type: 'finish', payload: {} },
         ] as any,
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -393,7 +393,7 @@ describe('consumeAgentStream', () => {
       // emit a burst of them in a row. Instead of stacking N "Recalled
       // memory" rows, the driver rolls them into a single `om-activation`
       // task that updates in place with the running totals.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
@@ -427,7 +427,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ] as any,
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -465,7 +465,7 @@ describe('consumeAgentStream', () => {
       // Two separate activation bursts separated by a text-delta should not
       // be merged into one row — the aggregator must reset on any non-
       // observation-activation chunk.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
@@ -486,7 +486,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ] as any,
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -512,7 +512,7 @@ describe('consumeAgentStream', () => {
       // 'timeline'/'grouped' where tool calls already live there. In non-plan
       // modes the OM rows would either flash a phantom plan widget or land
       // alongside the cards — both inconsistent with the mode contract.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
       await drive(
         channels,
         [
@@ -531,7 +531,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ] as any,
-        sdkThread,
+        chatThread,
       );
 
       const StreamingPlan = (await getChatModule()).StreamingPlan;
@@ -553,7 +553,7 @@ describe('consumeAgentStream', () => {
       // unconditionally before posting the Block Kit card, which produced a
       // one-row Plan widget that closed immediately after — visual noise in
       // modes where tool calls live out-of-band.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
       await drive(
         channels,
         [
@@ -563,7 +563,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ] as any,
-        sdkThread,
+        chatThread,
       );
 
       // The approval card should be posted out-of-band, but no Plan widget
@@ -581,7 +581,7 @@ describe('consumeAgentStream', () => {
       // plan before closing the session and posting the card — otherwise the
       // SDK plan would close mid-tool with the row still "in progress" and
       // flip to ⚠.
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
@@ -591,7 +591,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ] as any,
-        sdkThread,
+        chatThread,
       );
 
       const StreamingPlan = (await getChatModule()).StreamingPlan;
@@ -614,7 +614,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("'hidden': drops tool-call/result chunks entirely (no card, no task_update)", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
       await drive(
         channels,
         [
@@ -630,7 +630,7 @@ describe('consumeAgentStream', () => {
           { type: 'text-delta', payload: { text: 'done' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       // Streaming text still posts; tools render nothing.
@@ -652,7 +652,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("'timeline' without streaming: warns once and falls back to cards", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false, toolDisplay: 'timeline' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, toolDisplay: 'timeline' });
       const warn = vi.fn();
       (channels as any).__setLogger({
         info: vi.fn(),
@@ -673,8 +673,8 @@ describe('consumeAgentStream', () => {
         },
         { type: 'finish', payload: {} },
       ];
-      await drive(channels, chunks, sdkThread);
-      await drive(channels, chunks, sdkThread);
+      await drive(channels, chunks, chatThread);
+      await drive(channels, chunks, chatThread);
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain("toolDisplay: 'timeline' requires streaming: true");
@@ -687,7 +687,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("'timeline' with parallel tool calls: each gets its own task entry", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
       await drive(
         channels,
         [
@@ -703,7 +703,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       const posts = calls.filter(c => c.kind === 'post');
@@ -721,7 +721,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("deprecated cards: false maps to toolDisplay: 'text'", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false, cards: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, cards: false });
       await drive(
         channels,
         [
@@ -732,7 +732,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       // `'text'` mode posts plain-text running and result messages, not Block Kit cards.
@@ -746,7 +746,7 @@ describe('consumeAgentStream', () => {
       // (casts, JS, dynamic configs) should still get a function-form
       // resolution untouched by `cards` so the fn drives every event.
       const seen: string[] = [];
-      const { channels, calls, sdkThread } = makeChannels({
+      const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         cards: false,
         toolDisplay: event => {
@@ -765,7 +765,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       // The fn drives the render path: result event fires and the fn's
@@ -782,7 +782,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('deprecated formatToolCall shims into toolDisplay fn for result events', async () => {
-      const { channels, calls, sdkThread } = makeChannels({
+      const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         formatToolCall: ({ toolName, result }) => `🛠 ${toolName}=${String(result)}`,
       });
@@ -796,7 +796,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
 
       // The shim only fires on result/error, so the eager "Running…" card from
@@ -809,7 +809,7 @@ describe('consumeAgentStream', () => {
 
   describe('adaptive typing status', () => {
     it('emits Thinking → Typing → Calling {tool} → Typing transitions', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -827,14 +827,14 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       expect(typingStatuses).toEqual(['is thinking…', 'is typing…', 'is calling weather…', 'is typing…']);
     });
 
     it('does not surface channel tools (e.g. add_reaction) in the typing indicator', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -851,7 +851,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       // Should NEVER contain "is calling add_reaction…"
@@ -859,7 +859,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('emits "is working…" on the start chunk before other activity', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -868,14 +868,14 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       expect(typingStatuses).toEqual(['is working…', 'is typing…']);
     });
 
     it('dedups consecutive same-status calls', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -885,14 +885,14 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       expect(typingStatuses).toEqual(['is typing…']);
     });
 
     it('resets typing status between runs so the next run re-emits its first status', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -904,14 +904,14 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       expect(typingStatuses).toEqual(['is typing…', 'is typing…']);
     });
 
     it('emits at most one typing status across a run with only empty text-deltas', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -920,14 +920,14 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       expect(typingStatuses).toEqual(['is typing…']);
     });
 
     it('typingStatus: false disables all typing indicators', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false, typingStatus: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, typingStatus: false });
       await drive(
         channels,
         [
@@ -942,13 +942,13 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
     });
 
     it('typingStatus function receives chunks and can override status', async () => {
-      const { channels, calls, sdkThread } = makeChannels({
+      const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         typingStatus: (chunk: any) => {
           if (chunk.type === 'text-delta') return 'cooking…';
@@ -970,14 +970,14 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       expect(typingStatuses).toEqual(['cooking…', 'running weather']);
     });
 
     it('typingStatus function returning false/undefined leaves status unchanged', async () => {
-      const { channels, calls, sdkThread } = makeChannels({
+      const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         typingStatus: (chunk: any) => (chunk.type === 'text-delta' ? 'first' : undefined),
       });
@@ -992,7 +992,7 @@ describe('consumeAgentStream', () => {
           { type: 'text-delta', payload: { text: 'b' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       // Only the text-delta returns a string; tool-call returns undefined so status holds.
@@ -1001,7 +1001,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('typingStatus function exceptions are swallowed and stream continues', async () => {
-      const { channels, calls, sdkThread } = makeChannels({
+      const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         typingStatus: () => {
           throw new Error('boom');
@@ -1014,7 +1014,7 @@ describe('consumeAgentStream', () => {
             { type: 'text-delta', payload: { text: 'hi' } },
             { type: 'finish', payload: {} },
           ],
-          sdkThread,
+          chatThread,
         ),
       ).resolves.not.toThrow();
       expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
@@ -1023,7 +1023,7 @@ describe('consumeAgentStream', () => {
 
   describe('tool lifecycle', () => {
     it('posts running card on tool-call and edits it with the result on tool-result', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1037,7 +1037,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const posts = calls.filter(c => c.kind === 'post');
       const edits = calls.filter(c => c.kind === 'editMessage');
@@ -1047,7 +1047,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('edits the existing running card on tool-call-approval (no second post)', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1060,7 +1060,7 @@ describe('consumeAgentStream', () => {
             payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
           },
         ],
-        sdkThread,
+        chatThread,
       );
       expect(calls.filter(c => c.kind === 'post')).toHaveLength(1); // running card only
       const edits = calls.filter(c => c.kind === 'editMessage');
@@ -1069,7 +1069,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('uses the pendingApprovalCards entry when tool-result arrives without a matching tool-call (resumed run)', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       // Pre-seed a pending card as if the click handler posted the "Approved ⋯" card.
       (channels as any).pendingApprovalCards.set('t1', {
         displayName: 'weather',
@@ -1086,7 +1086,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const edits = calls.filter(c => c.kind === 'editMessage');
       expect(edits).toHaveLength(1);
@@ -1095,7 +1095,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('seeds tool tracking from approvalContext so result edits the original card', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1105,7 +1105,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
         { toolCallId: 't1', messageId: 'seeded-card' },
       );
       const edits = calls.filter(c => c.kind === 'editMessage');
@@ -1114,7 +1114,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('skips channel-emitted tool reactions (add_reaction / remove_reaction)', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1128,7 +1128,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
       expect(calls.filter(c => c.kind === 'editMessage')).toEqual([]);
@@ -1160,7 +1160,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        recording.sdkThread,
+        recording.chatThread,
       );
       // The fn skipped the `running` event (returned undefined), then
       // rendered `result` once — exactly one post.
@@ -1170,7 +1170,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("toolDisplay: 'text' renders plain-text per-tool messages (no Block Kit)", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false, toolDisplay: 'text' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, toolDisplay: 'text' });
       await drive(
         channels,
         [
@@ -1184,7 +1184,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       // Running post + result edit, both plain strings (no Block Kit object).
       const posts = calls.filter(c => c.kind === 'post');
@@ -1219,7 +1219,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        recording.sdkThread,
+        recording.chatThread,
       );
       const posts = recording.calls.filter(c => c.kind === 'post');
       const edits = recording.calls.filter(c => c.kind === 'editMessage');
@@ -1263,7 +1263,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        recording.sdkThread,
+        recording.chatThread,
       );
       const posts = recording.calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
@@ -1303,7 +1303,7 @@ describe('consumeAgentStream', () => {
           },
           { type: 'finish', payload: {} },
         ],
-        recording.sdkThread,
+        recording.chatThread,
       );
       const posts = recording.calls.filter(c => c.kind === 'post');
       const edits = recording.calls.filter(c => c.kind === 'editMessage');
@@ -1312,7 +1312,7 @@ describe('consumeAgentStream', () => {
     });
 
     it("streaming + toolDisplay: 'cards' uses close/post/reopen lifecycle", async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
       await drive(
         channels,
         [
@@ -1328,7 +1328,7 @@ describe('consumeAgentStream', () => {
           { type: 'text-delta', payload: { text: 'after' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       // Cards rendering still produces a running card post + a result edit
       // even with streaming enabled — the streaming session is closed around
@@ -1366,7 +1366,7 @@ describe('consumeAgentStream', () => {
           { type: 'text-delta', payload: { text: 'after' } },
           { type: 'finish', payload: {} },
         ],
-        recording.sdkThread,
+        recording.chatThread,
       );
       const stringPosts = recording.calls.filter(
         c => c.kind === 'post' && typeof (c as Extract<Call, { kind: 'post' }>).arg === 'string',
@@ -1378,7 +1378,7 @@ describe('consumeAgentStream', () => {
 
   describe('run boundary reset', () => {
     it('flushes pending text and discards tool tracking on finish', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1388,13 +1388,13 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       expect(calls.filter(c => c.kind === 'post').map(c => (c as any).arg)).toEqual(['pending', 'next run']);
     });
 
     it('posts a friendly error message on error chunks and resets state', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1404,21 +1404,21 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual(['partial', '❌ Error: boom', 'recovery']);
     });
 
     it('does not post anything on abort but still flushes pending text', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
           { type: 'text-delta', payload: { text: 'partial' } },
           { type: 'abort', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual(['partial']);
@@ -1427,14 +1427,14 @@ describe('consumeAgentStream', () => {
 
   describe('tripwire', () => {
     it('posts the tripwire reason when retry=false', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
           { type: 'tripwire', payload: { reason: 'blocked by guard', processorId: 'safety' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
@@ -1442,7 +1442,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('skips tripwire posts when retry=true (agent will retry internally)', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1451,7 +1451,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual(['shorter take']);
@@ -1460,7 +1460,7 @@ describe('consumeAgentStream', () => {
 
   describe('signal echo', () => {
     it('drops data-* chunks (echoed user-message / system-reminder signals)', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1470,7 +1470,7 @@ describe('consumeAgentStream', () => {
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual(['reply']);
@@ -1479,7 +1479,7 @@ describe('consumeAgentStream', () => {
 
   describe('file chunks', () => {
     it('posts file attachments and decodes base64 payloads', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       const payloadStr = Buffer.from('hello-bytes').toString('base64');
       await drive(
         channels,
@@ -1487,7 +1487,7 @@ describe('consumeAgentStream', () => {
           { type: 'file', payload: { data: payloadStr, mimeType: 'image/png' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
@@ -1499,7 +1499,7 @@ describe('consumeAgentStream', () => {
     });
 
     it('flushes pending text before posting a file', async () => {
-      const { channels, calls, sdkThread } = makeChannels({ streaming: false });
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
@@ -1507,7 +1507,7 @@ describe('consumeAgentStream', () => {
           { type: 'file', payload: { data: Buffer.from('x').toString('base64'), mimeType: 'image/png' } },
           { type: 'finish', payload: {} },
         ],
-        sdkThread,
+        chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(typeof postArgs[0]).toBe('string');

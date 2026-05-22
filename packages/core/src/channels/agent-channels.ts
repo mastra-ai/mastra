@@ -104,7 +104,7 @@ export class AgentChannels {
    * thread on the first message we route through it, so any signals we send (and any signals
    * other callers send to the same thread) are rendered exactly once to the platform. The
    * subscription stays open until `close()` is called or the consumer errors out — we don't
-   * eagerly subscribe at startup because the per-thread chunk consumer needs the `sdkThread`
+   * eagerly subscribe at startup because the per-thread chunk consumer needs the `chatThread`
    * handle, which only exists after a platform event arrives.
    */
   private threadSubscriptions = new Map<
@@ -261,8 +261,8 @@ export class AgentChannels {
       });
 
       // Default handler that routes messages to the agent
-      const defaultHandler = (sdkThread: Thread, message: Message) =>
-        this.handleChatMessage(sdkThread, message, mastra);
+      const defaultHandler = (chatThread: Thread, message: Message) =>
+        this.handleChatMessage(chatThread, message, mastra);
 
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
@@ -306,8 +306,8 @@ export class AgentChannels {
             return;
           }
 
-          const sdkThread = event.thread as Thread | null;
-          if (!sdkThread) {
+          const chatThread = event.thread as Thread | null;
+          if (!chatThread) {
             this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
             return;
           }
@@ -318,18 +318,18 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           // Look up the Mastra thread to find the runId and tool metadata from pending approvals.
-          // sdkThread.id encodes channel + threadTs, so it's stable per conversation:
+          // chatThread.id encodes channel + threadTs, so it's stable per conversation:
           // top-level DM, DM thread reply, channel mention, and channel thread reply each get
           // their own mastra thread (matching "new convo per slack thread" UX).
           //
           // Slack-specific workaround: the slack adapter's handleBlockActions falls back to
           // `messageTs` when the clicked card has no `thread_ts` (i.e. the card was posted at
-          // top level, not inside a thread). That makes the action's sdkThread.id point at a
+          // top level, not inside a thread). That makes the action's chatThread.id point at a
           // "thread keyed by the card itself" rather than the top-level conversation the user
           // was actually in, so the pending approval lookup misses. Detect that case by
           // checking whether the decoded threadTs equals the clicked message id, and if so,
           // rewrite the externalThreadId to the top-level (empty threadTs) form.
-          let externalThreadId = sdkThread.id;
+          let externalThreadId = chatThread.id;
           if (
             platform === 'slack' &&
             messageId &&
@@ -342,14 +342,14 @@ export class AgentChannels {
               decodeThreadId: (id: string) => { channel: string; threadTs: string };
               encodeThreadId: (data: { channel: string; threadTs: string }) => string;
             };
-            const decoded = slackAdapter.decodeThreadId(sdkThread.id);
+            const decoded = slackAdapter.decodeThreadId(chatThread.id);
             if (decoded.threadTs === messageId) {
               externalThreadId = slackAdapter.encodeThreadId({ channel: decoded.channel, threadTs: '' });
             }
           }
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
-            channelId: sdkThread.channelId,
+            channelId: chatThread.channelId,
             platform,
             resourceId: `${platform}:${event.user.userId}`,
             mastra,
@@ -423,10 +423,10 @@ export class AgentChannels {
           const useCards = toolDisplay === 'cards';
 
           if (!approved) {
-            const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+            const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
             try {
               await adapter.editMessage(
-                sdkThread.id,
+                chatThread.id,
                 messageId,
                 formatToolDenied(displayName, argsSummary, byUser, useCards),
               );
@@ -438,7 +438,7 @@ export class AgentChannels {
             // message (e.g. acknowledging the rejection). Without this, the run stays
             // suspended forever and the user gets no feedback from the model.
             const { channelContext } = this.buildEventContext({
-              sdkThread,
+              chatThread,
               platform,
               eventType: 'action',
               messageId,
@@ -450,7 +450,7 @@ export class AgentChannels {
             this.ensureThreadSubscription({
               mastraThreadId: mastraThread.id,
               resourceId: mastraThread.resourceId,
-              sdkThread,
+              chatThread,
               platform,
             });
 
@@ -484,14 +484,14 @@ export class AgentChannels {
 
           // Immediately edit the card to show "Approved" and remove the buttons
           try {
-            await adapter.editMessage(sdkThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
+            await adapter.editMessage(chatThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
           } catch (err) {
             this.log('debug', 'Failed to edit approved card', err);
           }
 
           // Build request context for the resumed stream.
           const { channelContext } = this.buildEventContext({
-            sdkThread,
+            chatThread,
             platform,
             eventType: 'action',
             messageId,
@@ -508,7 +508,7 @@ export class AgentChannels {
           this.ensureThreadSubscription({
             mastraThreadId: mastraThread.id,
             resourceId: mastraThread.resourceId,
-            sdkThread,
+            chatThread,
             platform,
           });
           if (toolCallId) {
@@ -769,7 +769,7 @@ export class AgentChannels {
    *     provider-keyed entries (openai, anthropic, …) are forwarded to the model.
    */
   private buildEventContext(params: {
-    sdkThread: Thread;
+    chatThread: Thread;
     platform: string;
     eventType: string;
     messageId: string | undefined;
@@ -779,19 +779,19 @@ export class AgentChannels {
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
   } {
-    const { sdkThread, platform, eventType, messageId, actor } = params;
+    const { chatThread, platform, eventType, messageId, actor } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
-    const botMention = botUserId ? sdkThread.mentionUser(botUserId) : undefined;
+    const botMention = botUserId ? chatThread.mentionUser(botUserId) : undefined;
     const actorName = actor.fullName || actor.userName;
-    const actorMention = actor.userId ? sdkThread.mentionUser(actor.userId) : undefined;
+    const actorMention = actor.userId ? chatThread.mentionUser(actor.userId) : undefined;
 
     const channelContext: ChannelContext = {
       platform,
       eventType,
-      isDM: sdkThread.isDM,
-      threadId: sdkThread.id,
-      channelId: sdkThread.channelId,
+      isDM: chatThread.isDM,
+      threadId: chatThread.id,
+      channelId: chatThread.channelId,
       messageId,
       userId: actor.userId,
       userName: actorName,
@@ -804,7 +804,7 @@ export class AgentChannels {
     // In DMs the author is stable for the whole conversation (already in the system message),
     // so we keep this minimal to avoid noise on every turn.
     const attributes: Record<string, string | undefined> = { messageId };
-    if (!sdkThread.isDM) {
+    if (!chatThread.isDM) {
       attributes.authorName = actorName;
       attributes.authorId = actor.userId;
       attributes.authorMention = actorMention;
@@ -836,39 +836,39 @@ export class AgentChannels {
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
     try {
-      await this.processChatMessage(sdkThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      this.log('error', `[${sdkThread.adapter.name}] Error handling message`, {
+      this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
         messageId: message.id,
         authorId: message.author?.userId,
         error: String(err),
       });
       try {
-        const adapterConfig = this.adapterConfigs[sdkThread.adapter.name];
+        const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
         const errorMessage = adapterConfig?.formatError
           ? adapterConfig.formatError(error)
           : `❌ Error: ${error.message}`;
-        await sdkThread.post(errorMessage);
+        await chatThread.post(errorMessage);
       } catch (postErr) {
         this.log('debug', 'Failed to post error message to thread', postErr);
       }
     }
   }
 
-  private async processChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
-    const platform = sdkThread.adapter.name;
+  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+    const platform = chatThread.adapter.name;
 
     // Map to a Mastra thread for memory/history.
-    // sdkThread.id encodes channel + threadTs, so it's stable per conversation:
+    // chatThread.id encodes channel + threadTs, so it's stable per conversation:
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
     // channel thread reply) gets its own mastra thread.
-    const externalThreadId = sdkThread.id;
+    const externalThreadId = chatThread.id;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
-      channelId: sdkThread.channelId,
+      channelId: chatThread.channelId,
       platform,
       resourceId: `${platform}:${message.author.userId}`,
       mastra,
@@ -886,16 +886,16 @@ export class AgentChannels {
     // to avoid consecutive user messages which some providers reject (e.g. DeepSeek).
     let historyBlock: string | undefined; // TODO: convert platform thread chat history into Mastra messages instead of one big text block
     const maxMessages = this.threadContext.maxMessages ?? 10;
-    if (maxMessages > 0 && !sdkThread.isDM) {
-      const alreadySubscribed = await sdkThread.isSubscribed();
+    if (maxMessages > 0 && !chatThread.isDM) {
+      const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
-        this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${sdkThread.id}`);
-        const history = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+        this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
+        const history = await this.fetchThreadHistory(chatThread, message.id, maxMessages);
         this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
         if (history.length > 0) {
           const lines = ['[Thread context — messages in this thread before you joined]'];
           for (const msg of history) {
-            const mention = msg.userId ? sdkThread.mentionUser(msg.userId) : undefined;
+            const mention = msg.userId ? chatThread.mentionUser(msg.userId) : undefined;
             let prefix = mention ? (msg.author ? `${msg.author} (${mention})` : mention) : msg.author;
             if (msg.isBot) prefix += ' (bot)';
             lines.push(`[${prefix}] (msg:${msg.id}): ${msg.text}`);
@@ -903,7 +903,7 @@ export class AgentChannels {
           historyBlock = lines.join('\n');
         }
       } else {
-        this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${sdkThread.id}`);
+        this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${chatThread.id}`);
       }
     }
 
@@ -1019,9 +1019,9 @@ export class AgentChannels {
       toolDisplay === 'hidden';
 
     const { channelContext, attributes, providerOptions } = this.buildEventContext({
-      sdkThread,
+      chatThread,
       platform,
-      eventType: sdkThread.isDM ? 'message' : 'mention',
+      eventType: chatThread.isDM ? 'message' : 'mention',
       messageId: message.id,
       actor: message.author,
     });
@@ -1032,7 +1032,7 @@ export class AgentChannels {
     this.ensureThreadSubscription({
       mastraThreadId: mastraThread.id,
       resourceId: threadResourceId,
-      sdkThread,
+      chatThread,
       platform,
     });
 
@@ -1040,7 +1040,7 @@ export class AgentChannels {
     // happens before the agent run loads the thread snapshot. Otherwise the
     // in-flight agent run can read the thread pre-subscribe and later
     // overwrite the `channel_subscribed` field via its own thread persistence.
-    await sdkThread.subscribe();
+    await chatThread.subscribe();
 
     // Refresh the thread snapshot so the agent run sees the post-subscribe
     // metadata. Without this, `prepareMemoryStep`'s deepEqual would detect a
@@ -1087,15 +1087,15 @@ export class AgentChannels {
    * current triggering message.
    */
   private async fetchThreadHistory(
-    sdkThread: Thread,
+    chatThread: Thread,
     currentMessageId: string,
     maxMessages: number,
   ): Promise<ThreadHistoryMessage[]> {
     const messages: ThreadHistoryMessage[] = [];
 
     try {
-      // sdkThread.messages is an async iterator that yields newest-first
-      for await (const msg of sdkThread.messages) {
+      // chatThread.messages is an async iterator that yields newest-first
+      for await (const msg of chatThread.messages) {
         // Skip the current message that triggered this request
         if (msg.id === currentMessageId) continue;
 
@@ -1124,16 +1124,16 @@ export class AgentChannels {
    * cache by `mastraThreadId` so multiple incoming messages on the same thread share one
    * subscription and run output is never rendered twice.
    *
-   * If the underlying consumer throws (e.g. the platform `sdkThread` becomes unusable), we
+   * If the underlying consumer throws (e.g. the platform `chatThread` becomes unusable), we
    * tear down the cache entry so the next message can reopen a fresh subscription.
    */
   private ensureThreadSubscription(params: {
     mastraThreadId: string;
     resourceId: string;
-    sdkThread: Thread;
+    chatThread: Thread;
     platform: string;
   }): AgentThreadSubscription<any> {
-    const { mastraThreadId, resourceId, sdkThread, platform } = params;
+    const { mastraThreadId, resourceId, chatThread, platform } = params;
     const existing = this.threadSubscriptions.get(mastraThreadId);
     if (existing) return existing.subscription;
 
@@ -1162,7 +1162,7 @@ export class AgentChannels {
       },
     };
 
-    const consumer = this.consumeAgentStream(stream, sdkThread, platform).catch(err => {
+    const consumer = this.consumeAgentStream(stream, chatThread, platform).catch(err => {
       this.log('error', `[${platform}] Thread subscription consumer failed`, { error: err });
       // Drop the cache entry so subsequent messages reopen a fresh subscription.
       const entry = this.threadSubscriptions.get(mastraThreadId);
@@ -1186,7 +1186,7 @@ export class AgentChannels {
 
   private async consumeAgentStream(
     stream: AsyncIterable<AgentChunkType<any>>,
-    sdkThread: Thread,
+    chatThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
   ): Promise<void> {
@@ -1217,7 +1217,7 @@ export class AgentChannels {
     // StreamingPlan post is in flight; the typing-status wrapper reads it
     // and skips `startTyping` during that window.
     const typingGate = { active: false };
-    const wrapped = this.withTypingStatus(stream, sdkThread, platform, adapterConfig, typingGate);
+    const wrapped = this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate);
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, record);
@@ -1232,7 +1232,7 @@ export class AgentChannels {
     if (streaming.enabled) {
       await runStreamingDriver({
         stream: wrapped,
-        sdkThread,
+        chatThread,
         adapter,
         toolDisplay: toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
         toolDisplayFn,
@@ -1248,7 +1248,7 @@ export class AgentChannels {
     } else {
       await runStaticDriver({
         stream: wrapped,
-        sdkThread,
+        chatThread,
         adapter,
         toolDisplay: toolDisplay as 'cards' | 'text' | 'hidden',
         toolDisplayFn,
@@ -1290,7 +1290,7 @@ export class AgentChannels {
    */
   private async *withTypingStatus(
     stream: AsyncIterable<AgentChunkType<any>>,
-    sdkThread: Thread,
+    chatThread: Thread,
     platform: string,
     adapterConfig: ChannelAdapterConfig | undefined,
     typingGate: { active: boolean },
@@ -1311,7 +1311,7 @@ export class AgentChannels {
         try {
           const ctx: TypingStatusContext = {
             platform,
-            threadId: sdkThread.id,
+            threadId: chatThread.id,
             toolCalls: new Map(),
             currentStatus: currentTypingStatus,
             channelTools: this.channelToolNames,
@@ -1323,7 +1323,7 @@ export class AgentChannels {
         }
         if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
           currentTypingStatus = result;
-          sdkThread.startTyping(result).catch(e => {
+          chatThread.startTyping(result).catch(e => {
             this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
           });
         }
@@ -1476,7 +1476,7 @@ export class AgentChannels {
    *  - `'timeline'` / `'grouped'` push `task_update` chunks into a streaming
    *    Plan widget, so they require `streaming: true`. Without streaming we
    *    fall back to `'cards'`.
-   *  - `'cards'` posts discrete Block-Kit cards via `sdkThread.post`/`edit`,
+   *  - `'cards'` posts discrete Block-Kit cards via `chatThread.post`/`edit`,
    *    which the streaming driver doesn't render (everything inside a
    *    `StreamingPlan` post is one message). With streaming enabled we fall
    *    back to `'timeline'`.

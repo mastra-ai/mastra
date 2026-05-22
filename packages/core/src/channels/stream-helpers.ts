@@ -210,12 +210,12 @@ export function extractErrorMessage(error: unknown): unknown {
  */
 export async function postStreamError(args: {
   chunk: Extract<AgentChunkType<any>, { type: 'error' }>;
-  sdkThread: Pick<Thread, 'post'>;
+  chatThread: Pick<Thread, 'post'>;
   platform: string;
   logger?: IMastraLogger;
   formatError?: (error: Error) => unknown;
 }): Promise<void> {
-  const { chunk, sdkThread, platform, logger, formatError } = args;
+  const { chunk, chatThread, platform, logger, formatError } = args;
   const errPayload = chunk.payload as { error?: unknown };
   const rawError = errPayload.error;
   // Reuse extractErrorMessage so structured errors (MastraError, plain
@@ -236,7 +236,7 @@ export async function postStreamError(args: {
     ? formatError(rawError instanceof Error ? rawError : new Error(display))
     : `❌ Error: ${display}`;
   try {
-    await sdkThread.post(postable as Parameters<Thread['post']>[0]);
+    await chatThread.post(postable as Parameters<Thread['post']>[0]);
   } catch (postErr) {
     logger?.debug?.('[CHANNEL] Failed to post error message', { error: postErr });
   }
@@ -249,16 +249,16 @@ export async function postStreamError(args: {
  */
 export async function postTripwire(args: {
   chunk: Extract<AgentChunkType<any>, { type: 'tripwire' }>;
-  sdkThread: Pick<Thread, 'post'>;
+  chatThread: Pick<Thread, 'post'>;
   logger?: IMastraLogger;
 }): Promise<void> {
-  const { chunk, sdkThread, logger } = args;
+  const { chunk, chatThread, logger } = args;
   const payload = chunk.payload as { retry?: boolean; reason?: string; processorId?: string };
   if (payload.retry) return;
   const reason = payload.reason || 'Your message was blocked by a safety check.';
   const display = payload.processorId ? `🛡️ Blocked by ${payload.processorId}: ${reason}` : `🛡️ ${reason}`;
   try {
-    await sdkThread.post(display);
+    await chatThread.post(display);
   } catch (e) {
     logger?.debug?.('[CHANNEL] Failed to post tripwire message', { error: e });
   }
@@ -270,10 +270,10 @@ export async function postTripwire(args: {
  */
 export async function postFileAttachment(args: {
   chunk: Extract<AgentChunkType<any>, { type: 'file' }>;
-  sdkThread: Pick<Thread, 'post'>;
+  chatThread: Pick<Thread, 'post'>;
   logger?: IMastraLogger;
 }): Promise<void> {
-  const { chunk, sdkThread, logger } = args;
+  const { chunk, chatThread, logger } = args;
   const { data, mimeType } = chunk.payload as { data: string | Uint8Array; mimeType: string };
   logger?.debug?.('[CHANNEL] Received file chunk', {
     mimeType,
@@ -285,7 +285,7 @@ export async function postFileAttachment(args: {
   const binary =
     typeof data === 'string' ? Buffer.from(data, 'base64') : data instanceof Uint8Array ? Buffer.from(data) : data;
   try {
-    await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] } as Parameters<
+    await chatThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] } as Parameters<
       Thread['post']
     >[0]);
   } catch (e) {
@@ -305,22 +305,22 @@ export async function postFileAttachment(args: {
  */
 export async function editOrPostMessage(args: {
   adapter: Pick<Adapter<any, any>, 'editMessage'>;
-  sdkThread: Pick<Thread, 'id' | 'post'>;
+  chatThread: Pick<Thread, 'id' | 'post'>;
   messageId: string | undefined;
   message: PostableMessage;
   logger?: IMastraLogger;
 }): Promise<string | undefined> {
-  const { adapter, sdkThread, messageId, message, logger } = args;
+  const { adapter, chatThread, messageId, message, logger } = args;
   if (messageId) {
     try {
-      await adapter.editMessage(sdkThread.id, messageId, message);
+      await adapter.editMessage(chatThread.id, messageId, message);
       return messageId;
     } catch (e) {
       logger?.debug?.('[CHANNEL] edit failed, falling back to post', { error: e });
     }
   }
   try {
-    const sent = await sdkThread.post(message);
+    const sent = await chatThread.post(message);
     return sent?.id;
   } catch (e) {
     logger?.debug?.('[CHANNEL] edit-fallback post failed', { error: e });

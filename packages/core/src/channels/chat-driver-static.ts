@@ -16,7 +16,7 @@ import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
 
 export interface StaticDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
-  sdkThread: Thread;
+  chatThread: Thread;
   adapter: Adapter;
   /** After `resolveToolDisplay`, non-streaming tool display is one of these. */
   toolDisplay: 'cards' | 'text' | 'hidden';
@@ -37,7 +37,7 @@ export interface StaticDriverArgs {
 
 /**
  * Static (non-streaming) driver: consumes `AgentChunkType<any>` chunks and
- * renders them through discrete `sdkThread.post` / `adapter.editMessage`
+ * renders them through discrete `chatThread.post` / `adapter.editMessage`
  * calls. Handles `'cards'` (per-tool "Running…" → "Result" cards) and
  * `'hidden'` (silent tool execution, one final text post) tool-display modes.
  *
@@ -47,7 +47,7 @@ export interface StaticDriverArgs {
  */
 export async function runStaticDriver({
   stream,
-  sdkThread,
+  chatThread,
   adapter,
   toolDisplay,
   toolDisplayFn,
@@ -100,7 +100,7 @@ export async function runStaticDriver({
     const cleaned = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
     if (cleaned) {
       try {
-        await sdkThread.post(cleaned);
+        await chatThread.post(cleaned);
       } catch (e) {
         logger?.debug('[CHANNEL] Failed to post buffered text', { error: e });
       }
@@ -109,7 +109,7 @@ export async function runStaticDriver({
   };
 
   const editOrPost = (messageId: string | undefined, content: PostableMessage) =>
-    editOrPostMessage({ adapter, sdkThread, messageId, message: content, logger });
+    editOrPostMessage({ adapter, chatThread, messageId, message: content, logger });
 
   const resetRunState = () => {
     textBuffer = '';
@@ -154,7 +154,7 @@ export async function runStaticDriver({
 
     if (chunk.type === 'file') {
       await flushText();
-      await postFileAttachment({ chunk, sdkThread, logger });
+      await postFileAttachment({ chunk, chatThread, logger });
       continue;
     }
 
@@ -166,7 +166,7 @@ export async function runStaticDriver({
 
     if (chunk.type === 'error') {
       await flushText();
-      await postStreamError({ chunk, sdkThread, platform, logger, formatError });
+      await postStreamError({ chunk, chatThread, platform, logger, formatError });
       resetRunState();
       continue;
     }
@@ -207,7 +207,7 @@ export async function runStaticDriver({
         args: enr.args,
       });
       if (running != null) {
-        const sent = await sdkThread.post(running);
+        const sent = await chatThread.post(running);
         toolMessageIds.set(enr.toolCallId, sent?.id);
       } else {
         toolMessageIds.set(enr.toolCallId, undefined);
@@ -318,7 +318,7 @@ export async function runStaticDriver({
       // response on this same stream, so nothing to post yet.
       if (chunk.payload.retry) continue;
       await flushText();
-      await postTripwire({ chunk, sdkThread, logger });
+      await postTripwire({ chunk, chatThread, logger });
       continue;
     }
 

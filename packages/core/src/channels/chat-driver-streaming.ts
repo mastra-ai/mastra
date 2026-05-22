@@ -18,12 +18,12 @@ import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
-  sdkThread: Thread;
+  chatThread: Thread;
   adapter: Adapter;
   /**
    * Resolved tool display mode. `'timeline'`/`'grouped'`/`'hidden'` render
    * inside the streaming `Plan` widget; `'cards'`/`'text'` render as
-   * discrete `sdkThread.post`/`edit` calls — the driver closes the active
+   * discrete `chatThread.post`/`edit` calls — the driver closes the active
    * session, posts the per-tool message, and reopens on the next chunk.
    */
   toolDisplay: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden';
@@ -83,7 +83,7 @@ interface StreamingSession {
  */
 export async function runStreamingDriver({
   stream,
-  sdkThread,
+  chatThread,
   adapter,
   toolDisplay,
   toolDisplayFn,
@@ -179,7 +179,7 @@ export async function runStreamingDriver({
     typingGate.active = true;
     const done = (async () => {
       try {
-        await sdkThread.post(postable as Parameters<Thread['post']>[0]);
+        await chatThread.post(postable as Parameters<Thread['post']>[0]);
       } catch (e) {
         logger?.warn('[CHANNEL] streaming post failed, falling back to buffered text', { error: e });
         // Drain whatever was queued plus anything pushed after the failure
@@ -197,7 +197,7 @@ export async function runStreamingDriver({
         const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
         if (cleaned) {
           try {
-            await sdkThread.post(cleaned);
+            await chatThread.post(cleaned);
           } catch (postErr) {
             logger?.debug('[CHANNEL] buffered fallback also failed', { error: postErr });
           }
@@ -280,7 +280,7 @@ export async function runStreamingDriver({
   const postOutOfBand = async (message: PostableMessage): Promise<string | undefined> => {
     await closeSession();
     try {
-      const sent = await sdkThread.post(message);
+      const sent = await chatThread.post(message);
       return sent?.id;
     } catch (e) {
       logger?.debug?.('[CHANNEL] streaming out-of-band post failed', { error: e });
@@ -330,7 +330,7 @@ export async function runStreamingDriver({
 
   const editOrPost = async (messageId: string | undefined, message: PostableMessage): Promise<void> => {
     await closeSession();
-    await editOrPostMessage({ adapter, sdkThread, messageId, message, logger });
+    await editOrPostMessage({ adapter, chatThread, messageId, message, logger });
   };
 
   for await (const chunk of stream) {
@@ -443,7 +443,7 @@ export async function runStreamingDriver({
 
     if (chunk.type === 'file') {
       await closeSession();
-      await postFileAttachment({ chunk, sdkThread, logger });
+      await postFileAttachment({ chunk, chatThread, logger });
       continue;
     }
 
@@ -455,7 +455,7 @@ export async function runStreamingDriver({
 
     if (chunk.type === 'error') {
       await closeSession();
-      await postStreamError({ chunk, sdkThread, platform, logger, formatError });
+      await postStreamError({ chunk, chatThread, platform, logger, formatError });
       tracker.reset();
       continue;
     }
@@ -710,13 +710,13 @@ export async function runStreamingDriver({
       let messageId: string | undefined = existing?.messageId;
       if (messageId) {
         try {
-          await adapter.editMessage(sdkThread.id, messageId, approvalMessage);
+          await adapter.editMessage(chatThread.id, messageId, approvalMessage);
         } catch {
-          const sent = await sdkThread.post(approvalMessage);
+          const sent = await chatThread.post(approvalMessage);
           messageId = sent?.id;
         }
       } else {
-        const sent = await sdkThread.post(approvalMessage);
+        const sent = await chatThread.post(approvalMessage);
         messageId = sent?.id;
       }
       onApprovalPosted(enr.toolCallId, {
@@ -734,7 +734,7 @@ export async function runStreamingDriver({
     if (chunk.type === 'tripwire') {
       if (chunk.payload.retry) continue;
       await closeSession();
-      await postTripwire({ chunk, sdkThread, logger });
+      await postTripwire({ chunk, chatThread, logger });
       continue;
     }
 
