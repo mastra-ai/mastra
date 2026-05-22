@@ -927,6 +927,28 @@ describe('headless mode — thread control', () => {
     expect(titled).toBeDefined();
   });
 
+  it('creates the first headless thread with --title', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Titled from start!') }),
+    });
+
+    await harness.init();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      title: 'first-headless-title',
+    });
+
+    expect(exitCode).toBe(0);
+
+    const threads = await harness.listThreads();
+    const titled = threads.find(t => t.title === 'first-headless-title');
+    expect(titled).toBeDefined();
+  });
+
   it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {
     const agent = new Agent({
       id: 'test-agent',

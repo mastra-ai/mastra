@@ -667,6 +667,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   setResourceId({ resourceId }: { resourceId: string }): void {
+    if (this.resourceId === resourceId) return;
     this.resourceId = resourceId;
     this.session = undefined;
     this.currentWorkspace = undefined;

@@ -673,4 +673,14 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(selectOrCreateThread).toHaveBeenCalled();
     expect(message).toHaveBeenCalledWith(expect.objectContaining({ content: 'hello' }));
   });
+
+  it('does not clear the active session when setting the same resource id', async () => {
+    const runtime = createRuntime();
+    await runtime.init();
+    const currentThreadId = runtime.getCurrentThreadId();
+
+    runtime.setResourceId({ resourceId: 'resource-one' });
+
+    expect(runtime.getCurrentThreadId()).toBe(currentThreadId);
+  });
 });

@@ -553,7 +553,11 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   // --- Title ---
   if (args.title) {
     try {
-      await harness.renameThread({ title: args.title });
+      if (harness.getCurrentThreadId()) {
+        await harness.renameThread({ title: args.title });
+      } else {
+        await harness.createThread({ title: args.title });
+      }
       if (!emit) process.stderr.write(`[title] "${args.title}"\n`);
     } catch (err) {
       const msg = `Failed to set thread title: ${(err as Error).message}`;
@@ -622,6 +626,9 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   }
 
   setupDebugLogging();
+  if (args.resourceId) {
+    harness.setResourceId({ resourceId: args.resourceId });
+  }
   await harness.init();
 
   const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
