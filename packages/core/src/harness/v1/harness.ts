@@ -1389,6 +1389,17 @@ export class Harness {
     return server instanceof MCPServerBase ? server : undefined;
   }
 
+  /**
+   * @internal — list registered MCP server keys for the workspace-action
+   * classifier. Used to detect `<serverKey>_<toolName>` namespaced tool
+   * names emitted by `MCPClient.listTools()` and journal them with
+   * `actionKind: 'mcp'`. Returns an empty array when no MCP servers are
+   * registered; callers must tolerate that.
+   */
+  _listMcpServerKeys(): string[] {
+    return this._listMcpServers().map(([key]) => key);
+  }
+
   /** @internal — Session enforces the subagent depth cap inside the spawn tool. */
   _getSubagentMaxDepth(): number {
     return this._subagentMaxDepth;

@@ -672,7 +672,10 @@ export interface WorkspaceActionJournalUnsupportedEvent extends HarnessEventBase
   resourceId: string;
   threadId: string;
   toolName: string;
-  actionKind: 'file' | 'command';
+  /** Mirrors `HarnessWorkspaceActionKind` — kept as a union here to avoid a
+   * cross-module import cycle. Includes the new `'network'` and `'mcp'`
+   * kinds that the classifier now recognizes. */
+  actionKind: 'file' | 'command' | 'network' | 'mcp';
   operation: string;
 }
 

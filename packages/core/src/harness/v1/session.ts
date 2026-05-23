@@ -4527,6 +4527,7 @@ export class Session {
     return classifyHarnessWorkspaceToolAction<WorkspaceJournalPath>(toolName, args, {
       pathFor: inputPath => this._workspaceJournalPath(inputPath),
       toolNameConfig: this._workspace?.getToolsConfig?.() as HarnessWorkspaceToolNameConfig | undefined,
+      mcpServerKeys: this._harness._listMcpServerKeys(),
     });
   }
 

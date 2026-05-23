@@ -158,4 +158,162 @@ describe('Harness v1 workspace action taxonomy', () => {
     expect(classifyHarnessWorkspaceToolAction('custom_tool', {})).toBeUndefined();
     expect(classifyHarnessWorkspaceToolAction('write_file', {})).toBeUndefined();
   });
+
+  // -------------------------------------------------------------------------
+  // MCP classification
+  // -------------------------------------------------------------------------
+
+  describe('MCP namespace match', () => {
+    it('classifies <serverKey>_<toolName> as actionKind: "mcp"', () => {
+      const result = classifyHarnessWorkspaceToolAction(
+        'weather_getForecast',
+        { city: 'Paris' },
+        { mcpServerKeys: ['weather'] },
+      );
+      expect(result).toMatchObject({
+        actionKind: 'mcp',
+        operation: 'call',
+        mutatesWorkspace: false,
+        action: {
+          kind: 'mcp',
+          serverId: 'weather',
+          toolName: 'getForecast',
+          canonicalToolName: 'getForecast',
+        },
+      });
+    });
+
+    it('prefers the longest-prefix match when keys overlap', () => {
+      const result = classifyHarnessWorkspaceToolAction(
+        'weather_eu_getForecast',
+        {},
+        { mcpServerKeys: ['weather', 'weather_eu'] },
+      );
+      expect(result?.action).toMatchObject({
+        serverId: 'weather_eu',
+        toolName: 'getForecast',
+      });
+    });
+
+    it('returns undefined when no MCP key matches', () => {
+      const result = classifyHarnessWorkspaceToolAction('unrelated_tool', {}, { mcpServerKeys: ['weather'] });
+      expect(result).toBeUndefined();
+    });
+
+    it('does not classify when the suffix after the underscore is empty', () => {
+      const result = classifyHarnessWorkspaceToolAction('weather_', {}, { mcpServerKeys: ['weather'] });
+      expect(result).toBeUndefined();
+    });
+
+    it('ignores empty / non-string entries in mcpServerKeys defensively', () => {
+      const result = classifyHarnessWorkspaceToolAction(
+        'weather_getForecast',
+        {},
+        // Mixed-content list — only valid keys are considered.
+        { mcpServerKeys: ['', 'weather', null as unknown as string] },
+      );
+      expect(result?.actionKind).toBe('mcp');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Network classification via top-level URL field
+  // -------------------------------------------------------------------------
+
+  describe('network URL detection', () => {
+    it('classifies a tool call with `url` arg as actionKind: "network"', () => {
+      const result = classifyHarnessWorkspaceToolAction('http_fetch', {
+        url: 'https://api.example.com:8443/v1/widgets',
+      });
+      expect(result).toMatchObject({
+        actionKind: 'network',
+        operation: 'request',
+        mutatesWorkspace: false,
+        action: {
+          kind: 'network',
+          toolName: 'http_fetch',
+          canonicalToolName: 'http_fetch',
+          host: 'api.example.com',
+          port: 8443,
+          protocol: 'https',
+          url: 'https://api.example.com:8443/v1/widgets',
+        },
+      });
+    });
+
+    it('recognizes `endpoint` and `uri` as aliases for `url`', () => {
+      expect(
+        classifyHarnessWorkspaceToolAction('rest_call', { endpoint: 'https://api.example.com/v1' })?.actionKind,
+      ).toBe('network');
+      expect(classifyHarnessWorkspaceToolAction('soap_call', { uri: 'http://api.example.com/soap' })?.actionKind).toBe(
+        'network',
+      );
+    });
+
+    it('fills in default ports for http/https/ws/wss when the URL omits the port', () => {
+      const http = classifyHarnessWorkspaceToolAction('http_get', { url: 'http://example.com/' });
+      expect(http?.action).toMatchObject({ host: 'example.com', port: 80, protocol: 'http' });
+      const https = classifyHarnessWorkspaceToolAction('https_get', { url: 'https://example.com/' });
+      expect(https?.action).toMatchObject({ host: 'example.com', port: 443, protocol: 'https' });
+    });
+
+    it('captures the HTTP method from args.method when provided as a string', () => {
+      const result = classifyHarnessWorkspaceToolAction('http_call', {
+        url: 'https://example.com/v1',
+        method: 'post',
+      });
+      expect(result?.operation).toBe('POST');
+      expect(result?.action).toMatchObject({ method: 'POST', operation: 'POST' });
+    });
+
+    it('returns undefined when the url value is not a string', () => {
+      const result = classifyHarnessWorkspaceToolAction('http_call', { url: 42 });
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined when the url string is not parseable', () => {
+      const result = classifyHarnessWorkspaceToolAction('http_call', { url: 'not a url at all' });
+      expect(result).toBeUndefined();
+    });
+
+    it('rejects non-network URI schemes (file/data/mailto/blob) so they do not pollute the journal', () => {
+      // `new URL()` accepts these; the classifier must NOT mark them as
+      // network actions because the host/port/protocol payload is
+      // meaningless for them. Regression for the codex review finding.
+      expect(classifyHarnessWorkspaceToolAction('read_local', { url: 'file:///tmp/example' })).toBeUndefined();
+      expect(
+        classifyHarnessWorkspaceToolAction('inline_data', { url: 'data:text/plain;base64,SGVsbG8=' }),
+      ).toBeUndefined();
+      expect(classifyHarnessWorkspaceToolAction('email', { url: 'mailto:user@example.com' })).toBeUndefined();
+      expect(classifyHarnessWorkspaceToolAction('blob_open', { url: 'blob:https://example.com/abc' })).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Classifier precedence
+  // -------------------------------------------------------------------------
+
+  describe('classifier precedence', () => {
+    it('static file/command descriptors win over MCP namespace matches', () => {
+      // The static `write_file` descriptor must keep its `'file'` kind even
+      // if `write` happens to also be a registered MCP server key.
+      const result = classifyHarnessWorkspaceToolAction(
+        'write_file',
+        { path: 'src/app.ts' },
+        { mcpServerKeys: ['write'] },
+      );
+      expect(result?.actionKind).toBe('file');
+    });
+
+    it('MCP match wins over a url field in args', () => {
+      // A tool whose name matches an MCP namespace AND whose args contain
+      // a URL classifies as MCP, not network.
+      const result = classifyHarnessWorkspaceToolAction(
+        'weather_getByLocation',
+        { url: 'https://example.com/' },
+        { mcpServerKeys: ['weather'] },
+      );
+      expect(result?.actionKind).toBe('mcp');
+    });
+  });
 });
