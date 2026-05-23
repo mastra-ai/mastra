@@ -1,4 +1,4 @@
-import { WORKSPACE_TOOLS } from '../../workspace/constants';
+import { WORKSPACE_TOOLS } from '../../../workspace/constants';
 
 /**
  * Kinds of workspace actions the runtime journals. `'file'` and `'command'`

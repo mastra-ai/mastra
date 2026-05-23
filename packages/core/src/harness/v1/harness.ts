@@ -126,8 +126,8 @@ import type {
   ThreadSetSettingsOptions,
   ToolCategory,
 } from './types';
-import type { WorkspacePolicy } from './workspace-policy';
-import { WorkspaceRegistry } from './workspace-registry';
+import type { WorkspacePolicy } from './workspace/policy';
+import { WorkspaceRegistry } from './workspace/registry';
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;

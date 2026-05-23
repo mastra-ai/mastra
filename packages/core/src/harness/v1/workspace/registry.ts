@@ -12,19 +12,19 @@
  * and `session.getWorkspace()`.
  */
 
-import { RequestContext } from '../../request-context';
-import type { Workspace } from '../../workspace';
+import { RequestContext } from '../../../request-context';
+import type { Workspace } from '../../../workspace';
 
 import {
   HarnessConfigError,
   HarnessWorkspaceInUseError,
   HarnessWorkspaceProviderMismatchError,
   HarnessWorkspaceProvisioningError,
-} from './errors';
-import type { EventEmitter } from './events';
-import type { HarnessWorkspaceConfig } from './types';
-import { nonDurableProvider } from './workspace-provider';
-import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
+} from '../errors';
+import type { EventEmitter } from '../events';
+import type { HarnessWorkspaceConfig } from '../types';
+import { nonDurableProvider } from './provider';
+import type { WorkspaceProvider, WorkspaceProviderContext } from './provider';
 
 // ---------------------------------------------------------------------------
 // Internal entry shapes.

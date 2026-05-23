@@ -40,8 +40,8 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
 import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
-import type { WorkspacePolicy } from './workspace-policy';
-import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
+import type { WorkspacePolicy } from './workspace/policy';
+import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
 
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).

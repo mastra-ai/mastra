@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { WORKSPACE_TOOLS } from '../../workspace/constants';
+import { WORKSPACE_TOOLS } from '../../../workspace/constants';
 
 import {
   classifyHarnessWorkspaceToolAction,
   getHarnessWorkspaceActionPathInput,
   isHarnessWorkspaceFileMutationTool,
-} from './workspace-actions';
+} from './actions';
 
 describe('Harness v1 workspace action taxonomy', () => {
   const pathFor = (inputPath: string) => ({ inputPath });

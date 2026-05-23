@@ -66,8 +66,8 @@ export {
   classifyHarnessWorkspaceToolAction,
   getHarnessWorkspaceActionPathInput,
   isHarnessWorkspaceFileMutationTool,
-} from './workspace-actions';
-export type { HarnessWorkspaceActionKind, HarnessWorkspaceToolAction } from './workspace-actions';
+} from './workspace/actions';
+export type { HarnessWorkspaceActionKind, HarnessWorkspaceToolAction } from './workspace/actions';
 
 export {
   HarnessAttachmentInUseError,
@@ -101,9 +101,9 @@ export {
   getHarnessPublicErrorCode,
 } from './errors';
 
-export { nonDurableProvider } from './workspace-provider';
-export type { WorkspaceOwnershipKind, WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
-export { evaluateWorkspacePolicy, resolveWorkspacePath } from './workspace-policy';
+export { nonDurableProvider } from './workspace/provider';
+export type { WorkspaceOwnershipKind, WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
+export { evaluateWorkspacePolicy, resolveWorkspacePath } from './workspace/policy';
 export type {
   WorkspaceCommandPolicyAction,
   WorkspaceFileOperation,
@@ -118,7 +118,7 @@ export type {
   WorkspacePolicyRule,
   WorkspaceResolvedPath,
   WorkspaceRootDescriptor,
-} from './workspace-policy';
+} from './workspace/policy';
 
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version

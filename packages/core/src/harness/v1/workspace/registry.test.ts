@@ -10,15 +10,19 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { Agent } from '../../agent';
-import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
-import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import type { Workspace } from '../../workspace';
+import { Agent } from '../../../agent';
+import { InMemoryHarness } from '../../../storage/domains/harness/inmemory';
+import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import type { Workspace } from '../../../workspace';
 
-import { HarnessWorkspaceInUseError, HarnessWorkspaceLostError, HarnessWorkspaceProviderMismatchError } from './errors';
-import { Harness } from './harness';
-import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
-import { nonDurableProvider } from './workspace-provider';
+import {
+  HarnessWorkspaceInUseError,
+  HarnessWorkspaceLostError,
+  HarnessWorkspaceProviderMismatchError,
+} from '../errors';
+import { Harness } from '../harness';
+import type { WorkspaceProvider, WorkspaceProviderContext } from './provider';
+import { nonDurableProvider } from './provider';
 
 function makeAgent(name: string) {
   return new Agent({ id: name, name, instructions: 'fake', model: 'openai/gpt-4o-mini' as any });

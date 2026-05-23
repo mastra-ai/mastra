@@ -146,10 +146,10 @@ import type {
   SetStateOptions,
   ToolCategory,
 } from './types';
-import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace-actions';
-import { classifyHarnessWorkspaceToolAction } from './workspace-actions';
-import type { WorkspaceFileOperation, WorkspacePolicyAction } from './workspace-policy';
-import { evaluateWorkspacePolicy } from './workspace-policy';
+import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace/actions';
+import { classifyHarnessWorkspaceToolAction } from './workspace/actions';
+import type { WorkspaceFileOperation, WorkspacePolicyAction } from './workspace/policy';
+import { evaluateWorkspacePolicy } from './workspace/policy';
 
 type MessageAdmissionIdentity = {
   signalId: string;

@@ -16,8 +16,8 @@ import type { Workspace } from '../../workspace';
 
 import { HarnessConfigError } from './errors';
 import { Harness } from './harness';
-import type { WorkspaceProvider } from './workspace-provider';
-import { nonDurableProvider } from './workspace-provider';
+import type { WorkspaceProvider } from './workspace/provider';
+import { nonDurableProvider } from './workspace/provider';
 
 function makeAgent(name: string) {
   return new Agent({ id: name, name, instructions: 'fake', model: 'openai/gpt-4o-mini' as any });

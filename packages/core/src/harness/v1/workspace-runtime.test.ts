@@ -39,8 +39,8 @@ import { HarnessConfigError, HarnessWorkspaceProvisioningError } from './errors'
 import { Harness } from './harness';
 import { createSpawnSubagentTool } from './spawn-subagent-tool';
 import type { HarnessRequestContext } from './types';
-import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
-import { nonDurableProvider } from './workspace-provider';
+import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
+import { nonDurableProvider } from './workspace/provider';
 
 // ---------------------------------------------------------------------------
 // Helpers (parallel structure to workspace-session.test.ts — duck-typed
