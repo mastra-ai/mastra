@@ -86,6 +86,31 @@ describe('Session.injectSystemReminder()', () => {
     expect(agent.streamCalls.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('persists the injected signal into session history before returning', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.injectSystemReminder('persist me', {
+      attributes: { type: 'goal-judge' },
+      metadata: { path: 'goals.active' },
+    });
+
+    const messages = await session.listMessages();
+    expect(messages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: [
+          expect.objectContaining({
+            type: 'system_reminder',
+            message: 'persist me',
+            reminderType: 'goal-judge',
+            path: 'goals.active',
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('settles the owned idle-wake turn when the live session is marked deleted', async () => {
     const agent = new MockAgent({ id: 'default' });
     let release!: () => void;

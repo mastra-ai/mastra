@@ -1809,6 +1809,12 @@ function mapHarnessError(error: unknown): never {
       resourceId: harnessErrorString(error, 'resourceId'),
     });
   }
+  if (name === 'HarnessWorkspaceInUseError') {
+    throwHarnessHttpError(409, 'harness.workspace_in_use', message, {
+      resourceId: harnessErrorString(error, 'resourceId'),
+      refCount: harnessErrorNumber(error, 'refCount'),
+    });
+  }
   if (name === 'HarnessStorageError') {
     throwHarnessHttpError(
       503,

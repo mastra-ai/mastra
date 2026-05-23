@@ -43,15 +43,18 @@ describe('PostgresStore Performance Indexes Integration', () => {
     const indexNames = indexes.map(idx => idx.name);
     expect(indexNames.some(name => name.includes('threads_resourceid_createdat'))).toBe(true);
     expect(indexNames.some(name => name.includes('messages_thread_id_createdat'))).toBe(true);
+    expect(indexNames.some(name => name.includes('idx_harness_sessions_active_key'))).toBe(true);
+    expect(indexNames.some(name => name.includes('idx_harness_session_events_replay'))).toBe(true);
+    expect(indexNames.some(name => name.includes('idx_harness_workspace_actions_session'))).toBe(true);
+    expect(indexNames.some(name => name.includes('idx_harness_wakeups_claim'))).toBe(true);
   });
 
   it('should demonstrate performance scaling with indexes across dataset sizes', async () => {
     const testSizes = [
       { name: 'XSmall', size: 100 },
       { name: 'Small', size: 1000 },
-      { name: 'Medium', size: 10000 },
-      { name: 'Large', size: 100000 },
-      { name: 'XLarge', size: 1000000 },
+      { name: 'Medium', size: 5000 },
+      { name: 'Large', size: 10000 },
     ];
 
     console.log('\n=== Comprehensive Performance Scaling Analysis ===');

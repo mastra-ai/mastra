@@ -63,9 +63,9 @@ export class PostgresPerformanceTest {
     await db.none('DELETE FROM mastra_threads WHERE title LIKE $1 OR id LIKE $2', ['perf_test_%', 'thread_%']);
     await db.none('DELETE FROM mastra_messages WHERE content LIKE $1 OR id LIKE $2', ['%perf_test%', 'message_%']);
 
-    // Clean up traces and evals (if tables exist)
+    // Clean up spans and evals (if tables exist)
     try {
-      await db.none('DELETE FROM mastra_traces WHERE id LIKE $1', ['trace_%']);
+      await db.none('DELETE FROM mastra_ai_spans WHERE "traceId" LIKE $1 OR "spanId" LIKE $2', ['trace_%', 'span_%']);
     } catch {
       // Table might not exist
     }
@@ -81,7 +81,10 @@ export class PostgresPerformanceTest {
 
     // Update PostgreSQL statistics after cleanup
     try {
-      await db.none('ANALYZE mastra_threads, mastra_messages, mastra_traces, mastra_evals');
+      await db.none('ANALYZE mastra_threads');
+      await db.none('ANALYZE mastra_messages');
+      await db.none('ANALYZE mastra_ai_spans');
+      await db.none('ANALYZE mastra_evals');
       console.info('📊 Updated PostgreSQL statistics after cleanup');
     } catch (error) {
       console.warn('Could not update statistics:', error);
@@ -97,7 +100,7 @@ export class PostgresPerformanceTest {
     try {
       await db.none('TRUNCATE TABLE mastra_threads CASCADE');
       await db.none('TRUNCATE TABLE mastra_messages CASCADE');
-      await db.none('TRUNCATE TABLE mastra_traces CASCADE');
+      await db.none('TRUNCATE TABLE mastra_ai_spans CASCADE');
       await db.none('TRUNCATE TABLE mastra_evals CASCADE');
       console.info('🧨 All tables truncated');
     } catch (error) {
@@ -115,8 +118,16 @@ export class PostgresPerformanceTest {
       `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
       `${schemaPrefix}mastra_messages_thread_id_idx`,
       `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-      `${schemaPrefix}mastra_traces_name_idx`,
-      `${schemaPrefix}mastra_traces_name_pattern_idx`,
+      `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_name_idx`,
+      `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+      `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+      `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+      `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+      `${schemaPrefix}mastra_ai_spans_metadata_gin_idx`,
+      `${schemaPrefix}mastra_ai_spans_tags_gin_idx`,
       `${schemaPrefix}mastra_evals_agent_name_idx`,
       `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
       `${schemaPrefix}mastra_workflow_snapshot_resourceid_idx`,
@@ -254,82 +265,88 @@ export class PostgresPerformanceTest {
       }
     }
 
-    // Create test traces for trace performance testing
-    console.info('Inserting traces...');
+    // Create test spans for observability performance testing.
+    console.info('Inserting spans...');
 
     try {
-      const traces: Array<{
-        id: string;
-        name: string;
+      const spans: Array<{
         traceId: string;
-        scope: string;
-        kind: number;
-        startTime: string; // bigint as string
-        endTime: string; // bigint as string
+        spanId: string;
+        name: string;
+        spanType: string;
+        isEvent: boolean;
+        startedAt: Date;
+        endedAt: Date;
+        parentSpanId: string | null;
+        metadata: string;
+        tags: string;
         createdAt: Date;
-        parentSpanId?: string;
-        attributes?: object;
-        status?: object;
-        events?: object;
-        links?: object;
-        other?: string;
+        updatedAt: Date;
       }> = [];
 
       // Use same scale as main dataset - equal scaling across all tables!
-      const tracesCount = Math.floor(this.config.testDataSize);
-      console.info(`  Creating ${tracesCount.toLocaleString()} traces...`);
+      const spansCount = Math.floor(this.config.testDataSize);
+      console.info(`  Creating ${spansCount.toLocaleString()} spans...`);
 
-      for (let i = 0; i < tracesCount; i++) {
+      for (let i = 0; i < spansCount; i++) {
         const now = Date.now();
-        const startTimeMs = now - Math.random() * 86400000 * 30; // Random time in last 30 days
-        const endTimeMs = startTimeMs + Math.random() * 10000; // End 0-10 seconds after start
+        const startedAt = new Date(now - Math.random() * 86400000 * 30); // Random time in last 30 days
+        const endedAt = new Date(startedAt.getTime() + Math.random() * 10000); // End 0-10 seconds after start
 
-        traces.push({
-          id: `trace_${i}`,
-          name: i % 5 === 0 ? 'test_trace' : `trace_${i % 10}`, // Some will match our test query
+        spans.push({
           traceId: `trace_${i}`,
-          scope: 'test_scope',
-          kind: 1,
-          startTime: (startTimeMs * 1000000).toString(), // Convert to nanoseconds as string
-          endTime: (endTimeMs * 1000000).toString(), // Convert to nanoseconds as string
+          spanId: `span_${i}`,
+          name: i % 5 === 0 ? 'test_trace' : `trace_${i % 10}`, // Some will match our test query
+          spanType: 'generic',
+          isEvent: false,
+          startedAt,
+          endedAt,
+          parentSpanId: i % 3 === 0 ? null : `span_${Math.max(0, i - 1)}`,
+          metadata: JSON.stringify({ test: true, index: i }),
+          tags: JSON.stringify(['perf_test']),
           createdAt: new Date(now - Math.random() * 86400000 * 30),
+          updatedAt: new Date(now),
         });
       }
 
-      if (traces.length > 0) {
-        for (let i = 0; i < traces.length; i += batchSize) {
-          const batch = traces.slice(i, i + batchSize);
+      if (spans.length > 0) {
+        for (let i = 0; i < spans.length; i += batchSize) {
+          const batch = spans.slice(i, i + batchSize);
           const values = batch
             .map(
               (_, index) =>
-                `($${index * 8 + 1}, $${index * 8 + 2}, $${index * 8 + 3}, $${index * 8 + 4}, $${index * 8 + 5}, $${index * 8 + 6}, $${index * 8 + 7}, $${index * 8 + 8})`,
+                `($${index * 12 + 1}, $${index * 12 + 2}, $${index * 12 + 3}, $${index * 12 + 4}, $${index * 12 + 5}, $${index * 12 + 6}, $${index * 12 + 7}, $${index * 12 + 8}, $${index * 12 + 9}, $${index * 12 + 10}, $${index * 12 + 11}, $${index * 12 + 12})`,
             )
             .join(', ');
 
-          const params = batch.flatMap(trace => [
-            trace.id,
-            trace.name,
-            trace.traceId,
-            trace.scope,
-            trace.kind,
-            trace.startTime,
-            trace.endTime,
-            trace.createdAt,
+          const params = batch.flatMap(span => [
+            span.traceId,
+            span.spanId,
+            span.parentSpanId,
+            span.name,
+            span.spanType,
+            span.isEvent,
+            span.startedAt,
+            span.endedAt,
+            span.metadata,
+            span.tags,
+            span.createdAt,
+            span.updatedAt,
           ]);
 
           await db.none(
-            `INSERT INTO mastra_traces (id, name, "traceId", scope, kind, "startTime", "endTime", "createdAt") VALUES ${values}`,
+            `INSERT INTO mastra_ai_spans ("traceId", "spanId", "parentSpanId", name, "spanType", "isEvent", "startedAt", "endedAt", metadata, tags, "createdAt", "updatedAt") VALUES ${values}`,
             params,
           );
 
           if (i % (batchSize * 10) === 0) {
-            console.info(`  Inserted ${Math.min(i + batchSize, traces.length)} / ${traces.length} traces`);
+            console.info(`  Inserted ${Math.min(i + batchSize, spans.length)} / ${spans.length} spans`);
           }
         }
-        console.info(`  Inserted ${traces.length} test traces`);
+        console.info(`  Inserted ${spans.length} test spans`);
       }
     } catch (error) {
-      throw new Error(`Failed to seed traces data: ${error}`);
+      throw new Error(`Failed to seed spans data: ${error}`);
     }
 
     console.info('Test data seeding completed');
