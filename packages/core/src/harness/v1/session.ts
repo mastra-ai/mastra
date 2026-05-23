@@ -66,6 +66,7 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
 import type { Workspace } from '../../workspace';
+import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '../tools';
@@ -690,6 +691,21 @@ export class Session {
    */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   /**
+   * In-memory registry of background sandbox processes spawned during this
+   * session that can outlive their owning turn (e.g. `background: true`
+   * shell commands or `detached: true` sandbox processes). Populated by
+   * tools via the `registerBackgroundProcess` slot method (§6.1) and reaped
+   * when the session is closed, evicted, or deleted. Foreground processes
+   * are NOT tracked here — their lifetime is already bounded by the turn's
+   * `abortSignal` via the sandbox process manager.
+   *
+   * Keyed by a per-registration `Symbol` rather than `handle.pid`: OS PIDs
+   * are reused after process exit, so a pid-keyed table could let a stale
+   * `unregister` callback delete a newer registration that happens to
+   * reuse the same pid, leaving the new process unreaped on lifecycle.
+   */
+  private readonly _backgroundProcesses = new Map<symbol, { handle: ProcessHandle; unregister: () => void }>();
+  /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
    * rejected so callers don't hang on a dead session.
    */
@@ -1194,6 +1210,66 @@ export class Session {
       err instanceof HarnessSessionDeletedError ||
       err instanceof HarnessStateConflictError
     );
+  }
+
+  /**
+   * Register a background sandbox process for reap-on-lifecycle (§6.1).
+   * Tools that spawn long-lived processes via `sandbox.processes.spawn(...)`
+   * call this through the request-context slot.
+   *
+   * In `live` / `closing` states the handle is stored and a
+   * `handle.wait()` hook auto-unregisters on either normal or failed exit.
+   * In any terminal state (`closed` / `evicted` / `deleted`) the handle is
+   * killed immediately to prevent a race-window leak where a process is
+   * spawned after the close/evict/delete decision has been made.
+   *
+   * @internal — exposed via `HarnessRequestContext.registerBackgroundProcess`.
+   */
+  _registerBackgroundProcess(handle: ProcessHandle): () => void {
+    if (this._state !== 'live' && this._state !== 'closing') {
+      // Race: register arrived after a terminal transition. Don't track it —
+      // just reap the handle directly so it doesn't outlive the session.
+      handle.kill().catch(() => {});
+      return () => {};
+    }
+    // Symbol-keyed registration so a stale callback cannot delete a newer
+    // registration that happens to reuse the same OS pid. See the field
+    // doc-comment above for the pid-reuse race motivation.
+    const registrationId = Symbol(`background-process:${String(handle.pid)}`);
+    let unregistered = false;
+    const unregister = () => {
+      if (unregistered) return;
+      unregistered = true;
+      this._backgroundProcesses.delete(registrationId);
+    };
+    this._backgroundProcesses.set(registrationId, { handle, unregister });
+    // Auto-unregister on either successful exit or wait() rejection. The
+    // process-manager wait machinery already swallows kill-induced rejections;
+    // we cover both branches defensively so a wait() rejection cannot leave
+    // the table holding a stale entry.
+    handle.wait().then(unregister, unregister);
+    return unregister;
+  }
+
+  /**
+   * Reap every tracked background process. Snapshot-and-clear the table
+   * first so concurrent unregister/exit notifications cannot mutate during
+   * iteration. Each `handle.kill()` is fire-and-forget — the
+   * sandbox process manager already serializes kill semantics and exposes
+   * idempotent SIGTERM→SIGKILL escalation.
+   *
+   * @internal — called from `_markClosed`, `_markEvicted`, `_markDeleted`.
+   */
+  private _reapBackgroundProcesses(): void {
+    if (this._backgroundProcesses.size === 0) return;
+    const entries = Array.from(this._backgroundProcesses.values());
+    this._backgroundProcesses.clear();
+    for (const entry of entries) {
+      entry.handle.kill().catch(() => {
+        // Best-effort: kill failures (process already gone, OS error) are
+        // not actionable here.
+      });
+    }
   }
 
   /**
@@ -8183,6 +8259,7 @@ export class Session {
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       resolveToolPermission: params => session._resolveToolPermissionPolicy(params.toolName),
       recordWorkspaceAction: params => session._recordWorkspaceAction(params),
+      registerBackgroundProcess: handle => session._registerBackgroundProcess(handle),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
@@ -8309,6 +8386,7 @@ export class Session {
    * harness's job. Idempotent.
    */
   _markClosed(updatedRecord: SessionRecord): void {
+    this._reapBackgroundProcesses();
     this._record = updatedRecord;
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
@@ -8317,6 +8395,7 @@ export class Session {
 
   /** @internal — used by Harness hard-delete after storage has removed the row. */
   _markDeleted(): void {
+    this._reapBackgroundProcesses();
     const err = new HarnessSessionDeletedError(this.id);
     this._state = 'deleted';
     this._rejectIdleWaiters(err);
@@ -8355,6 +8434,7 @@ export class Session {
    * the session can be re-hydrated. Currently unused; lands with eviction.
    */
   _markEvicted(updatedRecord: SessionRecord): void {
+    this._reapBackgroundProcesses();
     const err = new HarnessValidationError('session.evict()', 'Session evicted');
     this._record = updatedRecord;
     this._state = 'evicted';

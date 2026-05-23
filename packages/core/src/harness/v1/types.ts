@@ -39,6 +39,7 @@ import type {
 } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
+import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
 
 // ---------------------------------------------------------------------------
@@ -1917,6 +1918,21 @@ export interface HarnessRequestContext<TState = unknown> {
    * one. Tools should null-check before use.
    */
   workspace?: Workspace;
+
+  /**
+   * Register a background sandbox process so the Harness can reap it when
+   * the session is closed, evicted, or deleted. Tools that call
+   * `sandbox.processes.spawn(...)` for background mode (i.e. processes
+   * that outlive the spawning turn) should pass the resulting handle
+   * here. Returns an `unregister()` callback the tool MAY call explicitly,
+   * though the harness also auto-unregisters via `handle.wait()` on
+   * normal exit. Optional: tools must null-check before calling.
+   *
+   * Foreground commands need NOT register — they already terminate when
+   * the turn's `abortSignal` fires via the sandbox process manager's
+   * built-in abort-to-kill wiring.
+   */
+  registerBackgroundProcess?: (handle: ProcessHandle) => () => void;
 
   /**
    * Invoke a skill programmatically from inside a tool. Delegates to
