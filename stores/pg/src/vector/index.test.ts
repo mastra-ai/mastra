@@ -9,7 +9,7 @@ describe('PgVector', () => {
   let vectorDB: PgVector;
   const testIndexName = 'test_vectors';
   const testIndexName2 = 'test_vectors1';
-  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
 
   beforeAll(async () => {
     // Initialize PgVector
@@ -24,7 +24,7 @@ describe('PgVector', () => {
 
   // Shared vector store test suite
   describe('Shared Vector Store Test Suite', () => {
-    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
     const sharedTestVectorDB = new PgVector({ connectionString, id: 'pg-shared-test' });
 
     createVectorTestSuite({
@@ -1281,7 +1281,7 @@ describe('PgVector', () => {
     // Tests for halfvec type support (Issue #10999)
     // Note: halfvec requires pgvector >= 0.7.0
     describe('PgVector halfvec Type Support', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
       let halfvecVectorDB: PgVector;
       let halfvecSupported = false;
 
@@ -1543,7 +1543,7 @@ describe('PgVector', () => {
     // Tests for bit vector type support (Issue #11035)
     // Note: bit requires pgvector >= 0.7.0
     describe('PgVector bit Type Support', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
       let bitVectorDB: PgVector;
       let bitSupported = false;
 
@@ -1749,7 +1749,7 @@ describe('PgVector', () => {
     // Tests for sparsevec type support (Issue #11035)
     // Note: sparsevec requires pgvector >= 0.7.0
     describe('PgVector sparsevec Type Support', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
       let sparseVectorDB: PgVector;
       let sparsevecSupported = false;
 
@@ -1990,7 +1990,7 @@ describe('PgVector', () => {
 
     // Tests for operator class generation for new types (Issue #11035)
     describe('getVectorOps for bit and sparsevec types', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
       let db: PgVector;
 
       beforeAll(async () => {
@@ -2129,7 +2129,7 @@ describe('PgVector', () => {
 
     // Tests for validation logic (Issue #11035)
     describe('Validation for bit and sparsevec constraints', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
       let validationDB: PgVector;
 
       beforeAll(async () => {
@@ -2957,7 +2957,7 @@ describe('PgVector', () => {
   // --- Validation tests ---
   describe('Validation', () => {
     const customSchema = 'custom_schema';
-    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
     describe('Connection String Config', () => {
       it('throws if connectionString is empty', () => {
         expect(() => new PgVector({ id: 'test-vector', connectionString: '' })).toThrow(

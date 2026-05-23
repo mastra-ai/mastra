@@ -22,7 +22,7 @@ import type { MemoryPG } from '.';
 describe('ROW_NUMBER Performance Issue #11150', () => {
   let store: PostgresStore;
   let memoryStore: MemoryPG;
-  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5434/mastra';
 
   // Test configuration - adjust these to reproduce the issue
   const THREADS_COUNT = 10;

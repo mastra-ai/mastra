@@ -32,7 +32,7 @@ class PGPerformanceVector extends PgVector {
   private perfPool: pg.Pool;
 
   constructor(connectionString: string) {
-    super(connectionString);
+    super({ id: 'pg-vector-performance-test', connectionString });
 
     const basePool = new pg.Pool({
       connectionString,
@@ -80,6 +80,10 @@ class PGPerformanceVector extends PgVector {
       client.release();
     }
   }
+
+  override async disconnect() {
+    await Promise.all([super.disconnect(), this.perfPool.end()]);
+  }
 }
 
 const warmupCache = new Map<string, boolean>();
@@ -98,7 +102,7 @@ async function smartWarmup(
   }
 }
 
-const connectionString = process.env.DB_URL || `postgresql://postgres:postgres@localhost:5435/mastra`;
+const connectionString = process.env.DB_URL || `postgresql://postgres:postgres@127.0.0.1:5435/mastra`;
 describe('PostgreSQL Index Performance', () => {
   let vectorDB: PGPerformanceVector;
   const testIndexName = 'test_index_performance';

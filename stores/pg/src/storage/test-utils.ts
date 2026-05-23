@@ -9,7 +9,7 @@ import { exportSchemas, PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
   id: 'test-postgres-store',
-  host: process.env.POSTGRES_HOST || 'localhost',
+  host: process.env.POSTGRES_HOST || '127.0.0.1',
   port: Number(process.env.POSTGRES_PORT) || 5434,
   database: process.env.POSTGRES_DB || 'postgres',
   user: process.env.POSTGRES_USER || 'postgres',

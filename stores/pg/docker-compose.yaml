@@ -4,7 +4,7 @@ services:
     image: pgvector/pgvector:0.8.2-pg16
     container_name: 'pg-test-db'
     ports:
-      - '5434:5432'
+      - '127.0.0.1:5434:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
