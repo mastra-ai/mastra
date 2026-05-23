@@ -927,6 +927,11 @@ export class Session {
 
   private _enqueueSessionEventPersistence(event: HarnessEvent): void {
     if (this._eventPersistenceError !== undefined) return;
+    // Declarative short-circuit: when the adapter says it does not implement
+    // session event replay, skip the serialize/append round-trip up front.
+    // The legacy instanceof catch below still defends against adapters that
+    // declare support but throw on a specific call shape.
+    if (!this._storage.capabilities().sessionEventReplay) return;
     let parsed: ReturnType<typeof parseHarnessEventId>;
     let storedEvent: JsonValue;
     try {
@@ -4169,6 +4174,24 @@ export class Session {
   }): Promise<void> {
     const mapped = this._mapWorkspaceToolAction(params.toolName, params.args);
     if (!mapped) return;
+    // Declarative short-circuit when the adapter does not implement the
+    // workspace action journal. Emit the one-shot `unsupported` event so
+    // observability tooling sees the gap without depending on the legacy
+    // throw-then-catch path inside the append call.
+    if (!this._storage.capabilities().workspaceActionJournal) {
+      if (!this._workspaceActionJournalUnsupportedEmitted) {
+        this._workspaceActionJournalUnsupportedEmitted = true;
+        this._emit({
+          type: 'workspace_action_journal_unsupported',
+          resourceId: this.resourceId,
+          threadId: this.threadId,
+          toolName: params.toolName,
+          actionKind: mapped.actionKind,
+          operation: mapped.operation,
+        });
+      }
+      return;
+    }
     const now = Date.now();
     const action = snapshotHarnessEventForJson(
       {

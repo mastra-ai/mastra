@@ -388,9 +388,69 @@ export class HarnessStorageWakeupTransitionError extends Error {
  * Threads and messages are NOT in this domain — they live under
  * `MemoryStorage`. The harness layer composes the two.
  */
+/**
+ * Declarative support matrix for optional Harness storage features. Adapters
+ * surface this via `HarnessStorage.capabilities()` so route handlers, the
+ * Session runtime, and release-time compatibility tooling can probe support
+ * without `try/catch`ing every operation against `Unsupported*Error`.
+ *
+ * Keys map 1:1 to feature families on `HarnessStorage`:
+ *
+ * - `workspaceActionJournal` — `appendWorkspaceActionJournalEntry` /
+ *   `listWorkspaceActionJournalEntries`. Optional today (base methods throw
+ *   `HarnessStorageWorkspaceActionJournalUnsupportedError`).
+ * - `sessionEventReplay` — `appendSessionEvent` / `getSessionEventReplayState`
+ *   / `listSessionEvents`. Optional today (base methods throw
+ *   `HarnessStorageSessionEventReplayUnsupportedError`).
+ * - `admissionConflictDetection`, `attachmentBlobs`, `channelOutbox`,
+ *   `wakeups`, `proactiveWakeups` — abstract method families; any concrete
+ *   adapter implements them. Defaults to `true`; adapters that ship a
+ *   no-op or stubbed variant may override to `false`.
+ *
+ * Capabilities are static structural facts about the adapter; callers may
+ * cache the returned object.
+ */
+export interface HarnessStorageCapabilities {
+  workspaceActionJournal: boolean;
+  sessionEventReplay: boolean;
+  admissionConflictDetection: boolean;
+  attachmentBlobs: boolean;
+  channelOutbox: boolean;
+  wakeups: boolean;
+  proactiveWakeups: boolean;
+}
+
 export abstract class HarnessStorage extends StorageDomain {
   get supportsAtomicDeleteSessions(): boolean {
     return this.deleteSessions !== HarnessStorage.prototype.deleteSessions;
+  }
+
+  /**
+   * Declarative capability matrix — see {@link HarnessStorageCapabilities}.
+   *
+   * The default implementation detects optional-feature support by checking
+   * whether the adapter overrode every method in each feature family on its
+   * prototype chain (same idiom as `supportsAtomicDeleteSessions`). Adapters
+   * with config-driven toggles may override `capabilities()` directly.
+   */
+  capabilities(): HarnessStorageCapabilities {
+    return {
+      workspaceActionJournal:
+        this.appendWorkspaceActionJournalEntry !== HarnessStorage.prototype.appendWorkspaceActionJournalEntry &&
+        this.listWorkspaceActionJournalEntries !== HarnessStorage.prototype.listWorkspaceActionJournalEntries,
+      sessionEventReplay:
+        this.appendSessionEvent !== HarnessStorage.prototype.appendSessionEvent &&
+        this.getSessionEventReplayState !== HarnessStorage.prototype.getSessionEventReplayState &&
+        this.listSessionEvents !== HarnessStorage.prototype.listSessionEvents,
+      // Abstract families — every concrete adapter implements these. Adapters
+      // that ship explicit no-op variants may override `capabilities()` to
+      // flip the corresponding bit off.
+      admissionConflictDetection: true,
+      attachmentBlobs: true,
+      channelOutbox: true,
+      wakeups: true,
+      proactiveWakeups: true,
+    };
   }
 
   constructor() {

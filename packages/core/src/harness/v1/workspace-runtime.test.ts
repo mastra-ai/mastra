@@ -350,6 +350,61 @@ describe('HarnessRequestContext.workspace — runtime plumbing', () => {
       operation: 'write',
     });
   });
+
+  it('short-circuits journal appends when storage.capabilities() declares the feature unsupported', async () => {
+    // Adapter declares the feature off via the capability matrix instead of
+    // throwing the legacy Unsupported error from `appendWorkspaceActionJournalEntry`.
+    // The runtime must emit the one-shot `workspace_action_journal_unsupported`
+    // event AND never call the append method, so adapters with config-driven
+    // feature toggles do not pay the rejected-promise cost on every tool call.
+    class NoJournalAdapter extends InMemoryHarness {
+      override capabilities() {
+        return { ...super.capabilities(), workspaceActionJournal: false };
+      }
+    }
+    const storage = new NoJournalAdapter({ db: new InMemoryDB() });
+    const appendSpy = vi.spyOn(storage, 'appendWorkspaceActionJournalEntry');
+    const { harness, agent } = setupHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const events: any[] = [];
+    session.subscribe(event => {
+      if (event.type === 'workspace_action_journal_unsupported') events.push(event);
+    });
+    await session.message({ content: 'hi' });
+
+    const slot = getHarnessSlot(agent.streamCalls);
+    for (let index = 0; index < 3; index++) {
+      await slot.recordWorkspaceAction?.({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+        args: { path: 'src/index.ts', content: 'export {};' },
+        policyDecision: 'allow',
+        runId: 'run-1',
+        toolCallId: `tool-call-${index}`,
+        result: 'ok',
+      });
+    }
+
+    expect(events).toHaveLength(1);
+    expect(appendSpy).not.toHaveBeenCalled();
+  });
+
+  it('short-circuits session event persistence when storage.capabilities() declares replay unsupported', async () => {
+    class NoReplayAdapter extends InMemoryHarness {
+      override capabilities() {
+        return { ...super.capabilities(), sessionEventReplay: false };
+      }
+    }
+    const storage = new NoReplayAdapter({ db: new InMemoryDB() });
+    const appendSpy = vi.spyOn(storage, 'appendSessionEvent');
+    const { harness } = setupHarness({ sessions: { storage } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.message({ content: 'hi' });
+
+    // Event-persistence is fire-and-forget; flush the chain so any append
+    // would have happened by now.
+    await session._flushEventPersistence();
+    expect(appendSpy).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
