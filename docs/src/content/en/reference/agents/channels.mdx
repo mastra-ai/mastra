@@ -345,7 +345,7 @@ const agent = new Agent({
     type: 'ActionHandler | false',
     isOptional: true,
     description:
-      'Called when the bot receives an action (e.g. button click). Receives a `defaultHandler` that routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs. Custom action IDs are returned to the override as `{ kind: "unknown", actionId }` so user code can branch on them.',
+      'Called when the bot receives an action (e.g. button click). Receives a `defaultHandler` that routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs and returns `{ kind: "approved" | "denied" | "unknown" }` describing what it did.',
   },
   {
     name: 'onReaction',
