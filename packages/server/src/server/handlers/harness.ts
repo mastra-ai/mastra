@@ -18,7 +18,6 @@ import type {
   SessionRecord,
   HarnessEvent,
 } from '@mastra/core/harness/v1';
-import { parseHarnessEventId } from '@mastra/core/harness/v1';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodError } from 'zod/v4';
@@ -459,8 +458,45 @@ function encodeHarnessSseKeepalive(): Uint8Array {
 }
 
 const HARNESS_EVENT_REPLAY_PAGE_SIZE = 1000;
+const HARNESS_EVENT_ID_PREFIX = 'harness-v1';
 
-type ParsedHarnessEventId = ReturnType<typeof parseHarnessEventId>;
+interface ParsedHarnessEventId {
+  epoch: string;
+  sequence: number;
+}
+
+class HarnessRouteValidationError extends Error {
+  readonly name = 'HarnessValidationError';
+
+  constructor(
+    public readonly field: string,
+    public readonly reason: string,
+  ) {
+    super(`HarnessValidationError at ${field}: ${reason}`);
+  }
+}
+
+function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
+  // Keep this parser local until @mastra/server can raise its @mastra/core peer
+  // floor to a published version that exposes the @mastra/core/harness/v1 value subpath.
+  const parts = eventId.split(':');
+  if (parts.length !== 3 || parts[0] !== HARNESS_EVENT_ID_PREFIX || parts[1] === '' || parts[2] === '') {
+    throw new HarnessRouteValidationError('lastEventId', 'expected event id grammar harness-v1:<epoch>:<seq>');
+  }
+  const sequenceText = parts[2]!;
+  if (!/^(0|[1-9][0-9]*)$/.test(sequenceText)) {
+    throw new HarnessRouteValidationError('lastEventId', 'event id sequence must be an unsigned decimal integer');
+  }
+  const sequence = Number(sequenceText);
+  if (!Number.isSafeInteger(sequence)) {
+    throw new HarnessRouteValidationError(
+      'lastEventId',
+      'event id sequence must be within JavaScript safe integer range',
+    );
+  }
+  return { epoch: parts[1]!, sequence };
+}
+
 type HarnessEventReplayState = {
   epoch: string;
   oldestSequence: number;
