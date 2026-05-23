@@ -138,6 +138,20 @@ export class MastraCodeHarnessEventProjector {
 
     switch (event.kind) {
       case 'question':
+        if (isSandboxAccessQuestion(itemId, payload)) {
+          const sandboxRequest = parseSandboxAccessQuestion(payload.question);
+          if (sandboxRequest) {
+            return [
+              {
+                ...event,
+                type: 'sandbox_access_request',
+                questionId: itemId,
+                path: sandboxRequest.path,
+                reason: sandboxRequest.reason,
+              } as unknown as LegacyHarnessEvent,
+            ];
+          }
+        }
         return [
           {
             ...event,
@@ -174,6 +188,23 @@ export class MastraCodeHarnessEventProjector {
         return [event as unknown as LegacyHarnessEvent];
     }
   }
+}
+
+function isSandboxAccessQuestion(itemId: string, payload: { question?: unknown }): boolean {
+  return itemId.startsWith('sandbox_') && typeof payload.question === 'string';
+}
+
+function parseSandboxAccessQuestion(question: unknown): { path: string; reason: string } | undefined {
+  if (typeof question !== 'string') return undefined;
+  const prefix = 'Allow Mastra Code to access ';
+  const separator = '?\n\n';
+  if (!question.startsWith(prefix)) return undefined;
+  const separatorIndex = question.lastIndexOf(separator);
+  if (separatorIndex <= prefix.length) return undefined;
+  return {
+    path: question.slice(prefix.length, separatorIndex),
+    reason: question.slice(separatorIndex + separator.length),
+  };
 }
 
 function stringifySubagentOutput(output: unknown): string {

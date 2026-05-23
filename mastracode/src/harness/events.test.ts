@@ -70,6 +70,63 @@ describe('MastraCodeHarnessEventProjector', () => {
     });
   });
 
+  it('projects request_access question suspensions into sandbox access requests', async () => {
+    const { events, projector } = createProjector({
+      pending: {
+        itemId: 'sandbox_1_123',
+        payload: {
+          question: 'Allow Mastra Code to access /outside/project/dir?\n\nneed to read config',
+          options: [
+            { label: 'Yes', description: 'Grant access for this session.' },
+            { label: 'No', description: 'Deny this access request.' },
+          ],
+          selectionMode: 'single_select',
+        },
+      },
+    });
+
+    await projector.project({
+      type: 'suspension_required',
+      kind: 'question',
+      toolCallId: 'call-1',
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+
+    expect(events[0]).toMatchObject({
+      type: 'sandbox_access_request',
+      questionId: 'sandbox_1_123',
+      path: '/outside/project/dir',
+      reason: 'need to read config',
+    });
+  });
+
+  it('keeps malformed sandbox-like questions on the generic ask_question path', async () => {
+    const { events, projector } = createProjector({
+      pending: {
+        itemId: 'sandbox_1_123',
+        payload: {
+          question: 'Can I do something else?',
+          options: [{ label: 'Yes' }],
+        },
+      },
+    });
+
+    await projector.project({
+      type: 'suspension_required',
+      kind: 'question',
+      toolCallId: 'call-1',
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+
+    expect(events[0]).toMatchObject({
+      type: 'ask_question',
+      questionId: 'sandbox_1_123',
+      question: 'Can I do something else?',
+    });
+  });
+
   it('projects plan suspensions into plan approval events', async () => {
     const { events, projector } = createProjector({
       pending: {
