@@ -2308,14 +2308,24 @@ export class Harness {
         sessions.map(async session => {
           if (session.lifecycleState !== 'live' && session.lifecycleState !== 'closing') return;
           try {
-            const record = session.getRecord();
-            const lease = await storage.renewSessionLease({
-              harnessName: record.harnessName,
-              sessionId: session.id,
-              ownerId: this.ownerId,
-              ttlMs: this._leaseTtlMs,
+            // Route this session's renewal through its own lease-write chain
+            // so a concurrent `Session.extendLease(...)` cannot race with the
+            // heartbeat against `storage.renewSessionLease`. Compute the
+            // effective TTL inside the chained step so it reflects the
+            // latest extension deadline (a default-TTL heartbeat could
+            // otherwise overwrite a longer extension that landed between
+            // queueing and execution).
+            await session._enqueueLeaseRenewal(async () => {
+              const record = session.getRecord();
+              const effectiveTtl = session._getEffectiveLeaseTtlMs(this._leaseTtlMs);
+              const lease = await storage.renewSessionLease({
+                harnessName: record.harnessName,
+                sessionId: session.id,
+                ownerId: this.ownerId,
+                ttlMs: effectiveTtl,
+              });
+              session._markLeaseRenewed(lease.expiresAt);
             });
-            session._markLeaseRenewed(lease.expiresAt);
           } catch (err) {
             if (err instanceof HarnessStorageLeaseConflictError || err instanceof HarnessStorageSessionNotFoundError) {
               await this._evictLiveSession(session, 'lease_lost');
@@ -4114,6 +4124,13 @@ export class Harness {
   /** @internal — accessor for `Session.queue()` admission caps. */
   get _internalMaxQueueDepth(): number {
     return this._maxQueueDepth;
+  }
+
+  /** @internal — default lease TTL the heartbeat uses. Read by
+   * `Session.extendLease(...)` to clamp `ttlMs` upward so an extension
+   * cannot shrink an already-default-TTL lease. */
+  get _internalLeaseTtlMs(): number {
+    return this._leaseTtlMs;
   }
 
   /** @internal — goal-loop defaults, consumed by `Session.setGoal()` (§4.7). */

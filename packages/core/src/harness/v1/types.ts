@@ -1935,6 +1935,19 @@ export interface HarnessRequestContext<TState = unknown> {
   registerBackgroundProcess?: (handle: ProcessHandle) => () => void;
 
   /**
+   * Extend this session's storage lease so the current Harness retains
+   * ownership for at least `ttlMs` ms beyond `Date.now()`. Tools that
+   * KNOW they will block the event loop or exceed the default lease TTL
+   * should call this BEFORE the blocking work — the periodic heartbeat
+   * alone cannot guarantee renewal under starvation. The value is clamped
+   * upward to the default lease TTL so this call never shrinks an
+   * existing lease. Rejects on non-finite / non-positive / non-integer
+   * `ttlMs` and on values above the safety cap. Optional: tools must
+   * null-check before calling.
+   */
+  extendLease?: (opts: { ttlMs: number }) => Promise<void>;
+
+  /**
    * Invoke a skill programmatically from inside a tool. Delegates to
    * `session.skills.use(ref, opts)` against the owning session, sharing its
    * code/workspace resolution, args validation, prompt construction, and turn

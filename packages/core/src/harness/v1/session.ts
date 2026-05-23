@@ -200,6 +200,10 @@ const QUEUE_POST_RUN_FINALIZATION_RETRY_MS = 1_000;
 const ACTION_CATALOG_DEFAULT_LIMIT = 100;
 const ACTION_CATALOG_MAX_LIMIT = 500;
 const ACTION_CATALOG_MCP_LIST_TIMEOUT_MS = 2_000;
+/** Upper bound for `session.extendLease({ ttlMs })`. 24h, large enough for
+ * legitimate long-running tools while preventing accidental "extend forever"
+ * misuse that would defeat takeover safety. */
+const MAX_LEASE_EXTENSION_MS = 24 * 60 * 60 * 1_000;
 const ACTION_CATALOG_MCP_FAILURE_CACHE_MS = 5_000;
 const ACTION_CATALOG_SOURCE_KINDS: readonly HarnessActionCatalogSourceKind[] = ['skill', 'mcp-tool'];
 const ACTION_CATALOG_SOURCE_ORDER: Record<HarnessActionCatalogSourceKind, number> = {
@@ -705,6 +709,23 @@ export class Session {
    * reuse the same pid, leaving the new process unreaped on lifecycle.
    */
   private readonly _backgroundProcesses = new Map<symbol, { handle: ProcessHandle; unregister: () => void }>();
+
+  /**
+   * Deadline for a pending lease extension, in `Date.now()` ms. Set by
+   * `extendLease(...)` and consulted by `_getEffectiveLeaseTtlMs` so the
+   * periodic heartbeat does NOT renew with a shorter default TTL while an
+   * extension is still active. Cleared on terminal lifecycle transitions.
+   */
+  private _leaseExtensionDeadline?: number;
+
+  /**
+   * In-process serialization for lease writes (`storage.renewSessionLease`).
+   * Both `extendLease()` and the harness's per-session heartbeat arm queue
+   * their renew on this chain so two concurrent renewals cannot interleave
+   * and let a default-TTL heartbeat overwrite a longer extension. Mirrors
+   * the `_flushChain` idiom used elsewhere in this class.
+   */
+  private _leaseRenewalChain: Promise<void> = Promise.resolve();
   /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
    * rejected so callers don't hang on a dead session.
@@ -1463,6 +1484,141 @@ export class Session {
     const controller = this._currentTurnAbortController;
     if (!controller) return;
     controller.abort(opts?.reason ?? 'session_aborted');
+  }
+
+  // -------------------------------------------------------------------------
+  // Lease extension — §5.8.
+  //
+  // The Harness runs a periodic heartbeat that renews this session's storage
+  // lease at TTL/3 (min 1s). Under event-loop starvation (CPU-bound JS) or a
+  // tool that holds the session past the default TTL, the heartbeat can miss
+  // its deadline and another Harness instance can take over the session via
+  // `acquireSessionLease`. The CAS contract on `saveSession` then rejects
+  // late writes from the original owner (no two processes append to
+  // `pendingQueue`), but the window is observable.
+  //
+  // `extendLease` lets a tool that KNOWS it will exceed the default TTL push
+  // the storage expiry forward ahead of the blocking work. The heartbeat
+  // and any concurrent `extendLease` share the per-session lease-write
+  // chain so a default-TTL heartbeat in flight cannot overwrite a longer
+  // extension.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Extend this session's storage lease so it remains owned by the current
+   * Harness for at least `ttlMs` milliseconds from now. The value is clamped
+   * to at least the harness's default lease TTL — `extendLease` never
+   * shrinks an active lease. Excessively large values are rejected (capped
+   * at `MAX_LEASE_EXTENSION_MS`).
+   *
+   * Call this BEFORE a tool starts work that will block the event loop or
+   * exceed the default lease TTL. Subsequent heartbeat renewals respect the
+   * extension via `_getEffectiveLeaseTtlMs`. Once the extension deadline
+   * passes the heartbeat naturally falls back to the default TTL.
+   *
+   * Rejects with `HarnessValidationError` for non-finite, non-positive, or
+   * non-integer `ttlMs`, and for values above `MAX_LEASE_EXTENSION_MS`.
+   * Propagates storage errors from `renewSessionLease`.
+   */
+  async extendLease(opts: { ttlMs: number }): Promise<void> {
+    this._assertLive('extendLease()');
+    if (!Number.isFinite(opts.ttlMs) || !Number.isInteger(opts.ttlMs) || opts.ttlMs <= 0) {
+      throw new HarnessValidationError('extendLease().ttlMs', 'ttlMs must be a positive integer (milliseconds)');
+    }
+    if (opts.ttlMs > MAX_LEASE_EXTENSION_MS) {
+      throw new HarnessValidationError(
+        'extendLease().ttlMs',
+        `ttlMs must be at most ${MAX_LEASE_EXTENSION_MS}ms (24h)`,
+      );
+    }
+    const defaultTtl = this._harness._internalLeaseTtlMs;
+    const run = async (): Promise<void> => {
+      // Re-check lifecycle state at EXECUTION time, not just enqueue time —
+      // `extendLease` may have been queued behind another renewal that
+      // raced a concurrent `close/delete/evict`. Throwing here surfaces
+      // the lifecycle race to the caller; the chain itself is poison-proofed
+      // separately at the tail.
+      if (this._state !== 'live' && this._state !== 'closing') {
+        throw this._state === 'deleted'
+          ? new HarnessSessionDeletedError(this.id)
+          : new HarnessSessionClosedError(this.id);
+      }
+      // Compute the effective TTL INSIDE the chained step so the clamp sees
+      // the latest `_leaseExtensionDeadline`. A second `extendLease(shorter)`
+      // called while an earlier extension is still active must NOT shrink the
+      // lease — clamp against the remaining window in addition to the
+      // requested ttl and the harness default.
+      const remainingExtension =
+        this._leaseExtensionDeadline !== undefined && Number.isFinite(this._leaseExtensionDeadline)
+          ? this._leaseExtensionDeadline - Date.now()
+          : 0;
+      const effectiveTtl = Math.max(opts.ttlMs, defaultTtl, remainingExtension);
+      const lease = await this._storage.renewSessionLease({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        ownerId: this._ownerId,
+        ttlMs: effectiveTtl,
+      });
+      this._markLeaseRenewed(lease.expiresAt);
+      this._leaseExtensionDeadline = lease.expiresAt;
+    };
+    const next = this._leaseRenewalChain.then(run, run);
+    // Tail absorbs errors so a failed renewal does not poison the chain for
+    // subsequent renewals; the user-facing promise (`next`) still propagates
+    // the original error so callers can react.
+    this._leaseRenewalChain = next.catch(() => {});
+    return next;
+  }
+
+  /**
+   * Convenience wrapper that extends the lease and then invokes `fn`. If
+   * `fn` rejects, the lease is left as-extended — the heartbeat falls back
+   * naturally once the extension deadline passes.
+   */
+  async withExtendedLease<T>(fn: () => Promise<T>, opts: { ttlMs: number }): Promise<T> {
+    await this.extendLease(opts);
+    return fn();
+  }
+
+  /**
+   * Compute the effective TTL the heartbeat should use for this session's
+   * next renewal. Returns the larger of the harness default and the
+   * remaining extension window (`deadline - now`). Returns the default when
+   * no extension is active, when the extension has already expired, or when
+   * the deadline value is non-finite (defensive against external mutation).
+   *
+   * @internal — consumed by `Harness._renewLiveSessionLeases`.
+   */
+  _getEffectiveLeaseTtlMs(defaultTtlMs: number): number {
+    const deadline = this._leaseExtensionDeadline;
+    if (deadline === undefined || !Number.isFinite(deadline)) return defaultTtlMs;
+    const remaining = deadline - Date.now();
+    return remaining > defaultTtlMs ? remaining : defaultTtlMs;
+  }
+
+  /**
+   * Schedule a lease renewal on this session's serialized lease-write chain.
+   * Used by the harness heartbeat so a concurrent `extendLease` cannot race
+   * with the heartbeat against `storage.renewSessionLease`. Returns the
+   * user-facing promise so the heartbeat can await per-session completion
+   * and surface errors; the chain tail is poison-proofed separately.
+   *
+   * The runner is wrapped with a lifecycle guard so any work that was
+   * queued before `_markClosed/_markEvicted/_markDeleted` ran becomes a
+   * no-op once the session is terminal. This prevents the heartbeat
+   * (or a late chain entry) from re-extending a lease for a session
+   * the harness has already terminalized.
+   *
+   * @internal — invoked by `Harness._renewLiveSessionLeases`.
+   */
+  _enqueueLeaseRenewal(run: () => Promise<void>): Promise<void> {
+    const guardedRun = async () => {
+      if (this._state !== 'live' && this._state !== 'closing') return;
+      await run();
+    };
+    const next = this._leaseRenewalChain.then(guardedRun, guardedRun);
+    this._leaseRenewalChain = next.catch(() => {});
+    return next;
   }
 
   /** @internal — emitter epoch (for tests). */
@@ -8260,6 +8416,7 @@ export class Session {
       resolveToolPermission: params => session._resolveToolPermissionPolicy(params.toolName),
       recordWorkspaceAction: params => session._recordWorkspaceAction(params),
       registerBackgroundProcess: handle => session._registerBackgroundProcess(handle),
+      extendLease: extendOpts => session.extendLease(extendOpts),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
@@ -8387,6 +8544,7 @@ export class Session {
    */
   _markClosed(updatedRecord: SessionRecord): void {
     this._reapBackgroundProcesses();
+    this._leaseExtensionDeadline = undefined;
     this._record = updatedRecord;
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
@@ -8396,6 +8554,7 @@ export class Session {
   /** @internal — used by Harness hard-delete after storage has removed the row. */
   _markDeleted(): void {
     this._reapBackgroundProcesses();
+    this._leaseExtensionDeadline = undefined;
     const err = new HarnessSessionDeletedError(this.id);
     this._state = 'deleted';
     this._rejectIdleWaiters(err);
@@ -8435,6 +8594,7 @@ export class Session {
    */
   _markEvicted(updatedRecord: SessionRecord): void {
     this._reapBackgroundProcesses();
+    this._leaseExtensionDeadline = undefined;
     const err = new HarnessValidationError('session.evict()', 'Session evicted');
     this._record = updatedRecord;
     this._state = 'evicted';
