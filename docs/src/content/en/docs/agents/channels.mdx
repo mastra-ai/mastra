@@ -139,7 +139,7 @@ import { Agent } from '@mastra/core/agent'
 const agent = new Agent({
   name: 'ops',
   instructions: '…',
-  model: 'openai/gpt-4o',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: {
