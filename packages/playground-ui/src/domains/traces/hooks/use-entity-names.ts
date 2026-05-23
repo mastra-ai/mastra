@@ -6,9 +6,10 @@ import { ROOT_ENTITY_TYPE_OPTIONS } from '@/domains/traces/trace-filters';
 type UseEntityNamesOptions = {
   entityType?: EntityType;
   rootOnly?: boolean;
+  enabled?: boolean;
 };
 
-export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesOptions = {}) => {
+export const useEntityNames = ({ entityType, rootOnly = false, enabled = true }: UseEntityNamesOptions = {}) => {
   const client = useMastraClient();
 
   // Mirror the queryFn branches so the cache key reflects what the server
@@ -43,5 +44,6 @@ export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesO
     },
     select: data => data?.names ?? [],
     retry: false,
+    enabled,
   });
 };

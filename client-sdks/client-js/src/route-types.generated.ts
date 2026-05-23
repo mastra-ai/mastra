@@ -75508,6 +75508,50 @@ export type GetSystemPackages_Response = {
   storageType?: string | undefined;
   observabilityStorageType?: string | undefined;
   observabilityRuntimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;
+  observabilityStorageCapabilities?:
+    | {
+        tracing: {
+          preferredStrategy: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
+          supportedStrategies: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced')[];
+          runtimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;
+        };
+        logs: {
+          persist: boolean | 'unknown';
+          list: boolean | 'unknown';
+        };
+        metrics: {
+          persist: boolean | 'unknown';
+          list: boolean | 'unknown';
+          aggregate: boolean | 'unknown';
+          breakdown: boolean | 'unknown';
+          timeSeries: boolean | 'unknown';
+          percentiles: boolean | 'unknown';
+          discovery: boolean | 'unknown';
+        };
+        scores?:
+          | {
+              persist: boolean | 'unknown';
+              list: boolean | 'unknown';
+              getById: boolean | 'unknown';
+              aggregate: boolean | 'unknown';
+              breakdown: boolean | 'unknown';
+              timeSeries: boolean | 'unknown';
+              percentiles: boolean | 'unknown';
+            }
+          | undefined;
+        feedback?:
+          | {
+              persist: boolean | 'unknown';
+              list: boolean | 'unknown';
+              aggregate: boolean | 'unknown';
+              breakdown: boolean | 'unknown';
+              timeSeries: boolean | 'unknown';
+              percentiles: boolean | 'unknown';
+            }
+          | undefined;
+        persistence?: ('memory' | 'persistent' | 'unknown') | undefined;
+      }
+    | undefined;
 };
 
 export type GetSystemPackages_Request = Simplify<

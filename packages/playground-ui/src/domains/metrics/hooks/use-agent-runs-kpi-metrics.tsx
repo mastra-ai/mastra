@@ -2,8 +2,12 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
 
+type UseAgentRunsKpiMetricsOptions = {
+  enabled?: boolean;
+};
+
 /** Total Agent Runs — count of agent duration metric observations */
-export function useAgentRunsKpiMetrics() {
+export function useAgentRunsKpiMetrics({ enabled = true }: UseAgentRunsKpiMetricsOptions = {}) {
   const client = useMastraClient();
   const { filters, filterKey } = useMetricsFilters();
 
@@ -16,5 +20,6 @@ export function useAgentRunsKpiMetrics() {
         filters,
         comparePeriod: 'previous_period',
       }),
+    enabled,
   });
 }

@@ -4,6 +4,7 @@ import { EntityType } from '../../../observability';
 import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
+import type { ObservabilityStorageCapabilities } from './base';
 import type {
   GetEntityTypesArgs,
   GetEntityTypesResponse,
@@ -138,6 +139,43 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
 
     return ['delta-polling'] as const;
+  }
+
+  override getCapabilities(): ObservabilityStorageCapabilities {
+    return {
+      ...super.getCapabilities(),
+      logs: {
+        persist: true,
+        list: true,
+      },
+      metrics: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+        discovery: true,
+      },
+      scores: {
+        persist: true,
+        list: true,
+        getById: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      feedback: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      persistence: 'memory',
+    };
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -89,6 +89,47 @@ import { extractBranchSpans, getBranchArgsSchema } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
 export type ObservabilityStorageFeature = 'delta-polling';
+export type ObservabilityCapabilitySupport = boolean | 'unknown';
+export type ObservabilityStoragePersistence = 'memory' | 'persistent' | 'unknown';
+
+export interface ObservabilityStorageCapabilities {
+  tracing: {
+    preferredStrategy: ObservabilityStorageStrategy;
+    supportedStrategies: ObservabilityStorageStrategy[];
+    runtimeStrategy?: ObservabilityStorageStrategy;
+  };
+  logs: {
+    persist: ObservabilityCapabilitySupport;
+    list: ObservabilityCapabilitySupport;
+  };
+  metrics: {
+    persist: ObservabilityCapabilitySupport;
+    list: ObservabilityCapabilitySupport;
+    aggregate: ObservabilityCapabilitySupport;
+    breakdown: ObservabilityCapabilitySupport;
+    timeSeries: ObservabilityCapabilitySupport;
+    percentiles: ObservabilityCapabilitySupport;
+    discovery: ObservabilityCapabilitySupport;
+  };
+  scores?: {
+    persist: ObservabilityCapabilitySupport;
+    list: ObservabilityCapabilitySupport;
+    getById: ObservabilityCapabilitySupport;
+    aggregate: ObservabilityCapabilitySupport;
+    breakdown: ObservabilityCapabilitySupport;
+    timeSeries: ObservabilityCapabilitySupport;
+    percentiles: ObservabilityCapabilitySupport;
+  };
+  feedback?: {
+    persist: ObservabilityCapabilitySupport;
+    list: ObservabilityCapabilitySupport;
+    aggregate: ObservabilityCapabilitySupport;
+    breakdown: ObservabilityCapabilitySupport;
+    timeSeries: ObservabilityCapabilitySupport;
+    percentiles: ObservabilityCapabilitySupport;
+  };
+  persistence?: ObservabilityStoragePersistence;
+}
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -153,6 +194,37 @@ export class ObservabilityStorage extends StorageDomain {
    */
   public getFeatures(): readonly ObservabilityStorageFeature[] | undefined {
     return undefined;
+  }
+
+  /**
+   * Reports which observability APIs this storage domain supports without
+   * issuing writes or queries. Subclasses should override this when they
+   * implement any of the optional log, metric, score, or feedback methods.
+   */
+  public getCapabilities(): ObservabilityStorageCapabilities {
+    const runtimeStrategy = this.runtimeTracingStrategy;
+
+    return {
+      tracing: {
+        preferredStrategy: this.observabilityStrategy.preferred,
+        supportedStrategies: this.observabilityStrategy.supported,
+        ...(runtimeStrategy ? { runtimeStrategy } : {}),
+      },
+      logs: {
+        persist: false,
+        list: false,
+      },
+      metrics: {
+        persist: false,
+        list: false,
+        aggregate: false,
+        breakdown: false,
+        timeSeries: false,
+        percentiles: false,
+        discovery: false,
+      },
+      persistence: 'unknown',
+    };
   }
 
   /**

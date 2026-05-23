@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 
-import type { MastraPackage } from '../schemas/system';
-import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
+import type { MastraPackage, SystemPackagesResponse } from '../schemas/system';
+import {
+  apiSchemaManifestResponseSchema,
+  observabilityStorageCapabilitiesSchema,
+  systemPackagesResponseSchema,
+} from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
@@ -20,6 +24,30 @@ export const GET_API_SCHEMA_ROUTE = createRoute({
     return buildApiSchemaManifest();
   },
 });
+
+function getObservabilityStorageCapabilities(
+  observabilityStorage: unknown,
+): SystemPackagesResponse['observabilityStorageCapabilities'] {
+  const candidate = observabilityStorage as { getCapabilities?: () => unknown } | undefined;
+  if (typeof candidate?.getCapabilities !== 'function') {
+    return undefined;
+  }
+
+  const prototype = Object.getPrototypeOf(candidate);
+  const hasExplicitCapabilities =
+    Object.prototype.hasOwnProperty.call(candidate, 'getCapabilities') ||
+    (prototype && Object.prototype.hasOwnProperty.call(prototype, 'getCapabilities'));
+  if (!hasExplicitCapabilities) {
+    return undefined;
+  }
+
+  try {
+    const result = observabilityStorageCapabilitiesSchema.safeParse(candidate.getCapabilities());
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   method: 'GET',
@@ -50,6 +78,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const observabilityStorage = storage?.stores?.observability;
       const observabilityStorageType = observabilityStorage?.constructor.name;
       const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;
+      const observabilityStorageCapabilities = getObservabilityStorageCapabilities(observabilityStorage);
       const observabilityEnabled = !!mastra.observability.getDefaultInstance();
 
       return {
@@ -60,6 +89,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         storageType,
         observabilityStorageType,
         observabilityRuntimeStrategy,
+        ...(observabilityStorageCapabilities ? { observabilityStorageCapabilities } : {}),
       };
     } catch (error) {
       return handleError(error, 'Error getting system packages');

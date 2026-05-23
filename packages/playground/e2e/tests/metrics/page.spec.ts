@@ -39,6 +39,61 @@ test('renders Memory card with thread/resource tabs when metrics are available',
   await expect(resourcesTab).toHaveAttribute('aria-selected', 'true');
 });
 
+test('does not probe metrics endpoints when storage capabilities are unsupported', async ({ page }) => {
+  await page.route('**/api/system/packages', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        packages: [],
+        isDev: false,
+        cmsEnabled: true,
+        observabilityEnabled: true,
+        storageType: 'LibSQLStore',
+        observabilityStorageType: 'ObservabilityStorage',
+        observabilityStorageCapabilities: {
+          tracing: {
+            preferredStrategy: 'batch-with-updates',
+            supportedStrategies: ['batch-with-updates'],
+            runtimeStrategy: 'batch-with-updates',
+          },
+          logs: {
+            persist: false,
+            list: false,
+          },
+          metrics: {
+            persist: false,
+            list: false,
+            aggregate: false,
+            breakdown: false,
+            timeSeries: false,
+            percentiles: false,
+            discovery: false,
+          },
+          persistence: 'persistent',
+        },
+      }),
+    });
+  });
+
+  const unexpectedRequests: string[] = [];
+  await page.route('**/api/observability/metrics**', async route => {
+    unexpectedRequests.push(route.request().url());
+    await route.fulfill({ status: 500, body: 'unexpected metrics request' });
+  });
+  await page.route('**/api/observability/discovery/**', async route => {
+    unexpectedRequests.push(route.request().url());
+    await route.fulfill({ status: 500, body: 'unexpected discovery request' });
+  });
+
+  await page.goto('/metrics');
+
+  await expect(
+    page.getByRole('heading', { name: 'Metrics are not available with your current storage' }),
+  ).toBeVisible();
+  expect(unexpectedRequests).toEqual([]);
+});
+
 test('persists dimensional filter as URL param', async ({ page }) => {
   await page.goto('/metrics?filterEnvironment=production');
 

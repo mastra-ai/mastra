@@ -54,6 +54,30 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityInMemory',
 ]);
 
+type MetricsStorageCapabilities = {
+  persist?: boolean | 'unknown';
+  list?: boolean | 'unknown';
+  aggregate?: boolean | 'unknown';
+  breakdown?: boolean | 'unknown';
+  timeSeries?: boolean | 'unknown';
+  percentiles?: boolean | 'unknown';
+  discovery?: boolean | 'unknown';
+};
+
+function supportsMetricsDashboard(metricsCapabilities: MetricsStorageCapabilities | undefined) {
+  if (!metricsCapabilities) return false;
+
+  return (
+    metricsCapabilities.persist === true &&
+    metricsCapabilities.list === true &&
+    metricsCapabilities.aggregate === true &&
+    metricsCapabilities.breakdown === true &&
+    metricsCapabilities.timeSeries === true &&
+    metricsCapabilities.percentiles === true &&
+    metricsCapabilities.discovery === true
+  );
+}
+
 const PERIOD_PARAM = 'period';
 const DATE_FROM_PARAM = 'dateFrom';
 const DATE_TO_PARAM = 'dateTo';
@@ -186,19 +210,32 @@ export default function Metrics() {
 
 function MetricsContent() {
   const [searchParams] = useSearchParams();
-  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
   const { filterTokens, setFilterTokens } = useMetrics();
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
 
-  const { data: packagesData, isLoading: isPackagesLoading } = useMastraPackages();
+  const { data: packagesData, error: packagesError, isLoading: isPackagesLoading } = useMastraPackages();
   const observabilityType = packagesData?.observabilityStorageType;
-  const supportsMetrics = observabilityType ? ANALYTICS_OBSERVABILITY_TYPES.has(observabilityType) : false;
-  const isInMemory = observabilityType === 'ObservabilityInMemory';
+  const metricsCapabilities = packagesData?.observabilityStorageCapabilities?.metrics;
+  const supportsMetrics = metricsCapabilities
+    ? supportsMetricsDashboard(metricsCapabilities)
+    : observabilityType
+      ? ANALYTICS_OBSERVABILITY_TYPES.has(observabilityType)
+      : false;
+  const isInMemory =
+    packagesData?.observabilityStorageCapabilities?.persistence === 'memory' ||
+    observabilityType === 'ObservabilityInMemory';
+  const metricsQueriesEnabled = supportsMetrics && !isPackagesLoading;
+  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics({ enabled: metricsQueriesEnabled });
+  const loadError = packagesError ?? error;
 
-  const { data: tagsData, isLoading: isTagsLoading } = useTags();
-  const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
-  const { data: serviceNamesData, isLoading: isServiceNamesLoading } = useServiceNames();
-  const { data: environmentsData, isLoading: isEnvironmentsLoading } = useEnvironments();
+  const { data: tagsData, isLoading: isTagsLoading } = useTags({ enabled: metricsQueriesEnabled });
+  const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames({ enabled: metricsQueriesEnabled });
+  const { data: serviceNamesData, isLoading: isServiceNamesLoading } = useServiceNames({
+    enabled: metricsQueriesEnabled,
+  });
+  const { data: environmentsData, isLoading: isEnvironmentsLoading } = useEnvironments({
+    enabled: metricsQueriesEnabled,
+  });
 
   const filterFields = useMemo(
     () =>
@@ -258,7 +295,7 @@ function MetricsContent() {
     setFilterTokens(neutralTokens);
   }, [filterFields, filterTokens, setFilterTokens]);
 
-  if (error && is401UnauthorizedError(error)) {
+  if (loadError && is401UnauthorizedError(loadError)) {
     return (
       <NoDataPageLayout>
         <SessionExpired />
@@ -266,7 +303,7 @@ function MetricsContent() {
     );
   }
 
-  if (error && is403ForbiddenError(error)) {
+  if (loadError && is403ForbiddenError(loadError)) {
     return (
       <NoDataPageLayout>
         <PermissionDenied resource="metrics" />
@@ -274,10 +311,10 @@ function MetricsContent() {
     );
   }
 
-  if (error) {
+  if (loadError) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load metrics" message={error.message} />
+        <ErrorState title="Failed to load metrics" message={loadError.message} />
       </NoDataPageLayout>
     );
   }

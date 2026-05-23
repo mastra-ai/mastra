@@ -72,7 +72,7 @@ export const mastra = new Mastra({
 
 ## Studio
 
-The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
+The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. Studio reads the attached observability storage capabilities before it requests metric data, so adapters that do not support the full metrics query surface show the unsupported-storage state instead of issuing probe queries. See [Studio observability](/docs/studio/observability) for a full walkthrough.
 
 ## What Mastra measures
 

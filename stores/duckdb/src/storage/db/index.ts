@@ -70,6 +70,10 @@ export class DuckDBConnection extends MastraBase {
     this.path = config.path ?? 'mastra.duckdb';
   }
 
+  get isEphemeral(): boolean {
+    return this.path === ':memory:';
+  }
+
   private async initialize(): Promise<void> {
     if (this.initialized && this.instance) return;
 

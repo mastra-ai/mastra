@@ -101,6 +101,95 @@ describe('ObservabilityStorageDuckDB', () => {
     });
   });
 
+  it('reports in-memory observability capabilities for ephemeral DuckDB', () => {
+    expect(storage.getCapabilities()).toMatchObject({
+      tracing: {
+        preferredStrategy: 'event-sourced',
+        supportedStrategies: ['event-sourced'],
+      },
+      logs: {
+        persist: true,
+        list: true,
+      },
+      metrics: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+        discovery: true,
+      },
+      scores: {
+        persist: true,
+        list: true,
+        getById: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      feedback: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      persistence: 'memory',
+    });
+  });
+
+  it('reports persistent observability capabilities for file-backed DuckDB', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-capabilities-'));
+    const persistentStore = new DuckDBStore({ path: join(dir, 'observability.duckdb') });
+
+    try {
+      await persistentStore.init();
+      expect(persistentStore.observability.getCapabilities()).toMatchObject({
+        tracing: {
+          preferredStrategy: 'event-sourced',
+          supportedStrategies: ['event-sourced'],
+        },
+        logs: {
+          persist: true,
+          list: true,
+        },
+        metrics: {
+          persist: true,
+          list: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+          discovery: true,
+        },
+        scores: {
+          persist: true,
+          list: true,
+          getById: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+        },
+        feedback: {
+          persist: true,
+          list: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+        },
+        persistence: 'persistent',
+      });
+    } finally {
+      await persistentStore.db.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('gates delta list capabilities on the observability delta feature flag', async () => {
     const originalFeatures = new Set(coreFeatures);
 
@@ -130,11 +219,50 @@ describe('ObservabilityStorageDuckDB', () => {
       coreFeatures.add('observability-delta-polling');
 
       expect(lazyStore.observability.getFeatures()).toEqual(['delta-polling']);
+      expect(lazyStore.observability.getCapabilities()).toMatchObject({
+        metrics: {
+          persist: true,
+          list: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+          discovery: true,
+        },
+        persistence: 'memory',
+      });
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {
         coreFeatures.add(feature);
       }
+      await lazyStore.db.close();
+    }
+  });
+
+  it('reports unsupported capabilities through the lazy store facade after a compatibility failure', async () => {
+    const lazyStore = new DuckDBStore({ path: ':memory:' });
+
+    try {
+      (lazyStore.observability as any).unavailableError = new Error('upgrade @mastra/core');
+
+      expect(lazyStore.observability.getCapabilities()).toMatchObject({
+        logs: {
+          persist: false,
+          list: false,
+        },
+        metrics: {
+          persist: false,
+          list: false,
+          aggregate: false,
+          breakdown: false,
+          timeSeries: false,
+          percentiles: false,
+          discovery: false,
+        },
+        persistence: 'unknown',
+      });
+    } finally {
       await lazyStore.db.close();
     }
   });

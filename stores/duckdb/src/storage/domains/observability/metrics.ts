@@ -1,4 +1,3 @@
-import { METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
 import type {
   BatchCreateMetricsArgs,
   ListMetricsArgs,

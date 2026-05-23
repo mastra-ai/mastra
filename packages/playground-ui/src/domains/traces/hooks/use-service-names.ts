@@ -1,7 +1,11 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-export const useServiceNames = () => {
+type UseServiceNamesOptions = {
+  enabled?: boolean;
+};
+
+export const useServiceNames = ({ enabled = true }: UseServiceNamesOptions = {}) => {
   const client = useMastraClient();
 
   return useQuery({
@@ -15,5 +19,6 @@ export const useServiceNames = () => {
     },
     select: data => data?.serviceNames ?? [],
     retry: false,
+    enabled,
   });
 };

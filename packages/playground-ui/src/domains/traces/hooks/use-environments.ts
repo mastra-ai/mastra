@@ -1,7 +1,11 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-export const useEnvironments = () => {
+type UseEnvironmentsOptions = {
+  enabled?: boolean;
+};
+
+export const useEnvironments = ({ enabled = true }: UseEnvironmentsOptions = {}) => {
   const client = useMastraClient();
 
   return useQuery({
@@ -15,5 +19,6 @@ export const useEnvironments = () => {
     },
     select: data => data?.environments ?? [],
     retry: false,
+    enabled,
   });
 };

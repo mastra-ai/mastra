@@ -1,11 +1,57 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
+import { ObservabilityInMemory } from './inmemory';
 
 describe('ObservabilityStorage base class', () => {
   const storage = new ObservabilityStorage();
 
   it('does not advertise observability features by default', () => {
     expect(storage.getFeatures()).toBeUndefined();
+  });
+
+  it('reports conservative capabilities by default', () => {
+    expect(storage.getCapabilities()).toEqual({
+      tracing: {
+        preferredStrategy: 'batch-with-updates',
+        supportedStrategies: ['realtime', 'batch-with-updates', 'insert-only'],
+      },
+      logs: {
+        persist: false,
+        list: false,
+      },
+      metrics: {
+        persist: false,
+        list: false,
+        aggregate: false,
+        breakdown: false,
+        timeSeries: false,
+        percentiles: false,
+        discovery: false,
+      },
+      persistence: 'unknown',
+    });
+  });
+
+  it('reports in-memory log and metric capabilities', () => {
+    const inMemory = new ObservabilityInMemory({ db: new InMemoryDB() });
+
+    expect(inMemory.getCapabilities()).toMatchObject({
+      logs: {
+        persist: true,
+        list: true,
+      },
+      metrics: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+        discovery: true,
+      },
+      persistence: 'memory',
+    });
   });
 
   const methodCases: Array<{ name: string; callThunk: () => Promise<unknown>; expectedMessage: string }> = [

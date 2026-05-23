@@ -128,6 +128,46 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
   });
 
+  it('reports persistent observability capabilities', () => {
+    expect(storage.getCapabilities()).toMatchObject({
+      tracing: {
+        preferredStrategy: 'insert-only',
+        supportedStrategies: ['insert-only'],
+      },
+      logs: {
+        persist: true,
+        list: true,
+      },
+      metrics: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+        discovery: true,
+      },
+      scores: {
+        persist: true,
+        list: true,
+        getById: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      feedback: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      persistence: 'persistent',
+    });
+  });
+
   describe('delta polling', () => {
     async function withFallbackStorage<T>(
       run: (fallbackStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,

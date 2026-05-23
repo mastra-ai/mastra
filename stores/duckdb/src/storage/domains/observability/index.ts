@@ -208,6 +208,49 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     return ['delta-polling'] as const;
   }
 
+  getCapabilities() {
+    const runtimeStrategy = this.runtimeTracingStrategy;
+
+    return {
+      tracing: {
+        preferredStrategy: this.observabilityStrategy.preferred,
+        supportedStrategies: this.observabilityStrategy.supported,
+        ...(runtimeStrategy ? { runtimeStrategy } : {}),
+      },
+      logs: {
+        persist: true,
+        list: true,
+      },
+      metrics: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+        discovery: true,
+      },
+      scores: {
+        persist: true,
+        list: true,
+        getById: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      feedback: {
+        persist: true,
+        list: true,
+        aggregate: true,
+        breakdown: true,
+        timeSeries: true,
+        percentiles: true,
+      },
+      persistence: this.db.isEphemeral ? ('memory' as const) : ('persistent' as const),
+    };
+  }
+
   // Tracing
   async createSpan(args: CreateSpanArgs): Promise<void> {
     return tracingOps.createSpan(this.db, args);

@@ -12,6 +12,51 @@ export const observabilityRuntimeStrategySchema = z.enum([
   'event-sourced',
 ]);
 
+const observabilityCapabilitySupportSchema = z.union([z.boolean(), z.literal('unknown')]);
+
+export const observabilityStorageCapabilitiesSchema = z.object({
+  tracing: z.object({
+    preferredStrategy: observabilityRuntimeStrategySchema,
+    supportedStrategies: z.array(observabilityRuntimeStrategySchema),
+    runtimeStrategy: observabilityRuntimeStrategySchema.optional(),
+  }),
+  logs: z.object({
+    persist: observabilityCapabilitySupportSchema,
+    list: observabilityCapabilitySupportSchema,
+  }),
+  metrics: z.object({
+    persist: observabilityCapabilitySupportSchema,
+    list: observabilityCapabilitySupportSchema,
+    aggregate: observabilityCapabilitySupportSchema,
+    breakdown: observabilityCapabilitySupportSchema,
+    timeSeries: observabilityCapabilitySupportSchema,
+    percentiles: observabilityCapabilitySupportSchema,
+    discovery: observabilityCapabilitySupportSchema,
+  }),
+  scores: z
+    .object({
+      persist: observabilityCapabilitySupportSchema,
+      list: observabilityCapabilitySupportSchema,
+      getById: observabilityCapabilitySupportSchema,
+      aggregate: observabilityCapabilitySupportSchema,
+      breakdown: observabilityCapabilitySupportSchema,
+      timeSeries: observabilityCapabilitySupportSchema,
+      percentiles: observabilityCapabilitySupportSchema,
+    })
+    .optional(),
+  feedback: z
+    .object({
+      persist: observabilityCapabilitySupportSchema,
+      list: observabilityCapabilitySupportSchema,
+      aggregate: observabilityCapabilitySupportSchema,
+      breakdown: observabilityCapabilitySupportSchema,
+      timeSeries: observabilityCapabilitySupportSchema,
+      percentiles: observabilityCapabilitySupportSchema,
+    })
+    .optional(),
+  persistence: z.enum(['memory', 'persistent', 'unknown']).optional(),
+});
+
 export const systemPackagesResponseSchema = z.object({
   packages: z.array(mastraPackageSchema),
   isDev: z.boolean(),
@@ -20,6 +65,7 @@ export const systemPackagesResponseSchema = z.object({
   storageType: z.string().optional(),
   observabilityStorageType: z.string().optional(),
   observabilityRuntimeStrategy: observabilityRuntimeStrategySchema.optional(),
+  observabilityStorageCapabilities: observabilityStorageCapabilitiesSchema.optional(),
 });
 
 const jsonSchemaRecordSchema = z.record(z.string(), z.unknown());

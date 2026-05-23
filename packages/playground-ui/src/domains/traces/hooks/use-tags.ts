@@ -1,7 +1,11 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-export const useTags = () => {
+type UseTagsOptions = {
+  enabled?: boolean;
+};
+
+export const useTags = ({ enabled = true }: UseTagsOptions = {}) => {
   const client = useMastraClient();
 
   return useQuery({
@@ -16,5 +20,6 @@ export const useTags = () => {
     },
     select: data => data?.tags ?? [],
     retry: false,
+    enabled,
   });
 };

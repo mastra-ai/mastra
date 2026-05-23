@@ -9,10 +9,53 @@ import type {
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
 
+type ObservabilityStoreImpl = ObservabilityStorageDuckDBImpl;
+
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 const DUCKDB_OBSERVABILITY_FEATURES = ['delta-polling'] as const;
+const DUCKDB_OBSERVABILITY_STRATEGY: ObservabilityStoreImpl['observabilityStrategy'] = {
+  preferred: 'event-sourced',
+  supported: ['event-sourced'],
+};
+const DUCKDB_UNAVAILABLE_OBSERVABILITY_CAPABILITIES = {
+  tracing: {
+    preferredStrategy: DUCKDB_OBSERVABILITY_STRATEGY.preferred,
+    supportedStrategies: DUCKDB_OBSERVABILITY_STRATEGY.supported,
+  },
+  logs: {
+    persist: false,
+    list: false,
+  },
+  metrics: {
+    persist: false,
+    list: false,
+    aggregate: false,
+    breakdown: false,
+    timeSeries: false,
+    percentiles: false,
+    discovery: false,
+  },
+  scores: {
+    persist: false,
+    list: false,
+    getById: false,
+    aggregate: false,
+    breakdown: false,
+    timeSeries: false,
+    percentiles: false,
+  },
+  feedback: {
+    persist: false,
+    list: false,
+    aggregate: false,
+    breakdown: false,
+    timeSeries: false,
+    percentiles: false,
+  },
+  persistence: 'unknown' as const,
+};
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -32,8 +75,6 @@ function isObservabilityCompatibilityError(error: unknown): boolean {
 export { DuckDBConnection } from './db/index';
 export type { DuckDBStorageConfig } from './db/index';
 export type { ObservabilityDuckDBConfig } from './domains/observability/index';
-
-type ObservabilityStoreImpl = ObservabilityStorageDuckDBImpl;
 
 /**
  * Lazy DuckDB observability facade.
@@ -103,12 +144,7 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   }
 
   get observabilityStrategy(): ObservabilityStoreImpl['observabilityStrategy'] {
-    return (
-      this.delegate?.observabilityStrategy ?? {
-        preferred: 'event-sourced',
-        supported: ['event-sourced'],
-      }
-    );
+    return this.delegate?.observabilityStrategy ?? DUCKDB_OBSERVABILITY_STRATEGY;
   }
 
   get tracingStrategy(): ObservabilityStoreImpl['tracingStrategy'] {
@@ -123,6 +159,55 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     }
 
     return DUCKDB_OBSERVABILITY_FEATURES;
+  }
+
+  getCapabilities() {
+    if (this.unavailableError) {
+      return DUCKDB_UNAVAILABLE_OBSERVABILITY_CAPABILITIES;
+    }
+
+    const runtimeStrategy = this.runtimeTracingStrategy;
+
+    return (
+      this.delegate?.getCapabilities() ?? {
+        tracing: {
+          preferredStrategy: this.observabilityStrategy.preferred,
+          supportedStrategies: this.observabilityStrategy.supported,
+          ...(runtimeStrategy ? { runtimeStrategy } : {}),
+        },
+        logs: {
+          persist: true,
+          list: true,
+        },
+        metrics: {
+          persist: true,
+          list: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+          discovery: true,
+        },
+        scores: {
+          persist: true,
+          list: true,
+          getById: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+        },
+        feedback: {
+          persist: true,
+          list: true,
+          aggregate: true,
+          breakdown: true,
+          timeSeries: true,
+          percentiles: true,
+        },
+        persistence: this.db.isEphemeral ? ('memory' as const) : ('persistent' as const),
+      }
+    );
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {

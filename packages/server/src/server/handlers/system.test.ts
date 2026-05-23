@@ -10,8 +10,31 @@ type MockStorage = {
     observability?: {
       constructor?: { name?: string };
       runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
+      getCapabilities?: () => unknown;
     };
   };
+};
+
+const mockObservabilityStorageCapabilities = {
+  tracing: {
+    preferredStrategy: 'realtime',
+    supportedStrategies: ['realtime'],
+    runtimeStrategy: 'realtime',
+  },
+  logs: {
+    persist: true,
+    list: true,
+  },
+  metrics: {
+    persist: true,
+    list: true,
+    aggregate: true,
+    breakdown: true,
+    timeSeries: true,
+    percentiles: true,
+    discovery: true,
+  },
+  persistence: 'persistent',
 };
 
 const createMockMastra = (hasEditor: boolean, storage?: MockStorage, hasObservability = false) =>
@@ -188,6 +211,115 @@ describe('System Handlers', () => {
             observability: {
               constructor: { name: 'MockObservabilityStore' },
               runtimeTracingStrategy: 'realtime',
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'MockObservabilityStore',
+        observabilityRuntimeStrategy: 'realtime',
+      });
+    });
+
+    it('should return observability storage capabilities when the store exposes them', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: {
+              constructor: { name: 'MockObservabilityStore' },
+              runtimeTracingStrategy: 'realtime',
+              getCapabilities: () => mockObservabilityStorageCapabilities,
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'MockObservabilityStore',
+        observabilityRuntimeStrategy: 'realtime',
+        observabilityStorageCapabilities: mockObservabilityStorageCapabilities,
+      });
+    });
+
+    it('should omit inherited base observability storage capabilities', async () => {
+      class BaseObservabilityStorage {
+        getCapabilities() {
+          return mockObservabilityStorageCapabilities;
+        }
+      }
+
+      class LegacyObservabilityStorage extends BaseObservabilityStorage {
+        runtimeTracingStrategy = 'realtime';
+      }
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: new LegacyObservabilityStorage(),
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'LegacyObservabilityStorage',
+        observabilityRuntimeStrategy: 'realtime',
+      });
+    });
+
+    it('should omit invalid observability storage capabilities', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: {
+              constructor: { name: 'MockObservabilityStore' },
+              runtimeTracingStrategy: 'realtime',
+              getCapabilities: () => ({ metrics: { persist: true } }),
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'MockObservabilityStore',
+        observabilityRuntimeStrategy: 'realtime',
+      });
+    });
+
+    it('should omit observability storage capabilities when capability inspection throws', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: {
+              constructor: { name: 'MockObservabilityStore' },
+              runtimeTracingStrategy: 'realtime',
+              getCapabilities: () => {
+                throw new Error('capabilities unavailable');
+              },
             },
           },
         }),
