@@ -306,6 +306,146 @@ describe('WorkspaceRegistry — per-session', () => {
     await expect(h2.session({ sessionId })).rejects.toBeInstanceOf(HarnessWorkspaceProviderMismatchError);
   });
 
+  it('deleteSession tears down a per-session workspace whose session is dormant in the current harness', async () => {
+    // Repro: create the workspace in harness1, shut harness1 down (which
+    // releases the in-memory workspace but leaves `SessionWorkspaceState` on
+    // the record), then delete the session through a fresh harness2 that
+    // never re-resolved the session. Without `releaseDormant`, no provider
+    // teardown would ever fire for the dormant per-session workspace.
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const calls: Array<{ phase: 'create' | 'resume' | 'destroy'; sessionId?: string }> = [];
+
+    const provider: WorkspaceProvider = {
+      providerId: 'p-dormant',
+      resumable: true,
+      create: async (ctx: WorkspaceProviderContext) => {
+        calls.push({ phase: 'create', sessionId: ctx.sessionId });
+        await ctx.pushState({ leaf: true });
+        return makeWorkspace('dormant');
+      },
+      resume: async ctx => {
+        calls.push({ phase: 'resume', sessionId: ctx.sessionId });
+        return makeWorkspace('dormant-resumed');
+      },
+      destroy: async (_ws: Workspace, ctx) => {
+        calls.push({ phase: 'destroy', sessionId: ctx.sessionId });
+      },
+    };
+
+    const h1 = new Harness(
+      baseConfig({ sessions: { storage }, workspace: { kind: 'per-session' as const, provider } }),
+    );
+    const s1 = await h1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await s1.getWorkspace();
+    const sessionId = s1.id;
+    await s1.close();
+    await h1.shutdown();
+
+    // After harness1's lifecycle: one create + one destroy for the live close.
+    expect(calls.filter(c => c.sessionId === sessionId)).toEqual([
+      { phase: 'create', sessionId },
+      { phase: 'destroy', sessionId },
+    ]);
+
+    const h2 = new Harness(
+      baseConfig({ sessions: { storage }, workspace: { kind: 'per-session' as const, provider } }),
+    );
+    await h2.deleteSession({ sessionId, resourceId: 'u1' });
+
+    // Dormant teardown ran: resume rebuilt a transient workspace handle and
+    // then destroy fired against it — both attributed to the same session.
+    const dormantCalls = calls.filter(c => c.sessionId === sessionId).slice(2);
+    expect(dormantCalls).toEqual([
+      { phase: 'resume', sessionId },
+      { phase: 'destroy', sessionId },
+    ]);
+  });
+
+  it('deleteSession does not double-tear-down when the workspace was already released on close', async () => {
+    // Same harness from create through delete — close releases the live
+    // workspace synchronously; the dormant path is skipped because the
+    // session record carries no `workspace` state pushed before close.
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    let destroys = 0;
+    let resumes = 0;
+
+    const provider: WorkspaceProvider = {
+      providerId: 'p-same-harness',
+      resumable: true,
+      create: async () => makeWorkspace(),
+      resume: async () => {
+        resumes++;
+        return makeWorkspace();
+      },
+      destroy: async () => {
+        destroys++;
+      },
+    };
+
+    const harness = new Harness(
+      baseConfig({ sessions: { storage }, workspace: { kind: 'per-session' as const, provider } }),
+    );
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.getWorkspace();
+    const sessionId = session.id;
+    await session.close();
+    expect(destroys).toBe(1);
+    await harness.deleteSession({ sessionId, resourceId: 'u1' });
+    // No second destroy — the dormant path either no-oped (no persisted
+    // state) or short-circuited through `_dormantReleasing`.
+    expect(destroys).toBe(1);
+    expect(resumes).toBe(0);
+  });
+
+  it('deleteSession aborts when the dormant per-session workspace was created by a different provider', async () => {
+    // Reconfiguring the harness with a different per-session provider after a
+    // session has persisted state would otherwise silently delete the
+    // breadcrumb the original provider needed to find its on-disk dir.
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const providerA: WorkspaceProvider = {
+      providerId: 'provider-A',
+      resumable: true,
+      create: async (ctx: WorkspaceProviderContext) => {
+        await ctx.pushState({ owned: 'A' });
+        return makeWorkspace('A');
+      },
+      resume: async () => makeWorkspace('A-resumed'),
+      destroy: async () => {
+        /* no-op */
+      },
+    };
+    const providerB: WorkspaceProvider = {
+      providerId: 'provider-B',
+      resumable: true,
+      create: async () => makeWorkspace('B'),
+      resume: async () => makeWorkspace('B'),
+      destroy: async () => {
+        /* no-op */
+      },
+    };
+
+    const h1 = new Harness(
+      baseConfig({ sessions: { storage }, workspace: { kind: 'per-session' as const, provider: providerA } }),
+    );
+    const s1 = await h1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await s1.getWorkspace();
+    const sessionId = s1.id;
+    await s1.close();
+    await h1.shutdown();
+
+    const h2 = new Harness(
+      baseConfig({ sessions: { storage }, workspace: { kind: 'per-session' as const, provider: providerB } }),
+    );
+    await expect(h2.deleteSession({ sessionId, resourceId: 'u1' })).rejects.toBeInstanceOf(
+      HarnessWorkspaceProviderMismatchError,
+    );
+    // Record must still exist after the aborted delete so the operator can
+    // reconfigure provider A and retry.
+    const stillStored = await storage.loadSession({ sessionId });
+    expect(stillStored).not.toBeNull();
+    expect(stillStored?.workspace?.providerId).toBe('provider-A');
+  });
+
   it('Session._markWorkspaceLost causes the next getWorkspace() to throw HarnessWorkspaceLostError', async () => {
     // The registry rejects non-resumable per-session providers at config time,
     // so the "lost" path is only reachable via the rehydrate flag (Harness sets

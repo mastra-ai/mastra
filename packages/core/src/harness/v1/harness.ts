@@ -2914,6 +2914,34 @@ export class Harness {
     deletedLiveSessions = new Map<string, Session>(),
   ): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
+    // Tear down per-session workspace state from the persisted record before
+    // the storage rows go away. `releaseDormant` resolves to a no-op for
+    // sessions that are still live in `_perSession` (the close path already
+    // released them) and for records that never persisted workspace state.
+    // Best-effort: registry errors surface as workspace_error events.
+    if (this._workspaceKind === 'per-session') {
+      for (const node of bottomUp) {
+        const wsState = node.record.workspace;
+        if (!wsState) continue;
+        // Let `HarnessWorkspaceProviderMismatchError` propagate so the delete
+        // aborts before the row removal — the stored state is the only
+        // breadcrumb the original provider has to clean its filesystem dir.
+        // Other failures are best-effort: the registry already emitted
+        // workspace_error.
+        try {
+          await this._workspaceRegistry.releaseDormant({
+            sessionId: node.record.id,
+            resourceId: node.record.resourceId,
+            ...(node.record.parentSessionId !== undefined ? { parentSessionId: node.record.parentSessionId } : {}),
+            storedProviderId: wsState.providerId,
+            storedState: wsState.state,
+          });
+        } catch (err) {
+          if (err instanceof HarnessWorkspaceProviderMismatchError) throw err;
+          // Registry emits a workspace_error event on best-effort failure.
+        }
+      }
+    }
     const sessions = bottomUp.map(node => ({
       harnessName: node.record.harnessName,
       sessionId: node.record.id,

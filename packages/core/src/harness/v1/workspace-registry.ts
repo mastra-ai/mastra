@@ -15,7 +15,12 @@
 import { RequestContext } from '../../request-context';
 import type { Workspace } from '../../workspace';
 
-import { HarnessConfigError, HarnessWorkspaceInUseError, HarnessWorkspaceProvisioningError } from './errors';
+import {
+  HarnessConfigError,
+  HarnessWorkspaceInUseError,
+  HarnessWorkspaceProviderMismatchError,
+  HarnessWorkspaceProvisioningError,
+} from './errors';
 import type { EventEmitter } from './events';
 import type { HarnessWorkspaceConfig } from './types';
 import { nonDurableProvider } from './workspace-provider';
@@ -82,6 +87,10 @@ export class WorkspaceRegistry {
   private readonly _perResourceResolving = new Map<string, Promise<PerResourceEntry>>();
   private readonly _perSession = new Map<string, PerSessionEntry>();
   private readonly _perSessionResolving = new Map<string, Promise<PerSessionEntry>>();
+  /** In-flight `releaseDormant()` runs, keyed by `sessionId`. Each promise
+   * is captured so concurrent `releaseDormant` and live `releasePerSession`
+   * paths converge on a single teardown per session. */
+  private readonly _dormantReleasing = new Map<string, Promise<void>>();
   private readonly _resolvedProvider?: WorkspaceProvider;
   private _closed = false;
 
@@ -319,6 +328,15 @@ export class WorkspaceRegistry {
   async acquirePerSession(opts: AcquirePerSessionOpts): Promise<Workspace> {
     this._assertKind('per-session');
     this._assertOpen();
+    // If a dormant teardown is in flight for this session, wait for it to
+    // finish before resuming. Without this, `releaseDormant` could resume
+    // the workspace solely to destroy it while a real `acquirePerSession`
+    // simultaneously rebuilt a live entry against the same persisted state.
+    const dormant = this._dormantReleasing.get(opts.sessionId);
+    if (dormant) {
+      await dormant.catch(() => {});
+      this._assertOpen();
+    }
     const existing = this._perSession.get(opts.sessionId);
     if (existing) {
       existing.refCount += 1;
@@ -406,6 +424,127 @@ export class WorkspaceRegistry {
     // the parent's refcount.
     this._perSession.set(opts.childSessionId, parent);
     return parent.workspace;
+  }
+
+  /**
+   * Tear down a per-session workspace from its persisted state when the
+   * session is no longer live in `_perSession` (e.g. closed-but-not-resumed
+   * before `harness.deleteSession`). Falls back to `releasePerSession` when
+   * the session IS live so live and dormant delete paths converge.
+   *
+   * Idempotent: concurrent calls share a single `_dormantReleasing` promise.
+   * Errors are surfaced through the `workspace_error` event so the call
+   * site stays best-effort.
+   */
+  async releaseDormant(opts: {
+    sessionId: string;
+    resourceId: string;
+    parentSessionId?: string;
+    storedProviderId?: string;
+    storedState?: unknown;
+  }): Promise<void> {
+    if (this._config?.kind !== 'per-session') return;
+    if (this._closed) return;
+    if (this._perSession.has(opts.sessionId)) {
+      await this.releasePerSession({ sessionId: opts.sessionId });
+      return;
+    }
+    const { storedProviderId, storedState } = opts;
+    if (storedProviderId === undefined || storedState === undefined) {
+      // Nothing was ever persisted for this session, or the provider never
+      // produced state — there is no per-session directory to tear down.
+      return;
+    }
+    const existing = this._dormantReleasing.get(opts.sessionId);
+    if (existing) return existing;
+    const run = this._releaseDormantOnce({ ...opts, storedProviderId, storedState });
+    this._dormantReleasing.set(opts.sessionId, run);
+    try {
+      await run;
+    } finally {
+      if (this._dormantReleasing.get(opts.sessionId) === run) {
+        this._dormantReleasing.delete(opts.sessionId);
+      }
+    }
+  }
+
+  private async _releaseDormantOnce(opts: {
+    sessionId: string;
+    resourceId: string;
+    parentSessionId?: string;
+    storedProviderId: string;
+    storedState: unknown;
+  }): Promise<void> {
+    const provider = this._resolvedProvider;
+    if (!provider) return;
+    if (opts.storedProviderId !== provider.providerId) {
+      // Config drift: the stored provider does not match the configured one.
+      // Surface a workspace_error AND throw so the surrounding `deleteSession`
+      // aborts. Swallowing here would let the storage row vanish along with
+      // the breadcrumb the original provider needs to find its persistent
+      // state; the operator must reconfigure the matching provider and retry.
+      const err = new HarnessWorkspaceProviderMismatchError(opts.sessionId, provider.providerId, opts.storedProviderId);
+      this._emitError({
+        sessionId: opts.sessionId,
+        resourceId: opts.resourceId,
+        providerId: opts.storedProviderId,
+        err,
+      });
+      throw err;
+    }
+    if (!provider.resume) {
+      // Per-session providers must be resumable (validated at construction),
+      // so this is defensive — if a non-resumable provider somehow ended up
+      // with stored state, we cannot rebuild a Workspace handle to destroy.
+      return;
+    }
+    const ctx: WorkspaceProviderContext = {
+      resourceId: opts.resourceId,
+      sessionId: opts.sessionId,
+      ...(opts.parentSessionId ? { parentSessionId: opts.parentSessionId } : {}),
+      pushState: async () => {
+        /* dormant teardown — no state push back to a session record that is
+         * about to be deleted. */
+      },
+    };
+    this._emitStatus({
+      sessionId: opts.sessionId,
+      resourceId: opts.resourceId,
+      providerId: provider.providerId,
+      status: 'destroying',
+    });
+    let ws: Workspace | undefined;
+    try {
+      ws = await provider.resume({ ...ctx, state: opts.storedState });
+    } catch (cause) {
+      this._emitError({
+        sessionId: opts.sessionId,
+        resourceId: opts.resourceId,
+        providerId: provider.providerId,
+        err: cause,
+      });
+      return;
+    }
+    try {
+      if (provider.destroy) {
+        await provider.destroy(ws, ctx);
+      } else {
+        await ws.destroy();
+      }
+    } catch (err) {
+      this._emitError({
+        sessionId: opts.sessionId,
+        resourceId: opts.resourceId,
+        providerId: provider.providerId,
+        err,
+      });
+    }
+    this._emitStatus({
+      sessionId: opts.sessionId,
+      resourceId: opts.resourceId,
+      providerId: provider.providerId,
+      status: 'destroyed',
+    });
   }
 
   async releasePerSession(opts: { sessionId: string }): Promise<void> {
