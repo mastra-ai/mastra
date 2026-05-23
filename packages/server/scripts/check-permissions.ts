@@ -30,7 +30,6 @@ for (const route of SERVER_ROUTES) {
   if (runtimePerm) {
     const perms = Array.isArray(runtimePerm) ? runtimePerm : [runtimePerm];
     for (const perm of perms) {
-      runtimePermissions.add(perm);
       if (!generatedPermissions.has(perm)) {
         mismatches.push(`Missing: ${perm} (from ${route.method} ${route.path})`);
       }

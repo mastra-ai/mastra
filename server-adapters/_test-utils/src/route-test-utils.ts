@@ -103,7 +103,18 @@ export function generateContextualValue(fieldName?: string): string {
 /**
  * Generate valid test data from a Zod schema
  */
-export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): any {
+export function generateValidDataFromSchema(
+  schema: z.ZodTypeAny,
+  fieldName?: string,
+  depth = 0,
+  visited: Set<z.ZodTypeAny> = new Set(),
+): any {
+  if (depth > 20 || visited.has(schema)) {
+    return {};
+  }
+  const nextVisited = new Set(visited);
+  nextVisited.add(schema);
+
   let typeName = getZodTypeName(schema);
   let def = getZodDef(schema);
 
@@ -125,7 +136,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
-    return generateValidDataFromSchema(def.innerType, fieldName);
+    return generateValidDataFromSchema(def.innerType, fieldName, depth + 1, nextVisited);
   }
   if (typeName === 'ZodDefault') {
     if ('_zod' in schema) {
@@ -133,6 +144,10 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     } else {
       return def.defaultValue();
     }
+  }
+
+  if (typeName === 'ZodLazy') {
+    return generateValidDataFromSchema(def.getter(), fieldName, depth + 1, nextVisited);
   }
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
@@ -268,9 +283,9 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
 
   if (typeName === 'ZodArray') {
     if ('_zod' in schema) {
-      return [generateValidDataFromSchema(def.element, fieldName)];
+      return [generateValidDataFromSchema(def.element, fieldName, depth + 1, nextVisited)];
     } else {
-      return [generateValidDataFromSchema(def.type, fieldName)];
+      return [generateValidDataFromSchema(def.type, fieldName, depth + 1, nextVisited)];
     }
   }
 
@@ -286,17 +301,17 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         if (key === 'inputData' || key === 'agent_id') {
           const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
           const innerType = fieldDef.innerType;
-          obj[key] = generateValidDataFromSchema(innerType, key);
+          obj[key] = generateValidDataFromSchema(innerType, key, depth + 1, nextVisited);
         }
         continue;
       }
-      obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
+      obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key, depth + 1, nextVisited);
     }
     return obj;
   }
 
   if (typeName === 'ZodRecord') {
-    return { key: generateValidDataFromSchema(def.valueType, fieldName) };
+    return { key: generateValidDataFromSchema(def.valueType, fieldName, depth + 1, nextVisited) };
   }
 
   if (typeName === 'ZodUnion') {
@@ -309,22 +324,22 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         }
       }
     }
-    return generateValidDataFromSchema(def.options[0], fieldName);
+    return generateValidDataFromSchema(def.options[0], fieldName, depth + 1, nextVisited);
   }
 
   if (typeName === 'ZodDiscriminatedUnion') {
     const options = Array.from(def.options.values());
-    return generateValidDataFromSchema(options[0] as z.ZodTypeAny, fieldName);
+    return generateValidDataFromSchema(options[0] as z.ZodTypeAny, fieldName, depth + 1, nextVisited);
   }
 
   if (typeName === 'ZodIntersection') {
-    const left = generateValidDataFromSchema(def.left, fieldName);
-    const right = generateValidDataFromSchema(def.right, fieldName);
+    const left = generateValidDataFromSchema(def.left, fieldName, depth + 1, nextVisited);
+    const right = generateValidDataFromSchema(def.right, fieldName, depth + 1, nextVisited);
     return { ...left, ...right };
   }
 
   if (typeName === 'ZodTuple') {
-    return def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName));
+    return def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName, depth + 1, nextVisited));
   }
 
   if (typeName === 'ZodAny' || typeName === 'ZodUnknown') {
@@ -433,6 +448,15 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
 
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';
+
+  // Harness route params
+  if (route.path.startsWith('/harness/')) {
+    if (route.path.includes(':name')) params.name = 'test-harness';
+    if (route.path.includes(':sessionId')) params.sessionId = 'test-session';
+    if (route.path.includes(':attachmentId')) params.attachmentId = 'test-attachment';
+    if (route.path.includes(':signalId')) params.signalId = 'test-signal';
+    if (route.path.includes(':queuedItemId')) params.queuedItemId = 'test-queued-item';
+  }
 
   // Builder registry route params
   if (route.path.includes(':registryId')) params.registryId = 'skills-sh';

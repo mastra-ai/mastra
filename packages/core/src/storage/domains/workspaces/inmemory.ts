@@ -193,7 +193,7 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   }
 
   async list(args?: StorageListWorkspacesInput): Promise<StorageListWorkspacesOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, authorIds, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -212,8 +212,10 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
     // Get all workspaces and apply filters
     let configs = Array.from(this.db.workspaces.values());
 
-    // Filter by authorId if provided
-    if (authorId !== undefined) {
+    if (authorIds !== undefined) {
+      const authorSet = new Set(authorIds);
+      configs = configs.filter(config => authorSet.has(config.authorId ?? null));
+    } else if (authorId !== undefined) {
       configs = configs.filter(config => config.authorId === authorId);
     }
 

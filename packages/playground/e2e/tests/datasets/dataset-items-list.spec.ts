@@ -4,10 +4,6 @@ import { resetStorage, seedDatasetWithItems } from '../__utils__';
 const PORT = process.env.E2E_PORT || '4111';
 const BASE_URL = `http://localhost:${PORT}`;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
 test.afterEach(async () => {
   await resetStorage();
 });
@@ -27,7 +23,7 @@ test.describe('Dataset Items List - Behavior Tests', () => {
 
     await page.getByRole('button', { name: /Test input 1/ }).click();
 
-    await expect(page.getByText(/^Created /).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Created May/).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('selecting Delete Items from menu enables selection mode with checkboxes', async ({ page }) => {
@@ -94,11 +90,7 @@ test.describe('Dataset Items List - Behavior Tests', () => {
     if (!datasetRes.ok) {
       throw new Error(`Failed to create empty dataset: ${datasetRes.status} ${datasetRes.statusText}`);
     }
-    const datasetBody: unknown = await datasetRes.json();
-    if (!isRecord(datasetBody) || typeof datasetBody.id !== 'string') {
-      throw new Error('Dataset response missing id field');
-    }
-    const dataset = { id: datasetBody.id };
+    const dataset = (await datasetRes.json()) as { id: string };
 
     await page.goto(`/datasets/${dataset.id}`);
 

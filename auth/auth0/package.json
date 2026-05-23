@@ -32,6 +32,9 @@
   "dependencies": {
     "jose": "^6.2.1"
   },
+  "peerDependencies": {
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

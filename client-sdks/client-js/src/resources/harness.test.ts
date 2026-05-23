@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import { RemoteHarnessOperationError, RemoteHarnessUnsupportedError, type AttachmentRef } from './harness';
+import type { AttachmentRef } from './harness';
+import { RemoteHarnessOperationError, RemoteHarnessUnsupportedError } from './harness';
 
 global.fetch = vi.fn();
 

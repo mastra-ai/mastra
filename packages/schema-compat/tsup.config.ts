@@ -22,7 +22,14 @@ export default defineConfig({
   onSuccess: async () => {
     await generateTypes(
       process.cwd(),
-      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/ai-v6', '@types/json-schema']),
+      new Set([
+        '@internal/ai-sdk-v4',
+        '@internal/ai-sdk-v5',
+        '@internal/ai-v6',
+        '@standard-schema/spec',
+        '@types/json-schema',
+        'ajv',
+      ]),
     );
   },
 });

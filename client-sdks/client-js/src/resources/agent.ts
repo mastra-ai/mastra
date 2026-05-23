@@ -15,9 +15,10 @@ import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
-import type { Tool } from '@mastra/core/tools';
+import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
+import { createObservabilityCollector } from '../observability/collector';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -68,6 +69,76 @@ type ToolCallRespondFn<OUTPUT> = (
   },
 ) => Promise<FullOutput<OUTPUT>>;
 
+type ClientToolObservabilityContext = { traceparent: string; tracestate?: string; baggage?: string };
+
+type ClientToolObservabilityEnvelope = {
+  parentContext: ClientToolObservabilityContext;
+  payload?: Record<string, unknown>;
+};
+
+const noopClientToolObserve: ToolObserve = {
+  async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
+    return fn();
+  },
+  log(): void {},
+};
+
+function getClientToolObservabilityContext(toolCall: unknown): ClientToolObservabilityContext | undefined {
+  const candidate = toolCall as
+    | {
+        payload?: { observability?: ClientToolObservabilityContext };
+        observability?: ClientToolObservabilityContext;
+      }
+    | undefined;
+  return candidate?.payload?.observability ?? candidate?.observability;
+}
+
+async function executeClientToolWithObservability({
+  clientTool,
+  args,
+  toolName,
+  parentContext,
+  executeContext,
+}: {
+  clientTool: Tool;
+  args: unknown;
+  toolName: string;
+  parentContext?: ClientToolObservabilityContext;
+  executeContext: Record<string, unknown>;
+}): Promise<{ result: unknown; observability?: ClientToolObservabilityEnvelope }> {
+  const collector = parentContext ? createObservabilityCollector(parentContext) : undefined;
+  const observe: ToolObserve = collector
+    ? {
+        span: collector.span.bind(collector),
+        log: collector.log.bind(collector),
+      }
+    : noopClientToolObserve;
+
+  const runExecute = () =>
+    clientTool.execute!(args, {
+      ...executeContext,
+      observe,
+    });
+
+  const result = collector ? await collector.withContext(runExecute) : await runExecute();
+  if (!parentContext) {
+    return { result };
+  }
+
+  const flushed = collector?.flush() as Record<string, unknown> | undefined;
+  if (flushed) {
+    flushed.toolName = toolName;
+  }
+
+  return {
+    result,
+    observability: {
+      parentContext,
+      ...(flushed ? { payload: flushed } : {}),
+    },
+  };
+}
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -88,7 +159,14 @@ async function executeToolCallAndRespond<OUTPUT>({
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
       response as unknown as {
-        toolCalls: { payload: { toolName: string; args: any; toolCallId: string } }[];
+        toolCalls: {
+          payload: {
+            toolName: string;
+            args: any;
+            toolCallId: string;
+            observability?: ClientToolObservabilityContext;
+          };
+        }[];
         messages: CoreMessage[];
       }
     ).toolCalls;
@@ -101,18 +179,35 @@ async function executeToolCallAndRespond<OUTPUT>({
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(toolCall?.payload.args, {
-          requestContext: requestContext as RequestContext,
-          tracingContext: { currentSpan: undefined },
-          agent: {
-            agentId,
-            messages: (response as unknown as { messages: CoreMessage[] }).messages,
-            toolCallId: toolCall?.payload.toolCallId,
-            suspend: async () => {},
-            threadId,
-            resourceId,
+        const { result, observability } = await executeClientToolWithObservability({
+          clientTool,
+          args: toolCall?.payload.args,
+          toolName: toolCall.payload.toolName,
+          parentContext: getClientToolObservabilityContext(toolCall),
+          executeContext: {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
+              agentId,
+              messages: (response as unknown as { messages: CoreMessage[] }).messages,
+              toolCallId: toolCall?.payload.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
+            },
           },
         });
+
+        const toolResultContent: Record<string, unknown> = {
+          type: 'tool-result',
+          toolCallId: toolCall.payload.toolCallId,
+          toolName: toolCall.payload.toolName,
+          result,
+        };
+
+        if (observability) {
+          toolResultContent.__mastraObservability = observability;
+        }
 
         // Build updated messages from the response, adding the tool result
         // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
@@ -121,14 +216,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           ...(response.response.messages || []),
           {
             role: 'tool',
-            content: [
-              {
-                type: 'tool-result',
-                toolCallId: toolCall.payload.toolCallId,
-                toolName: toolCall.payload.toolName,
-                result,
-              },
-            ],
+            content: [toolResultContent],
           },
         ];
 
@@ -562,18 +650,35 @@ export class Agent extends BaseResource {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(toolCall?.args, {
-            requestContext: requestContext as RequestContext,
-            tracingContext: { currentSpan: undefined },
-            agent: {
-              agentId: this.agentId,
-              messages: (response as unknown as { messages: CoreMessage[] }).messages,
-              toolCallId: toolCall?.toolCallId,
-              suspend: async () => {},
-              threadId,
-              resourceId,
+          const { result, observability } = await executeClientToolWithObservability({
+            clientTool,
+            args: toolCall?.args,
+            toolName: toolCall.toolName,
+            parentContext: getClientToolObservabilityContext(toolCall),
+            executeContext: {
+              requestContext: requestContext as RequestContext,
+              tracingContext: { currentSpan: undefined },
+              agent: {
+                agentId: this.agentId,
+                messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                toolCallId: toolCall?.toolCallId,
+                suspend: async () => {},
+                threadId,
+                resourceId,
+              },
             },
           });
+
+          const toolResultContent: Record<string, unknown> = {
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+          };
+
+          if (observability) {
+            toolResultContent.__mastraObservability = observability;
+          }
 
           // Build updated messages from the response, adding the tool result
           // Do NOT re-include the original user message to avoid storage duplicates
@@ -581,14 +686,7 @@ export class Agent extends BaseResource {
             ...(response.response as unknown as { messages: CoreMessage[] }).messages,
             {
               role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result,
-                },
-              ],
+              content: [toolResultContent],
             },
           ];
           // Recursive call to generateLegacy with updated messages
@@ -722,7 +820,16 @@ export class Agent extends BaseResource {
     let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
 
     // keep track of partial tool calls
-    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+    const partialToolCalls: Record<
+      string,
+      {
+        text: string;
+        step: number;
+        index: number;
+        toolName: string;
+        observability?: ClientToolObservabilityContext;
+      }
+    > = {};
 
     let usage: any = {
       completionTokens: NaN,
@@ -853,14 +960,17 @@ export class Agent extends BaseResource {
           step,
           toolName: value.toolName,
           index: message.toolInvocations.length,
+          observability: getClientToolObservabilityContext(value),
         };
 
+        const observability = getClientToolObservabilityContext(value);
         const invocation = {
           state: 'partial-call',
           step,
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: undefined,
+          ...(observability ? { observability } : {}),
         } as const;
 
         message.toolInvocations.push(invocation);
@@ -882,6 +992,7 @@ export class Agent extends BaseResource {
           toolCallId: value.toolCallId,
           toolName: partialToolCall!.toolName,
           args: partialArgs,
+          ...(partialToolCall!.observability ? { observability: partialToolCall!.observability } : {}),
         } as const;
 
         message.toolInvocations![partialToolCall!.index] = invocation;
@@ -891,15 +1002,18 @@ export class Agent extends BaseResource {
         execUpdate();
       },
       async onToolCallPart(value) {
+        const partialToolCall = partialToolCalls[value.toolCallId];
+        const observability = getClientToolObservabilityContext(value) ?? partialToolCall?.observability;
         const invocation = {
           state: 'call',
           step,
           ...value,
+          ...(observability ? { observability } : {}),
         } as const;
 
-        if (partialToolCalls[value.toolCallId] != null) {
+        if (partialToolCall != null) {
           // change the partial tool call to a full tool call
-          message.toolInvocations![partialToolCalls[value.toolCallId]!.index] = invocation;
+          message.toolInvocations![partialToolCall.index] = invocation;
         } else {
           if (message.toolInvocations == null) {
             message.toolInvocations = [];
@@ -918,7 +1032,14 @@ export class Agent extends BaseResource {
         if (onToolCall) {
           const result = await onToolCall({ toolCall: value });
           if (result != null) {
+            const toolInvocationIndex = message.toolInvocations!.findIndex(
+              invocation => invocation.toolCallId === value.toolCallId,
+            );
+            if (toolInvocationIndex === -1) {
+              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+            }
             const invocation = {
+              ...message.toolInvocations![toolInvocationIndex],
               state: 'result',
               step,
               ...value,
@@ -926,7 +1047,7 @@ export class Agent extends BaseResource {
             } as const;
 
             // store the result in the tool invocation
-            message.toolInvocations![message.toolInvocations!.length - 1] = invocation;
+            message.toolInvocations![toolInvocationIndex] = invocation;
 
             updateToolInvocationPart(value.toolCallId, invocation);
 
@@ -1113,7 +1234,16 @@ export class Agent extends BaseResource {
     let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
 
     // keep track of partial tool calls
-    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+    const partialToolCalls: Record<
+      string,
+      {
+        text: string;
+        step: number;
+        index: number;
+        toolName: string;
+        observability?: ClientToolObservabilityContext;
+      }
+    > = {};
 
     let usage: any = {
       completionTokens: NaN,
@@ -1242,16 +1372,18 @@ export class Agent extends BaseResource {
           }
 
           case 'tool-call': {
+            const partialToolCall = partialToolCalls[chunk.payload.toolCallId];
+            const observability = getClientToolObservabilityContext(chunk) ?? partialToolCall?.observability;
             const invocation = {
               state: 'call',
               step,
               ...chunk.payload,
+              ...(observability ? { observability } : {}),
             } as const;
 
-            if (partialToolCalls[chunk.payload.toolCallId] != null) {
+            if (partialToolCall != null) {
               // change the partial tool call to a full tool call
-              message.toolInvocations![partialToolCalls[chunk.payload.toolCallId]!.index] =
-                invocation as ToolInvocation;
+              message.toolInvocations![partialToolCall.index] = invocation as ToolInvocation;
             } else {
               if (message.toolInvocations == null) {
                 message.toolInvocations = [];
@@ -1270,7 +1402,14 @@ export class Agent extends BaseResource {
             if (onToolCall) {
               const result = await onToolCall({ toolCall: chunk.payload as any });
               if (result != null) {
+                const toolInvocationIndex = message.toolInvocations!.findIndex(
+                  invocation => invocation.toolCallId === chunk.payload.toolCallId,
+                );
+                if (toolInvocationIndex === -1) {
+                  throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+                }
                 const invocation = {
+                  ...message.toolInvocations![toolInvocationIndex],
                   state: 'result',
                   step,
                   ...chunk.payload,
@@ -1278,13 +1417,14 @@ export class Agent extends BaseResource {
                 } as const;
 
                 // store the result in the tool invocation
-                message.toolInvocations![message.toolInvocations!.length - 1] = invocation as ToolInvocation;
+                message.toolInvocations![toolInvocationIndex] = invocation as ToolInvocation;
 
                 updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
 
                 execUpdate();
               }
             }
+            break;
           }
 
           case 'tool-call-input-streaming-start': {
@@ -1298,14 +1438,17 @@ export class Agent extends BaseResource {
               step,
               toolName: chunk.payload.toolName,
               index: message.toolInvocations.length,
+              observability: getClientToolObservabilityContext(chunk),
             };
 
+            const observability = getClientToolObservabilityContext(chunk);
             const invocation = {
               state: 'partial-call',
               step,
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: chunk.payload.args,
+              ...(observability ? { observability } : {}),
             } as const;
 
             message.toolInvocations.push(invocation as ToolInvocation);
@@ -1329,6 +1472,7 @@ export class Agent extends BaseResource {
               toolCallId: chunk.payload.toolCallId,
               toolName: partialToolCall!.toolName,
               args: partialArgs,
+              ...(partialToolCall!.observability ? { observability: partialToolCall!.observability } : {}),
             } as const;
 
             message.toolInvocations![partialToolCall!.index] = invocation as ToolInvocation;
@@ -1494,7 +1638,16 @@ export class Agent extends BaseResource {
               .reverse()
               .find(part => part.type === 'tool-invocation')?.toolInvocation;
             if (toolCall) {
-              toolCalls.push(toolCall);
+              const toolInvocationWithMetadata = message?.toolInvocations?.find(
+                invocation => invocation.toolCallId === toolCall.toolCallId,
+              );
+              toolCalls.push({
+                ...toolInvocationWithMetadata,
+                ...toolCall,
+                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
+                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
+                  : {}),
+              });
             }
 
             let shouldExecuteClientTool = false;
@@ -1503,17 +1656,22 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
-                const result = await clientTool.execute(toolCall?.args, {
-                  requestContext: processedParams.requestContext as RequestContext,
-                  // TODO: Pass proper tracing context when client-js supports tracing
-                  tracingContext: { currentSpan: undefined },
-                  agent: {
-                    agentId: this.agentId,
-                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                    toolCallId: toolCall?.toolCallId,
-                    suspend: async () => {},
-                    threadId,
-                    resourceId,
+                const { result, observability } = await executeClientToolWithObservability({
+                  clientTool,
+                  args: toolCall?.args,
+                  toolName: toolCall.toolName,
+                  parentContext: getClientToolObservabilityContext(toolCall),
+                  executeContext: {
+                    requestContext: processedParams.requestContext as RequestContext,
+                    tracingContext: { currentSpan: undefined },
+                    agent: {
+                      agentId: this.agentId,
+                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                      toolCallId: toolCall?.toolCallId,
+                      suspend: async () => {},
+                      threadId,
+                      resourceId,
+                    },
                   },
                 });
 
@@ -1530,6 +1688,7 @@ export class Agent extends BaseResource {
                     ...toolInvocationPart.toolInvocation,
                     state: 'result',
                     result,
+                    ...(observability ? { __mastraObservability: observability } : {}),
                   };
                 }
 
@@ -1541,6 +1700,11 @@ export class Agent extends BaseResource {
                   toolInvocation.state = 'result';
                   // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
+                  if (observability) {
+                    (
+                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
+                    ).__mastraObservability = observability;
+                  }
                 }
 
                 // Build updated messages for the recursive call
@@ -2396,24 +2560,38 @@ export class Agent extends BaseResource {
               .reverse()
               .find(part => part.type === 'tool-invocation')?.toolInvocation;
             if (toolCall) {
-              toolCalls.push(toolCall);
+              const toolInvocationWithMetadata = message?.toolInvocations?.find(
+                invocation => invocation.toolCallId === toolCall.toolCallId,
+              );
+              toolCalls.push({
+                ...toolInvocationWithMetadata,
+                ...toolCall,
+                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
+                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
+                  : {}),
+              });
             }
 
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(toolCall?.args, {
-                  requestContext: processedParams.requestContext as RequestContext,
-                  // TODO: Pass proper tracing context when client-js supports tracing
-                  tracingContext: { currentSpan: undefined },
-                  agent: {
-                    agentId: this.agentId,
-                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                    toolCallId: toolCall?.toolCallId,
-                    suspend: async () => {},
-                    threadId,
-                    resourceId,
+                const { result, observability } = await executeClientToolWithObservability({
+                  clientTool,
+                  args: toolCall?.args,
+                  toolName: toolCall.toolName,
+                  parentContext: getClientToolObservabilityContext(toolCall),
+                  executeContext: {
+                    requestContext: processedParams.requestContext as RequestContext,
+                    tracingContext: { currentSpan: undefined },
+                    agent: {
+                      agentId: this.agentId,
+                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                      toolCallId: toolCall?.toolCallId,
+                      suspend: async () => {},
+                      threadId,
+                      resourceId,
+                    },
                   },
                 });
 
@@ -2428,6 +2606,7 @@ export class Agent extends BaseResource {
                     ...toolInvocationPart.toolInvocation,
                     state: 'result',
                     result,
+                    ...(observability ? { __mastraObservability: observability } : {}),
                   };
                 }
 
@@ -2439,6 +2618,11 @@ export class Agent extends BaseResource {
                   toolInvocation.state = 'result';
                   // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
+                  if (observability) {
+                    (
+                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
+                    ).__mastraObservability = observability;
+                  }
                 }
 
                 // write the tool result part to the stream

@@ -246,6 +246,60 @@ describe('Koa Server Adapter', () => {
       await expect(paramResponse.json()).resolves.toEqual({ route: 'param', id: '42' });
     });
 
+    it('passes request metadata helpers to route handlers', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'POST',
+          path: '/items/:id',
+          responseType: 'json',
+          handler: async params => ({
+            id: params.id,
+            filter: params.filter,
+            body: params.requestBody,
+            requestPathParams: params.requestPathParams,
+            traceHeader: params.getHeader('x-trace-id'),
+          }),
+        },
+        { prefix: '' },
+      );
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/items/42?filter=blue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-trace-id': 'trace-123',
+        },
+        body: JSON.stringify({ name: 'test-item' }),
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        id: '42',
+        filter: 'blue',
+        body: { name: 'test-item' },
+        requestPathParams: { id: '42' },
+        traceHeader: 'trace-123',
+      });
+    });
+
     it('preserves middleware ordering when routes are registered around app.use calls', async () => {
       const app = new Koa();
       app.use(bodyParser());

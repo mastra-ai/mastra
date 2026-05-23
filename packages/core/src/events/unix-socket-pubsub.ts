@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
 import { dirname } from 'node:path';
 
@@ -25,6 +26,14 @@ type SubscribeWaiter = {
   resolve: () => void;
   reject: (error: Error) => void;
 };
+
+type ElectionLockRecord = {
+  pid?: number;
+  startedAt?: number;
+};
+
+const ELECTION_LOCK_STALE_MS = 2000;
+const ELECTION_LOCK_LIVE_PROCESS_STALE_MS = 30_000;
 
 function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -85,6 +94,7 @@ export class UnixSocketPubSub extends PubSub {
   #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
   #pendingWrites: Promise<void>[] = [];
+  #recovering?: Promise<void>;
 
   constructor(socketPath: string) {
     super();
@@ -97,6 +107,11 @@ export class UnixSocketPubSub extends PubSub {
 
   get isBroker(): boolean {
     return this.#isBroker;
+  }
+
+  /** Number of remote clients currently connected to this broker. Always 0 for non-broker instances. */
+  get remoteClientCount(): number {
+    return this.#isBroker ? this.#brokerClients.size : 0;
   }
 
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
@@ -233,11 +248,8 @@ export class UnixSocketPubSub extends PubSub {
       }
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK') {
-        await unlink(this.socketPath).catch(() => {});
         this.#throwIfClosed();
-        await this.#listen();
-        this.#throwIfClosed();
-        this.#isBroker = true;
+        await this.#electBroker();
         return;
       }
       throw error;
@@ -281,14 +293,10 @@ export class UnixSocketPubSub extends PubSub {
         this.#clientSocket = socket;
         this.#isBroker = false;
         readFrames(socket, frame => this.#handleServerFrame(frame));
-        socket.on('close', () => {
-          if (this.#clientSocket === socket) this.#clientSocket = undefined;
-          this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub broker connection closed'));
-        });
-        socket.on('error', error => {
-          if (this.#clientSocket === socket) this.#clientSocket = undefined;
-          this.#rejectSubscribeWaiters(error);
-        });
+        socket.on('close', () =>
+          this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
+        );
+        socket.on('error', error => this.#handleClientDisconnect(socket, error));
         void this.#resubscribeClient().then(resolve, reject);
       };
 
@@ -300,6 +308,137 @@ export class UnixSocketPubSub extends PubSub {
   async #resubscribeClient() {
     for (const topic of this.#callbacks.keys()) {
       await this.#sendSubscribeToBroker(topic);
+    }
+  }
+
+  #handleClientDisconnect(socket: net.Socket, error: Error) {
+    if (this.#clientSocket !== socket) return;
+    this.#clientSocket = undefined;
+    this.#rejectSubscribeWaiters(error);
+    if (!this.#closed) {
+      void this.#recoverClientConnection();
+    }
+  }
+
+  async #recoverClientConnection(): Promise<void> {
+    if (this.#recovering) return this.#recovering;
+    this.#recovering = this.#recoverClientConnectionLoop().finally(() => {
+      this.#recovering = undefined;
+    });
+    return this.#recovering;
+  }
+
+  async #recoverClientConnectionLoop(): Promise<void> {
+    while (!this.#closed && !this.#isBroker && !(this.#clientSocket && !this.#clientSocket.destroyed)) {
+      try {
+        await this.#ensureStarted(true);
+        return;
+      } catch {
+        if (this.#closed) return;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+  }
+
+  /**
+   * Serializes broker election across processes using an exclusive lock file.
+   * Only the lock winner unlinks the stale socket and listens; losers wait
+   * then connect as clients to the newly elected broker.
+   */
+  async #electBroker(): Promise<void> {
+    const lockPath = this.socketPath + '.elect';
+    while (!this.#closed) {
+      let lockFd: FileHandle | undefined;
+      try {
+        lockFd = await open(lockPath, 'wx');
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+          if (await this.#isElectionLockStale(lockPath)) {
+            try {
+              await unlink(lockPath);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                throw error;
+              }
+            }
+            continue;
+          }
+          await new Promise(resolve => setTimeout(resolve, 150));
+          try {
+            await this.#connectClient();
+            this.#throwIfClosed();
+            return;
+          } catch (error) {
+            if (!this.#isBrokerConnectRetryable(error)) {
+              throw error;
+            }
+            continue;
+          }
+        }
+        throw e;
+      }
+
+      try {
+        await lockFd.writeFile(
+          JSON.stringify({ pid: process.pid, startedAt: Date.now() } satisfies ElectionLockRecord),
+        );
+        // Re-check: a previous election round may have installed a broker
+        // between our initial connectClient() and acquiring this lock.
+        try {
+          await this.#connectClient();
+          this.#throwIfClosed();
+          return;
+        } catch {
+          // Still no live broker — proceed with election.
+        }
+        await unlink(this.socketPath).catch(() => {});
+        this.#throwIfClosed();
+        await this.#listen();
+        this.#throwIfClosed();
+        this.#isBroker = true;
+        return;
+      } finally {
+        await lockFd.close().catch(() => {});
+        await unlink(lockPath).catch(() => {});
+      }
+    }
+
+    throw new Error('UnixSocketPubSub is closed');
+  }
+
+  #isBrokerConnectRetryable(error: unknown): boolean {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK';
+  }
+
+  async #isElectionLockStale(lockPath: string): Promise<boolean> {
+    try {
+      const lockStat = await stat(lockPath);
+      const ageMs = Date.now() - lockStat.mtimeMs;
+      const lockRecord = await this.#readElectionLockRecord(lockPath);
+      if (lockRecord?.pid && Number.isInteger(lockRecord.pid) && lockRecord.pid > 0) {
+        return !this.#isProcessAlive(lockRecord.pid) || ageMs > ELECTION_LOCK_LIVE_PROCESS_STALE_MS;
+      }
+      return ageMs > ELECTION_LOCK_STALE_MS;
+    } catch {
+      return true;
+    }
+  }
+
+  async #readElectionLockRecord(lockPath: string): Promise<ElectionLockRecord | undefined> {
+    try {
+      return JSON.parse(await readFile(lockPath, 'utf8')) as ElectionLockRecord;
+    } catch {
+      return undefined;
+    }
+  }
+
+  #isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === 'EPERM';
     }
   }
 
@@ -389,13 +528,18 @@ export class UnixSocketPubSub extends PubSub {
 
     this.#deliverLocal(topic, brokerEvent);
 
-    const frame: ServerFrame = { type: 'event', topic, event: brokerEvent };
+    // Skip serialization entirely when no remote clients could receive the event.
+    if (this.#brokerClients.size === 0) return;
+
+    let frame: ServerFrame | undefined;
     for (const client of this.#brokerClients.values()) {
       if (!client.subscriptions.has(topic) || client.socket.destroyed) continue;
+      // Lazily build the frame only when we know at least one client needs it.
+      frame ??= { type: 'event', topic, event: brokerEvent };
       const write = writeFrame(client.socket, frame).catch(() => {});
       this.#pendingWrites.push(write);
     }
-    await this.flush();
+    if (frame) await this.flush();
   }
 
   #deliverLocal(topic: string, event: Event) {

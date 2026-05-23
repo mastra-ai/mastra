@@ -11886,6 +11886,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'mcp_tool_call'
             | 'processor_run'
             | 'tool_call'
+            | 'client_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -12088,6 +12089,7 @@ export type GetObservabilityTraces_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -12295,6 +12297,7 @@ export type GetObservabilityTracesLight_QueryParams = {
             | 'mcp_tool_call'
             | 'processor_run'
             | 'tool_call'
+            | 'client_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -12462,6 +12465,7 @@ export type GetObservabilityTracesLight_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -12585,6 +12589,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'mcp_tool_call'
             | 'processor_run'
             | 'tool_call'
+            | 'client_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -12767,6 +12772,7 @@ export type GetObservabilityBranches_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -12958,6 +12964,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13142,6 +13149,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13320,6 +13328,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13419,6 +13428,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'mcp_tool_call'
       | 'processor_run'
       | 'tool_call'
+      | 'client_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13724,6 +13734,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'mcp_tool_call'
           | 'processor_run'
           | 'tool_call'
+          | 'client_tool_call'
           | 'workflow_run'
           | 'workflow_step'
           | 'workflow_conditional'
@@ -73844,8 +73855,6 @@ export interface GetStoredWorkspacesStoredWorkspaceId_RouteContract {
 export type PostStoredWorkspaces_Body = {
   /** Unique identifier. If not provided, derived from name. */
   id?: string | undefined;
-  /** Author identifier for multi-tenant filtering */
-  authorId?: string | undefined;
   /** Additional metadata for the workspace */
   metadata?:
     | {
@@ -74105,7 +74114,6 @@ export type PatchStoredWorkspacesStoredWorkspaceId_PathParams = {
 };
 
 export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
-  authorId?: (string | undefined) | undefined;
   metadata?:
     | (
         | {

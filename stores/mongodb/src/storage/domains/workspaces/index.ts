@@ -372,7 +372,7 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
 
   async list(args?: StorageListWorkspacesInput): Promise<StorageListWorkspacesOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, authorIds, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -394,7 +394,17 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
-      if (authorId) {
+      if (authorIds !== undefined) {
+        const authorConditions: Record<string, any>[] = [];
+        const nonNullAuthorIds = authorIds.filter((id): id is string => id !== null);
+        if (nonNullAuthorIds.length > 0) {
+          authorConditions.push({ authorId: { $in: nonNullAuthorIds } });
+        }
+        if (authorIds.includes(null)) {
+          authorConditions.push({ authorId: null });
+        }
+        filter.$or = authorConditions.length > 0 ? authorConditions : [{ id: { $exists: false } }];
+      } else if (authorId) {
         filter.authorId = authorId;
       }
       if (metadata) {

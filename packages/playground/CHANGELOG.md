@@ -1,5 +1,43 @@
 # @internal/playground
 
+## 1.10.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e), [`e336a48`](https://github.com/mastra-ai/mastra/commit/e336a48e149f1ef8f160071082cc147e9608dac9), [`a16a765`](https://github.com/mastra-ai/mastra/commit/a16a765822b919125b803f20856482fe5fecf32b)]:
+  - @mastra/core@1.37.0-alpha.3
+  - @mastra/playground-ui@30.0.0-alpha.3
+  - @mastra/client-js@1.21.0-alpha.3
+  - @mastra/react@0.4.1-alpha.3
+
+## 1.10.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67)]:
+  - @mastra/core@1.37.0-alpha.2
+  - @mastra/client-js@1.21.0-alpha.2
+  - @mastra/react@0.4.1-alpha.2
+  - @mastra/playground-ui@30.0.0-alpha.2
+
+## 1.10.1-alpha.1
+
+### Patch Changes
+
+- Refactored the workspace Skills list to use the `DataList` primitives, matching the visual style of the Traces, Logs, and Dataset Items lists. The skill path moved to its own monospace. Removed the decorative skill icon and the mount badge (the mount prefix is visible in the path itself). The row update and remove buttons now use the ghost button variant. ([#16888](https://github.com/mastra-ai/mastra/pull/16888))
+
+- Improved the Dataset Items list to use the condensed `DataList` primitives, so it matches the Traces and Logs visual style. Rows are tighter, the ID column uses a shared truncated mono cell, and selection mode now renders a flush checkbox cell beside the row button without misalignment. ([#16820](https://github.com/mastra-ai/mastra/pull/16820))
+
+- Improved the agent eval results view: clicking **View Trace** now opens the full trace detail page (`/traces/:traceId`) instead of a side dialog, aligning eval with the rest of the Traces experience. The dedicated trace page provides an inline span detail panel, Feedback and Scoring tabs, and the same Save-as-Dataset-Item and Evaluate actions. ([#16903](https://github.com/mastra-ai/mastra/pull/16903))
+
+- Improved the Span Feedback list (Observability → Trace → Span → Feedback tab) with a condensed layout that matches the Traces, Logs, Scores, and Dataset Items lists. The Feedback detail dialog is unchanged. ([#16830](https://github.com/mastra-ai/mastra/pull/16830))
+
+- Updated dependencies [[`c93296c`](https://github.com/mastra-ai/mastra/commit/c93296cb40f1263051f920f61ac24f178fbc44e9), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`f738e1b`](https://github.com/mastra-ai/mastra/commit/f738e1bc052c1f0650b7945baa37c6aff32336cc), [`d69c307`](https://github.com/mastra-ai/mastra/commit/d69c307510836aa92b7e16d797e88a20144e2e0e), [`7e525c6`](https://github.com/mastra-ai/mastra/commit/7e525c69cf897380e0a555914ecbe571aece1816), [`20f4346`](https://github.com/mastra-ai/mastra/commit/20f4346ebaecbe8d4d1b6fe263d0472317a35ac8), [`d9b2294`](https://github.com/mastra-ai/mastra/commit/d9b22947d8710a480a878bde37bb464c2f98d738), [`473da1b`](https://github.com/mastra-ai/mastra/commit/473da1b1381e9151352e5c6a6b2ec5f38d9690c6), [`ecbb34e`](https://github.com/mastra-ai/mastra/commit/ecbb34edc03f2044cdbaf3fc2fc0dc8212048fbc)]:
+  - @mastra/playground-ui@30.0.0-alpha.1
+  - @mastra/client-js@1.21.0-alpha.1
+  - @mastra/core@1.37.0-alpha.1
+  - @mastra/react@0.4.1-alpha.1
+
 ## 1.10.1-alpha.0
 
 ### Patch Changes

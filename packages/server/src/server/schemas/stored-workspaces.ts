@@ -87,14 +87,14 @@ const snapshotConfigSchema = z.object({
 export const createStoredWorkspaceBodySchema = z
   .object({
     id: z.string().optional().describe('Unique identifier. If not provided, derived from name.'),
-    authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the workspace'),
   })
   .merge(snapshotConfigSchema);
 
 export const updateStoredWorkspaceBodySchema = z
   .object({
-    authorId: z.string().optional(),
+    // Note: authorId is intentionally not accepted. Ownership cannot be
+    // transferred via PATCH.
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .partial()

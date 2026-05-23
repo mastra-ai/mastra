@@ -397,7 +397,12 @@ export class FilesystemVersionedHelpers<
             );
           });
         } else {
-          entities = entities.filter(e => (e as Record<string, unknown>)[key] === value);
+          if (Array.isArray(value)) {
+            const values = new Set(value);
+            entities = entities.filter(e => values.has(((e as Record<string, unknown>)[key] as unknown) ?? null));
+          } else {
+            entities = entities.filter(e => (e as Record<string, unknown>)[key] === value);
+          }
         }
       }
     }

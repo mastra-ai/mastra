@@ -19,7 +19,7 @@ import { Agent } from '@mastra/core/agent'
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-5.1-realtime',
+    model: '__AI_SDK_OPENAI_MODEL_REALTIME__',
     apiKey: process.env.OPENAI_API_KEY,
   },
 })
@@ -28,7 +28,7 @@ const voice = new OpenAIRealtimeVoice({
 const agent = new Agent({
   name: 'Customer Support Agent',
   instructions: 'You are a helpful customer support agent for a software company.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice,
 })
 

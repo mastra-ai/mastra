@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Improved the Dataset Items list to match the visual style of Traces and Logs: rows are more compact, IDs display consistently across lists, and selection checkboxes align properly without layout shifts.
+Improved the Dataset Items list for better visual consistency with Traces and Logs. Rows are now more compact, selection checkboxes align with row actions, and IDs display consistently.

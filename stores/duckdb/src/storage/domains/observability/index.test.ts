@@ -1415,45 +1415,115 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('logs', () => {
-    it('creates and lists logs', async () => {
+    it('supports page deltaCursor and delta polling for logs', async () => {
       await storage.batchCreateLogs({
         logs: [
           {
-            logId: 'log-test-1',
-            timestamp: new Date(),
+            logId: 'log-delta-existing',
+            timestamp: new Date('2026-05-01T00:00:00Z'),
             level: 'info',
-            message: 'Test log message',
-            data: { key: 'value' },
-            traceId: 'trace-1',
-            spanId: 'span-1',
-            tags: ['test'],
-            entityType: EntityType.AGENT,
-            entityId: 'agent-1',
-            entityName: 'myAgent',
-            metadata: null,
-          },
-          {
-            logId: 'log-test-2',
-            timestamp: new Date(),
-            level: 'error',
-            message: 'Error occurred',
+            message: 'existing-log',
             data: null,
-            traceId: 'trace-1',
+            traceId: 'trace-log',
             spanId: null,
-            tags: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'production',
             metadata: null,
           },
         ],
       });
 
-      const result = await storage.listLogs({});
-      expect(result.logs).toHaveLength(2);
+      const page = await storage.listLogs({ filters: { environment: 'production' } });
+      expect(page.deltaCursor).toBeTruthy();
 
-      const filtered = await storage.listLogs({
-        filters: { level: 'error' },
+      const bootstrap = await storage.listLogs({ mode: 'delta', filters: { environment: 'production' } });
+      expect(bootstrap.logs).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'log-delta-new',
+            timestamp: new Date('2026-05-01T00:00:01Z'),
+            level: 'warn',
+            message: 'new-log',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'production',
+            metadata: null,
+          },
+          {
+            logId: 'log-delta-ignore',
+            timestamp: new Date('2026-05-01T00:00:02Z'),
+            level: 'warn',
+            message: 'ignore-log',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'staging',
+            metadata: null,
+          },
+        ],
       });
-      expect(filtered.logs).toHaveLength(1);
-      expect(filtered.logs[0]!.message).toBe('Error occurred');
+
+      const delta = await storage.listLogs({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.logs.map(log => log.logId)).toEqual(['log-delta-new']);
+
+      const afterPageCursor = await storage.listLogs({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: page.deltaCursor!,
+      });
+      expect(afterPageCursor.logs.map(log => log.logId)).toEqual(['log-delta-new']);
+    });
+
+    it('returns a resumable page deltaCursor for empty filtered logs', async () => {
+      const page = await storage.listLogs({ filters: { environment: 'production' } });
+      expect(page.logs).toEqual([]);
+      expect(page.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'log-delta-empty-page',
+            timestamp: new Date('2026-05-01T00:00:03Z'),
+            level: 'info',
+            message: 'new-log-after-empty-page',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'production',
+            metadata: null,
+          },
+        ],
+      });
+
+      const delta = await storage.listLogs({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: page.deltaCursor!,
+      });
+      expect(delta.logs.map(log => log.logId)).toEqual(['log-delta-empty-page']);
     });
 
     it('supports page deltaCursor and delta polling for logs', async () => {
@@ -1633,74 +1703,6 @@ describe('ObservabilityStorageDuckDB', () => {
       });
     });
 
-    it('getMetricAggregate returns sum', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'sum',
-      });
-      expect(result.value).toBe(800); // 100 + 200 + 500
-      expect(result.estimatedCost).toBeCloseTo(0.8);
-      expect(result.costUnit).toBe('usd');
-    });
-
-    it('listMetrics returns paginated metric records with shared filters', async () => {
-      const result = await storage.listMetrics({
-        filters: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          tags: ['prod'],
-        },
-        pagination: { page: 0, perPage: 1 },
-        orderBy: { field: 'timestamp', direction: 'ASC' },
-      });
-
-      expect(result.pagination.total).toBe(2);
-      expect(result.pagination.hasMore).toBe(true);
-      expect(result.metrics).toHaveLength(1);
-      expect(result.metrics[0]!.provider).toBe('openai');
-      expect(result.metrics[0]!.model).toBe('gpt-4o-mini');
-      expect(result.metrics[0]!.estimatedCost).toBeCloseTo(0.1);
-      expect(result.metrics[0]!.costUnit).toBe('usd');
-      expect(result.metrics[0]!.tags).toEqual(['prod']);
-      expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
-    });
-
-    it('getMetricBreakdown groups by entityName', async () => {
-      const result = await storage.getMetricBreakdown({
-        name: ['mastra_agent_duration_ms'],
-        groupBy: ['entityName'],
-        aggregation: 'avg',
-      });
-      expect(result.groups).toHaveLength(2);
-      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
-      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
-      expect(weather).toBeDefined();
-      expect(weather!.value).toBe(150); // (100+200)/2
-      expect(weather!.estimatedCost).toBeCloseTo(0.3);
-      expect(weather!.costUnit).toBe('usd');
-      expect(code).toBeDefined();
-      expect(code!.value).toBe(500);
-      expect(code!.estimatedCost).toBeCloseTo(0.5);
-      expect(code!.costUnit).toBe('usd');
-    });
-
-    it('getMetricBreakdown groups by label keys', async () => {
-      const result = await storage.getMetricBreakdown({
-        name: ['mastra_agent_duration_ms'],
-        groupBy: ['status'],
-        aggregation: 'count',
-      });
-
-      expect(result.groups).toHaveLength(2);
-      const ok = result.groups.find(g => g.dimensions.status === 'ok');
-      const error = result.groups.find(g => g.dimensions.status === 'error');
-
-      expect(ok?.value).toBe(2);
-      expect(ok?.estimatedCost).toBeCloseTo(0.3);
-      expect(error?.value).toBe(1);
-      expect(error?.estimatedCost).toBeCloseTo(0.5);
-    });
-
     it('getMetricBreakdown accepts discovered label keys with non-identifier characters', async () => {
       await storage.batchCreateMetrics({
         metrics: [
@@ -1741,19 +1743,6 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(alpha?.value).toBe(1);
       expect(beta?.value).toBe(1);
       expect(missing?.value).toBe(3);
-    });
-
-    it('getMetricTimeSeries returns bucketed data', async () => {
-      const result = await storage.getMetricTimeSeries({
-        name: ['mastra_agent_duration_ms'],
-        interval: '1h',
-        aggregation: 'sum',
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(1);
-      const mainSeries = result.series[0]!;
-      expect(mainSeries.points.length).toBeGreaterThanOrEqual(1);
-      expect(mainSeries.costUnit).toBe('usd');
-      expect(mainSeries.points[0]!.estimatedCost).toBeCloseTo(0.8);
     });
 
     it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
@@ -2033,86 +2022,7 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('scores', () => {
-    it('creates and lists scores', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.85,
-          reason: 'Good answer',
-          experimentId: 'exp-1',
-          metadata: { entityType: 'agent' },
-        },
-      });
-
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-2',
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: 'span-1',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(2);
-
-      const filtered = await storage.listScores({
-        filters: { scorerId: 'relevance' },
-      });
-      expect(filtered.scores).toHaveLength(1);
-      expect(filtered.scores[0]!.score).toBe(0.85);
-    });
-
-    it('gets a score by id', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-lookup-1',
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: 'trace-lookup-1',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.85,
-          reason: 'Good answer',
-          experimentId: 'exp-lookup',
-          metadata: { entityType: 'agent' },
-        },
-      });
-      await storage.createScore({
-        score: {
-          scoreId: 'score-lookup-2',
-          timestamp: new Date('2026-01-01T00:01:00Z'),
-          traceId: 'trace-lookup-2',
-          spanId: 'span-lookup-2',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const score = await storage.getScoreById('score-lookup-1');
-      expect(score).toEqual(
-        expect.objectContaining({
-          scoreId: 'score-lookup-1',
-          traceId: 'trace-lookup-1',
-          scorerId: 'relevance',
-          score: 0.85,
-        }),
-      );
-      expect(await storage.getScoreById('missing-score')).toBeNull();
-    });
-
-    it('supports deprecated source aliases for scores', async () => {
+    it('accepts deprecated `source` filter for scores (DuckDB-specific)', async () => {
       await storage.createScore({
         score: {
           scoreId: 'score-test-1',
@@ -2133,31 +2043,8 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       expect(filtered.scores).toHaveLength(1);
-      expect(filtered.scores[0]!.traceId).toBe('trace-legacy-score');
       expect(filtered.scores[0]!.source).toBe('manual');
       expect(filtered.scores[0]!.scoreSource).toBe('manual');
-    });
-
-    it('supports nullable traceId for scores at the storage boundary', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: null,
-          spanId: null,
-          scorerId: 'quality',
-          scoreSource: 'automated',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(1);
-      expect(result.scores[0]!.traceId).toBeNull();
-      expect(result.scores[0]!.scoreSource).toBe('automated');
     });
 
     it('supports page deltaCursor and delta polling for scores', async () => {
@@ -2216,97 +2103,6 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(delta.scores.map(score => score.scoreId)).toEqual(['score-delta-new']);
     });
-
-    it('supports score OLAP queries keyed by scorerId and optional scoreSource', async () => {
-      await storage.batchCreateScores({
-        scores: [
-          {
-            scoreId: 'score-test-1',
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'score-olap-1',
-            scorerId: 'relevance',
-            scoreSource: 'manual',
-            score: 0.8,
-            experimentId: 'exp-1',
-            entityName: 'agent-a',
-          },
-          {
-            scoreId: 'score-test-2',
-            timestamp: new Date('2026-01-01T00:20:00Z'),
-            traceId: 'score-olap-2',
-            scorerId: 'relevance',
-            scoreSource: 'manual',
-            score: 0.6,
-            experimentId: 'exp-2',
-            entityName: 'agent-b',
-          },
-          {
-            scoreId: 'score-test-3',
-            timestamp: new Date('2026-01-01T00:40:00Z'),
-            traceId: 'score-olap-3',
-            scorerId: 'relevance',
-            scoreSource: 'automated',
-            score: 0.2,
-            experimentId: 'exp-3',
-            entityName: 'agent-c',
-          },
-        ],
-      });
-
-      expect(
-        await storage.getScoreAggregate({
-          scorerId: 'relevance',
-          scoreSource: 'manual',
-          aggregation: 'avg',
-        }),
-      ).toEqual({ value: 0.7 });
-
-      expect(
-        await storage.getScoreBreakdown({
-          scorerId: 'relevance',
-          scoreSource: 'manual',
-          aggregation: 'avg',
-          groupBy: ['experimentId'],
-        }),
-      ).toEqual({
-        groups: [
-          { dimensions: { experimentId: 'exp-1' }, value: 0.8 },
-          { dimensions: { experimentId: 'exp-2' }, value: 0.6 },
-        ],
-      });
-
-      expect(
-        await storage.getScoreTimeSeries({
-          scorerId: 'relevance',
-          scoreSource: 'manual',
-          aggregation: 'avg',
-          interval: '1h',
-        }),
-      ).toEqual({
-        series: [
-          {
-            name: 'relevance|manual',
-            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 0.7 }],
-          },
-        ],
-      });
-
-      expect(
-        await storage.getScorePercentiles({
-          scorerId: 'relevance',
-          scoreSource: 'manual',
-          percentiles: [0.5],
-          interval: '1h',
-        }),
-      ).toEqual({
-        series: [
-          {
-            percentile: 0.5,
-            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 0.7 }],
-          },
-        ],
-      });
-    });
   });
 
   // ==========================================================================
@@ -2314,54 +2110,7 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('feedback', () => {
-    it('creates and lists feedback', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'Great!',
-          experimentId: null,
-          feedbackUserId: 'user-1',
-          sourceId: 'source-1',
-          metadata: null,
-        },
-      });
-
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-2',
-          timestamp: new Date(),
-          traceId: 'trace-2',
-          spanId: null,
-          feedbackSource: 'reviewer',
-          feedbackType: 'rating',
-          value: 4,
-          comment: null,
-          experimentId: 'exp-1',
-          feedbackUserId: 'user-2',
-          sourceId: 'source-2',
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(2);
-
-      const filtered = await storage.listFeedback({
-        filters: { feedbackSource: 'user' },
-      });
-      expect(filtered.feedback).toHaveLength(1);
-      expect(filtered.feedback[0]!.value).toBe(1);
-      expect(filtered.feedback[0]!.feedbackUserId).toBe('user-1');
-      expect(filtered.feedback[0]!.sourceId).toBe('source-1');
-    });
-
-    it('supports deprecated source aliases for feedback', async () => {
+    it('accepts deprecated `source` filter for feedback (DuckDB-specific)', async () => {
       await storage.createFeedback({
         feedback: {
           feedbackId: 'feedback-test-1',
@@ -2383,32 +2132,74 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       expect(filtered.feedback).toHaveLength(1);
-      expect(filtered.feedback[0]!.traceId).toBe('trace-legacy-feedback');
       expect(filtered.feedback[0]!.source).toBe('manual');
       expect(filtered.feedback[0]!.feedbackSource).toBe('manual');
     });
 
-    it('supports nullable traceId for feedback at the storage boundary', async () => {
+    it('supports page deltaCursor and delta polling for feedback', async () => {
       await storage.createFeedback({
         feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: null,
+          feedbackId: 'feedback-delta-existing',
+          timestamp: new Date('2026-01-01T00:01:00Z'),
+          traceId: 'trace-feedback-existing',
           spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'existing',
           experimentId: null,
-          sourceId: null,
+          feedbackUserId: 'user-2',
+          sourceId: 'source-2',
           metadata: null,
-        } as any,
+        },
       });
 
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(1);
-      expect(result.feedback[0]!.traceId).toBeNull();
-      expect(result.feedback[0]!.feedbackSource).toBe('manual');
+      const page = await storage.listFeedback({ filters: { feedbackSource: 'user' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listFeedback({ mode: 'delta', filters: { feedbackSource: 'user' } });
+      expect(bootstrap.feedback).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-delta-new',
+          timestamp: new Date('2026-01-01T00:02:00Z'),
+          traceId: 'trace-feedback-new',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'delta',
+          experimentId: null,
+          feedbackUserId: 'user-3',
+          sourceId: 'source-3',
+          metadata: null,
+        },
+      });
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-delta-ignore',
+          timestamp: new Date('2026-01-01T00:03:00Z'),
+          traceId: 'trace-feedback-ignore',
+          spanId: null,
+          feedbackSource: 'reviewer',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'ignore',
+          experimentId: null,
+          feedbackUserId: 'user-4',
+          sourceId: 'source-4',
+          metadata: null,
+        },
+      });
+
+      const delta = await storage.listFeedback({
+        mode: 'delta',
+        filters: { feedbackSource: 'user' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.feedback.map(feedback => feedback.feedbackId)).toEqual(['feedback-delta-new']);
     });
 
     it('supports page deltaCursor and delta polling for feedback', async () => {
@@ -2559,103 +2350,6 @@ describe('ObservabilityStorageDuckDB', () => {
           metadata: { severity: 'high' },
         }),
       ]);
-    });
-
-    it('supports feedback OLAP queries keyed by feedbackType and optional feedbackSource', async () => {
-      await storage.batchCreateFeedback({
-        feedbacks: [
-          {
-            feedbackId: 'feedback-test-1',
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'feedback-olap-1',
-            feedbackType: 'rating',
-            feedbackSource: 'user',
-            value: 5,
-            entityName: 'agent-a',
-          },
-          {
-            feedbackId: 'feedback-test-2',
-            timestamp: new Date('2026-01-01T00:10:00Z'),
-            traceId: 'feedback-olap-2',
-            feedbackType: 'rating',
-            feedbackSource: 'user',
-            value: '4',
-            entityName: 'agent-b',
-          },
-          {
-            feedbackId: 'feedback-test-3',
-            timestamp: new Date('2026-01-01T00:20:00Z'),
-            traceId: 'feedback-olap-3',
-            feedbackType: 'rating',
-            feedbackSource: 'system',
-            value: 1,
-            entityName: 'agent-a',
-          },
-          {
-            feedbackId: 'feedback-test-4',
-            timestamp: new Date('2026-01-01T00:30:00Z'),
-            traceId: 'feedback-olap-4',
-            feedbackType: 'rating',
-            feedbackSource: 'user',
-            value: 'needs-review',
-            entityName: 'agent-a',
-          },
-        ],
-      });
-
-      expect(
-        await storage.getFeedbackAggregate({
-          feedbackType: 'rating',
-          feedbackSource: 'user',
-          aggregation: 'avg',
-        }),
-      ).toEqual({ value: 4.5 });
-
-      expect(
-        await storage.getFeedbackBreakdown({
-          feedbackType: 'rating',
-          feedbackSource: 'user',
-          aggregation: 'avg',
-          groupBy: ['entityName'],
-        }),
-      ).toEqual({
-        groups: [
-          { dimensions: { entityName: 'agent-a' }, value: 5 },
-          { dimensions: { entityName: 'agent-b' }, value: 4 },
-        ],
-      });
-
-      expect(
-        await storage.getFeedbackTimeSeries({
-          feedbackType: 'rating',
-          feedbackSource: 'user',
-          aggregation: 'avg',
-          interval: '1h',
-        }),
-      ).toEqual({
-        series: [
-          {
-            name: 'rating|user',
-            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 4.5 }],
-          },
-        ],
-      });
-
-      expect(
-        await storage.getFeedbackPercentiles({
-          feedbackType: 'rating',
-          feedbackSource: 'user',
-          percentiles: [0.5],
-          interval: '1h',
-        }),
-      ).toEqual({
-        series: [
-          {
-            percentile: 0.5,
-            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 4.5 }],
-          },
-        ],
-      });
     });
   });
 

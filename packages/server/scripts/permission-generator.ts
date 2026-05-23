@@ -69,13 +69,29 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
 /**
  * Compound permission patterns supported by the RBAC matcher.
  */
-const ADDITIONAL_PERMISSION_PATTERNS = [
-  'stored:*',
+const ADDITIONAL_PERMISSION_PATTERNS: string[] = [
+  // Reserved for matcher patterns that are not represented by concrete permissions.
+];
+
+/**
+ * Permissions retained for compatibility with roles issued by older server
+ * builds, even when route derivation changes.
+ */
+const COMPATIBILITY_PERMISSIONS = [
+  'agent-builder:execute',
+  'agent-builder:read',
+  'agent-builder:write',
+  'processor-providers:read',
+  'schedules:execute',
+  'schedules:read',
+  'schedules:write',
+  'stored:delete',
   'stored:read',
   'stored:write',
-  'stored:delete',
   'stored-agents:share',
   'stored-skills:share',
+  'tool-providers:read',
+  'vectors:read',
 ];
 
 /**

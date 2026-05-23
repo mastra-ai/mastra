@@ -444,7 +444,7 @@ harness.restoreDisplayTasks(replayedTasks)
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
 
 ```typescript
-await harness.setState({ currentModelId: 'anthropic/claude-sonnet-4-6' })
+await harness.setState({ currentModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
 
 ### Modes
@@ -523,10 +523,10 @@ Switch the active model. When `scope` is `'thread'`, the model ID is persisted t
 
 ```typescript
 // Set for current session only
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6' })
+await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 
 // Persist to the current thread
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6', scope: 'thread' })
+await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__', scope: 'thread' })
 ```
 
 #### `getCurrentModelAuthStatus()`
@@ -981,7 +981,7 @@ const modelId = harness.getReflectorModelId()
 Switch the observer model. Persists the setting to thread metadata and emits an `om_model_changed` event.
 
 ```typescript
-await harness.switchObserverModel({ modelId: 'anthropic/claude-haiku-3.5' })
+await harness.switchObserverModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
 ```
 
 #### `switchReflectorModel({ modelId })`
@@ -989,7 +989,7 @@ await harness.switchObserverModel({ modelId: 'anthropic/claude-haiku-3.5' })
 Switch the reflector model. Persists the setting to thread metadata and emits an `om_model_changed` event.
 
 ```typescript
-await harness.switchReflectorModel({ modelId: 'anthropic/claude-haiku-3.5' })
+await harness.switchReflectorModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
 ```
 
 #### `getObservationThreshold()`
@@ -1024,10 +1024,13 @@ Set the subagent model ID. Pass an `agentType` to set a per-type override, or om
 
 ```typescript
 // Set global subagent model
-await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-6' })
+await harness.setSubagentModelId({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 
 // Set per-type model
-await harness.setSubagentModelId({ modelId: 'anthropic/claude-haiku-3.5', agentType: 'explore' })
+await harness.setSubagentModelId({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  agentType: 'explore',
+})
 ```
 
 ### Forked subagents

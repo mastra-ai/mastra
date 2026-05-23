@@ -46,6 +46,34 @@ describe('LibSQLStore domain wiring', () => {
   });
 });
 
+describe('LibSQLStore workspace authorIds filtering', () => {
+  it('lists owned and legacy unowned workspaces without returning other authors', async () => {
+    const store = new LibSQLStore({ id: 'libsql-workspace-author-ids', url: 'file::memory:?cache=shared' });
+    await store.init();
+    const workspaces = await store.getStore('workspaces');
+    const marker = `author-ids-${Date.now()}`;
+
+    await workspaces!.create({
+      workspace: { id: `${marker}-mine`, name: 'Mine', authorId: 'user-a', metadata: { marker } },
+    });
+    await workspaces!.create({ workspace: { id: `${marker}-legacy`, name: 'Legacy', metadata: { marker } } });
+    await workspaces!.create({
+      workspace: { id: `${marker}-other`, name: 'Other', authorId: 'user-b', metadata: { marker } },
+    });
+
+    const result = await workspaces!.listResolved({
+      page: 0,
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      authorIds: ['user-a', null],
+      metadata: { marker },
+    });
+
+    expect(result.workspaces.map(workspace => workspace.id)).toEqual([`${marker}-mine`, `${marker}-legacy`]);
+    expect(result.total).toBe(2);
+  });
+});
+
 // Configuration validation tests
 createConfigValidationTests({
   storeName: 'LibSQLStore',

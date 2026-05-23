@@ -80,13 +80,13 @@ export class FilesystemWorkspacesStorage extends WorkspacesStorage {
   }
 
   async list(args?: StorageListWorkspacesInput): Promise<StorageListWorkspacesOutput> {
-    const { page, perPage, orderBy, authorId, metadata } = args || {};
+    const { page, perPage, orderBy, authorId, authorIds, metadata } = args || {};
     const result = await this.helpers.listEntities({
       page,
       perPage,
       orderBy,
       listKey: 'workspaces',
-      filters: { authorId, metadata },
+      filters: { authorId: authorIds ?? authorId, metadata },
     });
     return result as unknown as StorageListWorkspacesOutput;
   }

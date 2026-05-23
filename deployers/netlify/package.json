@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "1.1.11-alpha.0",
+  "version": "1.1.14-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -44,6 +44,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
+    "rollup": "^4.0.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -85,7 +85,7 @@ export const PERMISSION_PATTERNS = {
   '*:publish': '*:publish',
   /** View all resources */
   '*:read': '*:read',
-  /** Change visibility/audience (e.g. private↔public) all resources */
+  /** Change visibility/audience all resources */
   '*:share': '*:share',
   /** Create and modify all resources */
   '*:write': '*:write',
@@ -127,7 +127,7 @@ export const PERMISSION_PATTERNS = {
   'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
-  /** Full access to any stored-* resource */
+  /** Full access to all stored resource families */
   'stored:*': 'stored:*',
   /** Full access to stored agents */
   'stored-agents:*': 'stored-agents:*',
@@ -247,7 +247,7 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
   'stored-agents:read': 'stored-agents:read',
-  /** Change visibility/audience (e.g. private↔public) stored agents */
+  /** Change visibility/audience stored agents */
   'stored-agents:share': 'stored-agents:share',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
@@ -281,7 +281,7 @@ export const PERMISSION_PATTERNS = {
   'stored-skills:publish': 'stored-skills:publish',
   /** View stored skills */
   'stored-skills:read': 'stored-skills:read',
-  /** Change visibility/audience (e.g. private↔public) stored skills */
+  /** Change visibility/audience stored skills */
   'stored-skills:share': 'stored-skills:share',
   /** Create and modify stored skills */
   'stored-skills:write': 'stored-skills:write',
@@ -291,11 +291,11 @@ export const PERMISSION_PATTERNS = {
   'stored-workspaces:read': 'stored-workspaces:read',
   /** Create and modify stored workspaces */
   'stored-workspaces:write': 'stored-workspaces:write',
-  /** Delete any stored-* resource */
+  /** Delete all stored resource families */
   'stored:delete': 'stored:delete',
-  /** View any stored-* resource */
+  /** View all stored resource families */
   'stored:read': 'stored:read',
-  /** Create and modify any stored-* resource */
+  /** Create and modify all stored resource families */
   'stored:write': 'stored:write',
   /** View system info */
   'system:read': 'system:read',
@@ -538,7 +538,7 @@ export const MastraFGAPermissions = {
   STORED_AGENTS_PUBLISH: 'stored-agents:publish',
   /** View stored agents */
   STORED_AGENTS_READ: 'stored-agents:read',
-  /** Change visibility/audience (e.g. private↔public) stored agents */
+  /** Change visibility/audience stored agents */
   STORED_AGENTS_SHARE: 'stored-agents:share',
   /** Create and modify stored agents */
   STORED_AGENTS_WRITE: 'stored-agents:write',
@@ -572,7 +572,7 @@ export const MastraFGAPermissions = {
   STORED_SKILLS_PUBLISH: 'stored-skills:publish',
   /** View stored skills */
   STORED_SKILLS_READ: 'stored-skills:read',
-  /** Change visibility/audience (e.g. private↔public) stored skills */
+  /** Change visibility/audience stored skills */
   STORED_SKILLS_SHARE: 'stored-skills:share',
   /** Create and modify stored skills */
   STORED_SKILLS_WRITE: 'stored-skills:write',
@@ -582,11 +582,11 @@ export const MastraFGAPermissions = {
   STORED_WORKSPACES_READ: 'stored-workspaces:read',
   /** Create and modify stored workspaces */
   STORED_WORKSPACES_WRITE: 'stored-workspaces:write',
-  /** Delete any stored-* resource */
+  /** Delete all stored resource families */
   STORED_DELETE: 'stored:delete',
-  /** View any stored-* resource */
+  /** View all stored resource families */
   STORED_READ: 'stored:read',
-  /** Create and modify any stored-* resource */
+  /** Create and modify all stored resource families */
   STORED_WRITE: 'stored:write',
   /** View system info */
   SYSTEM_READ: 'system:read',

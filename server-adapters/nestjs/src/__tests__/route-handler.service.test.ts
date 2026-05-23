@@ -23,6 +23,9 @@ describe('RouteHandlerService', () => {
         pathParams: {},
         queryParams: {},
         body: {},
+        getHeader: () => undefined,
+        requestBody: {},
+        requestPathParams: {},
         requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       }),
@@ -46,6 +49,9 @@ describe('RouteHandlerService', () => {
         pathParams: {},
         queryParams: {},
         body: '',
+        getHeader: () => undefined,
+        requestBody: '',
+        requestPathParams: {},
         requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       }),
@@ -69,6 +75,8 @@ describe('RouteHandlerService', () => {
       method: 'POST',
       path: '/test',
       responseType: 'json' as const,
+      pathParamSchema: z.object({ id: z.coerce.number(), mastra: z.string().optional() }),
+      bodySchema: z.object({ custom: z.string() }),
       handler: vi.fn(async params => params),
     };
 
@@ -84,35 +92,30 @@ describe('RouteHandlerService', () => {
       body: {
         requestContext: 'spoofed',
         routePrefix: '/spoofed',
+        getHeader: 'spoofed',
         requestBody: 'spoofed',
         requestPathParams: 'spoofed',
-        getHeader: 'spoofed',
         custom: 'ok',
       },
+      getHeader: name => (name.toLowerCase() === 'x-trace-id' ? 'trace-123' : undefined),
+      requestBody: { custom: 'ok' },
+      requestPathParams: { id: '123' },
       requestContext,
       abortSignal,
-      getHeader: (name: string) => (name.toLowerCase() === 'if-match' ? '"v1"' : undefined),
     });
 
     const handlerParams = await route.handler.mock.results[0]?.value;
 
     expect(result.responseType).toBe('json');
-    expect(handlerParams.id).toBe('123');
+    expect(handlerParams.id).toBe(123);
     expect(handlerParams.page).toBe('2');
     expect(handlerParams.custom).toBe('ok');
     expect(handlerParams.mastra).toBe(context.mastra);
     expect(handlerParams.requestContext).toBe(requestContext);
     expect(handlerParams.abortSignal).toBe(abortSignal);
     expect(handlerParams.routePrefix).toBe('/api');
-    expect(handlerParams.requestBody).toEqual({
-      requestContext: 'spoofed',
-      routePrefix: '/spoofed',
-      requestBody: 'spoofed',
-      requestPathParams: 'spoofed',
-      getHeader: 'spoofed',
-      custom: 'ok',
-    });
-    expect(handlerParams.requestPathParams).toEqual({ id: '123' });
-    expect(handlerParams.getHeader('if-match')).toBe('"v1"');
+    expect(handlerParams.getHeader('x-trace-id')).toBe('trace-123');
+    expect(handlerParams.requestBody).toEqual({ custom: 'ok' });
+    expect(handlerParams.requestPathParams).toEqual({ id: 123, mastra: 'spoofed' });
   });
 });

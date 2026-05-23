@@ -289,13 +289,24 @@ export class WorkspacesLibSQL extends WorkspacesStorage {
 
   async list(args?: StorageListWorkspacesInput): Promise<StorageListWorkspacesOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, authorIds, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
-      if (authorId !== undefined) {
+      if (authorIds !== undefined) {
+        const nonNullAuthorIds = authorIds.filter((id): id is string => id !== null);
+        const authorConditions: string[] = [];
+        if (nonNullAuthorIds.length > 0) {
+          authorConditions.push(`authorId IN (${nonNullAuthorIds.map(() => '?').join(', ')})`);
+          queryParams.push(...nonNullAuthorIds);
+        }
+        if (authorIds.includes(null)) {
+          authorConditions.push('authorId IS NULL');
+        }
+        conditions.push(authorConditions.length > 0 ? `(${authorConditions.join(' OR ')})` : '1 = 0');
+      } else if (authorId !== undefined) {
         conditions.push('authorId = ?');
         queryParams.push(authorId);
       }

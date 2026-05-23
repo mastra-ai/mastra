@@ -1841,6 +1841,11 @@ export type StorageListWorkspacesInput = {
    */
   authorId?: string;
   /**
+   * Filter workspaces by any of the provided author identifiers. `null`
+   * matches legacy unowned workspace records.
+   */
+  authorIds?: Array<string | null>;
+  /**
    * Filter workspaces by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
    */

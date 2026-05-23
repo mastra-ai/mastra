@@ -33,6 +33,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -921,6 +922,63 @@ export class Agent<
             agentName: this.name,
           },
         });
+      }
+    }
+  }
+
+  #extractClientObservability(messages: MessageListInput): void {
+    if (!Array.isArray(messages)) return;
+
+    const proxy = this.#mastra?.observability?.getClientObservabilityProxy?.();
+
+    const handleObservabilityBlock = (block: Record<string, unknown>) => {
+      const obs = block.__mastraObservability as
+        | {
+            parentContext?: { traceparent: string; tracestate?: string; baggage?: string };
+            payload?: { spans?: unknown; logs?: unknown; executionDurationMs?: number; toolName?: string };
+          }
+        | undefined;
+
+      if (proxy && obs?.payload && obs.parentContext) {
+        try {
+          proxy.receive(
+            obs.payload as Parameters<typeof proxy.receive>[0],
+            obs.parentContext as Parameters<typeof proxy.receive>[1],
+          );
+        } catch (err) {
+          this.logger?.warn?.('[ClientObservabilityProxy] failed to receive client observability payload', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      delete block.__mastraObservability;
+    };
+
+    for (const msg of messages) {
+      if (!msg || typeof msg !== 'object' || !('role' in msg)) continue;
+
+      const parts = (msg as { parts?: unknown }).parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (!part || typeof part !== 'object') continue;
+          const block = part as Record<string, unknown>;
+          if (block.type !== 'tool-invocation') continue;
+          const toolInvocation = block.toolInvocation;
+          if (!toolInvocation || typeof toolInvocation !== 'object') continue;
+          handleObservabilityBlock(toolInvocation as Record<string, unknown>);
+        }
+      }
+
+      if ((msg as { role: string }).role !== 'tool') continue;
+      const content = (msg as { content?: unknown }).content;
+      if (!Array.isArray(content)) continue;
+
+      for (const part of content) {
+        if (!part || typeof part !== 'object') continue;
+        const block = part as Record<string, unknown>;
+        if (block.type !== 'tool-result') continue;
+        handleObservabilityBlock(block);
       }
     }
   }
@@ -3390,6 +3448,7 @@ export class Agent<
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
+      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
@@ -3414,6 +3473,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      providerOptions,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -3430,6 +3490,10 @@ export class Agent<
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
+        const processInputProviderOptions =
+          llm instanceof MastraLLMVNext
+            ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
+            : providerOptions;
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
@@ -3440,6 +3504,7 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
+          providerOptions: processInputProviderOptions,
           retryCount: 0,
         });
         if (result.tools) {
@@ -6541,6 +6606,7 @@ export class Agent<
     }
 
     await this.#requireAgentExecutionFGA(mergedOptions);
+    this.#extractClientObservability(messages);
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6978,6 +7044,8 @@ export class Agent<
           };
         }
       }
+
+      this.#extractClientObservability(messages);
 
       const llm = await this.getLLM({
         requestContext: mergedOptions.requestContext,
@@ -7792,7 +7860,10 @@ export class Agent<
     let defaultOptions: AgentExecutionOptions<TOutput> | undefined;
     if (requestContextToUse) {
       // Keep explicit-context resume preflight before snapshot loading/model resolution so denied callers cannot touch persisted runs.
-      await this.#assertAgentExecutionPreflight(requestContextToUse, { memory: options?.memory, runId: options?.runId });
+      await this.#assertAgentExecutionPreflight(requestContextToUse, {
+        memory: options?.memory,
+        runId: options?.runId,
+      });
     } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
       defaultOptions = (await this.getDefaultOptions({
         requestContext: requestContextToUse,

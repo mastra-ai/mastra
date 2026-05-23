@@ -133,9 +133,20 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
+      // Network approval routes require a live suspended run. The generic
+      // adapter suite cannot create that precondition; agent/server handler
+      // tests cover the behavior.
+      '/agents/:agentId/approve-network-tool-call',
+      '/agents/:agentId/decline-network-tool-call',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
-    const excludedPrefixes = ['/datasets'];
+    const excludedPrefixes = [
+      '/datasets',
+      // Harness routes require route-scoped auth plus session/storage state.
+      // Keep schema validation in Route Validation, but skip generic HTTP
+      // execution here because it cannot satisfy those preconditions.
+      '/harness',
+    ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
       r.responseType === 'mcp-http' ||
