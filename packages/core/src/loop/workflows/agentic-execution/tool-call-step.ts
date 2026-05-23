@@ -6,6 +6,7 @@ import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import type { AnySpan } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
@@ -60,13 +61,35 @@ type HarnessToolContextSlot = {
     policyDecision: 'allow' | 'ask' | 'deny';
     runId?: string;
     toolCallId?: string;
+    observability?: HarnessWorkspaceActionObservability;
     result?: unknown;
     error?: unknown;
   }) => Promise<void>;
 };
 
+type HarnessWorkspaceActionObservability = {
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+};
+
 function isHarnessToolPermissionPolicy(value: unknown): value is 'allow' | 'ask' | 'deny' {
   return value === 'allow' || value === 'ask' || value === 'deny';
+}
+
+function getHarnessWorkspaceActionObservability(
+  span: AnySpan | undefined,
+): HarnessWorkspaceActionObservability | undefined {
+  if (!span) return undefined;
+  const traceId = span.externalTraceId ?? span.traceId;
+  const spanId = span.id;
+  const parentSpanId = span.getParentSpanId?.(true);
+  if (!traceId && !spanId && !parentSpanId) return undefined;
+  return {
+    ...(traceId ? { traceId } : {}),
+    ...(spanId ? { spanId } : {}),
+    ...(parentSpanId ? { parentSpanId } : {}),
+  };
 }
 
 async function recordHarnessWorkspaceAction(
@@ -77,6 +100,7 @@ async function recordHarnessWorkspaceAction(
     policyDecision: 'allow' | 'ask' | 'deny';
     runId?: string;
     toolCallId?: string;
+    observability?: HarnessWorkspaceActionObservability;
     result?: unknown;
     error?: unknown;
   },
@@ -432,6 +456,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
+        const workspaceActionObservability = getHarnessWorkspaceActionObservability(
+          modelSpanTracker?.getTracingContext().currentSpan,
+        );
 
         let resumeDataFromArgs: any = undefined;
         let args: any = inputData.args;
@@ -550,6 +577,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               policyDecision: 'deny',
               runId,
               toolCallId: inputData.toolCallId,
+              observability: workspaceActionObservability,
               error: `Tool "${inputData.toolName}" was denied by Harness permissions.`,
             },
             logger,
@@ -620,6 +648,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 policyDecision: 'ask',
                 runId,
                 toolCallId: inputData.toolCallId,
+                observability: workspaceActionObservability,
                 result: 'approval_required',
               },
               logger,
@@ -1317,6 +1346,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             policyDecision: harnessToolPermission ?? 'allow',
             runId,
             toolCallId: inputData.toolCallId,
+            observability: workspaceActionObservability,
             result,
           },
           logger,
@@ -1354,6 +1384,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             policyDecision: 'allow',
             runId,
             toolCallId: inputData.toolCallId,
+            observability: getHarnessWorkspaceActionObservability(modelSpanTracker?.getTracingContext().currentSpan),
             error,
           },
           logger,
