@@ -1,5 +1,15 @@
 # mastra
 
+## 1.10.1-alpha.4
+
+### Patch Changes
+
+- Fix CLI output alignment: streamed build logs, studio deploy SSE logs, server deploy polled logs, and `deploy logs` output now display with the clack pipe prefix (`│`) for visual continuity under their parent step. ([#16909](https://github.com/mastra-ai/mastra/pull/16909))
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+  - @mastra/deployer@1.37.0-alpha.4
+
 ## 1.10.1-alpha.3
 
 ### Patch Changes
