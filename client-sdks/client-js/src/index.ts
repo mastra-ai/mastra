@@ -9,6 +9,7 @@ export type {
   Goal,
   GoalBody,
   GoalResponse,
+  HarnessDisplayState,
   HarnessSessionSnapshot,
   HarnessSessionSummary,
   InboxResponseBody,

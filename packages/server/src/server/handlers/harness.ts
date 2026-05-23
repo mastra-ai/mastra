@@ -5,12 +5,12 @@ import type { IncomingHttpHeaders, IncomingMessage, RequestOptions } from 'node:
 import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 
-import { parseHarnessEventId } from '@mastra/core/harness/v1';
 import type {
   AttachmentRef,
   GoalOptions,
   GoalState,
   HarnessChannelDiagnostics,
+  HarnessDisplayStateSnapshotV1,
   HarnessMessage,
   InboxResponseResult,
   PermissionRules,
@@ -61,11 +61,13 @@ import {
 } from '../schemas/harness';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { toHarnessDisplayStateSnapshotV1 } from './harness-display-state';
 import { enforceThreadAccess, getEffectiveResourceId } from './utils';
 
 type SessionLifecycleStatus = 'active' | 'closing' | 'closed';
 type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
 type PublicPendingResume = Omit<NonNullable<SessionRecord['pendingResume']>, 'runtimeDependencies'>;
+type ParsedHarnessEventId = { epoch: string; sequence: number };
 type UrlAttachmentInput = {
   kind: 'url';
   url: string;
@@ -148,7 +150,7 @@ type HarnessSessionSnapshot = {
     nextCursor?: string;
     sessionOwnedOnly: true;
   };
-  displayState?: SessionDisplayState;
+  displayState?: HarnessDisplayStateSnapshotV1;
   goal?: unknown | null;
   channelBindings: unknown[];
   tokenUsage: SessionRecord['tokenUsage'];
@@ -755,6 +757,31 @@ function throwHarnessHttpError(
     message,
     res: jsonResponse(toHarnessErrorBody(code, message, details, retryable), { status }),
   });
+}
+
+function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
+  const parts = eventId.split(':');
+  if (parts.length !== 3 || parts[0] !== 'harness-v1' || parts[1] === '' || parts[2] === '') {
+    throwHarnessHttpError(400, 'harness.validation', 'expected event id grammar harness-v1:<epoch>:<seq>', {
+      field: 'lastEventId',
+      reason: 'invalid',
+    });
+  }
+  const sequenceText = parts[2]!;
+  if (!/^(0|[1-9][0-9]*)$/.test(sequenceText)) {
+    throwHarnessHttpError(400, 'harness.validation', 'event id sequence must be an unsigned decimal integer', {
+      field: 'lastEventId',
+      reason: 'invalid',
+    });
+  }
+  const sequence = Number(sequenceText);
+  if (!Number.isSafeInteger(sequence)) {
+    throwHarnessHttpError(400, 'harness.validation', 'event id sequence must be within JavaScript safe integer range', {
+      field: 'lastEventId',
+      reason: 'invalid',
+    });
+  }
+  return { epoch: parts[1]!, sequence };
 }
 
 function getAuthResourceId(requestContext: RequestContext): string {
@@ -1675,7 +1702,7 @@ function snapshotFromRecord(
       truncated: false,
       sessionOwnedOnly: true,
     },
-    displayState,
+    displayState: toHarnessDisplayStateSnapshotV1(displayState),
     goal: record.goal ?? null,
     channelBindings: [],
     tokenUsage: { ...record.tokenUsage },

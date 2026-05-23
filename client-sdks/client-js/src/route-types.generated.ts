@@ -20225,7 +20225,73 @@ export type PostHarnessNameSessions_Response = {
       nextCursor?: string | undefined;
       sessionOwnedOnly: true;
     };
-    displayState?: unknown | undefined;
+    displayState?:
+      | {
+          version: 1;
+          sessionId: string;
+          threadId: string;
+          resourceId: string;
+          parentSessionId?: string | undefined;
+          lifecycleState: 'live' | 'closing' | 'closed' | 'deleted' | 'evicted';
+          modeId: string;
+          modelId: string;
+          createdAt: number;
+          lastActivityAt: number;
+          isRunning: boolean;
+          currentRunId?: string | undefined;
+          currentMessageId?: string | undefined;
+          currentTraceId?: string | undefined;
+          activeTools: {
+            [key: string]: {
+              toolCallId: string;
+              toolName: string;
+              args: PostHarnessNameSessions_Response_Auxiliary_10;
+              startedAt: number;
+              subagentSessionId?: string | undefined;
+            };
+          };
+          toolInputBuffers: {
+            [key: string]: {
+              toolName: string;
+              text: string;
+            };
+          };
+          activeSubagents: {
+            [key: string]: {
+              subagentSessionId: string;
+              agentType: string;
+              task: string;
+              parentToolCallId: string;
+              startedAt: number;
+            };
+          };
+          tokenUsage: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+          };
+          pending: {
+            kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+            itemId?: string | undefined;
+            runId: string;
+            toolCallId: string;
+            toolName?: string | undefined;
+            source: 'parent' | 'subagent';
+            subagentToolCallId?: string | undefined;
+            requestedAt: number;
+            queuedItemId?: string | undefined;
+            modeId?: string | undefined;
+            resumedAt?: number | undefined;
+            payload?: PostHarnessNameSessions_Response_Auxiliary_10 | undefined;
+            transitionModeId?: string | undefined;
+            approvedTransitionModeId?: string | undefined;
+            modeTransitionAppliedAt?: number | undefined;
+          } | null;
+          queueDepth: number;
+          currentQueuedItemId?: string | undefined;
+          goal?: PostHarnessNameSessions_Response_Auxiliary_10 | undefined;
+        }
+      | undefined;
     goal?: (unknown | null) | undefined;
     channelBindings: unknown[];
     tokenUsage: {
@@ -20364,7 +20430,73 @@ export type GetHarnessNameSessionsSessionId_Response = {
     nextCursor?: string | undefined;
     sessionOwnedOnly: true;
   };
-  displayState?: unknown | undefined;
+  displayState?:
+    | {
+        version: 1;
+        sessionId: string;
+        threadId: string;
+        resourceId: string;
+        parentSessionId?: string | undefined;
+        lifecycleState: 'live' | 'closing' | 'closed' | 'deleted' | 'evicted';
+        modeId: string;
+        modelId: string;
+        createdAt: number;
+        lastActivityAt: number;
+        isRunning: boolean;
+        currentRunId?: string | undefined;
+        currentMessageId?: string | undefined;
+        currentTraceId?: string | undefined;
+        activeTools: {
+          [key: string]: {
+            toolCallId: string;
+            toolName: string;
+            args: GetHarnessNameSessionsSessionId_Response_Auxiliary_9;
+            startedAt: number;
+            subagentSessionId?: string | undefined;
+          };
+        };
+        toolInputBuffers: {
+          [key: string]: {
+            toolName: string;
+            text: string;
+          };
+        };
+        activeSubagents: {
+          [key: string]: {
+            subagentSessionId: string;
+            agentType: string;
+            task: string;
+            parentToolCallId: string;
+            startedAt: number;
+          };
+        };
+        tokenUsage: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        };
+        pending: {
+          kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+          itemId?: string | undefined;
+          runId: string;
+          toolCallId: string;
+          toolName?: string | undefined;
+          source: 'parent' | 'subagent';
+          subagentToolCallId?: string | undefined;
+          requestedAt: number;
+          queuedItemId?: string | undefined;
+          modeId?: string | undefined;
+          resumedAt?: number | undefined;
+          payload?: GetHarnessNameSessionsSessionId_Response_Auxiliary_9 | undefined;
+          transitionModeId?: string | undefined;
+          approvedTransitionModeId?: string | undefined;
+          modeTransitionAppliedAt?: number | undefined;
+        } | null;
+        queueDepth: number;
+        currentQueuedItemId?: string | undefined;
+        goal?: GetHarnessNameSessionsSessionId_Response_Auxiliary_9 | undefined;
+      }
+    | undefined;
   goal?: (unknown | null) | undefined;
   channelBindings: unknown[];
   tokenUsage: {

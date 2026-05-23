@@ -276,9 +276,23 @@ describe('Harness server routes', () => {
 
   it('creates a session with auth-derived resource and returns a snapshot', async () => {
     const record = makeRecord();
+    const displayState = makeDisplayState(record);
+    displayState.activeTools = {
+      'tool-1': {
+        toolCallId: 'tool-1',
+        toolName: 'lookup',
+        args: {
+          when: new Date('2026-05-23T00:00:00.000Z'),
+          count: 12n,
+          invalid: Number.POSITIVE_INFINITY,
+          omitted: undefined,
+        },
+        startedAt: 300,
+      },
+    };
     const session = {
       getRecord: () => record,
-      getDisplayState: () => makeDisplayState(record),
+      getDisplayState: () => displayState,
       getState: vi.fn(async () => record.state),
       listMessages: vi.fn(async () => [{ id: 'message-1', role: 'user', content: 'hello' }]),
     };
@@ -304,9 +318,23 @@ describe('Harness server routes', () => {
       session: {
         summary: { sessionId: 'session-1', resourceId: 'resource-1' },
         state: { view: 'open' },
+        displayState: {
+          version: 1,
+          sessionId: 'session-1',
+          activeTools: {
+            'tool-1': {
+              args: {
+                when: '2026-05-23T00:00:00.000Z',
+                count: '12',
+                invalid: null,
+              },
+            },
+          },
+        },
         messages: { cursor: { threadId: 'thread-1', route: 'thread-messages' } },
       },
     });
+    expect(result.session.displayState.activeTools['tool-1'].args).not.toHaveProperty('omitted');
   });
 
   it('ignores create options supplied only through flattened query params', async () => {
@@ -604,7 +632,10 @@ describe('Harness server routes', () => {
     expect(harness.session).not.toHaveBeenCalled();
     expect(body).toMatchObject({
       summary: { sessionId: 'session-1', lifecycle: 'active' },
-      displayState: { sessionId: 'session-1' },
+      displayState: {
+        version: 1,
+        sessionId: 'session-1',
+      },
       tokenUsage: { totalTokens: 3 },
     });
   });

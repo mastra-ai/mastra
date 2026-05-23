@@ -10,6 +10,15 @@
 export { Harness } from './harness';
 export { Session } from './session';
 export type { SessionLifecycleState, SessionDisplayState } from './session';
+export { toHarnessDisplayStateSnapshotV1 } from './display-state';
+export type {
+  HarnessDisplayActiveSubagentSnapshotV1,
+  HarnessDisplayActiveToolSnapshotV1,
+  HarnessDisplayJsonValue,
+  HarnessDisplayPendingSnapshotV1,
+  HarnessDisplayStateSnapshotV1,
+  HarnessDisplayToolInputBufferSnapshotV1,
+} from './display-state';
 
 export type {
   AgentEndEvent,

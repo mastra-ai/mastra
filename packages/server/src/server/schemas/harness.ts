@@ -95,6 +95,74 @@ const durableWorkListSummarySchema = z.object({
   sessionOwnedOnly: z.literal(true),
 });
 
+const harnessDisplayActiveToolSnapshotV1Schema = z.object({
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: jsonValueSchema,
+  startedAt: z.number(),
+  subagentSessionId: z.string().optional(),
+});
+
+const harnessDisplayToolInputBufferSnapshotV1Schema = z.object({
+  toolName: z.string(),
+  text: z.string(),
+});
+
+const harnessDisplayActiveSubagentSnapshotV1Schema = z.object({
+  subagentSessionId: z.string(),
+  agentType: z.string(),
+  task: z.string(),
+  parentToolCallId: z.string(),
+  startedAt: z.number(),
+});
+
+const harnessDisplayPendingSnapshotV1Schema = z.object({
+  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+  itemId: z.string().optional(),
+  runId: z.string(),
+  toolCallId: z.string(),
+  toolName: z.string().optional(),
+  source: z.enum(['parent', 'subagent']),
+  subagentToolCallId: z.string().optional(),
+  requestedAt: z.number(),
+  queuedItemId: z.string().optional(),
+  modeId: z.string().optional(),
+  resumedAt: z.number().optional(),
+  payload: jsonValueSchema.optional(),
+  transitionModeId: z.string().optional(),
+  approvedTransitionModeId: z.string().optional(),
+  modeTransitionAppliedAt: z.number().optional(),
+});
+
+export const harnessDisplayStateSnapshotV1Schema = z.object({
+  version: z.literal(1),
+  sessionId: z.string(),
+  threadId: z.string(),
+  resourceId: z.string(),
+  parentSessionId: z.string().optional(),
+  lifecycleState: z.enum(['live', 'closing', 'closed', 'deleted', 'evicted']),
+  modeId: z.string(),
+  modelId: z.string(),
+  createdAt: z.number(),
+  lastActivityAt: z.number(),
+  isRunning: z.boolean(),
+  currentRunId: z.string().optional(),
+  currentMessageId: z.string().optional(),
+  currentTraceId: z.string().optional(),
+  activeTools: z.record(z.string(), harnessDisplayActiveToolSnapshotV1Schema),
+  toolInputBuffers: z.record(z.string(), harnessDisplayToolInputBufferSnapshotV1Schema),
+  activeSubagents: z.record(z.string(), harnessDisplayActiveSubagentSnapshotV1Schema),
+  tokenUsage: z.object({
+    promptTokens: z.number(),
+    completionTokens: z.number(),
+    totalTokens: z.number(),
+  }),
+  pending: harnessDisplayPendingSnapshotV1Schema.nullable(),
+  queueDepth: z.number(),
+  currentQueuedItemId: z.string().optional(),
+  goal: jsonValueSchema.optional(),
+});
+
 export const harnessSessionListItemSchema = z.object({
   sessionId: z.string(),
   harnessName: z.string(),
@@ -150,7 +218,7 @@ export const harnessSessionSnapshotSchema = z.object({
     nextCursor: z.string().optional(),
     sessionOwnedOnly: z.literal(true),
   }),
-  displayState: z.unknown().optional(),
+  displayState: harnessDisplayStateSnapshotV1Schema.optional(),
   goal: z.unknown().nullable().optional(),
   channelBindings: z.array(z.unknown()),
   tokenUsage: z.object({

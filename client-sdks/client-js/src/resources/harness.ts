@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import type { HarnessEvent } from '@mastra/core/harness/v1';
+import type { HarnessDisplayStateSnapshotV1, HarnessEvent } from '@mastra/core/harness/v1';
 
 import type {
   GetHarnessNameSessions_Response,
@@ -14,7 +14,10 @@ import { MastraClientError } from '../types.js';
 import { BaseResource } from './base';
 
 type JsonObject = Record<string, unknown>;
-export type HarnessSessionSnapshot = GetHarnessNameSessionsSessionId_Response;
+export type HarnessSessionSnapshot = Omit<GetHarnessNameSessionsSessionId_Response, 'displayState'> & {
+  displayState?: HarnessDisplayStateSnapshotV1;
+};
+export type HarnessDisplayState = HarnessDisplayStateSnapshotV1;
 export type HarnessSessionSummary = GetHarnessNameSessions_Response['items'][number];
 export type ChannelDiagnostics = GetHarnessNameSessionsSessionIdChannelDiagnostics_Response;
 export type CreateHarnessSessionBody = PostHarnessNameSessions_Body;
@@ -250,7 +253,7 @@ export class RemoteSession extends BaseResource {
     return this.snapshot.summary;
   }
 
-  getDisplayState(): unknown {
+  getDisplayState(): HarnessDisplayStateSnapshotV1 | undefined {
     return this.snapshot.displayState;
   }
 
