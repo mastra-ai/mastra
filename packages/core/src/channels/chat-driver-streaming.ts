@@ -706,8 +706,13 @@ export async function runStreamingDriver({
       // so the Approve/Deny buttons render — non-cards modes never opt out
       // of rich approval rendering.
       const approvalMessage = formatToolApproval(enr.displayName, enr.argsSummary, enr.toolCallId, true);
+      // Prefer editing the running tool-card posted by `tool-call` (cards
+      // mode stashes it in `toolMessageIds`) so the approval buttons replace
+      // the running card in-place. Fall back to a re-posted approval message
+      // and finally to a fresh post when neither exists.
+      const runningCardMessageId = toolMessageIds.get(enr.toolCallId);
       const existing = getPendingApproval(enr.toolCallId);
-      let messageId: string | undefined = existing?.messageId;
+      let messageId: string | undefined = runningCardMessageId ?? existing?.messageId;
       if (messageId) {
         try {
           await adapter.editMessage(chatThread.id, messageId, approvalMessage);
@@ -719,6 +724,9 @@ export async function runStreamingDriver({
         const sent = await chatThread.post(approvalMessage);
         messageId = sent?.id;
       }
+      // Keep `toolMessageIds` in sync so the eventual `tool-result` edits the
+      // same message (whether we edited the existing card or had to repost).
+      if (messageId) toolMessageIds.set(enr.toolCallId, messageId);
       onApprovalPosted(enr.toolCallId, {
         messageId,
         displayName: enr.displayName,
