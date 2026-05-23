@@ -312,7 +312,8 @@ export class AgentChannels {
       // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>".
       // A user-supplied onAction is fully responsible for the event; call
       // defaultHandler() to delegate to the built-in tool_approve / tool_deny routing.
-      // Custom action IDs are surfaced to the default handler as { kind: 'unknown', actionId }.
+      // defaultHandler() returns { kind: 'approved' | 'denied', toolCallId } when it
+      // handled the action, or undefined for any other action ID.
       if (onAction !== false) {
         chat.onAction(async event => {
           const boundDefault = () => this.defaultActionHandler(event);
@@ -792,26 +793,26 @@ export class AgentChannels {
    * edits the card to show approved/denied, then resumes the suspended tool
    * via `agent.approveToolCall` / `agent.declineToolCall`.
    *
-   * Returns `{ kind: 'unknown', actionId }` for any other action ID so custom
-   * `onAction` handlers can branch on them.
+   * Returns `undefined` for any other action ID (custom `onAction` handlers
+   * branch on `event.actionId` directly for their own IDs).
    */
-  private async defaultActionHandler(event: ActionEvent): Promise<ActionHandlerResult> {
+  private async defaultActionHandler(event: ActionEvent): Promise<ActionHandlerResult | undefined> {
     const { actionId } = event;
     if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) {
-      return { kind: 'unknown', actionId };
+      return undefined;
     }
 
     const approved = actionId.startsWith('tool_approve:');
     const toolCallId = actionId.split(':')[1];
     if (!toolCallId) {
       this.log('info', `Missing toolCallId in action event actionId=${actionId}`);
-      return { kind: 'unknown', actionId };
+      return undefined;
     }
 
     const chatThread = event.thread as Thread | null;
     if (!chatThread) {
       this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
-      return { kind: 'unknown', actionId };
+      return undefined;
     }
 
     const platform = event.adapter.name;

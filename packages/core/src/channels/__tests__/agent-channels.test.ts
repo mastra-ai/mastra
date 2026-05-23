@@ -332,7 +332,7 @@ describe('AgentChannels', () => {
   });
 
   describe('defaultActionHandler', () => {
-    it('returns { kind: "unknown", actionId } for non-tool action IDs', async () => {
+    it('returns undefined for non-tool action IDs', async () => {
       const event = {
         actionId: 'explain:weatherTool',
         adapter: { name: 'slack' },
@@ -342,10 +342,10 @@ describe('AgentChannels', () => {
       } as any;
 
       const result = await (agentChannels as any).defaultActionHandler(event);
-      expect(result).toEqual({ kind: 'unknown', actionId: 'explain:weatherTool' });
+      expect(result).toBeUndefined();
     });
 
-    it('returns { kind: "unknown" } when toolCallId is missing from actionId', async () => {
+    it('returns undefined when toolCallId is missing from actionId', async () => {
       const event = {
         actionId: 'tool_approve:',
         adapter: { name: 'slack' },
@@ -355,10 +355,10 @@ describe('AgentChannels', () => {
       } as any;
 
       const result = await (agentChannels as any).defaultActionHandler(event);
-      expect(result).toEqual({ kind: 'unknown', actionId: 'tool_approve:' });
+      expect(result).toBeUndefined();
     });
 
-    it('returns { kind: "unknown" } when no thread is present on the event', async () => {
+    it('returns undefined when no thread is present on the event', async () => {
       const event = {
         actionId: 'tool_approve:tc-1',
         adapter: { name: 'slack' },
@@ -368,7 +368,7 @@ describe('AgentChannels', () => {
       } as any;
 
       const result = await (agentChannels as any).defaultActionHandler(event);
-      expect(result).toEqual({ kind: 'unknown', actionId: 'tool_approve:tc-1' });
+      expect(result).toBeUndefined();
     });
   });
 

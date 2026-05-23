@@ -345,7 +345,7 @@ const agent = new Agent({
     type: 'ActionHandler | false',
     isOptional: true,
     description:
-      'Called when the bot receives an action (e.g. button click). Receives a `defaultHandler` that routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs and returns `{ kind: "approved" | "denied" | "unknown" }` describing what it did.',
+      'Called when the bot receives an action (e.g. button click). Receives a `defaultHandler` that routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs. Inspect `event.actionId` to branch on your own custom IDs.',
   },
   {
     name: 'onReaction',
@@ -367,7 +367,7 @@ type ChannelHandler = (
 
 type ActionHandler = (
   event: ActionEvent,
-  defaultHandler: () => Promise<ActionHandlerResult>,
+  defaultHandler: () => Promise<ActionHandlerResult | undefined>,
 ) => unknown | Promise<unknown>
 
 type ReactionHandler = (
@@ -378,8 +378,9 @@ type ReactionHandler = (
 type ActionHandlerResult =
   | { kind: 'approved'; toolCallId: string }
   | { kind: 'denied'; toolCallId: string }
-  | { kind: 'unknown'; actionId: string }
 ```
+
+`defaultHandler()` returns the `ActionHandlerResult` when it handled a built-in `tool_approve:*` / `tool_deny:*` action, or `undefined` for any other action ID.
 
 When you supply an `ActionHandler` or `ReactionHandler`, the override fully owns the event — the default handler runs only if you call `defaultHandler()` explicitly. This matches the existing `onDirectMessage` / `onMention` / `onSubscribedMessage` semantics. Use `handlers.onAction: false` (or `handlers.onReaction: false`) to disable the default routing entirely.
 

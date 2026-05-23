@@ -318,16 +318,12 @@ export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 /**
  * Result of the built-in action handler for tool approval buttons.
  *
- * - `{ kind: 'approved', toolCallId }` — handled a `tool_approve:<toolCallId>` click.
- * - `{ kind: 'denied', toolCallId }` — handled a `tool_deny:<toolCallId>` click.
- * - `{ kind: 'unknown', actionId }` — actionId did not match the built-in
- *   `tool_approve:*` / `tool_deny:*` prefixes. Custom `onAction` handlers can
- *   branch on this to handle their own action IDs after delegating.
+ * Returned by `defaultHandler()` when an `onAction` override delegates to it.
+ * Returns `undefined` when the action ID was not handled by the default
+ * (e.g. a custom action ID like `explain:weatherTool`); the override already
+ * has `event.actionId` for branching on its own IDs.
  */
-export type ActionHandlerResult =
-  | { kind: 'approved'; toolCallId: string }
-  | { kind: 'denied'; toolCallId: string }
-  | { kind: 'unknown'; actionId: string };
+export type ActionHandlerResult = { kind: 'approved'; toolCallId: string } | { kind: 'denied'; toolCallId: string };
 
 /**
  * Custom handler for action (button click) events.
@@ -340,7 +336,7 @@ export type ActionHandlerResult =
  */
 export type ActionHandler = (
   event: ActionEvent,
-  defaultHandler: () => Promise<ActionHandlerResult>,
+  defaultHandler: () => Promise<ActionHandlerResult | undefined>,
 ) => unknown | Promise<unknown>;
 
 /**
@@ -390,8 +386,8 @@ export interface ChannelHandlers {
    *
    * Default: Routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`
    * action IDs through the tool approval flow (edits the card, resumes the
-   * suspended tool). All other action IDs are returned as
-   * `{ kind: 'unknown', actionId }` so custom handlers can branch on them.
+   * suspended tool). All other action IDs are ignored — custom handlers
+   * inspect `event.actionId` directly to branch on their own IDs.
    *
    * Pair with `toolDisplay: fn` (which can post custom cards with custom
    * action IDs) and `channels.approveTool(toolCallId, event)` /
