@@ -340,6 +340,20 @@ const agent = new Agent({
     isOptional: true,
     description: 'Called for messages in threads the agent has subscribed to.',
   },
+  {
+    name: 'onAction',
+    type: 'ActionHandler | false',
+    isOptional: true,
+    description:
+      'Called when the bot receives an action (e.g. button click). Receives a `defaultHandler` that routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs. Custom action IDs are returned to the override as `{ kind: "unknown", actionId }` so user code can branch on them.',
+  },
+  {
+    name: 'onReaction',
+    type: 'ReactionHandler | false',
+    isOptional: true,
+    description:
+      'Called when the bot receives a reaction (emoji) event. Default is a no-op. Pair with `channels.approveTool` / `denyTool` to drive approvals via reactions on platforms without buttons.',
+  },
 ]}
 />
 
@@ -351,7 +365,46 @@ type ChannelHandler = (
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
 ) => Promise<void>
+
+type ActionHandler = (
+  event: ActionEvent,
+  defaultHandler: () => Promise<ActionHandlerResult>,
+) => unknown | false | undefined | Promise<unknown | false | undefined>
+
+type ReactionHandler = (
+  event: ReactionEvent,
+  defaultHandler: () => Promise<void>,
+) => unknown | false | undefined | Promise<unknown | false | undefined>
+
+type ActionHandlerResult =
+  | { kind: 'approved'; toolCallId: string }
+  | { kind: 'denied'; toolCallId: string }
+  | { kind: 'unknown'; actionId: string }
 ```
+
+Returning `false` or `undefined` from `ActionHandler` / `ReactionHandler` falls through to the default handler. Any other return value (including the awaited result of `defaultHandler()`) is treated as "the override owned this event".
+
+## Programmatic approval
+
+The `AgentChannels` instance (`agent.channels`) exposes two methods for resolving suspended tool approvals from outside the default click handler:
+
+```typescript
+agent.channels.approveTool(toolCallId, source)
+agent.channels.denyTool(toolCallId, source)
+```
+
+Both look up the `runId` for `toolCallId` (in-memory first, persisted metadata fallback) and resume the suspended tool. Neither edits any message — the caller owns the UI. If no pending approval exists for `toolCallId` (e.g. a stale click), the call silently returns.
+
+`source` describes who is resolving the approval and from where:
+
+```typescript
+type ApprovalSource =
+  | ActionEvent
+  | ReactionEvent
+  | { chatThread: Thread; platform: string; actor: Author; messageId?: string }
+```
+
+Pass an `ActionEvent` or `ReactionEvent` when resolving from an inbound chat event handler. Use the explicit `{ chatThread, platform, actor }` form when resolving from a workflow, scheduled job, or any code path that isn't responding to an inbound event.
 
 ## Inline media
 

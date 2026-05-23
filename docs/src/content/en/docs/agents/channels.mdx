@@ -121,6 +121,106 @@ When the agent calls this tool, users see a card with the tool name, arguments, 
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode does not post approval buttons.
 
+## Custom action and reaction handlers
+
+For approval flows that need extra buttons, reaction-driven approval, or programmatic approval from a workflow, combine three pieces:
+
+- `toolDisplay: fn` posts whatever message you want (custom buttons, plain text awaiting reactions, etc.).
+- `handlers.onAction` / `handlers.onReaction` route inbound events to your code.
+- `channels.approveTool(toolCallId, source)` / `channels.denyTool(toolCallId, source)` resume the suspended tool call.
+
+### Custom approval card with an extra button
+
+The `toolDisplay` fn posts a Block Kit card with an additional "Explain" button. `onAction` routes the custom `explain:*` action ID and falls through to the default handler for the built-in `tool_approve:*` / `tool_deny:*` IDs:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  name: 'ops',
+  instructions: '…',
+  model: 'openai/gpt-4o',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: slackAdapter,
+        toolDisplay: event => {
+          if (event.kind !== 'approval') return undefined
+          return {
+            kind: 'post',
+            message: buildCardWithExplainButton(event),
+          }
+        },
+      },
+    },
+    handlers: {
+      onAction: async (event, defaultHandler) => {
+        if (event.actionId.startsWith('explain:')) {
+          await event.thread?.post('This tool will delete the file at the given path.')
+          return
+        }
+        // Fall through to built-in tool_approve / tool_deny routing.
+        return defaultHandler()
+      },
+    },
+  },
+})
+```
+
+### Reaction-driven approval
+
+Useful on platforms or channels where buttons aren't appropriate. `toolDisplay` posts a plain message and stashes the `toolCallId` keyed by `messageId`; `onReaction` resolves the approval based on emoji:
+
+```typescript
+const pendingApprovals = new Map<string, string>() // messageId -> toolCallId
+
+const agent = new Agent({
+  name: 'ops',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: slackAdapter,
+        toolDisplay: async (event, ctx) => {
+          if (event.kind !== 'approval') return undefined
+          const posted = await event.thread.post(
+            `Awaiting approval to run \`${event.displayName}(${event.argsSummary})\` — react ✅ to run, ❌ to deny`,
+          )
+          pendingApprovals.set(posted.id, event.toolCallId)
+          return undefined // we already posted
+        },
+      },
+    },
+    handlers: {
+      onReaction: async event => {
+        const toolCallId = pendingApprovals.get(event.messageId)
+        if (!toolCallId) return
+        if (event.emoji === 'white_check_mark') {
+          await agent.channels.approveTool(toolCallId, event)
+          pendingApprovals.delete(event.messageId)
+        } else if (event.emoji === 'x') {
+          await agent.channels.denyTool(toolCallId, event)
+          pendingApprovals.delete(event.messageId)
+        }
+      },
+    },
+  },
+})
+```
+
+### Programmatic approval from a workflow
+
+Hold the `AgentChannels` instance and resolve approvals without an inbound chat event. Useful for scheduled jobs, escalation timers, or workflow steps that gate tool execution:
+
+```typescript
+await agent.channels.approveTool(toolCallId, {
+  chatThread,
+  platform: 'slack',
+  actor: { userId: 'system', userName: 'workflow' },
+})
+```
+
+`approveTool` and `denyTool` do not edit any message — the caller owns the UI. If a `toolCallId` has no pending approval (e.g. a stale click), the call silently returns.
+
 ## Multi-user awareness
 
 In group conversations, Mastra automatically prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:

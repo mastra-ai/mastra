@@ -330,6 +330,155 @@ describe('AgentChannels', () => {
       expect((agentChannels as any).threadSubscriptions.size).toBe(0);
     });
   });
+
+  describe('defaultActionHandler', () => {
+    it('returns { kind: "unknown", actionId } for non-tool action IDs', async () => {
+      const event = {
+        actionId: 'explain:weatherTool',
+        adapter: { name: 'slack' },
+        user: { userId: 'U1' },
+        thread: { id: 'T1', channelId: 'C1' },
+        messageId: 'M1',
+      } as any;
+
+      const result = await (agentChannels as any).defaultActionHandler(event);
+      expect(result).toEqual({ kind: 'unknown', actionId: 'explain:weatherTool' });
+    });
+
+    it('returns { kind: "unknown" } when toolCallId is missing from actionId', async () => {
+      const event = {
+        actionId: 'tool_approve:',
+        adapter: { name: 'slack' },
+        user: { userId: 'U1' },
+        thread: { id: 'T1', channelId: 'C1' },
+        messageId: 'M1',
+      } as any;
+
+      const result = await (agentChannels as any).defaultActionHandler(event);
+      expect(result).toEqual({ kind: 'unknown', actionId: 'tool_approve:' });
+    });
+
+    it('returns { kind: "unknown" } when no thread is present on the event', async () => {
+      const event = {
+        actionId: 'tool_approve:tc-1',
+        adapter: { name: 'slack' },
+        user: { userId: 'U1' },
+        thread: null,
+        messageId: 'M1',
+      } as any;
+
+      const result = await (agentChannels as any).defaultActionHandler(event);
+      expect(result).toEqual({ kind: 'unknown', actionId: 'tool_approve:tc-1' });
+    });
+  });
+
+  describe('approveTool / denyTool', () => {
+    it('approveTool warns and returns when source lacks chatThread', async () => {
+      const warn = vi.fn();
+      (agentChannels as any).logger = { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+      // ActionEvent-shaped source with no thread → normalizeApprovalSource returns null
+      await agentChannels.approveTool('tc-1', {
+        actionId: 'tool_approve:tc-1',
+        adapter: { name: 'slack' },
+        user: { userId: 'U1' },
+        thread: null,
+        messageId: 'M1',
+      } as any);
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('no chatThread on source for toolCallId=tc-1'),
+        expect.anything(),
+      );
+    });
+
+    it('denyTool warns and returns when source lacks chatThread', async () => {
+      const warn = vi.fn();
+      (agentChannels as any).logger = { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+      await agentChannels.denyTool('tc-2', {
+        actionId: 'tool_deny:tc-2',
+        adapter: { name: 'slack' },
+        user: { userId: 'U1' },
+        thread: null,
+        messageId: 'M2',
+      } as any);
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('no chatThread on source for toolCallId=tc-2'),
+        expect.anything(),
+      );
+    });
+
+    it('approveTool warns when called before initialization', async () => {
+      const warn = vi.fn();
+      (agentChannels as any).logger = { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+      await agentChannels.approveTool('tc-3', {
+        chatThread: { id: 'T1', channelId: 'C1' } as any,
+        platform: 'slack',
+        actor: { userId: 'U1' } as any,
+      });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('approveTool/denyTool called before AgentChannels initialization'),
+        expect.anything(),
+      );
+    });
+
+    it('normalizeApprovalSource accepts ActionEvent-shaped source with thread', () => {
+      const source = {
+        actionId: 'tool_approve:tc-x',
+        adapter: { name: 'slack' },
+        user: { userId: 'U1' },
+        thread: { id: 'T1', channelId: 'C1' },
+        messageId: 'M1',
+      } as any;
+
+      const normalized = (agentChannels as any).normalizeApprovalSource(source);
+      expect(normalized).not.toBeNull();
+      expect(normalized.platform).toBe('slack');
+      expect(normalized.chatThread.id).toBe('T1');
+      expect(normalized.messageId).toBe('M1');
+    });
+
+    it('normalizeApprovalSource accepts manual { chatThread, platform, actor } form', () => {
+      const source = {
+        chatThread: { id: 'T2', channelId: 'C2' } as any,
+        platform: 'discord',
+        actor: { userId: 'U2' } as any,
+      };
+
+      const normalized = (agentChannels as any).normalizeApprovalSource(source);
+      expect(normalized).not.toBeNull();
+      expect(normalized.platform).toBe('discord');
+      expect(normalized.chatThread.id).toBe('T2');
+      expect(normalized.messageId).toBeUndefined();
+    });
+  });
+
+  describe('handler overrides', () => {
+    it('exposes onAction and onReaction in handlers config', () => {
+      const onAction = vi.fn();
+      const onReaction = vi.fn();
+      const channels = new AgentChannels({
+        adapters: { slack: createMockAdapter('slack') },
+        handlers: { onAction, onReaction },
+      });
+
+      expect((channels as any).handlerOverrides.onAction).toBe(onAction);
+      expect((channels as any).handlerOverrides.onReaction).toBe(onReaction);
+    });
+
+    it('accepts onAction: false to disable built-in approval handling', () => {
+      const channels = new AgentChannels({
+        adapters: { slack: createMockAdapter('slack') },
+        handlers: { onAction: false },
+      });
+
+      expect((channels as any).handlerOverrides.onAction).toBe(false);
+    });
+  });
 });
 
 describe('matchesDomain', () => {
