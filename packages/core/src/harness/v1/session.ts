@@ -681,7 +681,13 @@ export class Session {
   private readonly _activeTools = new Map<string, ActiveToolState>();
   private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
-  /** Cumulative usage for the session's thread. Updated on `agent_end`. */
+  /**
+   * Cumulative usage for the session's thread. Live counter, single source of
+   * truth in-process. Seeded from `internals.record.tokenUsage` in the
+   * constructor so reopens carry the persisted aggregate; flushed back into
+   * `_record.tokenUsage` on every `_flushUpdate` so the next reopen sees the
+   * latest value.
+   */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
@@ -790,6 +796,19 @@ export class Session {
     this.createdAt = internals.record.createdAt;
 
     this._record = internals.record;
+    // Seed the live token-usage counter from the persisted aggregate so reopens
+    // (after eviction / process restart) continue accumulating instead of
+    // restarting at zero. Coerce each field through `?? 0` because rows written
+    // before tokenUsage durability shipped may carry partially-populated objects;
+    // a missing component would otherwise poison `+=` into `NaN`.
+    {
+      const persisted = internals.record.tokenUsage as Partial<TokenUsage> | undefined;
+      this._tokenUsage = {
+        promptTokens: persisted?.promptTokens ?? 0,
+        completionTokens: persisted?.completionTokens ?? 0,
+        totalTokens: persisted?.totalTokens ?? 0,
+      };
+    }
     if (this._record.closedAt !== undefined) {
       this._state = 'closed';
     } else if (this._record.closingAt !== undefined) {
@@ -1133,11 +1152,65 @@ export class Session {
       };
       const prompt = u.promptTokens ?? u.inputTokens;
       const completion = u.completionTokens ?? u.outputTokens;
+      const incremented =
+        typeof prompt === 'number' || typeof completion === 'number' || typeof u.totalTokens === 'number';
       if (typeof prompt === 'number') this._tokenUsage.promptTokens += prompt;
       if (typeof completion === 'number') this._tokenUsage.completionTokens += completion;
-      if (typeof u.totalTokens === 'number') this._tokenUsage.totalTokens += u.totalTokens;
+      if (typeof u.totalTokens === 'number') {
+        this._tokenUsage.totalTokens += u.totalTokens;
+      } else if (typeof prompt === 'number' || typeof completion === 'number') {
+        // Providers that only emit `inputTokens`/`outputTokens` leave `totalTokens`
+        // off; derive it so the aggregate stays consistent with its parts.
+        this._tokenUsage.totalTokens += (prompt ?? 0) + (completion ?? 0);
+      }
+      if (incremented) this._schedulePersistTokenUsage();
     }
   }
+
+  /**
+   * Trigger a no-op `_flushUpdate` so the latest `_tokenUsage` is overlaid into
+   * `SessionRecord.tokenUsage` on disk. Fire-and-forget — serialized via
+   * `_flushChain` so it never races concurrent setters, and skipped when the
+   * session is no longer in a state that accepts writes. Non-lifecycle storage
+   * failures are latched onto `_pendingTokenUsageFlushError` so
+   * `_internalAwaitFlushChain()` can surface them to shutdown/test callers.
+   */
+  private _schedulePersistTokenUsage(): void {
+    if (this._state !== 'live' && this._state !== 'closing') return;
+    void this._flushUpdate(prev => prev).catch(err => {
+      if (this._isExpectedFlushLifecycleError(err)) return;
+      this._pendingTokenUsageFlushError ??= err;
+    });
+  }
+
+  private _isExpectedFlushLifecycleError(err: unknown): boolean {
+    return (
+      err instanceof HarnessSessionClosedError ||
+      err instanceof HarnessSessionDeletedError ||
+      err instanceof HarnessStateConflictError
+    );
+  }
+
+  /**
+   * Wait for any in-flight `_flushUpdate` writes (including the trailing
+   * persist scheduled by `_recordTurnCompletion`) to settle. Throws if a
+   * scheduled token-usage flush hit a non-lifecycle storage error so shutdown
+   * and tests surface durability gaps instead of silently dropping them.
+   *
+   * @internal
+   */
+  async _internalAwaitFlushChain(): Promise<void> {
+    await this._flushChain;
+    const latched = this._pendingTokenUsageFlushError;
+    if (latched !== undefined) {
+      this._pendingTokenUsageFlushError = undefined;
+      throw latched;
+    }
+  }
+
+  /** Latched storage error from a scheduled token-usage persist; surfaced by
+   * `_internalAwaitFlushChain()` so shutdown and tests can act on it. */
+  private _pendingTokenUsageFlushError: unknown;
 
   /**
    * True while a turn (message or queued) is in flight against the agent.
@@ -1184,10 +1257,10 @@ export class Session {
    * completed turn (manual or queued). Returns a fresh shallow copy so
    * callers can't mutate the running aggregate.
    *
-   * Note: this is **not** persisted across rehydration — token counts
-   * reset to zero when a closed/evicted session is hydrated from storage.
-   * Callers that need cross-process aggregates should sum from message
-   * history themselves.
+   * Durable across rehydration: counters are persisted into
+   * `SessionRecord.tokenUsage` on every save and seeded from there on
+   * construction, so reopens after eviction or process restart carry the
+   * accumulated value instead of resetting to zero.
    */
   getTokenUsage(): TokenUsage {
     return { ...this._tokenUsage };
@@ -7369,10 +7442,15 @@ export class Session {
     modeId: string,
     activeTurnWaiter?: Promise<never>,
   ): Promise<void> {
+    let alreadyAccounted = false;
     if (this._record.queueAdmissionReceipts?.[item.id]?.postRunFinalizedAt === undefined) {
-      // Mark before running non-idempotent post-run side effects. Recovery may
-      // retry a failed marker write, but must not replay goal continuations,
-      // token accounting, or terminal turn events after the marker persists.
+      // Account for the turn's tokens BEFORE writing the no-replay marker so
+      // the marker's CAS save piggybacks the live `_tokenUsage` via the
+      // `_flushUpdate` overlay (see ~line 7944). Without this ordering, a
+      // crash between the marker save and a later scheduled token persist
+      // would resume with `postRunFinalizedAt` set and never re-account.
+      this._recordTurnCompletion(full);
+      alreadyAccounted = true;
       try {
         await this._raceActiveTurnWaiter(this._markQueuedPostRunFinalized(item.id), activeTurnWaiter);
       } catch (err) {
@@ -7380,7 +7458,9 @@ export class Session {
         throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
       }
     }
-    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter);
+    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter, {
+      skipTokenAccounting: alreadyAccounted,
+    });
   }
 
   private async _markQueuedTurnCompleted(
@@ -7425,8 +7505,9 @@ export class Session {
     full: FullOutput<unknown>,
     modeId?: string,
     activeTurnWaiter?: Promise<never>,
+    opts: { skipTokenAccounting?: boolean } = {},
   ): Promise<FullOutput<unknown>> {
-    this._recordTurnCompletion(full);
+    if (!opts.skipTokenAccounting) this._recordTurnCompletion(full);
     await this._raceActiveTurnWaiter(
       this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId),
       activeTurnWaiter,
@@ -7922,6 +8003,12 @@ export class Session {
       const updated = await update(this._record);
       const next: SessionRecord = {
         ...updated,
+        // Overlay the live token-usage counter so every CAS write persists the
+        // latest aggregate. Updaters never need to thread `tokenUsage` through
+        // their closures, and `_recordTurnCompletion` mutations between save
+        // construction and post-save assignment are not lost — we re-overlay
+        // from the live counter below.
+        tokenUsage: { ...this._tokenUsage },
         lastActivityAt: Date.now(),
       };
       const saveOpts = {
@@ -7933,7 +8020,7 @@ export class Session {
         opts?.attachmentReferences && opts.attachmentReferences.length > 0
           ? await this._storage.saveSessionWithAttachmentReferences(next, saveOpts, opts.attachmentReferences)
           : await this._storage.saveSession(next, saveOpts);
-      this._record = { ...next, version: saved.version };
+      this._record = { ...next, tokenUsage: { ...this._tokenUsage }, version: saved.version };
     };
     // Chain so concurrent callers serialize against the latest in-memory
     // version. Swallow chain-link errors so one caller's failure doesn't

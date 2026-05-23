@@ -3162,6 +3162,12 @@ export class Harness {
         eventPersistenceError ??= { sessionId: session.id, error: err };
       }
 
+      // Drain any in-flight record writes (e.g. the trailing token-usage
+      // persist scheduled by `_recordTurnCompletion`) so a fresh harness
+      // resumes from the latest CAS-acknowledged state. Best-effort: lifecycle
+      // races are absorbed inside `_internalAwaitFlushChain`.
+      await session._internalAwaitFlushChain();
+
       try {
         await storage.releaseSessionLease({
           harnessName: session.getRecord().harnessName,
