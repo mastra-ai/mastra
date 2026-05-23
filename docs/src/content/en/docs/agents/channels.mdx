@@ -123,7 +123,7 @@ Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text inste
 
 ## Custom action and reaction handlers
 
-For approval flows that need extra buttons or programmatic approval from a workflow, combine three pieces:
+For approval flows that need extra buttons or custom logic, combine three pieces:
 
 - `toolDisplay: fn` posts whatever message you want (custom buttons, plain text, etc.).
 - `handlers.onAction` / `handlers.onReaction` route inbound events to your code.
@@ -166,20 +166,6 @@ const agent = new Agent({
   },
 })
 ```
-
-### Programmatic approval from a workflow
-
-Hold the `AgentChannels` instance and resolve approvals without an inbound chat event. Useful for scheduled jobs, escalation timers, or workflow steps that gate tool execution:
-
-```typescript
-await agent.channels.approveTool(toolCallId, {
-  chatThread,
-  platform: 'slack',
-  actor: { userId: 'system', userName: 'workflow' },
-})
-```
-
-`approveTool` and `denyTool` do not edit any message — the caller owns the UI. If a `toolCallId` has no pending approval (e.g. a stale click), the call silently returns.
 
 ## Multi-user awareness
 
