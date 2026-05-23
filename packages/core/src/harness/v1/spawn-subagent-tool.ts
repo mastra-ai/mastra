@@ -234,11 +234,15 @@ export function createSpawnSubagentTool(parent: Session) {
           // ignore
         }
         // Mirror the main retention path: ephemeral subagents that fail
-        // workspace-tool construction must NOT leave a closed child row in
-        // storage. `retain: true` opts out, same as the success path.
+        // workspace-tool construction must NOT leave a closed child row OR
+        // an orphan thread+message rows in storage. `retain: true` opts
+        // out, same as the success path.
         if (def.retain !== true) {
           await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
             // Best-effort; the tool result already encodes the failure.
+          });
+          await harness.threads.delete({ resourceId: child.resourceId, threadId: child.threadId }).catch(() => {
+            // Best-effort thread+message cleanup.
           });
         }
         return {
@@ -382,18 +386,30 @@ export function createSpawnSubagentTool(parent: Session) {
       // subagent type suppresses deletion for subagents that may be
       // re-attached later.
       //
-      // Known gap (deferred to follow-up): `deleteSession` does NOT cascade
-      // to thread / message rows. The session row is cleaned; the thread
-      // and its messages remain until a future cleanup commit. Operators
-      // that need full cleanup today should call `harness.threads.delete`
-      // themselves.
+      // We clean BOTH the session row (via `deleteSession`) AND the thread
+      // row + its messages (via `threads.delete`). `deleteSession` does
+      // NOT cascade to thread rows, and both the fresh-path thread (minted
+      // by `harness.session({threadId: {fresh: true}, ...})`) and the
+      // forked-path thread (cloned by `harness.threads.clone(...)`)
+      // belong exclusively to this child session — so deleting them is
+      // safe and necessary to keep memory message history bounded under
+      // heavy fan-out.
+      //
+      // Each call is best-effort: under separate-session-storage configs
+      // `threads.delete` may refuse via the MemoryStorage attachment guard
+      // (harness.ts:3433). In that environment the session row is still
+      // cleaned; the worst case is a leftover thread+messages, strictly
+      // better than the pre-fix state.
       if (def.retain !== true) {
         await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
           // Best-effort: cleanup failures shouldn't mask the tool's
           // result. The session row may simply already be gone (e.g. if
           // a sibling delete cascade landed first) or storage may be
-          // mid-eviction. Operators see lingering rows via the same
-          // listSessions surface they used pre-fix.
+          // mid-eviction.
+        });
+        await harness.threads.delete({ resourceId: child.resourceId, threadId: child.threadId }).catch(() => {
+          // Best-effort: thread+message cleanup may fail under custom
+          // session-storage overrides; the session row is already cleaned.
         });
       }
 

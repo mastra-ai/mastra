@@ -14,7 +14,7 @@
  *   6. close the child + drop the entry once the tool returns.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
@@ -527,6 +527,59 @@ describe('spawn_subagent tool — retention policy', () => {
     expect(result.subagentSessionId.length).toBeGreaterThan(0);
     const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
     expect(childRow).toBeNull();
+  });
+
+  it('also deletes the child thread row alongside the session row by default', async () => {
+    // Follow-up to the initial retention commit: cleaning the session
+    // row alone left the cloned/fresh thread and its messages behind.
+    // The cleanup now calls `harness.threads.delete` too.
+    const { harness, storage } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const threadsDelete = vi.spyOn(harness.threads, 'delete');
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-thread-cleanup'))) as any;
+
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(threadsDelete).toHaveBeenCalled();
+    // The child has a fresh thread (not the parent's); the delete must
+    // target that thread, not the parent's.
+    const callArg = threadsDelete.mock.calls[0]?.[0] as { resourceId: string; threadId: string };
+    expect(callArg.resourceId).toBe('u1');
+    expect(callArg.threadId).not.toBe(parent.threadId);
+    // The session row is gone too (covered by an earlier test); we
+    // additionally confirm here that storage no longer lists the child.
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).toBeNull();
+  });
+
+  it('does not delete the thread row when retain: true', async () => {
+    const { harness } = setup({ retain: true });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const threadsDelete = vi.spyOn(harness.threads, 'delete');
+    const tool = createSpawnSubagentTool(parent)!;
+    await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-retain-thread'));
+    expect(threadsDelete).not.toHaveBeenCalled();
+  });
+
+  it('also deletes the thread on the workspace-tool-construction early-return path', async () => {
+    const { harness } = setup({ retain: false, allowedWorkspaceTools: ['view'] });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const threadsDelete = vi.spyOn(harness.threads, 'delete');
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read only' }, {
+      ...execCtx('tc-ws-thread-cleanup'),
+      workspace: {
+        getToolsConfig: () => {
+          throw new Error('workspace unavailable');
+        },
+        filesystem: { readOnly: false },
+      },
+    } as any)) as any;
+
+    expect(result).toMatchObject({ isError: true });
+    expect(threadsDelete).toHaveBeenCalled();
   });
 
   it('leaves no orphan session rows after a bulk-spawn workload (default ephemeral)', async () => {
