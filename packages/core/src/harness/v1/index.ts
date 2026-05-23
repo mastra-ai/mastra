@@ -62,6 +62,12 @@ export type {
 } from './events';
 
 export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
+export {
+  classifyHarnessWorkspaceToolAction,
+  getHarnessWorkspaceActionPathInput,
+  isHarnessWorkspaceFileMutationTool,
+} from './workspace-actions';
+export type { HarnessWorkspaceActionKind, HarnessWorkspaceToolAction } from './workspace-actions';
 
 export {
   HarnessAttachmentInUseError,
@@ -89,6 +95,7 @@ export {
   HarnessWorkspaceLostError,
   HarnessWorkspaceProviderMismatchError,
   HarnessWorkspaceProvisioningError,
+  getHarnessPublicErrorCode,
 } from './errors';
 
 export { nonDurableProvider } from './workspace-provider';

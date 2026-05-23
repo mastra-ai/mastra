@@ -18,6 +18,7 @@ import type {
   SessionRecord,
   HarnessEvent,
 } from '@mastra/core/harness/v1';
+import { parseHarnessEventId } from '@mastra/core/harness/v1';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodError } from 'zod/v4';
@@ -455,6 +456,80 @@ function encodeHarnessSseEvent(event: HarnessEvent): Uint8Array {
 
 function encodeHarnessSseKeepalive(): Uint8Array {
   return new TextEncoder().encode(': keepalive\n\n');
+}
+
+const HARNESS_EVENT_REPLAY_PAGE_SIZE = 1000;
+
+type ParsedHarnessEventId = ReturnType<typeof parseHarnessEventId>;
+type HarnessEventReplayState = {
+  epoch: string;
+  oldestSequence: number;
+  newestSequence: number;
+} | null;
+type HarnessEventReplayRow = { sequence: number; event: HarnessEvent };
+type HarnessEventReplayReader = {
+  getEventReplayState(): Promise<HarnessEventReplayState | undefined>;
+  listEventsAfter(opts: { epoch: string; afterSequence: number; limit: number }): Promise<HarnessEventReplayRow[]>;
+};
+type HarnessEventReplayFrame = { type: 'event'; row: HarnessEventReplayRow } | { type: 'keepalive' };
+type HarnessEventReplayPlan =
+  | { status: 'none'; frames: [] }
+  | { status: 'aborted'; frames: [] }
+  | { status: 'precondition_failed'; reason: 'stale_epoch' | 'unreplayable_gap'; frames: [] }
+  | { status: 'ready'; frames: HarnessEventReplayFrame[] };
+
+async function planHarnessEventReplay(options: {
+  parsed: ParsedHarnessEventId | undefined;
+  replayReader: HarnessEventReplayReader;
+  abortSignal?: AbortSignal;
+}): Promise<HarnessEventReplayPlan> {
+  const { parsed, replayReader, abortSignal } = options;
+  if (!parsed) return { status: 'none', frames: [] };
+
+  const replayState = await replayReader.getEventReplayState();
+  if (
+    !replayState ||
+    replayState.epoch !== parsed.epoch ||
+    parsed.sequence < replayState.oldestSequence - 1 ||
+    parsed.sequence > replayState.newestSequence
+  ) {
+    return {
+      status: 'precondition_failed',
+      reason: !replayState || replayState.epoch !== parsed.epoch ? 'stale_epoch' : 'unreplayable_gap',
+      frames: [],
+    };
+  }
+
+  const frames: HarnessEventReplayFrame[] = [];
+  let afterSequence = parsed.sequence;
+  let expectedSequence = parsed.sequence + 1;
+  while (expectedSequence <= replayState.newestSequence) {
+    if (abortSignal?.aborted) return { status: 'aborted', frames: [] };
+    const page = (
+      await replayReader.listEventsAfter({
+        epoch: parsed.epoch,
+        afterSequence,
+        limit: HARNESS_EVENT_REPLAY_PAGE_SIZE,
+      })
+    ).filter(row => row.sequence <= replayState.newestSequence);
+    if (page.length === 0) {
+      return { status: 'precondition_failed', reason: 'unreplayable_gap', frames: [] };
+    }
+
+    for (const row of page) {
+      if (row.sequence !== expectedSequence) {
+        return { status: 'precondition_failed', reason: 'unreplayable_gap', frames: [] };
+      }
+      frames.push({ type: 'event', row });
+      afterSequence = row.sequence;
+      expectedSequence += 1;
+    }
+    if (expectedSequence <= replayState.newestSequence) {
+      frames.push({ type: 'keepalive' });
+    }
+  }
+
+  return { status: 'ready', frames };
 }
 
 function harnessSseJsonReplacer(_key: string, value: unknown): unknown {
@@ -1508,43 +1583,6 @@ function harnessErrorNumber(error: unknown, key: string): number | undefined {
   return typeof value === 'number' ? value : undefined;
 }
 
-const HARNESS_EVENT_ID_PREFIX = 'harness-v1';
-
-interface ParsedHarnessEventId {
-  epoch: string;
-  sequence: number;
-}
-
-class HarnessRouteValidationError extends Error {
-  readonly name = 'HarnessValidationError';
-
-  constructor(
-    public readonly field: string,
-    public readonly reason: string,
-  ) {
-    super(`HarnessValidationError at ${field}: ${reason}`);
-  }
-}
-
-function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
-  const parts = eventId.split(':');
-  if (parts.length !== 3 || parts[0] !== HARNESS_EVENT_ID_PREFIX || parts[1] === '' || parts[2] === '') {
-    throw new HarnessRouteValidationError('lastEventId', 'expected event id grammar harness-v1:<epoch>:<seq>');
-  }
-  const sequenceText = parts[2]!;
-  if (!/^(0|[1-9][0-9]*)$/.test(sequenceText)) {
-    throw new HarnessRouteValidationError('lastEventId', 'event id sequence must be an unsigned decimal integer');
-  }
-  const sequence = Number(sequenceText);
-  if (!Number.isSafeInteger(sequence)) {
-    throw new HarnessRouteValidationError(
-      'lastEventId',
-      'event id sequence must be within JavaScript safe integer range',
-    );
-  }
-  return { epoch: parts[1]!, sequence };
-}
-
 function harnessErrorStringArray(error: unknown, key: string): string[] {
   const value = harnessErrorProp(error, key);
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
@@ -2415,57 +2453,18 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
         });
       }
 
-      let replayState:
-        | {
-            epoch: string;
-            oldestSequence: number;
-            newestSequence: number;
-          }
-        | null
-        | undefined;
-      if (parsed) {
-        replayState = await replayReader.getEventReplayState();
-        if (
-          !replayState ||
-          replayState.epoch !== parsed.epoch ||
-          parsed.sequence < replayState.oldestSequence - 1 ||
-          parsed.sequence > replayState.newestSequence
-        ) {
-          cleanup();
-          return preconditionFailedResponse({
-            reason: !replayState || replayState.epoch !== parsed.epoch ? 'stale_epoch' : 'unreplayable_gap',
-            lastEventId,
-            sessionId: pathSessionId,
-          });
-        }
-
-        let afterSequence = parsed.sequence;
-        let expectedSequence = parsed.sequence + 1;
-        while (expectedSequence <= replayState.newestSequence) {
-          if (abortSignal?.aborted) {
-            cleanup();
-            return new Response(null, { status: 204 });
-          }
-          const page = (
-            await replayReader.listEventsAfter({
-              epoch: parsed.epoch,
-              afterSequence,
-              limit: 1000,
-            })
-          ).filter(row => row.sequence <= replayState!.newestSequence);
-          if (page.length === 0) {
-            cleanup();
-            return preconditionFailedResponse({ reason: 'unreplayable_gap', lastEventId, sessionId: pathSessionId });
-          }
-          for (const row of page) {
-            if (row.sequence !== expectedSequence) {
-              cleanup();
-              return preconditionFailedResponse({ reason: 'unreplayable_gap', lastEventId, sessionId: pathSessionId });
-            }
-            afterSequence = row.sequence;
-            expectedSequence += 1;
-          }
-        }
+      const replayPlan = await planHarnessEventReplay({ parsed, replayReader, abortSignal });
+      if (replayPlan.status === 'aborted') {
+        cleanup();
+        return new Response(null, { status: 204 });
+      }
+      if (replayPlan.status === 'precondition_failed') {
+        cleanup();
+        return preconditionFailedResponse({
+          reason: replayPlan.reason,
+          lastEventId,
+          sessionId: pathSessionId,
+        });
       }
 
       const stream = new ReadableStream<Uint8Array>({
@@ -2484,38 +2483,15 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
           }
 
           try {
-            if (parsed && replayState) {
-              let afterSequence = parsed.sequence;
-              let expectedSequence = parsed.sequence + 1;
-              while (expectedSequence <= replayState.newestSequence) {
-                if (abortSignal?.aborted || closed) return;
-                const page = (
-                  await replayReader.listEventsAfter({
-                    epoch: parsed.epoch,
-                    afterSequence,
-                    limit: 1000,
-                  })
-                ).filter(row => row.sequence <= replayState!.newestSequence);
-                if (page.length === 0) {
-                  cleanup();
-                  streamController.error(new Error('Harness event replay gap appeared after preflight'));
-                  return;
-                }
-                for (const row of page) {
-                  if (row.sequence !== expectedSequence) {
-                    cleanup();
-                    streamController.error(new Error('Harness event replay gap appeared after preflight'));
-                    return;
-                  }
-                  if (liveQueuedEventIds.has(row.event.id)) replayedLiveEventIds.add(row.event.id);
-                  streamController.enqueue(encodeHarnessSseEvent(row.event));
-                  afterSequence = row.sequence;
-                  expectedSequence += 1;
-                }
-                if (expectedSequence <= replayState.newestSequence) {
-                  streamController.enqueue(encodeHarnessSseKeepalive());
-                }
+            for (const frame of replayPlan.frames) {
+              if (abortSignal?.aborted || closed) return;
+              if (frame.type === 'keepalive') {
+                streamController.enqueue(encodeHarnessSseKeepalive());
+                continue;
               }
+              const { row } = frame;
+              if (liveQueuedEventIds.has(row.event.id)) replayedLiveEventIds.add(row.event.id);
+              streamController.enqueue(encodeHarnessSseEvent(row.event));
             }
             replaying = false;
             if (terminalLifecycle) {

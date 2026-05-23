@@ -26,7 +26,7 @@ import type {
 } from '../../storage/domains/harness';
 import type { TaskItem } from './builtin-tools/shared';
 
-import { HarnessEventSerializationError, HarnessValidationError } from './errors';
+import { HarnessEventSerializationError, HarnessValidationError, getHarnessPublicErrorCode } from './errors';
 import type { EventSerializationReason } from './errors';
 import type { SessionLifecycleState } from './session';
 import type { PermissionPolicy, ToolCategory } from './types';
@@ -776,7 +776,7 @@ export function snapshotHarnessEventForJson(value: unknown, path = 'event'): Jso
 
 export function projectHarnessPublicError(err: unknown): { code: string; message: string } {
   if (err instanceof Error) {
-    return { code: (err as { code?: string }).code ?? err.name ?? 'harness.message_failed', message: err.message };
+    return { code: getHarnessPublicErrorCode(err) ?? err.name ?? 'harness.message_failed', message: err.message };
   }
   return { code: 'harness.message_failed', message: String(err) };
 }

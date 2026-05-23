@@ -288,6 +288,29 @@ describe('HarnessRequestContext — queued turns', () => {
       }),
     ).rejects.toBeInstanceOf(HarnessValidationError);
   });
+
+  it('wakeup admission rejects url attachments because routes own URL ingestion', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      (session as any)._admitWakeupQueue({
+        content: 'scheduled work',
+        admissionId: 'wakeup-admission-url-ref',
+        attachments: [
+          {
+            kind: 'url',
+            name: 'remote.txt',
+            mimeType: 'text/plain',
+            url: 'https://example.test/remote.txt',
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      name: 'HarnessValidationError',
+      field: 'admitQueue().attachments[0].kind',
+    });
+  });
 });
 
 describe('HarnessRequestContext — §15 pending registration acceptance', () => {

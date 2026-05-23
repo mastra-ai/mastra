@@ -65,7 +65,6 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
 import type { Workspace } from '../../workspace';
-import { WORKSPACE_TOOLS } from '../../workspace/constants';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '../tools';
@@ -141,6 +140,8 @@ import type {
   SetStateOptions,
   ToolCategory,
 } from './types';
+import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace-actions';
+import { classifyHarnessWorkspaceToolAction } from './workspace-actions';
 
 type MessageAdmissionIdentity = {
   signalId: string;
@@ -4139,76 +4140,11 @@ export class Session {
   private _mapWorkspaceToolAction(
     toolName: string,
     args: Record<string, unknown>,
-  ):
-    | {
-        actionKind: 'file' | 'command';
-        operation: string;
-        action: Record<string, unknown>;
-        path?: WorkspaceJournalPath;
-        toPath?: WorkspaceJournalPath;
-        cwd?: WorkspaceJournalPath;
-      }
-    | undefined {
-    const argPath = typeof args.path === 'string' ? args.path : undefined;
-    const pathRecord = argPath ? this._workspaceJournalPath(argPath) : undefined;
-    switch (toolName) {
-      case WORKSPACE_TOOLS.FILESYSTEM.READ_FILE:
-      case WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES:
-      case WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT:
-      case WORKSPACE_TOOLS.FILESYSTEM.GREP:
-        if (!pathRecord) return undefined;
-        return { actionKind: 'file', operation: 'read', action: { kind: 'file', operation: 'read' }, path: pathRecord };
-      case WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE:
-      case WORKSPACE_TOOLS.FILESYSTEM.MKDIR:
-        if (!pathRecord) return undefined;
-        return {
-          actionKind: 'file',
-          operation: 'write',
-          action: { kind: 'file', operation: 'write' },
-          path: pathRecord,
-        };
-      case WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE:
-      case WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT:
-        if (!pathRecord) return undefined;
-        return {
-          actionKind: 'file',
-          operation: 'patch',
-          action: { kind: 'file', operation: 'patch' },
-          path: pathRecord,
-        };
-      case WORKSPACE_TOOLS.FILESYSTEM.DELETE:
-        if (!pathRecord) return undefined;
-        return {
-          actionKind: 'file',
-          operation: 'delete',
-          action: { kind: 'file', operation: 'delete' },
-          path: pathRecord,
-        };
-      case WORKSPACE_TOOLS.SEARCH.INDEX:
-        if (!pathRecord) return undefined;
-        return {
-          actionKind: 'file',
-          operation: 'index',
-          action: { kind: 'file', operation: 'index' },
-          path: pathRecord,
-        };
-      case WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND: {
-        const cwd = typeof args.cwd === 'string' ? this._workspaceJournalPath(args.cwd) : undefined;
-        return {
-          actionKind: 'command',
-          operation: 'execute',
-          action: {
-            kind: 'command',
-            command: typeof args.command === 'string' ? args.command : '',
-            ...(typeof args.cwd === 'string' ? { cwd: args.cwd } : {}),
-            ...(Array.isArray(args.args) ? { args: args.args } : {}),
-          },
-          ...(cwd ? { cwd } : {}),
-        };
-      }
-      default:
-        return undefined;
-    }
+  ): HarnessWorkspaceToolAction<WorkspaceJournalPath> | undefined {
+    return classifyHarnessWorkspaceToolAction<WorkspaceJournalPath>(toolName, args, {
+      pathFor: inputPath => this._workspaceJournalPath(inputPath),
+      toolNameConfig: this._workspace?.getToolsConfig?.() as HarnessWorkspaceToolNameConfig | undefined,
+    });
   }
 
   private _workspaceJournalPath(inputPath: string): WorkspaceJournalPath {
@@ -7008,6 +6944,12 @@ export class Session {
   private _validatePersistedAttachments(field: string, attachments: PersistedAttachment[]): void {
     for (let i = 0; i < attachments.length; i += 1) {
       const attachment = attachments[i]!;
+      if (attachment.kind === 'url') {
+        throw new HarnessValidationError(
+          `${field}[${i}].kind`,
+          'url attachments must be ingested by the remote route before durable wakeup admission',
+        );
+      }
       if (attachment.kind !== 'ref') continue;
       if (attachment.ownerSessionId !== this.id) {
         throw new HarnessValidationError(`${field}[${i}].ownerSessionId`, 'attachment must belong to this session');

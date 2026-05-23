@@ -37,7 +37,10 @@ describe('Harness v1 — §15 package export acceptance', () => {
 
     expect(harnessV1Entry.Harness).toBeDefined();
     expect(harnessV1Entry.Session).toBeDefined();
+    expect(harnessV1Entry.parseHarnessEventId).toBeTypeOf('function');
     expect(harnessV1Entry.formatHarnessEventId).toBeTypeOf('function');
+    expect(harnessV1Entry.getHarnessPublicErrorCode).toBeTypeOf('function');
+    expect(harnessV1Entry.classifyHarnessWorkspaceToolAction).toBeTypeOf('function');
     expect(harnessV1Entry.Harness).not.toBe(legacyHarnessEntry.Harness);
   });
 });

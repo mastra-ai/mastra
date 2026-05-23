@@ -2068,6 +2068,7 @@ describe('Harness server routes', () => {
     const text = await readStreamChunk(response);
 
     expect(session.getEventReplayState).toHaveBeenCalled();
+    expect(session.listEventsAfter).toHaveBeenCalledTimes(1);
     expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1, limit: 1000 });
     expect(text).toContain('id: harness-v1:epoch-1:2');
     expect(text).toContain('"replay":true');
@@ -2104,6 +2105,7 @@ describe('Harness server routes', () => {
       sessionId: 'session-1',
       resourceId: 'resource-1',
     });
+    expect(harness.listSessionEventsAfter).toHaveBeenCalledTimes(1);
     expect(harness.listSessionEventsAfter).toHaveBeenCalledWith({
       sessionId: 'session-1',
       resourceId: 'resource-1',
@@ -2173,8 +2175,47 @@ describe('Harness server routes', () => {
     }
     await reader.cancel();
     expect(text).toContain(': keepalive');
+    expect(session.listEventsAfter).toHaveBeenCalledTimes(2);
     expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1, limit: 1000 });
     expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1001, limit: 1000 });
+  });
+
+  it('does not fetch replay rows when Last-Event-ID is already newest', async () => {
+    let listener: ((event: any) => void) | undefined;
+    const session = {
+      subscribe: vi.fn((next: (event: any) => void) => {
+        listener = next;
+        return vi.fn();
+      }),
+      getEventReplayState: vi.fn(async () => ({
+        epoch: 'epoch-1',
+        oldestSequence: 1,
+        newestSequence: 2,
+      })),
+      listEventsAfter: vi.fn(),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        getHeader: (header: string) => (header === 'last-event-id' ? 'harness-v1:epoch-1:2' : undefined),
+      }),
+    );
+    listener?.(makeEvent({ id: 'harness-v1:epoch-1:3', payload: { live: true } }));
+    const text = await readStreamChunk(response);
+
+    expect(response.status).toBe(200);
+    expect(session.getEventReplayState).toHaveBeenCalledTimes(1);
+    expect(session.listEventsAfter).not.toHaveBeenCalled();
+    expect(text).toContain('id: harness-v1:epoch-1:3');
+    expect(text).toContain('"live":true');
   });
 
   it('rejects malformed Last-Event-ID values before opening the live stream', async () => {

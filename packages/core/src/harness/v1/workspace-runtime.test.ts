@@ -232,6 +232,78 @@ describe('HarnessRequestContext.workspace — runtime plumbing', () => {
     }
   });
 
+  it('records remapped workspace action aliases through the shared Harness taxonomy', async () => {
+    const tempDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'harness-workspace-journal-alias-'));
+    try {
+      const ws = new WorkspaceImpl({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+      const { harness, agent, storage } = setupHarness({
+        workspace: { kind: 'shared', workspace: ws },
+      });
+      const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+      await session.message({ content: 'hi' });
+
+      const slot = getHarnessSlot(agent.streamCalls);
+      await slot.recordWorkspaceAction?.({
+        toolName: 'string_replace_lsp',
+        args: { path: 'src/index.ts', old_string: 'old', new_string: 'new' },
+        policyDecision: 'allow',
+        toolCallId: 'tool-call-edit',
+        result: 'ok',
+      });
+      await slot.recordWorkspaceAction?.({
+        toolName: 'execute_command',
+        args: { command: 'pnpm test', cwd: 'packages/core' },
+        policyDecision: 'allow',
+        toolCallId: 'tool-call-command',
+        result: 'ok',
+      });
+
+      const editRows = await storage.listWorkspaceActionJournalEntries({
+        sessionId: session.id,
+        resourceId: 'u1',
+        threadId: session.threadId,
+        requestId: 'tool-call-edit',
+      });
+      expect(editRows).toHaveLength(1);
+      expect(editRows[0]).toMatchObject({
+        actionKind: 'file',
+        operation: 'patch',
+        path: {
+          rootPath: tempDir,
+          relativePath: 'src/index.ts',
+          path: nodePath.join(tempDir, 'src/index.ts'),
+        },
+        action: {
+          toolName: 'string_replace_lsp',
+          canonicalToolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+        },
+      });
+
+      const commandRows = await storage.listWorkspaceActionJournalEntries({
+        sessionId: session.id,
+        resourceId: 'u1',
+        threadId: session.threadId,
+        requestId: 'tool-call-command',
+      });
+      expect(commandRows).toHaveLength(1);
+      expect(commandRows[0]).toMatchObject({
+        actionKind: 'command',
+        operation: 'execute',
+        cwd: {
+          rootPath: tempDir,
+          relativePath: 'packages/core',
+          path: nodePath.join(tempDir, 'packages/core'),
+        },
+        action: {
+          command: 'pnpm test',
+          canonicalToolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+        },
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it('emits one event when workspace action journal storage is unsupported', async () => {
     const { harness, agent, storage } = setupHarness();
     vi.spyOn(storage, 'appendWorkspaceActionJournalEntry').mockRejectedValue(
