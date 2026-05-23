@@ -42,16 +42,17 @@ verification-specific consequence and tests/invariants the deferral implies.
   list/fetch APIs and `artifact_*` events stay absent. Remote clients
   cannot browse generated workspace files through portable Harness session
   routes.
-- **Operator repair APIs beyond dispatch.** v1 specifies
-  `dispatchOutbox(...)`, dead-letter/undeliverable row states, and explicit
-  migration constraints. Read-only channel diagnostics are included only as
-  redacted, side-effect-free session-scoped summaries plus optional
-  operator-only channel-wide diagnostics (§14.8). Product-specific repair,
-  binding migration UI, manual replay/re-projection, per-row retrigger,
-  administrative reconciliation, retry/retarget controls, and stuck-session
-  repair routes are deferred; the safe fallback is no automatic retargeting,
-  no diagnostic-surface mutation, and no hidden retry after terminal
-  `dead`/`undeliverable`.
+- **Operator repair APIs beyond dispatch.** v1 specifies per-harness
+  `harness.channels.dispatchOutbox(...)`, dead-letter/undeliverable row states,
+  and explicit migration constraints. Read-only channel diagnostics are included
+  only as redacted, side-effect-free session-scoped summaries plus optional
+  operator-only channel-wide diagnostics (§14.8). A central cross-harness
+  `mastra.harnessChannels.dispatchOutbox(...)` operator surface,
+  product-specific repair, binding migration UI, manual replay/re-projection,
+  per-row retrigger, administrative reconciliation, retry/retarget controls, and
+  stuck-session repair routes are deferred; the safe fallback is no automatic
+  retargeting, no diagnostic-surface mutation, and no hidden retry after
+  terminal `dead`/`undeliverable`.
 - **Channel buttons for non-idempotent resume kinds.** Tool approvals,
   suspensions, questions, and plan approvals are channel-action eligible
   only after their resume path proves `resumeAttemptId = responseId`

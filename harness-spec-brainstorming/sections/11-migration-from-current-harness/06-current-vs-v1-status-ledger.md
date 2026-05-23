@@ -37,9 +37,9 @@ or §5.2 `HarnessStorageDomain` instead.
 
 This ledger still classifies spec names against legacy/current Mastra collision
 risk. It is not a claim that `@mastra/core/harness/v1` is empty: as of
-`ba5a939ff9d0256ff6bc1a175aef378e9cf8dd26`, the v1 subpath and remote
-contract have a substantial implementation across core, server, storage, and
-SDK packages.
+`477e8f92ad78be29fcd1996f9aad9923a866a562`, after the PF-344 source-alignment
+merge, the v1 subpath and remote contract have a substantial implementation
+across core, server, storage, and SDK packages.
 
 Source-confirmed local surfaces now present:
 
@@ -94,6 +94,15 @@ Source-confirmed remaining limitations or deferred boundaries:
   channel-origin work uses them.
 - Background task rows remain source-specific diagnostics unless executor and
   completion policy are reconstructable or an owning Harness row can retry.
+
+PF-379 keeps those limitations active in the release-evidence ledger: broad
+coverage exists for local Harness/session flows, attachments, storage adapter
+families, server/SSE/result lookup, SDK recovery, per-harness channel dispatch,
+and wakeup recovery, but the Evented workflow request-context row, externally
+reachable channel callback route/worker rows, full PG row-level parity proof,
+background-task reconstruction evidence, and final row-by-row §15.2 evidence
+map remain open release blockers unless future PRs close, defer, or attach
+row-level proof for them.
 
 #### 11.6a Names that overlap with current Mastra code
 

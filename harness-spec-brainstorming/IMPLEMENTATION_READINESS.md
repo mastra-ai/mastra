@@ -230,8 +230,10 @@ classDiagram
 1. **Release-evidence pass.** §15.2 remains a release gate: every row needs an
    executable test, explicit PR evidence, or an owning §15.3 deferral. PF-376,
    PF-377, and PF-378 added broad core, client attachment, and channel
-   acceptance coverage, but the final release pass still needs a row-by-row
-   evidence map before Harness v1 is called complete.
+   acceptance coverage. PF-379 records the current release-evidence ledger
+   below; the project still needs each remaining `gap` or
+   `open-release-evidence` row closed, explicitly deferred, or backed by
+   attached row-level proof before Harness v1 is called complete.
 2. **Worker readiness and operator surfaces.** Harness readiness now gates
    route startup and worker initialization, while read-only diagnostics exist
    for session-scoped channel state. Current operator dispatch is the
@@ -252,6 +254,35 @@ classDiagram
    catalogs, and workspace journals now have Mastra-side primitives. Remaining
    product-specific read state, notification state, repair UI, and artifact
    browsing are outside v1 unless Linear records a new accepted scope decision.
+
+### PF-379 Release-Evidence Ledger
+
+This ledger is a current-source release map, not a replacement for the §15.2
+row text. Status values:
+
+- `covered-by-family` means the cited tests exercise the acceptance family,
+  though reviewers may still ask for a narrower row-level assertion before
+  release.
+- `gap` means current source does not yet satisfy the row and the row remains a
+  release blocker unless code lands or Linear records a §15.3 deferral.
+- `deferred-by-§15.3` means the row is intentionally outside v1.
+- `open-release-evidence` means coverage exists nearby, but the final
+  row-by-row proof still needs to be attached before the release is called
+  complete.
+
+| §15.2 family | Current PF-379 status | Evidence or next action |
+| --- | --- | --- |
+| Local Harness/session lifecycle, message admission, queue admission, idempotency, close/delete, drift, and result evidence | `covered-by-family` | `packages/core/src/harness/v1/harness.test.ts`; `packages/core/src/harness/v1/session.message.test.ts`; `packages/core/src/harness/v1/session.queue.test.ts`; `packages/core/src/harness/v1/session.tool-context.test.ts`; `packages/core/src/harness/v1/workspace-registry.test.ts`. |
+| File, primitive, and element attachments, including provider object metadata suitable for product-owned blob stores such as R2 | `covered-by-family` | `packages/core/src/harness/v1/attachments.test.ts`; `packages/server/src/server/handlers/harness.test.ts`; `client-sdks/client-js/src/resources/harness.test.ts`. |
+| Durable storage/session/lease/admission/channel/wakeup/outbox adapter evidence | `covered-by-family` for core in-memory and LibSQL; `open-release-evidence` for full PG row-level parity | Core in-memory and `stores/libsql` Harness storage tests cover provider callback bindings, inbox/action/outbox rows, claim/renew, action receipts, and wakeup rows. `stores/pg` has Harness schema/session/result/channel/wakeup diagnostics coverage, but final release evidence still needs a row-level PG parity map before claiming complete adapter parity. |
+| Server Harness auth, routes, SSE replay, stale/gap `412`, stream cleanup, result lookup, and resource mismatch denial | `covered-by-family` | `packages/server/src/server/handlers/harness.test.ts` covers authenticated Harness route mounting, channel diagnostics, attachment upload, message/queue result lookup, live event streams, stale replay, and resource mismatch denial. |
+| Client JS and React remote Harness session recovery, Last-Event-ID replay, result lookup fallback, attachment refs, diagnostics, and unsubscribe cleanup | `covered-by-family` | `client-sdks/client-js/src/resources/harness.test.ts`; `client-sdks/react/src/harness/hooks.test.tsx`. |
+| Harness channel registry, provider callback binding storage, durable inbox/action/outbox rows, per-harness outbox dispatch, and read-only diagnostics | `covered-by-family` for storage, registry, per-harness dispatch, and diagnostics; `gap` for externally reachable inbound/action callback route workers | `packages/core/src/harness/v1/channel-registry.ts`; `packages/core/src/harness/v1/harness.test.ts`; storage-domain tests; server/client diagnostics tests. `packages/server/src/server/server-adapter/routes/harness.ts` has no provider callback or channel action callback route today, and `packages/core/src/worker/worker.test.ts` has no channel ingress/action worker family. |
+| Wakeup/background recovery | `covered-by-family` for `HarnessWakeupWorker`; `open-release-evidence` for any generic background-task reconstruction claim | `packages/core/src/worker/worker.test.ts` covers wakeup claim/retry/binding behavior. Generic background-task rows remain source-specific diagnostics unless executor/completion policy is reconstructable. |
+| Evented workflow request context | `gap` | `packages/core/src/agent/durable/evented-agent.ts` still calls `run.startAsync({ inputData })` without forwarding persisted `requestContext`, so §15.2 Evented workflow request-context coverage is not satisfied. |
+| Cross-harness operator channel dispatch | `deferred-by-§15.3` unless Linear records new v1 scope | Current dispatch is per-harness `harness.channels.dispatchOutbox(...)`; no `mastra.harnessChannels.dispatchOutbox(...)` surface is source-confirmed. |
+| First-class durable artifacts, generic MCP/app callback ledgers, generic non-read external receipts, generic durable work ledger, closed-session GC/history retention, per-principal read/notification state, richer stream/result/typed-generate schemas, and product repair UI | `deferred-by-§15.3` | See §15.3. These rows must not be implied by diagnostics, result lookup, or source-specific storage rows. |
+| Final row-by-row §15.2 release proof | `open-release-evidence` | Before release, attach a row-level evidence map that names each row, the executable test or PR evidence that satisfies it, or the owning §15.3 deferral. |
 
 ## Implementation Mapping Checks
 

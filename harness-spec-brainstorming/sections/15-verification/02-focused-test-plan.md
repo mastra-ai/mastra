@@ -19,6 +19,11 @@ relies on them. Deferred-test notes cite the owning §15.3 deferral.
 `createOrLoadChannelInboxItem` and bridge ingress return the existing row/status
 without a second session admission.
 
+Current PF-379 evidence status: storage-level inbox de-dupe is covered in the
+Harness storage-domain contract tests. Externally reachable provider callback
+routes and ingress workers remain a source-confirmed gap until a route/worker PR
+lands coverage for bridge ingress.
+
 **Same inbound key with different hash**
 
 Storage and bridge surface a conflict before binding/session mutation.
@@ -56,6 +61,11 @@ rows and does not block unrelated scopes or read-only diagnostic routes. Exact
 duplicate callbacks that are answered only from stored terminal evidence, inbox
 accepted/queued evidence, action accepted/applied evidence, or retained
 source-specific duplicate/conflict proof do not count as new durable ingress.
+
+Current PF-379 evidence status: `HarnessWakeupWorker` readiness/recovery is
+covered by worker tests, and Harness route startup has readiness coverage. Channel
+inbox/action callback route workers are not implemented in current source and
+remain a release gap for the channel-ingress rows.
 
 **Route principal authorization**
 
@@ -927,6 +937,11 @@ channel/wakeup/reconstructable-task rows remain in storage for the next
 instance; raw closure-backed background-task work without an owning durable
 Harness row is not part of the drain contract and may be cancelled at shutdown.
 
+Current PF-379 evidence status: shutdown stops the background task manager and
+Harness wakeup workers have recovery tests. A complete drain proof still needs
+row-level evidence for every externally reachable durable-ingress route family,
+especially the channel callback routes/workers that are not yet present.
+
 **Close/interruption with unresolved accepted signals**
 
 Session/event tests prove close, abort, process-restart interruption, and
@@ -982,6 +997,11 @@ and completes remaining `closedAt` writes bottom-up.
 Server/SDK tests prove unresolved `signalId` / `queuedItemId` promises recover
 through result lookup routes after `412`, including completed, failed, expired,
 and still-pending responses.
+
+Current PF-379 evidence status: server and client SDK tests cover live stream,
+Last-Event-ID replay, stale/gap `412`, snapshot fallback, and message/queue
+result lookup. Final release evidence should still map each replay/result row to
+its exact server and SDK assertions.
 
 **Embedded `AgentResult` identity consistency**
 
@@ -1125,6 +1145,11 @@ authority rather than from fresh caller input, mirroring the base
 `DurableAgent.executeWorkflow(...)` path used for `Workflow.start(...)`.
 Reserved top-level request-context slots cannot be spoofed by direct callers;
 only the persisted context from the admitting boundary survives the wrapper hop.
+
+Current PF-379 evidence status: gap. Current
+`packages/core/src/agent/durable/evented-agent.ts` calls
+`run.startAsync({ inputData })` without forwarding the persisted request context
+into `Workflow.startAsync(...)`.
 
 **Reserved request-context key rejection**
 
