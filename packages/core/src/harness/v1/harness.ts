@@ -697,6 +697,8 @@ export class Harness {
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
+  /** In-process session resolver de-dupe keyed by stable resolver identity. */
+  private readonly _sessionResolvePromises = new Map<string, Promise<Session>>();
   /** In-process close de-dupe by any session id currently covered by a close tree. */
   private readonly _closePromises = new Map<string, Promise<void>>();
   /** Workspace registry — owns lifecycle across `shared`/`per-resource`/`per-session`. */
@@ -1851,20 +1853,50 @@ export class Harness {
 
     // 1) sessionId-only lookups.
     if ('sessionId' in opts && opts.sessionId && !('threadId' in opts && opts.threadId)) {
-      return this._resolveById(storage, opts.sessionId, opts.resourceId);
+      return this._withSessionResolveSingleFlight(
+        this._sessionResolveSingleFlightKey('session', opts.sessionId, opts.resourceId ?? ''),
+        () => this._resolveById(storage, opts.sessionId!, opts.resourceId),
+      );
     }
 
     // 2) threadId resolution. May be `{ fresh: true }` to force a new thread.
     if ('threadId' in opts && opts.threadId !== undefined) {
-      return this._resolveByThread(storage, opts);
+      const key =
+        typeof opts.threadId === 'string'
+          ? this._sessionResolveSingleFlightKey('thread', opts.resourceId ?? '', opts.threadId)
+          : opts.sessionId
+            ? this._sessionResolveSingleFlightKey('session', opts.sessionId, opts.resourceId ?? '')
+            : undefined;
+      return key
+        ? this._withSessionResolveSingleFlight(key, () => this._resolveByThread(storage, opts))
+        : this._resolveByThread(storage, opts);
     }
 
     // 3) resourceId-only resolution: most-recent active or create.
     if ('resourceId' in opts && opts.resourceId) {
-      return this._resolveByResource(storage, opts);
+      return this._withSessionResolveSingleFlight(
+        this._sessionResolveSingleFlightKey('resource', opts.resourceId),
+        () => this._resolveByResource(storage, opts),
+      );
     }
 
     throw new HarnessConfigError('session()', 'invalid resolver options');
+  }
+
+  private _sessionResolveSingleFlightKey(kind: 'session' | 'thread' | 'resource', ...parts: string[]): string {
+    return JSON.stringify([this._harnessName, kind, ...parts]);
+  }
+
+  private _withSessionResolveSingleFlight(key: string, resolve: () => Promise<Session>): Promise<Session> {
+    const existing = this._sessionResolvePromises.get(key);
+    if (existing) return existing;
+    const promise = resolve().finally(() => {
+      if (this._sessionResolvePromises.get(key) === promise) {
+        this._sessionResolvePromises.delete(key);
+      }
+    });
+    this._sessionResolvePromises.set(key, promise);
+    return promise;
   }
 
   private async _resolveById(storage: HarnessStorage, sessionId: string, resourceId?: string): Promise<Session> {
@@ -2160,6 +2192,17 @@ export class Harness {
       eventReplaySeed?: { epoch: string; nextSequence: number };
     },
   ): Session {
+    const live = this._liveSessions.get(record.id);
+    if (live) {
+      if (live.isClosing) {
+        throw new HarnessSessionClosingError(record.id);
+      }
+      if (live.isClosed) {
+        throw new HarnessSessionClosedError(record.id);
+      }
+      return live;
+    }
+
     // Workspace provider validation (§2.7). If the stored record carries a
     // workspace state blob, the configured provider must match. Mismatch is
     // a hard error — refuse to hand the record to the wrong implementation.

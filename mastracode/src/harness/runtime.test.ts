@@ -3,6 +3,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MastraCodeHarnessRuntime } from './runtime.js';
+import { MASTRACODE_HARNESS_NAME } from './config.js';
 
 function createRuntime(
   options: {
@@ -63,6 +64,12 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(() => createRuntime({ modes: [] })).toThrow('No MastraCode harness modes configured');
   });
 
+  it('registers the Harness v1 runtime on the returned Mastra instance', () => {
+    const runtime = createRuntime();
+
+    expect(runtime.getMastra().getHarness(MASTRACODE_HARNESS_NAME)).toBe(runtime.core);
+  });
+
   it('restores Harness v1 thread metadata into MastraCode runtime state', async () => {
     const runtime = createRuntime();
     await runtime.init();
@@ -86,6 +93,46 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(runtime.getReflectorModelId()).toBe('anthropic/claude-haiku-4-5');
     expect(runtime.getSubagentModelId()).toBe('openai/gpt-5.4-mini');
 
+    await runtime.destroy();
+  });
+
+  it('does not write target thread metadata into the previously active session while switching threads', async () => {
+    const runtime = createRuntime();
+    await runtime.init();
+    const firstThreadId = runtime.getCurrentThreadId();
+    if (!firstThreadId) throw new Error('expected initial thread');
+    await runtime.setState({ currentModelId: 'openai/gpt-5.4-mini' });
+
+    await runtime.createThread({ title: 'second' });
+    const secondSession = (runtime as any).session;
+    await runtime.setState({ currentModelId: 'anthropic/claude-haiku-4-5' });
+
+    await runtime.switchThread({ threadId: firstThreadId });
+
+    await expect(secondSession.getState()).resolves.toMatchObject({
+      currentModelId: 'anthropic/claude-haiku-4-5',
+    });
+    await runtime.destroy();
+  });
+
+  it('does not project events from non-active child sessions as top-level MastraCode events', async () => {
+    const runtime = createRuntime();
+    await runtime.init();
+    const parent = (runtime as any).session;
+    const child = await runtime.core.session({
+      resourceId: runtime.getResourceId(),
+      threadId: { fresh: true },
+      parentSessionId: parent.id,
+      origin: 'subagent-tool',
+      modeId: runtime.getCurrentModeId(),
+      modelId: runtime.getCurrentModelId(),
+    });
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+
+    child._emit({ type: 'message_start', messageId: 'child-message' } as any);
+
+    expect(listener).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'message_start' }));
     await runtime.destroy();
   });
 
@@ -283,10 +330,20 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.destroy();
   });
 
-  it('passes initial-message files through to Harness v1 message content parts', async () => {
+  it('uploads initial-message files through Harness v1 attachments', async () => {
     const runtime = createRuntime();
     const message = vi.fn(async () => undefined);
+    const upload = vi.spyOn(runtime.core.attachments, 'upload').mockResolvedValue({
+      attachmentId: 'attachment-1',
+      resourceId: 'resource-one',
+      ownerSessionId: 'session-one',
+      bytes: 6,
+      mimeType: 'image/png',
+      name: 'attachment-1',
+    });
     (runtime as any).session = {
+      id: 'session-one',
+      resourceId: 'resource-one',
       message,
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
@@ -300,12 +357,19 @@ describe('MastraCodeHarnessRuntime', () => {
       files: [{ data: 'abc123', mimeType: 'image/png' }],
     });
 
+    expect(upload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-one',
+        resourceId: 'resource-one',
+        data: expect.any(Uint8Array),
+        filename: 'attachment-1',
+        contentType: 'image/png',
+      }),
+    );
     expect(message).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: [
-          { type: 'text', text: 'inspect this' },
-          { type: 'file', data: 'abc123', mediaType: 'image/png' },
-        ],
+        content: 'inspect this',
+        attachments: [expect.objectContaining({ attachmentId: 'attachment-1' })],
       }),
     );
 
@@ -665,9 +729,25 @@ describe('MastraCodeHarnessRuntime', () => {
       result: 'ok',
       isError: false,
     });
+    await (runtime as any).handleCoreEvent({
+      type: 'subagent_tool_start',
+      innerToolCallId: 'sub-tool-1',
+      toolName: 'write_file',
+      args: { path: 'src/from-subagent.ts' },
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'subagent_tool_end',
+      innerToolCallId: 'sub-tool-1',
+      toolName: 'write_file',
+      output: 'ok',
+      isError: false,
+    });
 
     expect(runtime.getDisplayState().modifiedFiles.get('src/app.ts')).toMatchObject({
       operations: ['write_file', 'string_replace_lsp', 'ast_smart_edit'],
+    });
+    expect(runtime.getDisplayState().modifiedFiles.get('src/from-subagent.ts')).toMatchObject({
+      operations: ['write_file'],
     });
 
     runtime.getDisplayState().modifiedFiles.clear();

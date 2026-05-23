@@ -3617,11 +3617,35 @@ describe('Harness v1 — crash recovery (lease TTL)', () => {
 });
 
 describe('Harness v1 — concurrent resolver race', () => {
-  // In-flight dedup of parallel session() calls for the same thread is not
-  // yet implemented — the current resolver lets both calls race to
-  // _createFresh. Track the desired behavior here so it surfaces when the
-  // dedup map lands.
-  it.todo('serialises two parallel session() calls for the same thread to a single record');
+  it('serialises two parallel session() calls for the same thread to a single live instance', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+
+    const createOrLoad = storage.createOrLoadActiveSession.bind(storage);
+    let releaseCreate!: () => void;
+    const createStarted = new Promise<void>(resolve => {
+      vi.spyOn(storage, 'createOrLoadActiveSession').mockImplementation(async (...args) => {
+        resolve();
+        await new Promise<void>(release => {
+          releaseCreate = release;
+        });
+        return createOrLoad(...args);
+      });
+    });
+
+    const first = harness.session({ threadId: 't1', resourceId: 'r1' });
+    await createStarted;
+    const second = harness.session({ threadId: 't1', resourceId: 'r1' });
+    releaseCreate();
+
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(b);
+    expect(storage.createOrLoadActiveSession).toHaveBeenCalledTimes(1);
+
+    const active = await storage.listSessions({ resourceId: 'r1', includeClosed: false });
+    expect(active).toHaveLength(1);
+    expect(active[0]?.threadId).toBe('t1');
+  });
 
   it('serialises lease acquisition per session — distinct sessions resolve in parallel', async () => {
     // A single harness owns its leases; parallel resolves for *different*

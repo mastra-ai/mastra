@@ -22,7 +22,9 @@ import {
   isHarnessWorkspaceFileMutationTool,
 } from '@mastra/core/harness/v1';
 import type {
+  AttachmentRef,
   HarnessEvent as HarnessV1Event,
+  HarnessEventUnsubscribe as HarnessV1EventUnsubscribe,
   HarnessMessageContentPart,
   Session,
   SessionDisplayState,
@@ -35,6 +37,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { isSubagentToolName } from '../tool-names.js';
 import {
   MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
+  MASTRACODE_HARNESS_NAME,
   resolveDefaultModeId,
   toHarnessV1Agents,
   toHarnessV1AuthStatus,
@@ -135,6 +138,28 @@ function messageContents(content: string, files?: unknown[]): string | HarnessMe
     }
   }
   return parts;
+}
+
+function fileUploadData(value: Record<string, unknown>): Uint8Array | undefined {
+  if (value.data instanceof Uint8Array) return value.data;
+  if (value.data instanceof ArrayBuffer) return new Uint8Array(value.data);
+  if (typeof value.data === 'string') return new TextEncoder().encode(value.data);
+  return undefined;
+}
+
+function fileContentType(value: Record<string, unknown>): string {
+  return typeof value.mimeType === 'string'
+    ? value.mimeType
+    : typeof value.mediaType === 'string'
+      ? value.mediaType
+      : 'application/octet-stream';
+}
+
+function fileName(value: Record<string, unknown>, index: number): string {
+  if (typeof value.name === 'string' && value.name.length > 0) return value.name;
+  if (typeof value.filename === 'string' && value.filename.length > 0) return value.filename;
+  if (typeof value.path === 'string' && value.path.length > 0) return value.path.split(/[\\/]/).pop() || value.path;
+  return `attachment-${index + 1}`;
 }
 
 function isHarnessSessionLifecycleError(error: unknown): boolean {
@@ -270,6 +295,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private state: TState;
   private readonly listeners = new Set<HarnessEventListener>();
   private readonly projector: MastraCodeHarnessEventProjector;
+  private sessionEventUnsubscribe?: HarnessV1EventUnsubscribe;
   private readonly heartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
   private readonly heartbeatHandlers = new Map<
     string,
@@ -314,15 +340,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     const harnessV1Subagents =
       exposedSubagents.length > 0 ? { types: toHarnessV1Subagents(exposedSubagents) } : undefined;
 
-    this.mastra = new Mastra({
-      agents: harnessV1Agents,
-      storage: config.storage,
-      observability: config.observability,
-      workers: false,
-    });
-
     this.core = new HarnessV1({
-      mastra: this.mastra,
       runtimeCompatibilityGeneration: MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
       modes: toHarnessV1Modes(config.modes, harnessV1Agents, this.defaultModeId, exposedSubagents),
       subagents: harnessV1Subagents,
@@ -332,10 +350,18 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       modelAuthStatusResolver: modelId => this.resolveHarnessV1AuthStatus(modelId),
       workspace: config.workspace
         ? {
-            kind: 'shared',
+            kind: 'shared' as const,
             workspace: ({ requestContext }) => config.workspace!({ requestContext, mastra: this.mastra }),
           }
         : undefined,
+    });
+
+    this.mastra = new Mastra({
+      agents: harnessV1Agents,
+      storage: config.storage,
+      observability: config.observability,
+      workers: false,
+      harnesses: { [MASTRACODE_HARNESS_NAME]: this.core },
     });
 
     if (config.browser && typeof config.browser !== 'function') {
@@ -350,12 +376,6 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         return thread ? toLegacyThread(thread) : undefined;
       },
     );
-
-    this.core.subscribe(event => {
-      void this.handleCoreEvent(event).catch(error => {
-        this.emitNonLifecycleError(error);
-      });
-    });
 
     for (const handler of config.heartbeatHandlers ?? []) {
       this.registerHeartbeat(handler);
@@ -424,11 +444,18 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       this.activeToolCalls.set(event.toolCallId, { name: event.toolName, args: event.args });
       return;
     }
-    if (event.type !== 'tool_end') return;
+    if (event.type === 'subagent_tool_start') {
+      this.activeToolCalls.set(event.innerToolCallId, { name: event.toolName, args: event.args });
+      return;
+    }
+    const endedToolCallId =
+      event.type === 'tool_end' ? event.toolCallId : event.type === 'subagent_tool_end' ? event.innerToolCallId : null;
+    if (!endedToolCallId) return;
+    const isError = event.type === 'tool_end' || event.type === 'subagent_tool_end' ? event.isError : false;
 
-    const tool = this.activeToolCalls.get(event.toolCallId);
-    this.activeToolCalls.delete(event.toolCallId);
-    if (!tool || event.isError || !isHarnessWorkspaceFileMutationTool(tool.name)) return;
+    const tool = this.activeToolCalls.get(endedToolCallId);
+    this.activeToolCalls.delete(endedToolCallId);
+    if (!tool || isError || !isHarnessWorkspaceFileMutationTool(tool.name)) return;
 
     const filePath = getHarnessWorkspaceActionPathInput(tool.name, tool.args as Record<string, unknown>);
     if (!filePath) return;
@@ -563,13 +590,15 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         title: 'New thread',
         metadata: this.buildThreadMetadata(),
       }));
-    await this.applyThreadMetadata(thread.metadata);
-    this.session = await this.core.session({
-      resourceId: this.resourceId,
-      threadId: thread.id,
-      modeId: this.currentModeId,
-      modelId: this.resolveModeModel(this.currentModeId),
-    });
+    await this.applyThreadMetadata(thread.metadata, { persist: false });
+    this.bindActiveSession(
+      await this.core.session({
+        resourceId: this.resourceId,
+        threadId: thread.id,
+        modeId: this.currentModeId,
+        modelId: this.resolveModeModel(this.currentModeId),
+      }),
+    );
     await this.ensureSessionState();
     await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
@@ -582,13 +611,15 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       title: title ?? 'New thread',
       metadata: this.buildThreadMetadata(),
     });
-    await this.applyThreadMetadata(thread.metadata);
-    this.session = await this.core.session({
-      resourceId: this.resourceId,
-      threadId: thread.id,
-      modeId: this.currentModeId,
-      modelId: this.resolveModeModel(this.currentModeId),
-    });
+    await this.applyThreadMetadata(thread.metadata, { persist: false });
+    this.bindActiveSession(
+      await this.core.session({
+        resourceId: this.resourceId,
+        threadId: thread.id,
+        modeId: this.currentModeId,
+        modelId: this.resolveModeModel(this.currentModeId),
+      }),
+    );
     await this.ensureSessionState();
     await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
@@ -604,13 +635,15 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     if (!thread) {
       throw new Error(`Thread not found: ${threadId}`);
     }
-    await this.applyThreadMetadata(thread.metadata);
-    this.session = await this.core.session({
-      resourceId: this.resourceId,
-      threadId,
-      modeId: this.currentModeId,
-      modelId: this.resolveModeModel(this.currentModeId),
-    });
+    await this.applyThreadMetadata(thread.metadata, { persist: false });
+    this.bindActiveSession(
+      await this.core.session({
+        resourceId: this.resourceId,
+        threadId,
+        modeId: this.currentModeId,
+        modelId: this.resolveModeModel(this.currentModeId),
+      }),
+    );
     await this.ensureSessionState();
     await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
@@ -688,7 +721,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   setResourceId({ resourceId }: { resourceId: string }): void {
     if (this.resourceId === resourceId) return;
     this.resourceId = resourceId;
-    this.session = undefined;
+    this.clearActiveSession();
     this.currentWorkspace = undefined;
   }
 
@@ -754,7 +787,6 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       throw new Error(`Mode not found: ${modeId}`);
     }
     if (this.isRunning()) this.abort();
-    const previousModeId = this.currentModeId;
     const currentModelId = this.getCurrentModelId();
     if (currentModelId) {
       await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
@@ -764,7 +796,6 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     await session.switchMode({ mode: modeId });
     await this.setThreadSetting({ key: 'currentModeId', value: modeId });
     await this.switchModel({ modelId: await this.loadModeModelId(modeId), modeId });
-    this.emit({ type: 'mode_changed', modeId, previousModeId } as unknown as HarnessEvent);
   }
 
   getCurrentModelId(): string {
@@ -804,7 +835,6 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     await Promise.resolve(this.config.modelUseCountTracker?.(modelId)).catch(error => {
       console.error('Failed to persist model usage count', error);
     });
-    this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as unknown as HarnessEvent);
   }
 
   async listAvailableModels(): Promise<AvailableModel[]> {
@@ -1001,8 +1031,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     const session = await this.ensureSession();
     await this.ensureSessionState();
     await this.syncSessionControls();
+    const { attachments, inlineFiles } = await this.uploadMessageAttachments(session, files);
     await session.message({
-      content: messageContents(content, files),
+      content: messageContents(content, inlineFiles),
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...((this.state as Record<string, unknown>).yolo === true ? { yolo: true } : {}),
       ...(admissionId ? { admissionId } : {}),
       ...(admissionId ? {} : { prepareStep: this.prepareActiveToolsStep }),
@@ -1469,6 +1501,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async destroy(): Promise<void> {
+    this.clearActiveSession();
     await this.destroyWorkspace();
     await this.stopHeartbeats();
     await this.core.shutdown();
@@ -1503,6 +1536,35 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private filterActiveTools(toolNames: string[]): string[] {
     const disabled = new Set(this.config.disabledTools ?? []);
     return toolNames.filter(toolName => !this.isToolDisabled(toolName, disabled) && !this.isToolDenied(toolName));
+  }
+
+  private async uploadMessageAttachments(
+    session: Session,
+    files?: unknown[],
+  ): Promise<{ attachments: AttachmentRef[]; inlineFiles: unknown[] | undefined }> {
+    if (!files?.length) return { attachments: [], inlineFiles: undefined };
+    const attachments: AttachmentRef[] = [];
+    const inlineFiles: unknown[] = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      if (!file || typeof file !== 'object') continue;
+      const value = file as Record<string, unknown>;
+      const data = fileUploadData(value);
+      if (!data) {
+        inlineFiles.push(file);
+        continue;
+      }
+      attachments.push(
+        await this.core.attachments.upload({
+          sessionId: session.id,
+          resourceId: session.resourceId,
+          data,
+          filename: fileName(value, index),
+          contentType: fileContentType(value),
+        }),
+      );
+    }
+    return { attachments, inlineFiles: inlineFiles.length > 0 ? inlineFiles : undefined };
   }
 
   private isToolDenied(toolName: string): boolean {
@@ -1564,9 +1626,30 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     return Object.keys(metadata).length > 0 ? metadata : undefined;
   }
 
-  private async applyThreadMetadata(metadata?: Record<string, unknown>): Promise<void> {
+  private bindActiveSession(session: Session): void {
+    if (this.session === session) return;
+    this.sessionEventUnsubscribe?.();
+    this.session = session;
+    this.sessionEventUnsubscribe = session.subscribe(event => {
+      void this.handleCoreEvent(event).catch(error => {
+        this.emitNonLifecycleError(error);
+      });
+    });
+  }
+
+  private clearActiveSession(): void {
+    this.sessionEventUnsubscribe?.();
+    this.sessionEventUnsubscribe = undefined;
+    this.session = undefined;
+  }
+
+  private async applyThreadMetadata(
+    metadata?: Record<string, unknown>,
+    options: { persist?: boolean } = {},
+  ): Promise<void> {
+    const persist = options.persist ?? true;
     if (!metadata) {
-      await this.applyModeModelFallback();
+      await this.applyModeModelFallback({ persist });
       return;
     }
 
@@ -1602,14 +1685,23 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     }
 
     if (Object.keys(updates).length > 0) {
-      await this.setState(updates as Partial<TState>);
+      if (persist) {
+        await this.setState(updates as Partial<TState>);
+      } else {
+        this.state = { ...this.state, ...(updates as Partial<TState>) };
+      }
     }
   }
 
-  private async applyModeModelFallback(): Promise<void> {
+  private async applyModeModelFallback(options: { persist?: boolean } = {}): Promise<void> {
     const fallback = this.resolveModeModel(this.currentModeId);
     if (fallback) {
-      await this.setState({ currentModelId: fallback } as unknown as Partial<TState>);
+      const updates = { currentModelId: fallback } as unknown as Partial<TState>;
+      if (options.persist ?? true) {
+        await this.setState(updates);
+      } else {
+        this.state = { ...this.state, ...updates };
+      }
     }
   }
 

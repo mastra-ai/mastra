@@ -196,6 +196,11 @@ describe('HarnessRequestContext.workspace — runtime plumbing', () => {
         policyDecision: 'allow',
         runId: 'run-1',
         toolCallId: 'tool-call-1',
+        observability: {
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          parentSpanId: 'parent-span-1',
+        },
         result: 'ok',
       });
       expect(appendJournal).toHaveBeenCalled();
@@ -221,6 +226,13 @@ describe('HarnessRequestContext.workspace — runtime plumbing', () => {
         operation: 'write',
         policyDecision: 'allow',
         requestId: 'tool-call-1',
+        actor: {
+          observability: {
+            traceId: 'trace-1',
+            spanId: 'span-1',
+            parentSpanId: 'parent-span-1',
+          },
+        },
         path: {
           rootPath: tempDir,
           relativePath: 'src/index.ts',

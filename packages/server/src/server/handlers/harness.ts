@@ -1642,6 +1642,14 @@ function mapHarnessError(error: unknown): never {
       reason: harnessErrorString(error, 'reason'),
     });
   }
+  if (name === 'HarnessEventSerializationError') {
+    throwHarnessHttpError(400, 'harness.event_serialization', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      eventType: harnessErrorString(error, 'eventType'),
+      path: harnessErrorString(error, 'path'),
+      reason: harnessErrorString(error, 'reason'),
+    });
+  }
   if (name === 'HarnessStorageSessionEventReplayUnsupportedError') {
     throwHarnessHttpError(501, 'harness.event_replay_unsupported', message, undefined, false);
   }
@@ -1673,6 +1681,13 @@ function mapHarnessError(error: unknown): never {
       admissionId: harnessErrorString(error, 'admissionId'),
       storedAdmissionHash: harnessErrorString(error, 'storedAdmissionHash'),
       attemptedAdmissionHash: harnessErrorString(error, 'attemptedAdmissionHash'),
+    });
+  }
+  if (name === 'HarnessOverrideConflictError') {
+    throwHarnessHttpError(409, 'harness.override_conflict', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+      field: harnessErrorString(error, 'field'),
+      reason: harnessErrorString(error, 'reason'),
     });
   }
   if (name === 'HarnessAttachmentUnavailableError') {
@@ -1729,6 +1744,29 @@ function mapHarnessError(error: unknown): never {
       blockers: harnessErrorStringArray(error, 'blockers').map(id => ({ source: 'session', id })),
     });
   }
+  if (name === 'HarnessThreadNotFoundError') {
+    throwHarnessHttpError(404, 'harness.thread_not_found', message, {
+      threadId: harnessErrorString(error, 'threadId'),
+      resourceId: harnessErrorString(error, 'resourceId'),
+    });
+  }
+  if (name === 'HarnessModelNotFoundError') {
+    throwHarnessHttpError(404, 'harness.model_not_found', message, {
+      modelId: harnessErrorString(error, 'modelId'),
+    });
+  }
+  if (name === 'HarnessSkillNotFoundError') {
+    throwHarnessHttpError(404, 'harness.skill_not_found', message, {
+      skillName: harnessErrorString(error, 'skillName'),
+      searchedSources: harnessErrorProp(error, 'searchedSources'),
+    });
+  }
+  if (name === 'HarnessSkillArgsValidationError') {
+    throwHarnessHttpError(400, 'harness.skill_args_invalid', message, {
+      skillName: harnessErrorString(error, 'skillName'),
+      issues: harnessErrorProp(error, 'issues'),
+    });
+  }
   if (name === 'HarnessSessionLockedError') {
     throwHarnessHttpError(409, 'harness.session_locked', message, {
       sessionId: harnessErrorString(error, 'sessionId'),
@@ -1765,7 +1803,7 @@ function mapHarnessError(error: unknown): never {
     });
   }
   if (name === 'HarnessWorkspaceProvisioningError') {
-    throwHarnessHttpError(503, 'harness.internal', message, {
+    throwHarnessHttpError(503, 'harness.workspace_provisioning', message, {
       providerId: harnessErrorString(error, 'providerId'),
       sessionId: harnessErrorString(error, 'sessionId'),
       resourceId: harnessErrorString(error, 'resourceId'),

@@ -4065,6 +4065,11 @@ export class Session {
     policyDecision: PermissionPolicy;
     runId?: string;
     toolCallId?: string;
+    observability?: {
+      traceId?: string;
+      spanId?: string;
+      parentSpanId?: string;
+    };
     result?: unknown;
     error?: unknown;
   }): Promise<void> {
@@ -4109,6 +4114,7 @@ export class Session {
             toolName: params.toolName,
             ...(params.runId ? { runId: params.runId } : {}),
             ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
+            ...(params.observability ? { observability: params.observability } : {}),
             source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
             ...(this._record.parentSessionId ? { parentSessionId: this._record.parentSessionId } : {}),
           },
