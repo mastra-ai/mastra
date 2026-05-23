@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HarnessValidationError } from '../harness/v1/errors';
 import type { HarnessWakeupItem } from '../storage/domains/harness';
 import { MastraWorker } from './worker';
 import type { WorkerDeps } from './worker';
@@ -576,6 +577,48 @@ describe('HarnessWakeupWorker', () => {
         status: 'dead',
         deadAt: expect.any(Number),
         lastError: expect.objectContaining({ code: 'worker_unavailable', retryable: false }),
+      }),
+      { claimId: item.claimId },
+    );
+  });
+
+  it('marks invalid persisted wakeup attachments as provider payload errors', async () => {
+    const item = sampleWakeup({
+      attachments: [{ kind: 'url', name: 'remote.txt', mimeType: 'text/plain', url: 'https://example.test/a.txt' }],
+    });
+    const storage = createWakeupStorage([item]);
+    const worker = new HarnessWakeupWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue(storage);
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          _internalGetSessionStorage: () => storage,
+          session: vi.fn().mockResolvedValue({
+            resourceId: item.resourceId,
+            threadId: item.threadId,
+            _admitWakeupQueue: vi
+              .fn()
+              .mockRejectedValue(
+                new HarnessValidationError(
+                  'admitQueue().attachments[0].kind',
+                  'url attachments must be ingested by the remote route before durable wakeup admission',
+                ),
+              ),
+          }),
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await worker.runOnce();
+
+    expect(storage.updateHarnessWakeupItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: item.id,
+        status: 'dead',
+        deadAt: expect.any(Number),
+        lastError: expect.objectContaining({ code: 'provider_payload_invalid', retryable: false }),
       }),
       { claimId: item.claimId },
     );

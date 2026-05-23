@@ -437,3 +437,42 @@ export class HarnessWorkspaceInUseError extends Error {
     super(`Workspace for resource "${resourceId}" is in use (refCount: ${refCount})`);
   }
 }
+
+const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
+  HarnessConfigError: 'harness.validation',
+  HarnessRuntimeDependencyDriftError: 'harness.runtime_dependency_drifted',
+  HarnessSessionNotFoundError: 'harness.session_not_found',
+  HarnessSessionClosedError: 'harness.session_closed',
+  HarnessSessionClosingError: 'harness.session_closing',
+  HarnessSessionDeleteBlockedError: 'harness.session_delete_blocked',
+  HarnessSessionDeletedError: 'harness.session_deleted',
+  HarnessSessionLockedError: 'harness.session_locked',
+  HarnessValidationError: 'harness.validation',
+  HarnessQueueFullError: 'harness.queue_full',
+  HarnessAdmissionConflictError: 'harness.admission_conflict',
+  HarnessInboxItemNotFoundError: 'harness.inbox_item_not_found',
+  HarnessInboxResponseConflictError: 'harness.inbox_response_conflict',
+  HarnessStateConflictError: 'harness.state_conflict',
+  HarnessAttachmentInUseError: 'harness.attachment_in_use',
+  HarnessAttachmentUnavailableError: 'harness.attachment_unavailable',
+  HarnessSubagentDepthExceededError: 'harness.subagent_depth_exceeded',
+  HarnessStorageError: 'harness.storage',
+  HarnessThreadNotFoundError: 'harness.thread_not_found',
+  HarnessModelNotFoundError: 'harness.model_not_found',
+  HarnessSkillNotFoundError: 'harness.skill_not_found',
+  HarnessSkillArgsValidationError: 'harness.skill_args_invalid',
+  HarnessOverrideConflictError: 'harness.override_conflict',
+  HarnessEventSerializationError: 'harness.event_serialization',
+  HarnessWorkspaceProviderMismatchError: 'harness.workspace_provider_mismatch',
+  HarnessWorkspaceLostError: 'harness.workspace_lost',
+  HarnessWorkspaceProvisioningError: 'harness.workspace_provisioning',
+  HarnessWorkspaceInUseError: 'harness.workspace_in_use',
+};
+
+export function getHarnessPublicErrorCode(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === 'string' && code.length > 0) return code;
+  const name = (err as { name?: unknown }).name;
+  return typeof name === 'string' ? HARNESS_PUBLIC_ERROR_CODES[name] : undefined;
+}

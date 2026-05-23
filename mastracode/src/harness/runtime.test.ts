@@ -276,7 +276,9 @@ describe('MastraCodeHarnessRuntime', () => {
 
     expect(runtime.getDisplayState().tasks).toEqual([{ id: 'late-task', title: 'Late task', status: 'completed' }]);
     await expect((runtime as any).handleCoreEvent({ type: 'state_changed' })).resolves.toBeUndefined();
-    await expect((runtime as any).handleCoreEvent({ type: 'model_changed', modelId: 'openai/gpt-4o-mini' })).resolves.toBeUndefined();
+    await expect(
+      (runtime as any).handleCoreEvent({ type: 'model_changed', modelId: 'openai/gpt-4o-mini' }),
+    ).resolves.toBeUndefined();
     expect(listener).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
     await runtime.destroy();
   });
@@ -375,7 +377,6 @@ describe('MastraCodeHarnessRuntime', () => {
 
     await runtime.destroy();
   });
-
 
   it('persists system reminder messages and first user previews through memory storage', async () => {
     const runtime = createRuntime();
@@ -652,9 +653,21 @@ describe('MastraCodeHarnessRuntime', () => {
       result: 'ok',
       isError: false,
     });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_start',
+      toolCallId: 'tool-3',
+      toolName: 'ast_smart_edit',
+      args: { path: 'src/app.ts' },
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'tool_end',
+      toolCallId: 'tool-3',
+      result: 'ok',
+      isError: false,
+    });
 
     expect(runtime.getDisplayState().modifiedFiles.get('src/app.ts')).toMatchObject({
-      operations: ['write_file', 'string_replace_lsp'],
+      operations: ['write_file', 'string_replace_lsp', 'ast_smart_edit'],
     });
 
     runtime.getDisplayState().modifiedFiles.clear();

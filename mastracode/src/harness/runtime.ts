@@ -16,7 +16,11 @@ import type {
   ToolCategory,
 } from '@mastra/core/harness';
 import { defaultDisplayState } from '@mastra/core/harness';
-import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
+import {
+  Harness as HarnessV1,
+  getHarnessWorkspaceActionPathInput,
+  isHarnessWorkspaceFileMutationTool,
+} from '@mastra/core/harness/v1';
 import type {
   HarnessEvent as HarnessV1Event,
   HarnessMessageContentPart,
@@ -44,7 +48,6 @@ import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 
 type SignalDeliveryAttributes = Record<string, string | number | boolean | null | undefined>;
 const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
-const FILE_MUTATION_TOOLS = new Set(['string_replace_lsp', 'write_file', 'ast_smart_edit']);
 const HARNESS_SESSION_LIFECYCLE_ERROR_NAMES = new Set([
   'HarnessSessionClosedError',
   'HarnessSessionClosingError',
@@ -308,7 +311,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
     const exposedSubagents = this.shouldExposeSubagentTool() ? config.subagents : [];
-    const harnessV1Subagents = exposedSubagents.length > 0 ? { types: toHarnessV1Subagents(exposedSubagents) } : undefined;
+    const harnessV1Subagents =
+      exposedSubagents.length > 0 ? { types: toHarnessV1Subagents(exposedSubagents) } : undefined;
 
     this.mastra = new Mastra({
       agents: harnessV1Agents,
@@ -424,10 +428,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
     const tool = this.activeToolCalls.get(event.toolCallId);
     this.activeToolCalls.delete(event.toolCallId);
-    if (!tool || event.isError || !FILE_MUTATION_TOOLS.has(tool.name)) return;
+    if (!tool || event.isError || !isHarnessWorkspaceFileMutationTool(tool.name)) return;
 
-    const filePath = (tool.args as { path?: unknown } | undefined)?.path;
-    if (typeof filePath !== 'string' || filePath.length === 0) return;
+    const filePath = getHarnessWorkspaceActionPathInput(tool.name, tool.args as Record<string, unknown>);
+    if (!filePath) return;
 
     const existing = this.modifiedFiles.get(filePath);
     if (existing) {
