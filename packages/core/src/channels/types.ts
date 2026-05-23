@@ -332,31 +332,29 @@ export type ActionHandlerResult =
 /**
  * Custom handler for action (button click) events.
  *
- * The `defaultHandler` runs the built-in tool approval flow (handles
- * `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs, edits the
- * card, and resumes the suspended tool). Call it to delegate, or skip it to
- * fully replace the default behavior.
- *
- * Return `false` or `undefined` to fall through to the default handler.
+ * When supplied, the override fully owns the event. Call `defaultHandler()` to
+ * run the built-in tool approval flow (handles `tool_approve:<toolCallId>` /
+ * `tool_deny:<toolCallId>` action IDs, edits the card, and resumes the
+ * suspended tool); skip it to fully replace the default behavior. Set the
+ * handler config to `false` to disable the default routing entirely.
  */
 export type ActionHandler = (
   event: ActionEvent,
   defaultHandler: () => Promise<ActionHandlerResult>,
-) => unknown | false | undefined | Promise<unknown | false | undefined>;
+) => unknown | Promise<unknown>;
 
 /**
  * Custom handler for reaction (emoji) events.
  *
- * The `defaultHandler` is currently a no-op (channels does not consume
- * reactions by default). The signature matches `ActionHandler` for
- * consistency and to leave room for future built-in behavior.
- *
- * Return `false` or `undefined` to fall through to the default handler.
+ * When supplied, the override fully owns the event. `defaultHandler` is
+ * currently a no-op (channels does not consume reactions by default); the
+ * signature matches `ActionHandler` for consistency and to leave room for
+ * future built-in behavior.
  */
 export type ReactionHandlerFn = (
   event: ReactionEvent,
   defaultHandler: () => Promise<void>,
-) => unknown | false | undefined | Promise<unknown | false | undefined>;
+) => unknown | Promise<unknown>;
 
 /**
  * Handler configuration for action / reaction events.

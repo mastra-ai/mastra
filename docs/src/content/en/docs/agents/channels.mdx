@@ -131,7 +131,7 @@ For approval flows that need extra buttons, reaction-driven approval, or program
 
 ### Custom approval card with an extra button
 
-The `toolDisplay` fn posts a Block Kit card with an additional "Explain" button. `onAction` routes the custom `explain:*` action ID and falls through to the default handler for the built-in `tool_approve:*` / `tool_deny:*` IDs:
+The `toolDisplay` fn posts a Block Kit card with an additional "Explain" button. `onAction` handles the custom `explain:*` action ID and delegates to `defaultHandler()` for the built-in `tool_approve:*` / `tool_deny:*` IDs. When you supply `onAction`, you own the event — the default handler only runs if you call it.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'

@@ -310,16 +310,14 @@ export class AgentChannels {
       }
 
       // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>".
-      // Custom action IDs are returned to the override as { kind: 'unknown', actionId }
-      // so users can branch on them after delegating to the default handler.
+      // A user-supplied onAction is fully responsible for the event; call
+      // defaultHandler() to delegate to the built-in tool_approve / tool_deny routing.
+      // Custom action IDs are surfaced to the default handler as { kind: 'unknown', actionId }.
       if (onAction !== false) {
         chat.onAction(async event => {
           const boundDefault = () => this.defaultActionHandler(event);
           if (typeof onAction === 'function') {
-            const result = await onAction(event, boundDefault);
-            if (result === false || result === undefined) {
-              await boundDefault();
-            }
+            await onAction(event, boundDefault);
             return;
           }
           await boundDefault();
@@ -327,17 +325,13 @@ export class AgentChannels {
       }
 
       // Reactions: no built-in behavior. Subscribe so a user override can fire.
+      // defaultHandler is a no-op; provided for parity with the other handler hooks.
       if (onReaction !== false) {
         chat.onReaction(async event => {
-          const boundDefault = async () => {};
           if (typeof onReaction === 'function') {
-            const result = await onReaction(event, boundDefault);
-            if (result === false || result === undefined) {
-              await boundDefault();
-            }
-            return;
+            const boundDefault = async () => {};
+            await onReaction(event, boundDefault);
           }
-          await boundDefault();
         });
       }
       await chat.initialize();

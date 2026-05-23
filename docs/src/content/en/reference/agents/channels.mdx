@@ -369,12 +369,12 @@ type ChannelHandler = (
 type ActionHandler = (
   event: ActionEvent,
   defaultHandler: () => Promise<ActionHandlerResult>,
-) => unknown | false | undefined | Promise<unknown | false | undefined>
+) => unknown | Promise<unknown>
 
 type ReactionHandler = (
   event: ReactionEvent,
   defaultHandler: () => Promise<void>,
-) => unknown | false | undefined | Promise<unknown | false | undefined>
+) => unknown | Promise<unknown>
 
 type ActionHandlerResult =
   | { kind: 'approved'; toolCallId: string }
@@ -382,7 +382,7 @@ type ActionHandlerResult =
   | { kind: 'unknown'; actionId: string }
 ```
 
-Returning `false` or `undefined` from `ActionHandler` / `ReactionHandler` falls through to the default handler. Any other return value (including the awaited result of `defaultHandler()`) is treated as "the override owned this event".
+When you supply an `ActionHandler` or `ReactionHandler`, the override fully owns the event — the default handler runs only if you call `defaultHandler()` explicitly. This matches the existing `onDirectMessage` / `onMention` / `onSubscribedMessage` semantics. Use `handlers.onAction: false` (or `handlers.onReaction: false`) to disable the default routing entirely.
 
 ## Programmatic approval
 
