@@ -16,7 +16,7 @@ import type { HarnessMessage, HarnessMessageContent } from '../types';
  */
 export interface StoredMessageRow {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'signal';
   createdAt: Date;
   content: {
     parts: Array<{
@@ -62,6 +62,15 @@ export function convertStoredMessageToHarnessMessage(msg: StoredMessageRow): Har
     typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
       ? msg.content.metadata.systemReminder
       : undefined;
+  const signal =
+    typeof msg.content.metadata?.signal === 'object' && msg.content.metadata.signal !== null
+      ? (msg.content.metadata.signal as Record<string, unknown>)
+      : undefined;
+  const textFromParts = () =>
+    msg.content.parts
+      .map(part => (part.type === 'text' && typeof part.text === 'string' ? part.text : undefined))
+      .filter((part): part is string => typeof part === 'string')
+      .join('\n');
 
   if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
     content.push({
@@ -82,7 +91,46 @@ export function convertStoredMessageToHarnessMessage(msg: StoredMessageRow): Har
           : undefined,
     });
 
-    return { id: msg.id, role: msg.role, content, createdAt: msg.createdAt };
+    return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
+  }
+
+  if (signal?.type === 'system-reminder') {
+    const attributes =
+      typeof signal.attributes === 'object' && signal.attributes !== null
+        ? (signal.attributes as Record<string, unknown>)
+        : undefined;
+    const metadata =
+      typeof signal.metadata === 'object' && signal.metadata !== null
+        ? (signal.metadata as Record<string, unknown>)
+        : undefined;
+    const contents = signal.contents;
+    content.push({
+      type: 'system_reminder',
+      message:
+        typeof contents === 'string'
+          ? contents
+          : typeof metadata?.message === 'string'
+            ? metadata.message
+            : textFromParts(),
+      reminderType: typeof attributes?.type === 'string' ? attributes.type : 'system',
+      path: typeof metadata?.path === 'string' ? metadata.path : undefined,
+      precedesMessageId: typeof metadata?.precedesMessageId === 'string' ? metadata.precedesMessageId : undefined,
+      gapText: typeof metadata?.gapText === 'string' ? metadata.gapText : undefined,
+      gapMs: typeof metadata?.gapMs === 'number' ? metadata.gapMs : undefined,
+      timestamp: typeof metadata?.timestamp === 'string' ? metadata.timestamp : undefined,
+    });
+
+    return { id: msg.id, role: 'user', content, createdAt: msg.createdAt };
+  }
+
+  if (signal?.type === 'user-message') {
+    const contents = signal.contents;
+    content.push({
+      type: 'text',
+      text: typeof contents === 'string' ? contents : textFromParts(),
+    });
+
+    return { id: msg.id, role: 'user', content, createdAt: msg.createdAt };
   }
 
   for (const part of msg.content.parts) {
@@ -226,5 +274,14 @@ export function convertStoredMessageToHarnessMessage(msg: StoredMessageRow): Har
     }
   }
 
-  return { id: msg.id, role: msg.role, content, createdAt: msg.createdAt };
+  if (
+    content.length === 0 &&
+    'content' in msg.content &&
+    typeof msg.content.content === 'string' &&
+    msg.content.content.length > 0
+  ) {
+    content.push({ type: 'text', text: msg.content.content });
+  }
+
+  return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
 }

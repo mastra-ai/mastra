@@ -14,8 +14,9 @@ import type {
   OMProgressState,
   PermissionPolicy,
   ToolCategory,
+  StoredMessageRow,
 } from '@mastra/core/harness';
-import { defaultDisplayState } from '@mastra/core/harness';
+import { convertStoredMessageToHarnessMessage, defaultDisplayState } from '@mastra/core/harness';
 import {
   Harness as HarnessV1,
   getHarnessWorkspaceActionPathInput,
@@ -30,6 +31,7 @@ import type {
   SessionDisplayState,
   ThreadRecord,
 } from '@mastra/core/harness/v1';
+import type { WorkspaceActionJournalEntry } from '@mastra/core/storage';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -229,57 +231,7 @@ function cloneTasks(value: unknown): TaskItemSnapshot[] {
 }
 
 function toHarnessMessage(message: any): HarnessMessage {
-  const parts = Array.isArray(message?.content?.parts) ? message.content.parts : [];
-  const signal = message?.content?.metadata?.signal;
-  const systemReminder = message?.content?.metadata?.systemReminder;
-  const content: HarnessMessage['content'] = [];
-
-  if (systemReminder && typeof systemReminder === 'object') {
-    content.push({
-      type: 'system_reminder',
-      reminderType: typeof systemReminder.type === 'string' ? systemReminder.type : 'system',
-      contents: typeof systemReminder.message === 'string' ? systemReminder.message : '',
-      metadata: systemReminder,
-    } as never);
-  } else if (signal?.type === 'system-reminder') {
-    content.push({
-      type: 'system_reminder',
-      reminderType: typeof signal.attributes?.type === 'string' ? signal.attributes.type : 'system',
-      contents:
-        typeof signal.contents === 'string'
-          ? signal.contents
-          : normalizeMessageContent({ content: signal.contents ?? [] }),
-      attributes: signal.attributes,
-      metadata: signal.metadata,
-    } as never);
-  } else if (signal?.type === 'user-message') {
-    content.push({
-      type: 'text',
-      text:
-        typeof signal.contents === 'string'
-          ? signal.contents
-          : normalizeMessageContent({ content: signal.contents ?? [] }),
-    });
-  } else {
-    for (const part of parts) {
-      if (part?.type === 'text' && typeof part.text === 'string') {
-        content.push({ type: 'text', text: part.text });
-      } else if (part?.type === 'reasoning' && typeof part.reasoning === 'string') {
-        content.push({ type: 'thinking', thinking: part.reasoning } as never);
-      }
-    }
-  }
-
-  if (content.length === 0 && typeof message?.content?.content === 'string' && message.content.content.length > 0) {
-    content.push({ type: 'text', text: message.content.content });
-  }
-
-  return {
-    id: String(message.id),
-    role: message.role === 'signal' ? 'user' : message.role,
-    content,
-    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt ?? Date.now()),
-  };
+  return convertStoredMessageToHarnessMessage(message as StoredMessageRow);
 }
 
 export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
@@ -313,6 +265,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   private currentDisplayTasks: TaskItemSnapshot[] = [];
   private readonly activeToolCalls = new Map<string, { name: string; args?: unknown }>();
   private readonly modifiedFiles = new Map<string, { operations: string[]; firstModified: Date }>();
+  private harnessEventUnsubscribe?: HarnessV1EventUnsubscribe;
   private browser: unknown;
 
   readonly actions = Object.freeze({
@@ -387,8 +340,18 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async init(): Promise<void> {
-    await this.core.init();
+    await this.initCore();
     await this.selectOrCreateThread();
+  }
+
+  async initCore(): Promise<void> {
+    await this.core.init();
+    if (!this.harnessEventUnsubscribe) {
+      this.harnessEventUnsubscribe = this.core.subscribe(event => {
+        if (!this.isThreadLifecycleEventForCurrentResource(event)) return;
+        void this.projector.project(event).catch(error => this.emitNonLifecycleError(error));
+      });
+    }
   }
 
   subscribe(listener: HarnessEventListener): () => void {
@@ -414,7 +377,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.currentTraceId = this.getSessionDisplayState()?.currentTraceId ?? this.currentTraceId;
     if (event.type === 'state_changed' && this.session) {
       try {
-        this.state = { ...this.state, ...((await this.session.getState<TState>()) as TState) };
+        this.applyLocalState((await this.session.getState<TState>()) as Partial<TState>, { emitLegacy: false });
       } catch (error) {
         if (!isHarnessSessionLifecycleError(error)) throw error;
       }
@@ -426,9 +389,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       );
     }
     if (event.type === 'model_changed') {
-      await this.setState({ currentModelId: event.modelId } as unknown as Partial<TState>).catch(error =>
-        this.emitNonLifecycleError(error),
-      );
+      this.applyLocalState({ currentModelId: event.modelId } as unknown as Partial<TState>, { emitLegacy: false });
     }
     if (event.type === 'task_updated') {
       this.previousDisplayTasks = [...this.currentDisplayTasks];
@@ -463,12 +424,78 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     const existing = this.modifiedFiles.get(filePath);
     if (existing) {
       existing.operations.push(tool.name);
+      void this.refreshModifiedFilesFromWorkspaceJournal();
       return;
     }
     this.modifiedFiles.set(filePath, {
       operations: [tool.name],
       firstModified: new Date(),
     });
+    void this.refreshModifiedFilesFromWorkspaceJournal();
+  }
+
+  private async refreshModifiedFilesFromWorkspaceJournal(): Promise<void> {
+    const session = this.session;
+    if (!session) return;
+    const harnessStorage = (await this.config.storage.getStore('harness')) as
+      | {
+          listWorkspaceActionJournalEntries?: (input: {
+            harnessName?: string;
+            sessionId: string;
+            resourceId: string;
+            threadId?: string;
+            actionKind?: WorkspaceActionJournalEntry['actionKind'];
+            limit: number;
+          }) => Promise<WorkspaceActionJournalEntry[]>;
+        }
+      | undefined;
+    if (!harnessStorage?.listWorkspaceActionJournalEntries) return;
+
+    const entries = await harnessStorage.listWorkspaceActionJournalEntries({
+      harnessName: MASTRACODE_HARNESS_NAME,
+      sessionId: session.id,
+      resourceId: this.resourceId,
+      threadId: session.threadId,
+      actionKind: 'file',
+      limit: 500,
+    });
+
+    const next = new Map<string, { operations: string[]; firstModified: Date }>();
+    for (const entry of entries) {
+      this.mergeModifiedFileJournalEntry(next, entry.path, entry.operation, entry.createdAt);
+      this.mergeModifiedFileJournalEntry(next, entry.toPath, entry.operation, entry.createdAt);
+    }
+    for (const [path, value] of next) {
+      this.modifiedFiles.set(path, value);
+    }
+  }
+
+  private mergeModifiedFileJournalEntry(
+    target: Map<string, { operations: string[]; firstModified: Date }>,
+    path: WorkspaceActionJournalEntry['path'],
+    operation: string | undefined,
+    createdAt: number,
+  ): void {
+    const filePath = path?.relativePath || path?.path;
+    if (!filePath) return;
+    const existing = target.get(filePath);
+    if (existing) {
+      if (operation) existing.operations.push(operation);
+      return;
+    }
+    target.set(filePath, {
+      operations: operation ? [operation] : [],
+      firstModified: new Date(createdAt),
+    });
+  }
+
+  private isThreadLifecycleEventForCurrentResource(
+    event: HarnessV1Event,
+  ): event is Extract<HarnessV1Event, { type: 'thread_created' | 'thread_cloned' | 'thread_renamed' }> {
+    return (
+      (event.type === 'thread_created' || event.type === 'thread_cloned' || event.type === 'thread_renamed') &&
+      event.resourceId === this.resourceId
+    );
   }
 
   private applyOMEvent(event: HarnessV1Event | MastraCodeOMEvent): void {
@@ -623,9 +650,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     await this.ensureSessionState();
     await this.syncSessionControls();
     await this.resolveWorkspace().catch(() => undefined);
-    const legacy = toLegacyThread(thread);
-    this.emit({ type: 'thread_created', thread: legacy } as unknown as HarnessEvent);
-    return legacy;
+    return toLegacyThread(thread);
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
@@ -671,9 +696,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       this.resourceId = cloned.resourceId;
     }
     await this.switchThread({ threadId: cloned.id });
-    const legacy = toLegacyThread(cloned);
-    this.emit({ type: 'thread_created', thread: legacy } as unknown as HarnessEvent);
-    return legacy;
+    return toLegacyThread(cloned);
   }
 
   async renameThread({ title }: { title: string }): Promise<void> {
@@ -744,24 +767,30 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
 
   async setState(updates: Partial<TState>): Promise<void> {
     const nextUpdate = this.stateUpdateQueue.then(async () => {
-      this.state = { ...this.state, ...updates };
-      if (Object.prototype.hasOwnProperty.call(updates, 'tasks')) {
-        this.previousDisplayTasks = [...this.currentDisplayTasks];
-        this.currentDisplayTasks = cloneTasks((updates as Record<string, unknown>).tasks);
-      }
+      this.applyLocalState(updates);
       if (this.session) {
         await this.session.setState(this.state);
       }
-      this.emit({
-        type: 'state_changed',
-        state: this.state,
-        changedKeys: Object.keys(updates),
-      } as unknown as HarnessEvent);
     });
     this.stateUpdateQueue = nextUpdate.catch(error => {
       console.error('MastraCode Harness state update failed', error);
     });
     return nextUpdate;
+  }
+
+  private applyLocalState(updates: Partial<TState>, options: { emitLegacy?: boolean } = {}): void {
+    this.state = { ...this.state, ...updates };
+    if (Object.prototype.hasOwnProperty.call(updates, 'tasks')) {
+      this.previousDisplayTasks = [...this.currentDisplayTasks];
+      this.currentDisplayTasks = cloneTasks((updates as Record<string, unknown>).tasks);
+    }
+    if (options.emitLegacy ?? true) {
+      this.emit({
+        type: 'state_changed',
+        state: this.state,
+        changedKeys: Object.keys(updates),
+      } as unknown as HarnessEvent);
+    }
   }
 
   listModes(): LegacyHarnessMode<TState>[] {
@@ -826,7 +855,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }): Promise<void> {
     const targetModeId = modeId ?? this.currentModeId;
     if (targetModeId === this.currentModeId) {
-      await this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
+      this.applyLocalState({ currentModelId: modelId } as unknown as Partial<TState>);
       await this.requireSession().models.switch({ model: modelId });
     }
     if (scope === 'thread') {
@@ -1095,28 +1124,22 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }): Promise<HarnessMessage | null> {
     const threadId = this.getCurrentThreadId();
     if (!threadId) return null;
-    const memory = await this.getMemoryStorage();
-    const dbMessage = {
-      id: randomUUID(),
-      role,
-      threadId,
-      resourceId: this.resourceId,
-      createdAt: new Date(),
-      content: {
-        format: 2 as const,
-        parts: [],
-        content: '',
-        metadata: {
-          systemReminder: {
-            type: reminderType,
-            message,
-            ...metadata,
-          },
+    const result = await this.requireSession().injectSystemReminder(normalizeMessageContent({ content: message }), {
+      attributes: toSystemReminderAttributes({ type: reminderType, role }),
+      metadata: {
+        systemReminder: {
+          type: reminderType,
+          message,
+          ...metadata,
         },
       },
+    });
+    return {
+      id: result.id,
+      role,
+      createdAt: new Date(),
+      content: [{ type: 'system_reminder', reminderType, message }],
     };
-    const result = await memory.saveMessages({ messages: [dbMessage] });
-    return toHarnessMessage(result.messages[0] ?? dbMessage);
   }
 
   abort(): void {
@@ -1501,6 +1524,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async destroy(): Promise<void> {
+    this.harnessEventUnsubscribe?.();
+    this.harnessEventUnsubscribe = undefined;
     this.clearActiveSession();
     await this.destroyWorkspace();
     await this.stopHeartbeats();

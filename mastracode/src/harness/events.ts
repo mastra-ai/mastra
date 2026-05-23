@@ -64,6 +64,21 @@ export class MastraCodeHarnessEventProjector {
           } as unknown as LegacyHarnessEvent,
         ];
       }
+      case 'thread_cloned': {
+        const thread = await this.getThread(event.threadId, event.resourceId);
+        return [
+          {
+            ...event,
+            thread: thread ?? {
+              id: event.threadId,
+              resourceId: event.resourceId,
+              title: event.title,
+              createdAt: new Date(event.timestamp),
+              updatedAt: new Date(event.timestamp),
+            },
+          } as unknown as LegacyHarnessEvent,
+        ];
+      }
       case 'thread_renamed':
         return [
           {

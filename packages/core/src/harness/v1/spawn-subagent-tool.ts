@@ -22,7 +22,6 @@ import { createTool } from '../../tools/tool';
 import { createWorkspaceTools } from '../../workspace/tools';
 import { HarnessSubagentDepthExceededError, HarnessValidationError } from './errors';
 import type { Session } from './session';
-import type { SubagentDefinition } from './types';
 
 export const SPAWN_SUBAGENT_TOOL_ID = 'spawn_subagent';
 
@@ -42,20 +41,7 @@ function optionalModelId(value: string | null | undefined): string | undefined {
  * so the tool registry stays clean.
  */
 export function createSpawnSubagentTool(parent: Session) {
-  const harness = (parent as any)._harness as {
-    _listSubagentTypeIds(): string[];
-    _getSubagentType(id: string): SubagentDefinition | undefined;
-    _getSubagentMaxDepth(): number;
-    threads: {
-      clone(opts: {
-        resourceId: string;
-        threadId: string;
-        title?: string;
-        metadata?: Record<string, unknown>;
-      }): Promise<{ id: string; resourceId: string }>;
-    };
-    session(opts: unknown): Promise<Session>;
-  };
+  const harness = parent._internalGetHarnessForSubagentTool();
   const typeIds = harness._listSubagentTypeIds();
   if (typeIds.length === 0) return undefined;
 
@@ -124,7 +110,7 @@ export function createSpawnSubagentTool(parent: Session) {
         };
       }
 
-      const parentDepth = (parent as any).subagentDepth as number;
+      const parentDepth = parent.subagentDepth;
       const childDepth = parentDepth + 1;
       const maxDepth = harness._getSubagentMaxDepth();
       if (childDepth > maxDepth) {
@@ -225,7 +211,7 @@ export function createSpawnSubagentTool(parent: Session) {
       // `'fresh'` provisions a new per-session workspace; only valid under
       // `kind: 'per-session'` (validated at harness construction).
       const subagentWorkspaceMode = def.workspace ?? 'inherit';
-      child._subagentInheritWorkspace = subagentWorkspaceMode === 'inherit';
+      child._internalSetSubagentWorkspaceInheritance(subagentWorkspaceMode === 'inherit');
 
       const allowedWorkspaceTools = def.allowedWorkspaceTools ? new Set(def.allowedWorkspaceTools) : undefined;
       let workspaceToolNames: Set<string> | undefined;
@@ -331,18 +317,7 @@ export function createSpawnSubagentTool(parent: Session) {
 
       // Track the active subagent so `getDisplayState()` renders it.
 
-      const activeMap = (parent as any)._activeSubagents as Map<
-        string,
-        {
-          subagentSessionId: string;
-          agentType: string;
-          task: string;
-          parentToolCallId: string;
-          startedAt: number;
-          forked?: boolean;
-        }
-      >;
-      activeMap.set(toolCallId, {
+      parent._internalTrackActiveSubagent(toolCallId, {
         subagentSessionId: child.id,
         agentType,
         task,
@@ -371,7 +346,7 @@ export function createSpawnSubagentTool(parent: Session) {
         result = err instanceof Error ? err.message : String(err);
       } finally {
         unsub();
-        activeMap.delete(toolCallId);
+        parent._internalUntrackActiveSubagent(toolCallId);
         // Auto-close the subagent-tool child per §5.6. Best-effort: a
         // failed close shouldn't mask the tool's own result.
         try {

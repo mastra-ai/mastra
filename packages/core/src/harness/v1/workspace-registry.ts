@@ -79,7 +79,9 @@ export class WorkspaceRegistry {
   private readonly _emit: EventEmitter;
   private readonly _shared: SharedEntry | undefined;
   private readonly _perResource = new Map<string, PerResourceEntry>();
+  private readonly _perResourceResolving = new Map<string, Promise<PerResourceEntry>>();
   private readonly _perSession = new Map<string, PerSessionEntry>();
+  private readonly _perSessionResolving = new Map<string, Promise<PerSessionEntry>>();
   private readonly _resolvedProvider?: WorkspaceProvider;
   private _closed = false;
 
@@ -236,7 +238,24 @@ export class WorkspaceRegistry {
       existing.refCount += 1;
       return existing.workspace;
     }
+    let resolving = this._perResourceResolving.get(opts.resourceId);
+    if (!resolving) {
+      resolving = this._createPerResourceEntry(opts);
+      this._perResourceResolving.set(opts.resourceId, resolving);
+      void resolving
+        .finally(() => {
+          if (this._perResourceResolving.get(opts.resourceId) === resolving) {
+            this._perResourceResolving.delete(opts.resourceId);
+          }
+        })
+        .catch(() => {});
+    }
+    const entry = await resolving;
+    entry.refCount += 1;
+    return entry.workspace;
+  }
 
+  private async _createPerResourceEntry(opts: AcquirePerResourceOpts): Promise<PerResourceEntry> {
     const provider = this._resolvedProvider!;
     const ctx: WorkspaceProviderContext = {
       resourceId: opts.resourceId,
@@ -254,9 +273,10 @@ export class WorkspaceRegistry {
       throw new HarnessWorkspaceProvisioningError(provider.providerId, cause, undefined, opts.resourceId);
     }
     await this._initIfFresh(ws);
-    this._perResource.set(opts.resourceId, { workspace: ws, refCount: 1, provider, ctx });
+    const entry = { workspace: ws, refCount: 0, provider, ctx };
+    this._perResource.set(opts.resourceId, entry);
     this._emitStatus({ resourceId: opts.resourceId, providerId: provider.providerId, status: 'ready' });
-    return ws;
+    return entry;
   }
 
   async releasePerResource(opts: { resourceId: string }): Promise<void> {
@@ -304,6 +324,24 @@ export class WorkspaceRegistry {
       existing.refCount += 1;
       return existing.workspace;
     }
+    let resolving = this._perSessionResolving.get(opts.sessionId);
+    if (!resolving) {
+      resolving = this._createPerSessionEntry(opts);
+      this._perSessionResolving.set(opts.sessionId, resolving);
+      void resolving
+        .finally(() => {
+          if (this._perSessionResolving.get(opts.sessionId) === resolving) {
+            this._perSessionResolving.delete(opts.sessionId);
+          }
+        })
+        .catch(() => {});
+    }
+    const entry = await resolving;
+    entry.refCount += 1;
+    return entry.workspace;
+  }
+
+  private async _createPerSessionEntry(opts: AcquirePerSessionOpts): Promise<PerSessionEntry> {
     const provider = this._resolvedProvider!;
     const ctx: WorkspaceProviderContext = {
       resourceId: opts.resourceId,
@@ -336,20 +374,21 @@ export class WorkspaceRegistry {
       throw new HarnessWorkspaceProvisioningError(provider.providerId, cause, opts.sessionId, opts.resourceId);
     }
     await this._initIfFresh(ws);
-    this._perSession.set(opts.sessionId, {
+    const entry = {
       workspace: ws,
       provider,
       ctx,
-      refCount: 1,
+      refCount: 0,
       resourceId: opts.resourceId,
-    });
+    };
+    this._perSession.set(opts.sessionId, entry);
     this._emitStatus({
       sessionId: opts.sessionId,
       resourceId: opts.resourceId,
       providerId: provider.providerId,
       status: 'ready',
     });
-    return ws;
+    return entry;
   }
 
   inheritPerSession(opts: InheritPerSessionOpts): Workspace {

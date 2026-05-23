@@ -33,6 +33,7 @@ import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
+import type { CreatedAgentSignal } from '../../agent/signals';
 import type { AgentThreadSubscription, ToolsInput } from '../../agent/types';
 import { ModelRouterLanguageModel } from '../../llm/model/router';
 import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../processors';
@@ -986,6 +987,26 @@ export class Session {
   /** @internal — number of registered listeners (for tests). */
   get _internalListenerCount(): number {
     return this._emitter.listenerCount;
+  }
+
+  /** @internal — scoped access for the built-in `spawn_subagent` tool. */
+  _internalGetHarnessForSubagentTool(): Harness {
+    return this._harness;
+  }
+
+  /** @internal — marks whether a subagent child should inherit the parent's workspace. */
+  _internalSetSubagentWorkspaceInheritance(inherit: boolean): void {
+    this._subagentInheritWorkspace = inherit;
+  }
+
+  /** @internal — tracks a live child subagent for display-state projection. */
+  _internalTrackActiveSubagent(toolCallId: string, state: ActiveSubagentState): void {
+    this._activeSubagents.set(toolCallId, state);
+  }
+
+  /** @internal — removes a live child subagent from display-state projection. */
+  _internalUntrackActiveSubagent(toolCallId: string): void {
+    this._activeSubagents.delete(toolCallId);
   }
 
   /**
@@ -4452,6 +4473,7 @@ export class Session {
         finishOwnedReminderTurn();
         throw err;
       }
+      await this._persistSystemReminderSignal(dispatched.signal);
 
       const completion = this._awaitRunCompletion(dispatched.runId);
       const completionOrDelete = Promise.race([completion, activeTurnWaiter.promise]);
@@ -4498,6 +4520,7 @@ export class Session {
         ifIdle: { behavior: 'wake', streamOptions: {} as never },
       },
     );
+    await this._persistSystemReminderSignal(dispatched.signal);
 
     return {
       id: dispatched.signal.id,
@@ -4506,6 +4529,14 @@ export class Session {
       accepted: true,
       signal: dispatched.signal,
     };
+  }
+
+  private async _persistSystemReminderSignal(signal: CreatedAgentSignal): Promise<void> {
+    const memory = await this._harness._internalTryGetMemoryStorage();
+    if (!memory) return;
+    await memory.saveMessages({
+      messages: [signal.toDBMessage({ threadId: this.threadId, resourceId: this.resourceId })],
+    });
   }
 
   /**
@@ -7979,13 +8010,7 @@ export class Session {
     if (turn.resolveWorkspace === false) {
       workspace = this._workspace;
     } else {
-      try {
-        workspace = await this._getWorkspaceUnchecked();
-      } catch {
-        // Leave undefined — tools that need a workspace will get a null slot.
-        // The registry has already emitted workspace_error so subscribers know.
-        workspace = undefined;
-      }
+      workspace = await this._getWorkspaceUnchecked();
     }
     const harnessSlot: HarnessRequestContext<unknown> = {
       harnessId: this._harness.ownerId,

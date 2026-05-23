@@ -1,4 +1,5 @@
 export { HarnessLegacy } from './harness';
+export { convertStoredMessageToHarnessMessage } from './_shared/message-conversion';
 /**
  * @deprecated Compatibility alias for the legacy harness during the Harness v1 migration.
  * New code that wants this implementation should import `HarnessLegacy` from `@mastra/core/harness`;
@@ -57,3 +58,4 @@ export type {
   BuiltinToolId,
   TokenUsage,
 } from './types';
+export type { StoredMessageRow } from './_shared/message-conversion';

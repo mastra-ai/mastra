@@ -110,6 +110,43 @@ describe('Session.listMessages', () => {
     });
   });
 
+  it('maps persisted user-message signals from their stored text parts', async () => {
+    const { harness } = setupHarness();
+    await harness.threads.create({ resourceId: 'r1', threadId: 'thread-signal-user', title: 't' });
+    await seedMessages(harness, [
+      {
+        id: 'sig-user-1',
+        role: 'signal',
+        threadId: 'thread-signal-user',
+        resourceId: 'r1',
+        createdAt: new Date('2026-05-10T00:00:00Z'),
+        type: 'user-message',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello from signal' }],
+          metadata: {
+            signal: {
+              id: 'sig-user-1',
+              type: 'user-message',
+              createdAt: '2026-05-10T00:00:00.000Z',
+            },
+          },
+        },
+      } as MastraDBMessage,
+    ]);
+
+    const session = await harness.session({ resourceId: 'r1', threadId: 'thread-signal-user' });
+    const messages = await session.listMessages();
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        id: 'sig-user-1',
+        role: 'user',
+        content: [{ type: 'text', text: 'hello from signal' }],
+      }),
+    ]);
+  });
+
   it('splits a tool-invocation into separate tool_call + tool_result parts', async () => {
     const { harness } = setupHarness();
     await harness.threads.create({ resourceId: 'r1', threadId: 'thread-tools', title: 't' });
