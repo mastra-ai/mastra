@@ -548,6 +548,45 @@ describe('consumeAgentStream', () => {
       expect(planUpdates.find((p: any) => p.title === 'Updating memory')).toBeUndefined();
     });
 
+    it("streaming + 'cards': approval edits the running tool card in place (no second post)", async () => {
+      // Regression: previously the approval handler ignored toolMessageIds
+      // and always posted a fresh approval message, leaving the original
+      // running card stranded above it. The fix prefers editing the stashed
+      // running-card messageId so the approval buttons replace the running
+      // card in place — and the eventual tool-result edits the same message.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'cards' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+          },
+          {
+            type: 'tool-call-approval',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ] as any,
+        chatThread,
+      );
+
+      const StreamingPlan = (await getChatModule()).StreamingPlan;
+      const posts = calls.filter(c => c.kind === 'post');
+      const cardPosts = posts.filter(p => !((p as Extract<Call, { kind: 'post' }>).arg instanceof StreamingPlan));
+      // Only ONE platform post — the original running card.
+      expect(cardPosts).toHaveLength(1);
+      // Both the approval and the tool-result should edit that same message.
+      const edits = calls.filter(c => c.kind === 'editMessage') as Extract<Call, { kind: 'editMessage' }>[];
+      expect(edits).toHaveLength(2);
+      expect(edits[0]!.messageId).toBe('m1');
+      expect(edits[1]!.messageId).toBe('m1');
+    });
+
     it("'cards' approval does not push plan/task rows (no flash plan widget)", async () => {
       // The built-in approval handler used to push plan_update + task_update
       // unconditionally before posting the Block Kit card, which produced a
