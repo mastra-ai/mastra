@@ -134,4 +134,45 @@ describe('RouteHandlerService', () => {
       lastEventId: 'harness-v1:epoch-1:4',
     });
   });
+
+  it('forwards validated raw request containers to Harness handlers', async () => {
+    const context = await createDefaultTestContext();
+    const service = new RouteHandlerService(context.mastra, { mastra: context.mastra, prefix: '/api' });
+
+    const route = {
+      method: 'PATCH',
+      path: '/harness/:name/sessions/:sessionId/state',
+      responseType: 'json' as const,
+      pathParamSchema: z.object({ name: z.string(), sessionId: z.string() }),
+      queryParamSchema: z.object({ cursor: z.string().optional() }),
+      bodySchema: z.object({
+        name: z.string(),
+        requestBody: z.string().optional(),
+        value: z.boolean(),
+      }),
+      handler: vi.fn(async ({ name, sessionId, requestBody, requestPathParams, requestQueryParams }) => ({
+        name,
+        sessionId,
+        requestBody,
+        requestPathParams,
+        requestQueryParams,
+      })),
+    };
+
+    const result = await service.executeHandler(route, {
+      pathParams: { name: 'code', sessionId: 'session-1' },
+      queryParams: { cursor: 'page-2' },
+      body: { name: 'body-name', requestBody: 'spoofed', value: true },
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.data).toEqual({
+      name: 'body-name',
+      sessionId: 'session-1',
+      requestBody: { name: 'body-name', requestBody: 'spoofed', value: true },
+      requestPathParams: { name: 'code', sessionId: 'session-1' },
+      requestQueryParams: { cursor: 'page-2' },
+    });
+  });
 });

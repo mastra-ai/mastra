@@ -104,6 +104,7 @@ export const harnessSessionListItemSchema = z.object({
   harnessName: z.string(),
   resourceId: z.string(),
   threadId: z.string(),
+  version: z.number(),
   parentSessionId: z.string().optional(),
   lifecycle: lifecycleSchema,
   createdAt: z.number(),

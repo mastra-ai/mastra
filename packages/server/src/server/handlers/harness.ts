@@ -101,6 +101,7 @@ type HarnessSessionListItem = {
   harnessName: string;
   resourceId: string;
   threadId: string;
+  version: number;
   parentSessionId?: string;
   lifecycle: SessionLifecycleStatus;
   createdAt: number;
@@ -1773,6 +1774,7 @@ function mapSessionRecordToListItem(record: SessionRecord, displayState?: Sessio
     harnessName: record.harnessName,
     resourceId: record.resourceId,
     threadId: record.threadId,
+    version: record.version,
     lifecycle: lifecycleOf(record),
     createdAt: record.createdAt,
     lastActivityAt: record.lastActivityAt,

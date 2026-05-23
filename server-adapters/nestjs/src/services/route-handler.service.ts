@@ -63,6 +63,10 @@ export class RouteHandlerService {
     'registeredTools',
     'taskStore',
     'abortSignal',
+    'getHeader',
+    'requestBody',
+    'requestPathParams',
+    'requestQueryParams',
     'routePrefix',
   ]);
 
@@ -219,6 +223,13 @@ export class RouteHandlerService {
       taskStore: this.options.taskStore,
       abortSignal: params.abortSignal,
       getHeader: params.getHeader,
+      ...(route.path.startsWith('/harness/')
+        ? {
+            requestBody: validatedBody,
+            requestPathParams: validatedPathParams,
+            requestQueryParams: validatedQueryParams,
+          }
+        : {}),
       routePrefix: this.options.prefix,
     };
 
