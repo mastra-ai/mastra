@@ -5,6 +5,13 @@
  * index creation to validate the performance improvements.
  */
 
+import {
+  TABLE_MESSAGES,
+  TABLE_SCORERS,
+  TABLE_SPANS,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { PgDB } from '../db';
 import { PostgresStore } from '../index';
@@ -32,6 +39,16 @@ interface PerformanceComparison {
   improvementPercentage: number;
 }
 
+type DefaultIndexCreator = {
+  createDefaultIndexes(): Promise<void>;
+};
+
+/** Returns true when a storage domain exposes the default-index hook used by this perf helper. */
+function hasDefaultIndexCreator(domain: unknown): domain is DefaultIndexCreator {
+  return typeof (domain as Partial<DefaultIndexCreator> | undefined)?.createDefaultIndexes === 'function';
+}
+
+/** Runs the Postgres storage performance-index smoke and comparison suite against a configured database. */
 export class PostgresPerformanceTest {
   private store: PostgresStore;
   private memory!: MemoryStorage;
@@ -48,11 +65,17 @@ export class PostgresPerformanceTest {
     this.dbOps = new PgDB({ client: this.store.db });
   }
 
+  /** Initialize the store and memory domain used by the benchmark operations. */
   async init(): Promise<void> {
     await this.store.init();
-    this.memory = (await this.store.getStore('memory'))!;
+    const memory = await this.store.getStore('memory');
+    if (!memory) {
+      throw new Error('Memory store is unavailable after PostgresStore initialization');
+    }
+    this.memory = memory;
   }
 
+  /** Remove synthetic benchmark rows and refresh planner statistics for touched tables. */
   async cleanup(): Promise<void> {
     // Clean up test data more aggressively
     const db = this.store.db;
@@ -60,12 +83,12 @@ export class PostgresPerformanceTest {
     console.info('🧹 Cleaning up all test data...');
 
     // Clean threads and messages with broader patterns
-    await db.none('DELETE FROM mastra_threads WHERE title LIKE $1 OR id LIKE $2', ['perf_test_%', 'thread_%']);
-    await db.none('DELETE FROM mastra_messages WHERE content LIKE $1 OR id LIKE $2', ['%perf_test%', 'message_%']);
+    await db.none(`DELETE FROM ${TABLE_THREADS} WHERE title LIKE $1 OR id LIKE $2`, ['perf_test_%', 'thread_%']);
+    await db.none(`DELETE FROM ${TABLE_MESSAGES} WHERE content LIKE $1 OR id LIKE $2`, ['%perf_test%', 'message_%']);
 
-    // Clean up traces and evals (if tables exist)
+    // Clean up observability spans and evals (if tables exist)
     try {
-      await db.none('DELETE FROM mastra_traces WHERE id LIKE $1', ['trace_%']);
+      await db.none(`DELETE FROM ${TABLE_SPANS} WHERE "traceId" LIKE $1 OR "spanId" LIKE $2`, ['trace_%', 'span_%']);
     } catch {
       // Table might not exist
     }
@@ -80,14 +103,17 @@ export class PostgresPerformanceTest {
     }
 
     // Update PostgreSQL statistics after cleanup
-    try {
-      await db.none('ANALYZE mastra_threads, mastra_messages, mastra_traces, mastra_evals');
-      console.info('📊 Updated PostgreSQL statistics after cleanup');
-    } catch (error) {
-      console.warn('Could not update statistics:', error);
+    for (const table of [TABLE_THREADS, TABLE_MESSAGES, TABLE_SPANS, TABLE_SCORERS]) {
+      try {
+        await db.none(`ANALYZE ${table}`);
+      } catch (error) {
+        console.warn(`Could not update statistics for ${table}:`, error);
+      }
     }
+    console.info('📊 Updated PostgreSQL statistics after cleanup');
   }
 
+  /** Truncate benchmark tables when a run needs a fully clean database. */
   async resetDatabase(): Promise<void> {
     // Nuclear option: completely reset all tables
     const db = this.store.db;
@@ -95,9 +121,9 @@ export class PostgresPerformanceTest {
     console.info('💥 NUCLEAR CLEANUP: Resetting all tables...');
 
     try {
-      await db.none('TRUNCATE TABLE mastra_threads CASCADE');
-      await db.none('TRUNCATE TABLE mastra_messages CASCADE');
-      await db.none('TRUNCATE TABLE mastra_traces CASCADE');
+      await db.none(`TRUNCATE TABLE ${TABLE_THREADS} CASCADE`);
+      await db.none(`TRUNCATE TABLE ${TABLE_MESSAGES} CASCADE`);
+      await db.none(`TRUNCATE TABLE ${TABLE_SPANS} CASCADE`);
       await db.none('TRUNCATE TABLE mastra_evals CASCADE');
       console.info('🧨 All tables truncated');
     } catch (error) {
@@ -105,21 +131,30 @@ export class PostgresPerformanceTest {
     }
   }
 
+  /** Drop the performance indexes measured by the benchmark's before/after comparison. */
   async dropPerformanceIndexes(): Promise<void> {
     console.info('Dropping performance indexes...');
     // Get schema name for index naming
-    const schemaPrefix = this.store['schema'] ? `${this.store['schema']}_` : '';
+    const schemaPrefix = this.store['schema'] && this.store['schema'] !== 'public' ? `${this.store['schema']}_` : '';
 
     const indexesToDrop = [
       `${schemaPrefix}mastra_threads_resourceid_idx`,
       `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
       `${schemaPrefix}mastra_messages_thread_id_idx`,
       `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-      `${schemaPrefix}mastra_traces_name_idx`,
-      `${schemaPrefix}mastra_traces_name_pattern_idx`,
+      `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_name_idx`,
+      `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+      `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+      `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+      `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+      `${schemaPrefix}mastra_ai_spans_metadata_gin_idx`,
+      `${schemaPrefix}mastra_ai_spans_tags_gin_idx`,
       `${schemaPrefix}mastra_evals_agent_name_idx`,
       `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-      `${schemaPrefix}mastra_workflow_snapshot_resourceid_idx`,
+      `${schemaPrefix}${TABLE_WORKFLOW_SNAPSHOT}_resourceid_idx`,
     ];
 
     for (const indexName of indexesToDrop) {
@@ -132,13 +167,17 @@ export class PostgresPerformanceTest {
     }
   }
 
+  /** Ask each initialized storage domain to create its default indexes. */
   async createDefaultIndexes(): Promise<void> {
     console.info('Creating indexes...');
-    // Note: Indexes are now created by domain classes during init()
-    // This method re-initializes the store to ensure indexes are created
-    await this.store.init();
+    for (const domain of Object.values(this.store.stores)) {
+      if (hasDefaultIndexCreator(domain)) {
+        await domain.createDefaultIndexes();
+      }
+    }
   }
 
+  /** Seed synthetic threads, messages, and spans at the configured benchmark scale. */
   async seedTestData(): Promise<void> {
     console.info(`Seeding ${this.config.testDataSize} test records...`);
 
@@ -189,7 +228,7 @@ export class PostgresPerformanceTest {
       ]);
 
       await db.none(
-        `INSERT INTO mastra_threads (id, "resourceId", title, metadata, "createdAt", "updatedAt") VALUES ${values}`,
+        `INSERT INTO ${TABLE_THREADS} (id, "resourceId", title, metadata, "createdAt", "updatedAt") VALUES ${values}`,
         params,
       );
 
@@ -245,7 +284,7 @@ export class PostgresPerformanceTest {
       ]);
 
       await db.none(
-        `INSERT INTO mastra_messages (id, thread_id, "resourceId", content, role, type, "createdAt") VALUES ${values}`,
+        `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, "resourceId", content, role, type, "createdAt") VALUES ${values}`,
         params,
       );
 
@@ -254,87 +293,93 @@ export class PostgresPerformanceTest {
       }
     }
 
-    // Create test traces for trace performance testing
-    console.info('Inserting traces...');
+    // Create test spans for observability performance testing
+    console.info('Inserting spans...');
 
     try {
-      const traces: Array<{
-        id: string;
+      const spans: Array<{
+        spanId: string;
         name: string;
         traceId: string;
-        scope: string;
-        kind: number;
-        startTime: string; // bigint as string
-        endTime: string; // bigint as string
+        parentSpanId: string | null;
+        spanType: string;
+        isEvent: boolean;
+        startedAt: Date;
+        endedAt: Date;
         createdAt: Date;
-        parentSpanId?: string;
-        attributes?: object;
-        status?: object;
-        events?: object;
-        links?: object;
-        other?: string;
+        updatedAt: Date;
       }> = [];
 
       // Use same scale as main dataset - equal scaling across all tables!
-      const tracesCount = Math.floor(this.config.testDataSize);
-      console.info(`  Creating ${tracesCount.toLocaleString()} traces...`);
+      const spansCount = Math.floor(this.config.testDataSize);
+      console.info(`  Creating ${spansCount.toLocaleString()} spans...`);
 
-      for (let i = 0; i < tracesCount; i++) {
+      for (let i = 0; i < spansCount; i++) {
         const now = Date.now();
         const startTimeMs = now - Math.random() * 86400000 * 30; // Random time in last 30 days
         const endTimeMs = startTimeMs + Math.random() * 10000; // End 0-10 seconds after start
+        const startedAt = new Date(startTimeMs);
+        const endedAt = new Date(endTimeMs);
+        const createdAt = new Date(now - Math.random() * 86400000 * 30);
 
-        traces.push({
-          id: `trace_${i}`,
+        spans.push({
+          spanId: `span_${i}`,
           name: i % 5 === 0 ? 'test_trace' : `trace_${i % 10}`, // Some will match our test query
           traceId: `trace_${i}`,
-          scope: 'test_scope',
-          kind: 1,
-          startTime: (startTimeMs * 1000000).toString(), // Convert to nanoseconds as string
-          endTime: (endTimeMs * 1000000).toString(), // Convert to nanoseconds as string
-          createdAt: new Date(now - Math.random() * 86400000 * 30),
+          parentSpanId: null,
+          spanType: 'generic',
+          isEvent: false,
+          startedAt,
+          endedAt,
+          createdAt,
+          updatedAt: createdAt,
         });
       }
 
-      if (traces.length > 0) {
-        for (let i = 0; i < traces.length; i += batchSize) {
-          const batch = traces.slice(i, i + batchSize);
+      if (spans.length > 0) {
+        for (let i = 0; i < spans.length; i += batchSize) {
+          const batch = spans.slice(i, i + batchSize);
           const values = batch
             .map(
               (_, index) =>
-                `($${index * 8 + 1}, $${index * 8 + 2}, $${index * 8 + 3}, $${index * 8 + 4}, $${index * 8 + 5}, $${index * 8 + 6}, $${index * 8 + 7}, $${index * 8 + 8})`,
+                `($${index * 12 + 1}, $${index * 12 + 2}, $${index * 12 + 3}, $${index * 12 + 4}, $${index * 12 + 5}, $${index * 12 + 6}, $${index * 12 + 7}, $${index * 12 + 8}, $${index * 12 + 9}, $${index * 12 + 10}, $${index * 12 + 11}, $${index * 12 + 12})`,
             )
             .join(', ');
 
-          const params = batch.flatMap(trace => [
-            trace.id,
-            trace.name,
-            trace.traceId,
-            trace.scope,
-            trace.kind,
-            trace.startTime,
-            trace.endTime,
-            trace.createdAt,
+          const params = batch.flatMap(span => [
+            span.traceId,
+            span.spanId,
+            span.parentSpanId,
+            span.name,
+            span.spanType,
+            span.isEvent,
+            span.startedAt,
+            span.startedAt,
+            span.endedAt,
+            span.endedAt,
+            span.createdAt,
+            span.updatedAt,
           ]);
 
           await db.none(
-            `INSERT INTO mastra_traces (id, name, "traceId", scope, kind, "startTime", "endTime", "createdAt") VALUES ${values}`,
+            `INSERT INTO ${TABLE_SPANS} ("traceId", "spanId", "parentSpanId", name, "spanType", "isEvent", "startedAt", "startedAtZ", "endedAt", "endedAtZ", "createdAt", "updatedAt") VALUES ${values}`,
             params,
           );
 
           if (i % (batchSize * 10) === 0) {
-            console.info(`  Inserted ${Math.min(i + batchSize, traces.length)} / ${traces.length} traces`);
+            console.info(`  Inserted ${Math.min(i + batchSize, spans.length)} / ${spans.length} spans`);
           }
         }
-        console.info(`  Inserted ${traces.length} test traces`);
+        console.info(`  Inserted ${spans.length} test spans`);
       }
     } catch (error) {
-      throw new Error(`Failed to seed traces data: ${error}`);
+      throw new Error(`Failed to seed spans data: ${error}`);
     }
 
     console.info('Test data seeding completed');
   }
 
+  /** Measure one benchmark operation across the configured number of iterations. */
   async measureOperation(
     name: string,
     operation: () => Promise<any>,
@@ -368,6 +413,7 @@ export class PostgresPerformanceTest {
     };
   }
 
+  /** Run the benchmark operations for one index scenario. */
   async runPerformanceTests(scenario: 'without_indexes' | 'with_indexes'): Promise<PerformanceResult[]> {
     const results: PerformanceResult[] = [];
 
@@ -399,6 +445,7 @@ export class PostgresPerformanceTest {
     return results;
   }
 
+  /** Compare benchmark operation timings before and after default index creation. */
   async runComparisonTest(): Promise<PerformanceComparison[]> {
     console.info('\n=== Running Performance Comparison Test ===');
 
@@ -435,6 +482,7 @@ export class PostgresPerformanceTest {
     return comparisons;
   }
 
+  /** Print planner output for the benchmark's representative memory queries. */
   async analyzeCurrentQueries(): Promise<void> {
     const db = this.store.db;
     console.info('\n=== Query Execution Plans ===');
@@ -444,7 +492,7 @@ export class PostgresPerformanceTest {
       const threadPlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
-        FROM mastra_threads
+        FROM ${TABLE_THREADS}
         WHERE "resourceId" = 'resource_0'
         ORDER BY "createdAt" DESC
       `);
@@ -455,7 +503,7 @@ export class PostgresPerformanceTest {
       const messagePlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
-        FROM mastra_messages
+        FROM ${TABLE_MESSAGES}
         WHERE thread_id = 'thread_0'
         ORDER BY "createdAt" DESC
       `);
@@ -466,6 +514,7 @@ export class PostgresPerformanceTest {
     }
   }
 
+  /** Print before/after comparison rows for benchmark output. */
   printComparison(comparisons: PerformanceComparison[]): void {
     console.info('\n=== Performance Comparison Results ===');
     console.info('Operation                 | Without (ms) | With (ms) | Improvement | % Faster');
@@ -490,6 +539,7 @@ export class PostgresPerformanceTest {
     console.info(`Best improvement: ${maxOp?.operation} - ${maxImprovement.toFixed(2)}x faster`);
   }
 
+  /** Print raw benchmark result rows for one scenario. */
   printResults(results: PerformanceResult[]): void {
     console.info('\n=== Performance Test Results ===');
     console.info('Operation                 | Scenario         | Avg (ms) | Min (ms) | Max (ms) | Iterations');
@@ -507,12 +557,14 @@ export class PostgresPerformanceTest {
     }
   }
 
+  /** Print the performance indexes currently visible in the connected database. */
   async checkIndexes(): Promise<void> {
     const db = this.store.db;
     const indexes = await db.manyOrNone(`
       SELECT schemaname, tablename, indexname, indexdef
       FROM pg_indexes
       WHERE indexname LIKE '%mastra_%_idx'
+        OR indexname LIKE '%idx_harness_%'
       ORDER BY tablename, indexname
     `);
 
@@ -530,7 +582,7 @@ export class PostgresPerformanceTest {
 // Example usage
 async function runTest() {
   const test = new PostgresPerformanceTest({
-    connectionString: process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5432/mastra',
+    connectionString: process.env.DB_URL || 'postgresql://postgres:postgres@127.0.0.1:5435/mastra',
     testDataSize: 1000,
     iterations: 10,
   });

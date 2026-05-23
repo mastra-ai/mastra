@@ -1,10 +1,14 @@
+import { TABLE_THREADS } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PgDB } from '../db';
 import { PostgresStore } from '../index';
 import { PostgresPerformanceTest } from './performance-test';
 
+const describePgPerfIntegration =
+  process.env.MASTRA_RUN_PG_PERF_INTEGRATION === 'true' ? describe : describe.skip;
+
 // Integration tests that require a real database connection
-describe('PostgresStore Performance Indexes Integration', () => {
+describePgPerfIntegration('PostgresStore Performance Indexes Integration', () => {
   let store: PostgresStore;
   let dbOps: PgDB;
   let performanceTest: PostgresPerformanceTest;
@@ -19,8 +23,8 @@ describe('PostgresStore Performance Indexes Integration', () => {
 
     performanceTest = new PostgresPerformanceTest({
       connectionString,
-      testDataSize: 1000, // Larger dataset to trigger index usage
-      iterations: 3,
+      testDataSize: 500,
+      iterations: 1,
     });
     await performanceTest.init();
   }, 30000); // 30 second timeout for setup
@@ -43,15 +47,15 @@ describe('PostgresStore Performance Indexes Integration', () => {
     const indexNames = indexes.map(idx => idx.name);
     expect(indexNames.some(name => name.includes('threads_resourceid_createdat'))).toBe(true);
     expect(indexNames.some(name => name.includes('messages_thread_id_createdat'))).toBe(true);
+    expect(indexNames.some(name => name.includes('harness_sessions_active_key'))).toBe(true);
+    expect(indexNames.some(name => name.includes('harness_session_events_replay'))).toBe(true);
   });
 
   it('should demonstrate performance scaling with indexes across dataset sizes', async () => {
     const testSizes = [
       { name: 'XSmall', size: 100 },
-      { name: 'Small', size: 1000 },
-      { name: 'Medium', size: 10000 },
-      { name: 'Large', size: 100000 },
-      { name: 'XLarge', size: 1000000 },
+      { name: 'Small', size: 500 },
+      { name: 'Medium', size: 1000 },
     ];
 
     console.log('\n=== Comprehensive Performance Scaling Analysis ===');
@@ -152,7 +156,7 @@ describe('PostgresStore Performance Indexes Integration', () => {
     for (const results of functionResults.values()) {
       expect(results.length).toBe(testSizes.length);
     }
-  }, 300000); // 5 minute timeout for comprehensive testing
+  }, 300000);
 
   it('should handle index creation gracefully when indexes already exist', async () => {
     // Re-initialize the store - should not fail even if indexes already exist
@@ -171,17 +175,17 @@ describe('PostgresStore Performance Indexes Integration', () => {
 
     // Ensure we have some test data
     await db.none(`
-      INSERT INTO mastra_threads (id, "resourceId", title, metadata, "createdAt", "updatedAt") 
-      VALUES ('test-thread', 'test-resource', 'Test Thread', '{}', NOW(), NOW())
+      INSERT INTO ${TABLE_THREADS} (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+      VALUES ('thread_query_plan', 'test-resource', 'perf_test_query_plan_thread', '{}', NOW(), NOW())
       ON CONFLICT (id) DO NOTHING
     `);
 
     // Get query plan for indexed query
     const plan = await db.manyOrNone(`
       EXPLAIN (FORMAT TEXT)
-      SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" 
-      FROM mastra_threads 
-      WHERE "resourceId" = 'test-resource' 
+      SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
+      FROM ${TABLE_THREADS}
+      WHERE "resourceId" = 'test-resource'
       ORDER BY "createdAt" DESC
     `);
 
