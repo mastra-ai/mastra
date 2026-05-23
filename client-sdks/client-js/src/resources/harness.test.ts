@@ -181,6 +181,18 @@ describe('Harnesses Resource', () => {
     expect(stream.lastEventId).toBe('harness-v1:epoch-1:3');
   });
 
+  it('surfaces malformed Harness SSE data with event context', async () => {
+    mockSseResponse(['id: harness-v1:epoch-1:2\ndata: {bad json}\n\n']);
+
+    const stream = await client.harnesses.session('code', 'session-1').events();
+
+    await expect(async () => {
+      for await (const _event of stream) {
+        // The malformed frame should fail before yielding.
+      }
+    }).rejects.toThrow('Failed to parse Harness SSE event harness-v1:epoch-1:2');
+  });
+
   it('exposes reconnect result lookups without re-admitting work', async () => {
     mockJsonResponse({
       source: 'inbox-response',
@@ -236,6 +248,22 @@ describe('Harnesses Resource', () => {
           'If-Match': '"7"',
         }),
         body: JSON.stringify({ selected: true }),
+      }),
+    );
+  });
+
+  it('preserves already quoted ETags when patching session state', async () => {
+    mockJsonResponse({ selected: true });
+
+    await client.harnesses.session('code', 'session-1').patchState({ selected: true }, { ifMatch: '"8"' });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/harness/code/sessions/session-1/state',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({
+          'If-Match': '"8"',
+        }),
       }),
     );
   });

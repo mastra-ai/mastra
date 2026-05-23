@@ -612,7 +612,7 @@ describe('Harness server routes', () => {
     expect(harness.loadSession).toHaveBeenCalledWith({ sessionId: 'session-1', includeClosed: true });
     expect(harness.session).not.toHaveBeenCalled();
     expect(body).toMatchObject({
-      summary: { sessionId: 'session-1', lifecycle: 'active' },
+      summary: { sessionId: 'session-1', lifecycle: 'active', version: 7 },
       displayState: { sessionId: 'session-1' },
       tokenUsage: { totalTokens: 3 },
     });

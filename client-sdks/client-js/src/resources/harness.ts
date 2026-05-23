@@ -81,19 +81,37 @@ function appendQuery(
   )}`;
 }
 
+function readSseField(line: string, field: string): string | undefined {
+  const prefix = `${field}:`;
+  if (!line.startsWith(prefix)) {
+    return undefined;
+  }
+  const value = line.slice(prefix.length);
+  return value.startsWith(' ') ? value.slice(1) : value;
+}
+
 function parseSseBlock(block: string): HarnessEvent | null {
-  const normalizedBlock = block.replace(/\r\n/g, '\n').trim();
-  if (!normalizedBlock) {
+  const normalizedBlock = block.replace(/\r\n/g, '\n');
+  if (!normalizedBlock.trim()) {
     return null;
   }
 
   let eventId: string | undefined;
   const dataLines: string[] = [];
   for (const line of normalizedBlock.split('\n')) {
-    if (line.startsWith('id:')) {
-      eventId = line.slice('id:'.length).trim();
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice('data:'.length).trim());
+    if (!line || line.startsWith(':')) {
+      continue;
+    }
+
+    const id = readSseField(line, 'id');
+    if (id !== undefined) {
+      eventId = id;
+      continue;
+    }
+
+    const data = readSseField(line, 'data');
+    if (data !== undefined) {
+      dataLines.push(data);
     }
   }
   const data = dataLines.join('\n');
@@ -102,8 +120,13 @@ function parseSseBlock(block: string): HarnessEvent | null {
     return null;
   }
 
-  const event = JSON.parse(data) as HarnessEvent;
-  return eventId ? { ...event, id: eventId } : event;
+  try {
+    const event = JSON.parse(data) as HarnessEvent;
+    return eventId ? { ...event, id: eventId } : event;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to parse Harness SSE event${eventId ? ` ${eventId}` : ''}: ${message}`);
+  }
 }
 
 function findSseBoundary(buffer: string): { index: number; length: number } | null {
@@ -291,10 +314,11 @@ export class RemoteSession extends BaseResource {
   }
 
   patchState(body: HarnessStatePatch, options: HarnessPatchStateOptions): Promise<unknown> {
+    const ifMatch = String(options.ifMatch);
     return this.request(this.withContext(`${this.basePath}/state`, options.requestContext), {
       method: 'PATCH',
       body,
-      headers: { 'If-Match': `"${options.ifMatch}"` },
+      headers: { 'If-Match': ifMatch.startsWith('"') && ifMatch.endsWith('"') ? ifMatch : `"${ifMatch}"` },
     });
   }
 

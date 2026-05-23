@@ -20036,6 +20036,7 @@ export type GetHarnessNameSessions_Response = {
     harnessName: string;
     resourceId: string;
     threadId: string;
+    version: number;
     parentSessionId?: string | undefined;
     lifecycle: 'active' | 'closing' | 'closed';
     createdAt: number;
@@ -20156,6 +20157,7 @@ export type PostHarnessNameSessions_Response = {
       harnessName: string;
       resourceId: string;
       threadId: string;
+      version: number;
       parentSessionId?: string | undefined;
       lifecycle: 'active' | 'closing' | 'closed';
       createdAt: number;
@@ -20295,6 +20297,7 @@ export type GetHarnessNameSessionsSessionId_Response = {
     harnessName: string;
     resourceId: string;
     threadId: string;
+    version: number;
     parentSessionId?: string | undefined;
     lifecycle: 'active' | 'closing' | 'closed';
     createdAt: number;
