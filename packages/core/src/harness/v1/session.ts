@@ -75,6 +75,7 @@ import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '
 import type { HarnessMessage } from '../types';
 
 import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID, askUser, submitPlan } from './builtin-tools';
+import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './builtin-tools/spawn-subagent';
 import {
   HarnessAdmissionConflictError,
   HarnessAttachmentUnavailableError,
@@ -109,7 +110,6 @@ import type {
   TaskUpdatedEvent,
 } from './events';
 import type { Harness } from './harness';
-import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagent-tool';
 import type {
   AgentResult,
   AgentStream,

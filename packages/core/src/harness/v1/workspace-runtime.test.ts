@@ -35,9 +35,9 @@ import { LocalFilesystem, WORKSPACE_TOOLS, Workspace as WorkspaceImpl } from '..
 import type { Workspace } from '../../workspace';
 
 import { setupHarness } from './__test-utils__/setup';
+import { createSpawnSubagentTool } from './builtin-tools/spawn-subagent';
 import { HarnessConfigError, HarnessWorkspaceProvisioningError } from './errors';
 import { Harness } from './harness';
-import { createSpawnSubagentTool } from './spawn-subagent-tool';
 import type { HarnessRequestContext } from './types';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
 import { nonDurableProvider } from './workspace/provider';

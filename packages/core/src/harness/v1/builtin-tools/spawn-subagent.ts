@@ -18,10 +18,10 @@
 
 import { z } from 'zod';
 
-import { createTool } from '../../tools/tool';
-import { createWorkspaceTools } from '../../workspace/tools';
-import { HarnessSubagentDepthExceededError, HarnessValidationError } from './errors';
-import type { Session } from './session';
+import { createTool } from '../../../tools/tool';
+import { createWorkspaceTools } from '../../../workspace/tools';
+import { HarnessSubagentDepthExceededError, HarnessValidationError } from '../errors';
+import type { Session } from '../session';
 
 export const SPAWN_SUBAGENT_TOOL_ID = 'spawn_subagent';
 

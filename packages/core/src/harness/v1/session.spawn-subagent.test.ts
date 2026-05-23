@@ -21,9 +21,9 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { buildFakeOutput } from './__test-utils__/fake-output';
 
+import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './builtin-tools/spawn-subagent';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
-import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagent-tool';
 
 class FakeAgent extends Agent<any, any, any> {
   chunks: any[] = [];
