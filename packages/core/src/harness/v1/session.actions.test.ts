@@ -135,6 +135,22 @@ class HangingMcpServer extends MockMcpServer {
   }
 }
 
+class AbortAwareHangingMcpServer extends MockMcpServer {
+  getToolListInfo(requestContext?: RequestContext) {
+    this.toolListCallCount++;
+    this.lastToolListRequestContext = requestContext;
+    const abortSignal = requestContext?.get<'harness', { abortSignal?: AbortSignal }>('harness')?.abortSignal;
+    return new Promise<ReturnType<MockMcpServer['getToolListInfo']>>((_, reject) => {
+      const rejectAborted = () => reject(new Error('server aborted'));
+      if (abortSignal?.aborted) {
+        rejectAborted();
+        return;
+      }
+      abortSignal?.addEventListener('abort', rejectAborted, { once: true });
+    });
+  }
+}
+
 class GatedMcpServer extends MockMcpServer {
   private releaseGates: Array<() => void> = [];
 
@@ -682,11 +698,29 @@ describe('Session action catalog (PF-576)', () => {
     });
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-    await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toMatchObject([
-      { id: 'mcp-tool:healthy:search_files' },
+    const first = await session.actions.list();
+    expect(first).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'mcp-server:failing',
+          source: { kind: 'mcp-server', serverKey: 'failing' },
+          status: 'unavailable',
+          statusReason: 'mcp_tool_catalog_failed',
+          statusMessage: 'MCP tool catalog unavailable',
+          label: 'Failing',
+          permissions: { mcpScopes: ['failing'] },
+          mcp: { serverName: 'Failing', serverVersion: '1.0.0' },
+        }),
+        expect.objectContaining({ id: 'mcp-tool:healthy:search_files', status: 'available' }),
+      ]),
+    );
+    expect(JSON.stringify(first)).not.toContain('mcp unavailable');
+
+    await expect(session.actions.list({ source: 'mcp-server' })).resolves.toEqual([
+      expect.objectContaining({ id: 'mcp-server:failing', statusReason: 'mcp_tool_catalog_failed' }),
     ]);
-    await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toMatchObject([
-      { id: 'mcp-tool:healthy:search_files' },
+    await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toEqual([
+      expect.objectContaining({ id: 'mcp-tool:healthy:search_files' }),
     ]);
     expect(healthy.toolListCallCount).toBe(1);
     expect(failing.toolListCallCount).toBe(1);
@@ -752,23 +786,85 @@ describe('Session action catalog (PF-576)', () => {
       });
       const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-      const first = session.actions.list({ source: 'mcp-tool' });
+      const first = session.actions.list({ source: 'mcp-server' });
       await vi.waitFor(() => expect(hanging.toolListCallCount).toBe(1));
       await vi.advanceTimersByTimeAsync(2_000);
-      await expect(first).resolves.toEqual([]);
+      await expect(first).resolves.toEqual([
+        expect.objectContaining({
+          id: 'mcp-server:hanging',
+          source: { kind: 'mcp-server', serverKey: 'hanging' },
+          status: 'unavailable',
+          statusReason: 'mcp_tool_catalog_timeout',
+          statusMessage: 'MCP tool catalog timed out',
+        }),
+      ]);
 
-      await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toEqual([]);
+      await expect(session.actions.list({ source: 'mcp-server' })).resolves.toEqual([
+        expect.objectContaining({ id: 'mcp-server:hanging', statusReason: 'mcp_tool_catalog_timeout' }),
+      ]);
       expect(hanging.toolListCallCount).toBe(1);
 
-      await vi.advanceTimersByTimeAsync(5_001);
-      const afterBackoff = session.actions.list({ source: 'mcp-tool' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      const afterBackoff = session.actions.list({ source: 'mcp-server' });
       await vi.waitFor(() => expect(hanging.toolListCallCount).toBe(2));
       await vi.advanceTimersByTimeAsync(2_000);
-      await expect(afterBackoff).resolves.toEqual([]);
+      await expect(afterBackoff).resolves.toEqual([
+        expect.objectContaining({ id: 'mcp-server:hanging', statusReason: 'mcp_tool_catalog_timeout' }),
+      ]);
 
-      await vi.advanceTimersByTimeAsync(5_001);
-      await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toEqual([]);
+      await vi.advanceTimersByTimeAsync(30_001);
+      await expect(session.actions.list({ source: 'mcp-server' })).resolves.toEqual([
+        expect.objectContaining({
+          id: 'mcp-server:hanging',
+          statusReason: 'mcp_tool_catalog_retry_suppressed',
+          statusMessage: 'MCP tool catalog retry delayed',
+        }),
+      ]);
       expect(hanging.toolListCallCount).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps timed-out MCP discovery status when the server rejects on abort', async () => {
+    vi.useFakeTimers();
+    try {
+      const hanging = new AbortAwareHangingMcpServer({
+        id: 'abort-aware',
+        name: 'Abort aware',
+        version: '1.0.0',
+        tools: { search_files: makeTool() },
+      });
+      const harness = new Harness({
+        modes: [{ id: 'default', agentId: 'default' }],
+        defaultModeId: 'default',
+      });
+      new Mastra({
+        agents: { default: makeAgent() },
+        storage: new InMemoryStore(),
+        mcpServers: { hanging },
+        harness,
+      });
+      const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+      const first = session.actions.list({ source: 'mcp-server' });
+      await vi.waitFor(() => expect(hanging.toolListCallCount).toBe(1));
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(first).resolves.toEqual([
+        expect.objectContaining({
+          id: 'mcp-server:hanging',
+          statusReason: 'mcp_tool_catalog_timeout',
+        }),
+      ]);
+      await vi.advanceTimersByTimeAsync(0);
+
+      await expect(session.actions.list({ source: 'mcp-server' })).resolves.toEqual([
+        expect.objectContaining({
+          id: 'mcp-server:hanging',
+          statusReason: 'mcp_tool_catalog_timeout',
+        }),
+      ]);
+      expect(hanging.toolListCallCount).toBe(1);
     } finally {
       vi.useRealTimers();
     }
@@ -795,12 +891,16 @@ describe('Session action catalog (PF-576)', () => {
       });
       const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-      const first = session.actions.list({ source: 'mcp-tool' });
+      const first = session.actions.list({ source: 'mcp-server' });
       await vi.waitFor(() => expect(slow.toolListCallCount).toBe(1));
       await vi.advanceTimersByTimeAsync(2_000);
-      await expect(first).resolves.toEqual([]);
+      await expect(first).resolves.toEqual([
+        expect.objectContaining({ id: 'mcp-server:slow', statusReason: 'mcp_tool_catalog_timeout' }),
+      ]);
 
-      await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toEqual([]);
+      await expect(session.actions.list({ source: 'mcp-server' })).resolves.toEqual([
+        expect.objectContaining({ id: 'mcp-server:slow', statusReason: 'mcp_tool_catalog_timeout' }),
+      ]);
       expect(slow.toolListCallCount).toBe(1);
 
       slow.release();
@@ -836,13 +936,15 @@ describe('Session action catalog (PF-576)', () => {
       });
       const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-      const first = session.actions.list({ source: 'mcp-tool' });
+      const first = session.actions.list({ source: 'mcp-server' });
       await vi.waitFor(() => expect(slow.toolListCallCount).toBe(1));
       await vi.advanceTimersByTimeAsync(2_000);
-      await expect(first).resolves.toEqual([]);
+      await expect(first).resolves.toEqual([
+        expect.objectContaining({ id: 'mcp-server:late', statusReason: 'mcp_tool_catalog_timeout' }),
+      ]);
 
-      await vi.advanceTimersByTimeAsync(5_001);
-      const retry = session.actions.list({ source: 'mcp-tool' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      const retry = session.actions.list({ source: 'mcp-server' });
       await vi.waitFor(() => expect(slow.toolListCallCount).toBe(2));
 
       slow.release(0);
@@ -854,7 +956,9 @@ describe('Session action catalog (PF-576)', () => {
       });
 
       await vi.advanceTimersByTimeAsync(2_000);
-      await expect(retry).resolves.toEqual([]);
+      await expect(retry).resolves.toEqual([
+        expect.objectContaining({ id: 'mcp-server:late', statusReason: 'mcp_tool_catalog_timeout' }),
+      ]);
       await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toMatchObject([
         { id: 'mcp-tool:late:search_files' },
       ]);
@@ -996,8 +1100,20 @@ describe('Session action catalog (PF-576)', () => {
     });
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-    await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toEqual([]);
-    await expect(session.actions.list({ source: 'mcp-tool' })).resolves.toEqual([]);
+    const failed = await session.actions.list({ source: 'mcp-server' });
+    expect(failed).toEqual([
+      expect.objectContaining({
+        id: 'mcp-server:flaky',
+        source: { kind: 'mcp-server', serverKey: 'flaky' },
+        status: 'unavailable',
+        statusReason: 'mcp_tool_catalog_failed',
+        statusMessage: 'MCP tool catalog unavailable',
+      }),
+    ]);
+    expect(JSON.stringify(failed)).not.toContain('temporary mcp unavailable');
+    await expect(session.actions.list({ source: 'mcp-server' })).resolves.toEqual([
+      expect.objectContaining({ id: 'mcp-server:flaky', statusReason: 'mcp_tool_catalog_failed' }),
+    ]);
     expect(flaky.toolListCallCount).toBe(1);
 
     await session.actions.refresh();

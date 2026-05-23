@@ -655,7 +655,7 @@ export interface HarnessMcpToolDescriptor {
 /**
  * Source kinds exposed by the read-only desktop action catalog.
  */
-export type HarnessActionCatalogSourceKind = 'skill' | 'mcp-tool';
+export type HarnessActionCatalogSourceKind = 'skill' | 'mcp-server' | 'mcp-tool';
 
 export interface HarnessActionCatalogSkillSource {
   kind: 'skill';
@@ -675,7 +675,23 @@ export interface HarnessActionCatalogMcpToolSource {
   toolName: string;
 }
 
-export type HarnessActionCatalogSource = HarnessActionCatalogSkillSource | HarnessActionCatalogMcpToolSource;
+export interface HarnessActionCatalogMcpServerSource {
+  kind: 'mcp-server';
+  /** Registered MCP server key. */
+  serverKey: string;
+}
+
+export type HarnessActionCatalogSource =
+  | HarnessActionCatalogSkillSource
+  | HarnessActionCatalogMcpServerSource
+  | HarnessActionCatalogMcpToolSource;
+
+export type HarnessActionCatalogEntryStatus = 'available' | 'unavailable' | 'auth_required' | 'permission_denied';
+
+export type HarnessActionCatalogUnavailableReason =
+  | 'mcp_tool_catalog_failed'
+  | 'mcp_tool_catalog_timeout'
+  | 'mcp_tool_catalog_retry_suppressed';
 
 /**
  * Read-only action catalog entry for desktop hosts.
@@ -691,7 +707,11 @@ export interface HarnessActionCatalogEntry {
   /** Source reference that can be used to locate the owning descriptor. */
   source: HarnessActionCatalogSource;
   /** Current availability hint for catalog UIs. */
-  status: 'available';
+  status: HarnessActionCatalogEntryStatus;
+  /** Stable machine-readable reason for unavailable or gated entries. */
+  statusReason?: HarnessActionCatalogUnavailableReason;
+  /** Safe display summary for unavailable or gated entries. */
+  statusMessage?: string;
   /** User-facing action label. */
   label: string;
   /** Optional human-readable description. */

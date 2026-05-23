@@ -108,6 +108,7 @@ import type {
   HarnessActionCatalogEntry,
   HarnessActionCatalogListOptions,
   HarnessActionCatalogSourceKind,
+  HarnessActionCatalogUnavailableReason,
   HarnessMcpServerDescriptor,
   HarnessMcpToolDescriptor,
   HarnessMode,
@@ -199,12 +200,13 @@ const ACTION_CATALOG_DEFAULT_LIMIT = 100;
 const ACTION_CATALOG_MAX_LIMIT = 500;
 const ACTION_CATALOG_MCP_LIST_TIMEOUT_MS = 2_000;
 const ACTION_CATALOG_MCP_SUCCESS_CACHE_MS = 5_000;
-const ACTION_CATALOG_MCP_FAILURE_CACHE_MS = 5_000;
+const ACTION_CATALOG_MCP_FAILURE_CACHE_MS = 30_000;
 const ACTION_CATALOG_MCP_MAX_TIMEOUT_RETRIES = 1;
-const ACTION_CATALOG_SOURCE_KINDS: readonly HarnessActionCatalogSourceKind[] = ['skill', 'mcp-tool'];
+const ACTION_CATALOG_SOURCE_KINDS: readonly HarnessActionCatalogSourceKind[] = ['skill', 'mcp-server', 'mcp-tool'];
 const ACTION_CATALOG_SOURCE_ORDER: Record<HarnessActionCatalogSourceKind, number> = {
   skill: 0,
-  'mcp-tool': 1,
+  'mcp-server': 1,
+  'mcp-tool': 2,
 };
 const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'required',
@@ -1737,9 +1739,11 @@ export class Session {
   }
 
   private _actionCatalogSearchText(entry: HarnessActionCatalogEntry): string {
-    const parts = [entry.id, entry.label, entry.description, entry.category];
+    const parts = [entry.id, entry.label, entry.description, entry.category, entry.status, entry.statusReason];
     if (entry.source.kind === 'skill') {
       parts.push(entry.source.skillName, entry.source.filePath);
+    } else if (entry.source.kind === 'mcp-server') {
+      parts.push(entry.source.serverKey, entry.mcp?.serverName);
     } else {
       parts.push(entry.source.serverKey, entry.source.toolName, entry.mcp?.serverName);
     }
@@ -1754,7 +1758,8 @@ export class Session {
   private async _buildActionCatalogEntries(
     source?: HarnessActionCatalogSourceKind,
   ): Promise<HarnessActionCatalogEntry[]> {
-    const skillEntries = source === 'mcp-tool' ? [] : await this._resolveSkillActionCatalogEntries();
+    const skillEntries =
+      source === 'mcp-tool' || source === 'mcp-server' ? [] : await this._resolveSkillActionCatalogEntries();
     const mcpEntries: HarnessActionCatalogEntry[] = [];
     if (source !== 'skill') {
       mcpEntries.push(...(await this._resolveMcpActionCatalogEntries()));
@@ -1865,6 +1870,32 @@ export class Session {
     };
   }
 
+  private _projectUnavailableMcpActionCatalogEntry(
+    server: HarnessMcpServerDescriptor,
+    reason: HarnessActionCatalogUnavailableReason,
+  ): HarnessActionCatalogEntry {
+    const statusMessage =
+      reason === 'mcp_tool_catalog_timeout'
+        ? 'MCP tool catalog timed out'
+        : reason === 'mcp_tool_catalog_retry_suppressed'
+          ? 'MCP tool catalog retry delayed'
+          : 'MCP tool catalog unavailable';
+    return {
+      id: `mcp-server:${encodeActionCatalogIdPart(server.key)}`,
+      source: { kind: 'mcp-server', serverKey: server.key },
+      status: 'unavailable',
+      statusReason: reason,
+      statusMessage,
+      label: server.name,
+      ...(server.description ? { description: server.description } : {}),
+      permissions: { mcpScopes: [server.key] },
+      mcp: {
+        serverName: server.name,
+        serverVersion: server.version,
+      },
+    };
+  }
+
   private _actionMcpCatalogCacheKey(server: HarnessMcpServerDescriptor, workspaceId: string): string {
     return [server.key, this._record.modeId, this._record.modelId ?? '', workspaceId].join('\0');
   }
@@ -1935,17 +1966,17 @@ export class Session {
       })
       .catch(error => {
         if (this._actionsMcpEntriesResolvingByServer.get(cacheKey) !== pending) return;
-        const timeoutWorkStillTracked =
-          error instanceof ActionCatalogMcpListTimeoutError &&
-          this._actionsMcpTimedOutWorkByServer.get(cacheKey)?.work === work;
+        const timeoutWorkStillTracked = this._actionsMcpTimedOutWorkByServer.get(cacheKey)?.work === work;
+        const didCatalogTimeout =
+          error instanceof ActionCatalogMcpListTimeoutError || (didTimeout() && timeoutWorkStillTracked);
         const existingCache = this._actionsMcpEntriesCacheByServer.get(cacheKey);
         const hasSuccessfulTimedOutResult = existingCache?.successful === true;
-        if (
-          (!(error instanceof ActionCatalogMcpListTimeoutError) || timeoutWorkStillTracked) &&
-          !hasSuccessfulTimedOutResult
-        ) {
+        if ((!didCatalogTimeout || timeoutWorkStillTracked) && !hasSuccessfulTimedOutResult) {
+          const reason: HarnessActionCatalogUnavailableReason = didCatalogTimeout
+            ? 'mcp_tool_catalog_timeout'
+            : 'mcp_tool_catalog_failed';
           this._actionsMcpEntriesCacheByServer.set(cacheKey, {
-            entries: [],
+            entries: [this._projectUnavailableMcpActionCatalogEntry(server, reason)],
             expiresAt: Date.now() + ACTION_CATALOG_MCP_FAILURE_CACHE_MS,
           });
         }
@@ -1965,7 +1996,7 @@ export class Session {
       .catch(() => {
         if (didTimeout() && this._actionsMcpTimedOutWorkByServer.get(cacheKey)?.work === work) {
           this._actionsMcpEntriesCacheByServer.set(cacheKey, {
-            entries: [],
+            entries: [this._projectUnavailableMcpActionCatalogEntry(server, 'mcp_tool_catalog_timeout')],
             expiresAt: Date.now() + ACTION_CATALOG_MCP_FAILURE_CACHE_MS,
           });
         }
@@ -1991,7 +2022,7 @@ export class Session {
       timedOutWork &&
       (timedOutWork.retryAfter > Date.now() || timedOutWork.retryCount >= ACTION_CATALOG_MCP_MAX_TIMEOUT_RETRIES)
     ) {
-      const entries: HarnessActionCatalogEntry[] = [];
+      const entries = [this._projectUnavailableMcpActionCatalogEntry(server, 'mcp_tool_catalog_retry_suppressed')];
       this._actionsMcpEntriesCacheByServer.set(cacheKey, {
         entries,
         expiresAt:
@@ -2010,8 +2041,10 @@ export class Session {
       this._startMcpActionCatalogEntriesForServer(server, cacheKey, (timedOutWork?.retryCount ?? -1) + 1);
     try {
       return await pending;
-    } catch {
-      return [];
+    } catch (error) {
+      const reason: HarnessActionCatalogUnavailableReason =
+        error instanceof ActionCatalogMcpListTimeoutError ? 'mcp_tool_catalog_timeout' : 'mcp_tool_catalog_failed';
+      return [this._projectUnavailableMcpActionCatalogEntry(server, reason)];
     }
   }
 
