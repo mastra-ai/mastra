@@ -316,12 +316,11 @@ export class AgentChannels {
       // handled the action, or undefined for any other action ID.
       if (onAction !== false) {
         chat.onAction(async event => {
-          const boundDefault = () => this.defaultActionHandler(event);
           if (typeof onAction === 'function') {
-            await onAction(event, boundDefault);
+            await onAction(event, () => this.defaultActionHandler(event));
             return;
           }
-          await boundDefault();
+          await this.defaultActionHandler(event);
         });
       }
 
@@ -330,8 +329,7 @@ export class AgentChannels {
       if (onReaction !== false) {
         chat.onReaction(async event => {
           if (typeof onReaction === 'function') {
-            const boundDefault = async () => {};
-            await onReaction(event, boundDefault);
+            await onReaction(event, async () => {});
           }
         });
       }
