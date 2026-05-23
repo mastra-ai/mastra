@@ -474,6 +474,22 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
     });
 
+    it('should give split prompt messages stable unique IDs when projecting signals', () => {
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'split-signal',
+        type: 'user-message',
+        contents: [
+          { role: 'user' as const, content: 'First signal prompt message' },
+          { role: 'user' as const, content: 'Second signal prompt message' },
+        ],
+      });
+
+      const promptMessages = (list as any).convertSignalForModelPrompt(signal.toDBMessage()) as MastraDBMessage[];
+      expect(promptMessages).toHaveLength(2);
+      expect(promptMessages.map(message => message.id)).toEqual(['split-signal', 'split-signal:prompt:1']);
+    });
+
     it('should normalize regular input signals using transcript timestamps', () => {
       const baseTime = Date.now() + 60_000;
       const responseTime = new Date(baseTime);
@@ -623,6 +639,66 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       const createdAt2 = (result[1].metadata as { createdAt?: string | Date })?.createdAt;
       expect(new Date(createdAt1!).getTime()).toEqual(time1.getTime());
       expect(new Date(createdAt2!).getTime()).toEqual(time2.getTime());
+    });
+
+    it('should preserve historical response timestamps when part timestamps advance the watermark', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+
+        const list = new MessageList();
+        list.add(
+          {
+            id: 'user-1',
+            role: 'user',
+            content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2023-01-01T00:00:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: { format: 2, content: 'Hi', parts: [{ type: 'text', text: 'Hi' }] },
+            createdAt: new Date('2023-01-01T00:01:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'user-2',
+            role: 'user',
+            content: {
+              format: 2,
+              content: 'Next',
+              parts: [{ type: 'text', text: 'Next', createdAt: new Date('2024-01-01T00:00:00.000Z').getTime() }],
+            },
+            createdAt: new Date('2023-01-01T00:02:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: { format: 2, content: 'Answer', parts: [{ type: 'text', text: 'Answer' }] },
+            createdAt: new Date('2023-01-01T00:03:00.000Z'),
+          },
+          'memory',
+        );
+
+        const messages = list.get.all.db();
+        expect(messages.map(message => message.id)).toEqual(['user-1', 'assistant-1', 'user-2', 'assistant-2']);
+        expect(messages.map(message => message.createdAt.toISOString())).toEqual([
+          '2023-01-01T00:00:00.000Z',
+          '2023-01-01T00:01:00.000Z',
+          '2023-01-01T00:02:00.000Z',
+          '2023-01-01T00:03:00.000Z',
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should preserve order for V5 Core messages without timestamps', () => {

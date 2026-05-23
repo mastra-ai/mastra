@@ -134,6 +134,48 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('channelConfig', () => {
+    it('exposes the original ChannelConfig (round-trippable)', () => {
+      const discord = createMockAdapter('discord');
+      const slack = createMockAdapter('slack');
+      const handlers = { onDirectMessage: false } as const;
+      const originalConfig = {
+        adapters: { discord, slack: { adapter: slack, gateway: true } },
+        handlers,
+        inlineMedia: ['image/png', 'image/jpeg'],
+        inlineLinks: ['imgur.com'],
+        userName: 'TestBot',
+        threadContext: { maxMessages: 5 },
+        tools: false,
+        chatOptions: { dedupeTtlMs: 1000 },
+      };
+      const channels = new AgentChannels(originalConfig as any);
+
+      expect(channels.channelConfig).toBe(originalConfig);
+    });
+
+    it('lets a provider rebuild AgentChannels while preserving existing adapters', () => {
+      // Simulate the SlackProvider merge pattern: agent author configured Discord,
+      // then a provider needs to inject Slack without losing Discord.
+      const discord = createMockAdapter('discord');
+      const original = new AgentChannels({
+        adapters: { discord },
+        userName: 'OriginalBot',
+      });
+
+      const slack = createMockAdapter('slack');
+      const merged = new AgentChannels({
+        ...original.channelConfig,
+        adapters: { ...original.channelConfig.adapters, slack },
+        userName: 'ProviderBot',
+      });
+
+      expect(Object.keys(merged.adapters).sort()).toEqual(['discord', 'slack']);
+      expect(merged.adapters.discord).toBe(discord);
+      expect(merged.adapters.slack).toBe(slack);
+    });
+  });
+
   describe('getWebhookRoutes', () => {
     it('generates one route per adapter', () => {
       const routes = agentChannels.getWebhookRoutes();
@@ -264,6 +306,7 @@ describe('AgentChannels', () => {
       expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
     });
   });
+
 });
 
 describe('matchesDomain', () => {

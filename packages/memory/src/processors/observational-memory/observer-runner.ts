@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
 import type { ModelByInputTokens } from './model-by-input-tokens';
+import type { ObserverAttachmentFilter } from './observer-agent';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -95,6 +97,42 @@ export class ObserverRunner {
     return agent;
   }
 
+  private async extractModelRouterId(
+    model: ConcreteObservationModel,
+    requestContext?: RequestContext,
+  ): Promise<string | undefined> {
+    if (typeof model === 'string') return model;
+
+    if (typeof model === 'function') {
+      if (!requestContext) return undefined;
+      try {
+        const resolved = await model({ requestContext });
+        return this.extractModelRouterId(resolved as ConcreteObservationModel, requestContext);
+      } catch {
+        return undefined;
+      }
+    }
+
+    const modelRecord = model as Record<string, unknown>;
+    if (typeof modelRecord.provider === 'string' && typeof modelRecord.modelId === 'string') {
+      return `${modelRecord.provider}/${modelRecord.modelId}`;
+    }
+
+    return undefined;
+  }
+
+  private async resolveAttachmentFilter(
+    model: ConcreteObservationModel,
+    requestContext?: RequestContext,
+  ): Promise<ObserverAttachmentFilter> {
+    const filter = this.observationConfig.observeAttachments;
+    if (filter !== 'auto') return filter;
+
+    const routerId = await this.extractModelRouterId(model, requestContext);
+    if (!routerId) return true;
+    return modelSupportsAttachments(routerId) ?? true;
+  }
+
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
     if (abortSignal?.aborted) {
       throw new Error('The operation was aborted.');
@@ -133,6 +171,7 @@ export class ObserverRunner {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model);
+    const attachmentFilter = await this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
     const observerMessages = [
       {
@@ -143,7 +182,7 @@ export class ObserverRunner {
         }),
       },
       buildObserverHistoryMessage(messagesToObserve, {
-        attachmentFilter: this.observationConfig.observeAttachments,
+        attachmentFilter,
       }),
     ];
 
@@ -258,6 +297,7 @@ export class ObserverRunner {
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true);
+    const attachmentFilter = await this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
     const observerMessages = [
       {
@@ -271,7 +311,7 @@ export class ObserverRunner {
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
-        attachmentFilter: this.observationConfig.observeAttachments,
+        attachmentFilter,
       }),
     ];
 

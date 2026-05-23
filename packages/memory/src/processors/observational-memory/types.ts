@@ -212,7 +212,7 @@ export interface ObservationConfig {
    *
    * @default true
    */
-  observeAttachments?: boolean | string[];
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -966,7 +966,7 @@ export interface ResolvedObservationConfig {
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Filter for attachment parts forwarded to the Observer model */
-  observeAttachments: boolean | string[];
+  observeAttachments: 'auto' | boolean | string[];
 }
 
 export interface ResolvedReflectionConfig {

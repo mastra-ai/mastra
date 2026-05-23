@@ -176,14 +176,17 @@ export class MessageList {
   public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
     const source = options?.source ?? 'input';
     const createdAt = this.generateCreatedAt(source, new Date());
-    const signalForTranscript = createSignal({
+    const signalInput = {
       id: signal.id,
-      type: signal.type,
-      contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
       createdAt,
-    } as Parameters<typeof createSignal>[0]);
+      acceptedAt: signal.acceptedAt ?? signal.createdAt,
+    };
+    const signalForTranscript =
+      signal.type === 'user-message'
+        ? createSignal({ ...signalInput, type: signal.type, contents: signal.contents })
+        : createSignal({ ...signalInput, type: signal.type, contents: signal.contents as string });
 
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;
@@ -205,6 +208,11 @@ export class MessageList {
     }
 
     for (const message of messageArray) {
+      if (isCreatedAgentSignal(message) && messageSource === 'input') {
+        this.addSignal(message, { source: messageSource });
+        continue;
+      }
+
       const messageInput = isCreatedAgentSignal(message)
         ? message.toDBMessage(this.memoryInfo ?? undefined)
         : typeof message === `string`
@@ -305,19 +313,49 @@ export class MessageList {
       // only understand normal prompt messages. Project the signal into its
       // LLM-facing message content here so the existing MessageList converters
       // keep handling strings, arrays, files/images, and provider-specific shapes.
-      const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
-      return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map(signalMessage =>
-        convertInputToMastraDBMessage(
-          typeof signalMessage === `string`
-            ? {
-                role: 'user' as const,
-                content: signalMessage,
-              }
-            : signalMessage,
-          'input',
-          this.createAdapterContext(),
-        ),
-      );
+      return this.convertSignalForModelPrompt(message);
+    });
+  }
+
+  private convertSignalForModelPrompt(message: MastraDBMessage): MastraDBMessage[] {
+    const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
+    const createdAt = message.createdAt;
+
+    return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map((signalMessage, index) => {
+      const promptMessageId = index === 0 ? message.id : `${message.id}:prompt:${index}`;
+      const metadata =
+        typeof signalMessage === 'object' &&
+        signalMessage !== null &&
+        !Array.isArray(signalMessage) &&
+        'metadata' in signalMessage &&
+        signalMessage.metadata &&
+        typeof signalMessage.metadata === 'object'
+          ? signalMessage.metadata
+          : {};
+      const promptMessage =
+        typeof signalMessage === `string`
+          ? {
+              role: 'user' as const,
+              content: signalMessage,
+              id: promptMessageId,
+              metadata: { createdAt },
+            }
+          : {
+              ...signalMessage,
+              id: promptMessageId,
+              metadata: { ...metadata, createdAt },
+            };
+
+      return convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+        memoryInfo: this.memoryInfo,
+        newMessageId: () => promptMessageId,
+        generateCreatedAt: (_messageSource, start) => {
+          if (start instanceof Date) return start;
+          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+          return createdAt;
+        },
+        dbMessages: this.messages,
+      });
     });
   }
 
@@ -1374,8 +1412,26 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-    if (messageSource === 'input' && messageV2.role === 'signal') {
+
+    if (messageSource === 'response') {
       messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+    }
+
+    const signalMetadata =
+      messageV2.role === 'signal'
+        ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
+        : undefined;
+    if (messageSource === 'input' && messageV2.role === 'signal' && !signalMetadata?.acceptedAt) {
+      const acceptedAt = signalMetadata?.createdAt ?? messageV2.createdAt.toISOString();
+      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+      messageV2.content.metadata = {
+        ...messageV2.content.metadata,
+        signal: {
+          ...signalMetadata,
+          createdAt: messageV2.createdAt.toISOString(),
+          acceptedAt,
+        },
+      };
     }
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);

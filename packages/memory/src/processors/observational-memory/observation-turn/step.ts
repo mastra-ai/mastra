@@ -263,11 +263,16 @@ export class ObservationStep {
             ?.lastObservedMessageCursor
         : undefined;
 
+      const pendingMessageIds = new Set(
+        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+      );
+
       filterObservedMessages({
         messageList,
         record: this.turn.record,
         useMarkerBoundaryPruning: this.stepNumber === 0,
         fallbackCursor,
+        preserveMessageIds: pendingMessageIds,
       });
     }
 
