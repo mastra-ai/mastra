@@ -86,6 +86,17 @@ function setup(opts?: {
   chunks?: any[];
   allowedWorkspaceTools?: string[];
   forkedDefault?: boolean;
+  /**
+   * Retention policy for the `explore` subagent type. Many existing tests
+   * inspect `storage.loadSession({ sessionId: child.id })` AFTER the tool
+   * returns to verify configuration (modeId, modelId, parentSessionId,
+   * etc.); under the production default `retain: false`, the row would be
+   * deleted before those assertions could run. We default this helper to
+   * `retain: true` so existing tests stay assertion-friendly. Tests that
+   * specifically exercise the ephemeral-cleanup contract pass
+   * `retain: false`.
+   */
+  retain?: boolean;
 }) {
   const parentAgent = new FakeAgent('parent-agent');
   const childAgent = new FakeAgent('child-agent');
@@ -110,6 +121,7 @@ function setup(opts?: {
           forked: opts?.forkedDefault,
           allowedWorkspaceTools: opts?.allowedWorkspaceTools,
           workspace: 'inherit',
+          retain: opts?.retain ?? true,
         },
       },
     },
@@ -435,5 +447,106 @@ describe('spawn_subagent tool — execution', () => {
     expect(childAgent.lastStreamOptions?.memory?.thread).toBeDefined();
     expect(childAgent.lastStreamOptions.memory.thread).not.toBe(parent.threadId);
     expect(parentAgent.lastStreamOptions).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Retention policy — default ephemeral + opt-in retain
+// ---------------------------------------------------------------------------
+
+describe('spawn_subagent tool — retention policy', () => {
+  it('deletes the child session row after subagent_end by default (retain unset)', async () => {
+    // setup({retain: false}) opts the test subagent type into the production
+    // default of ephemeral cleanup.
+    const { harness, storage } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-ephemeral'))) as any;
+
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(result.subagentSessionId).not.toBe('');
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).toBeNull();
+  });
+
+  it('preserves the child session row when retain: true', async () => {
+    const { harness, storage } = setup({ retain: true });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-retain'))) as any;
+
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).not.toBeNull();
+    expect(childRow?.closedAt).toBeDefined();
+  });
+
+  it('still emits subagent_end before the cleanup deletes the row', async () => {
+    // Regression: the cleanup MUST run AFTER `subagent_end` is emitted so
+    // subscribers can observe the event before the row vanishes.
+    const { harness } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const events: HarnessEvent[] = [];
+    parent.subscribe(e => {
+      events.push(e);
+    });
+
+    await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-event-order'));
+
+    const end = events.find(e => e.type === 'subagent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.subagentSessionId).toMatch(/^sess-/);
+    expect(end.toolCallId).toBe('tc-event-order');
+  });
+
+  it('also cleans the child row when workspace-tool construction fails on the early-return path', async () => {
+    // Regression: codex review surfaced that the workspace-tool-construction
+    // catch path closes the child and returns BEFORE the main `finally`
+    // retention block runs. Under default `retain: false`, that path must
+    // still delete the row or workspace/provider failures in fan-out
+    // workloads keep accumulating closed children.
+    const { harness, storage } = setup({ retain: false, allowedWorkspaceTools: ['view'] });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read only' }, {
+      ...execCtx('tc-ws-error-cleanup'),
+      workspace: {
+        getToolsConfig: () => {
+          throw new Error('workspace unavailable');
+        },
+        filesystem: { readOnly: false },
+      },
+    } as any)) as any;
+
+    expect(result).toMatchObject({ isError: true, message: 'workspace unavailable' });
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(result.subagentSessionId.length).toBeGreaterThan(0);
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).toBeNull();
+  });
+
+  it('leaves no orphan session rows after a bulk-spawn workload (default ephemeral)', async () => {
+    // The Linear acceptance criterion: a workflow that spawns many
+    // ephemeral subagents and runs to completion leaves zero closed
+    // subagent sessions in storage by default.
+    const { harness, storage } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const N = 25;
+    for (let i = 0; i < N; i++) {
+      await tool.execute!({ agentType: 'explore', task: `task-${i}` }, execCtx(`tc-bulk-${i}`));
+    }
+
+    const childRecords = await storage.listSessions({
+      resourceId: 'u1',
+      parentSessionId: parent.id,
+      includeClosed: true,
+    });
+    expect(childRecords).toEqual([]);
   });
 });

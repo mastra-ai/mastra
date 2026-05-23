@@ -233,6 +233,14 @@ export function createSpawnSubagentTool(parent: Session) {
         } catch {
           // ignore
         }
+        // Mirror the main retention path: ephemeral subagents that fail
+        // workspace-tool construction must NOT leave a closed child row in
+        // storage. `retain: true` opts out, same as the success path.
+        if (def.retain !== true) {
+          await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
+            // Best-effort; the tool result already encodes the failure.
+          });
+        }
         return {
           isError: true,
           errorName: err instanceof Error ? err.name : 'Error',
@@ -367,6 +375,27 @@ export function createSpawnSubagentTool(parent: Session) {
         durationMs,
         depth: childDepth,
       });
+
+      // Retention policy: ephemeral subagents (the default) are deleted
+      // from storage after `subagent_end` so heavy fan-out workloads do not
+      // accumulate closed-but-undeleted rows. `retain: true` on the
+      // subagent type suppresses deletion for subagents that may be
+      // re-attached later.
+      //
+      // Known gap (deferred to follow-up): `deleteSession` does NOT cascade
+      // to thread / message rows. The session row is cleaned; the thread
+      // and its messages remain until a future cleanup commit. Operators
+      // that need full cleanup today should call `harness.threads.delete`
+      // themselves.
+      if (def.retain !== true) {
+        await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
+          // Best-effort: cleanup failures shouldn't mask the tool's
+          // result. The session row may simply already be gone (e.g. if
+          // a sibling delete cascade landed first) or storage may be
+          // mid-eviction. Operators see lingering rows via the same
+          // listSessions surface they used pre-fix.
+        });
+      }
 
       return {
         subagentSessionId: child.id,

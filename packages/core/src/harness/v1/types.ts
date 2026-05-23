@@ -1145,6 +1145,24 @@ export interface SubagentDefinition {
 
   /** Optional stop condition for this subagent's execution loop. */
   stopWhen?: AgentExecutionOptionsBase<unknown>['stopWhen'];
+
+  /**
+   * Retention policy for the spawned subagent's session record. Default
+   * `false` — the session is deleted from storage after `subagent_end`
+   * fires, so heavy `spawn_subagent` workloads (parallel explore
+   * subagents, large fan-out review/migration runs) do not accumulate
+   * closed-but-undeleted rows.
+   *
+   * Set `true` for long-running specialized subagents that may be
+   * re-attached after `subagent_end` — the row is preserved.
+   *
+   * Note: thread + message-row cleanup is NOT covered by this flag yet;
+   * `deleteSession` does not cascade to thread rows. Operators that
+   * need full thread/message cleanup should call
+   * `harness.threads.delete(...)` themselves until the follow-up
+   * commit lands cleanup wiring.
+   */
+  retain?: boolean;
 }
 
 /**
@@ -1182,6 +1200,13 @@ interface SessionResolveCommon {
   origin?: 'top-level' | 'subagent-tool';
   modeId?: string;
   modelId?: string;
+  /**
+   * @internal — used when the caller has already created a thread outside
+   * `session({ threadId: { fresh: true } })` but the new session should own
+   * that thread for cascade cleanup. Currently used by forked subagents after
+   * cloning the parent thread.
+   */
+  ownsThread?: boolean;
   /**
    * @internal — used by the built-in `spawn_subagent` tool to record the
    * child's depth in the subagent tree (parent + 1). Top-level callers
