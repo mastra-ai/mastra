@@ -36,6 +36,10 @@ export interface WorkspaceSpanOptions {
 export interface WorkspaceSpanHandle {
   /** The underlying span (undefined when tracing is not active) */
   span: AnySpan | undefined;
+  /** OpenTelemetry-compatible trace id for the workspace action span */
+  traceId: string | undefined;
+  /** Span id for the workspace action span */
+  spanId: string | undefined;
   /** End the span with final attributes and output */
   end(attrs?: Partial<WorkspaceActionAttributes>, output?: unknown): void;
   /** End the span with an error */
@@ -151,6 +155,8 @@ export function startWorkspaceSpan(
 
   return {
     span,
+    traceId: span.isValid === false ? undefined : (span.externalTraceId ?? span.traceId),
+    spanId: span.isValid === false ? undefined : span.id,
     end(attrs?: Partial<WorkspaceActionAttributes>, output?: unknown) {
       span?.end({
         output: sanitizeWorkspaceTraceData(output),
@@ -175,6 +181,8 @@ export function startWorkspaceSpan(
 /** No-op handle when tracing is not available */
 const noOpHandle: WorkspaceSpanHandle = {
   span: undefined,
+  traceId: undefined,
+  spanId: undefined,
   end() {},
   error() {},
 };

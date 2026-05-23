@@ -16,6 +16,7 @@ import {
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_WAKEUPS,
+  TABLE_HARNESS_WORKSPACE_ACTIONS,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageChannelActionClaimConflictError,
@@ -674,6 +675,123 @@ describe('HarnessLibSQL active session admission', () => {
     await expect(listIds({ actionKind: 'command', operation: 'run', policyDecision: 'deny' })).resolves.toEqual(['c']);
     await expect(listIds({ actionKind: 'file', after: { createdAt: 1000, id: 'a' } })).resolves.toEqual(['b']);
     await expect(listIds({ harnessName: 'other-harness' })).resolves.toEqual(['other-namespace']);
+  });
+
+  it('round-trips workspace action journal observability correlation fields', async () => {
+    await storage.saveSession(sampleSession(), { ownerId: 'h-1', ifVersion: 0 });
+
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'with-span',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      }),
+    );
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'other-span',
+        traceId: 'trace-2',
+        spanId: 'span-2',
+      }),
+    );
+
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'with-span',
+        requestId: 'request-1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      }),
+    ]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'with-span' })]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-2',
+        spanId: 'span-2',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'other-span' })]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        spanId: 'span-2',
+        limit: 10,
+      }),
+    ).rejects.toThrow('spanId filter requires traceId');
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({
+          id: 'invalid-span',
+          spanId: 'span-without-trace',
+        }),
+      ),
+    ).rejects.toThrow('spanId requires traceId');
+  });
+
+  it('widens existing workspace action journal tables with observability columns', async () => {
+    const client = createHarnessTestClient();
+    await client.execute({
+      sql: `CREATE TABLE ${TABLE_HARNESS_WORKSPACE_ACTIONS} (
+        id TEXT NOT NULL,
+        harness_name TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        resource_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        action_kind TEXT NOT NULL,
+        operation TEXT,
+        action TEXT NOT NULL,
+        policy_decision TEXT NOT NULL,
+        policy_reasons TEXT NOT NULL,
+        matched_rules TEXT NOT NULL,
+        path TEXT,
+        to_path TEXT,
+        cwd TEXT,
+        actor TEXT,
+        request_id TEXT,
+        result TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (harness_name, session_id, id)
+      )`,
+      args: [],
+    });
+    const storage = new HarnessLibSQL({ client });
+    await storage.init();
+    await storage.saveSession(sampleSession(), { ownerId: 'h-1', ifVersion: 0 });
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({
+          id: 'with-span',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+        }),
+      ),
+    ).resolves.toEqual({ created: true });
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'with-span', spanId: 'span-1' })]);
   });
 
   it('filters workspace action journal rows by request and affected path', async () => {

@@ -545,6 +545,8 @@ export interface WorkspaceActionAttributes extends AIBaseAttributes {
   filesystemProvider?: string;
   /** Whether the operation succeeded */
   success?: boolean;
+  /** Durable Harness workspace action journal row id, when journaling succeeds */
+  journalEntryId?: string;
 }
 
 /**

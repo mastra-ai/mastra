@@ -556,6 +556,76 @@ describe('InMemoryHarness admission storage contract', () => {
     await expect(listIds({ harnessName: 'other-harness' })).resolves.toEqual(['other-namespace']);
   });
 
+  it('round-trips workspace action journal observability correlation fields', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession(), { ownerId: 'h-1', ifVersion: 0 });
+
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'with-span',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      }),
+    );
+    await storage.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'other-span',
+        traceId: 'trace-2',
+        spanId: 'span-2',
+      }),
+    );
+
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'with-span',
+        requestId: 'request-1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      }),
+    ]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'with-span' })]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-2',
+        spanId: 'span-2',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'other-span' })]);
+    await expect(
+      storage.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        spanId: 'span-2',
+        limit: 10,
+      }),
+    ).rejects.toThrow('spanId filter requires traceId');
+    await expect(
+      storage.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({
+          id: 'invalid-span',
+          spanId: 'span-without-trace',
+        }),
+      ),
+    ).rejects.toThrow('spanId requires traceId');
+  });
+
   it('filters workspace action journal rows by request and affected path', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
     await storage.saveSession(sampleSession(), { ownerId: 'h-1', ifVersion: 0 });

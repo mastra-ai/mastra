@@ -1525,14 +1525,16 @@ export class HarnessLibSQL extends HarnessStorage {
   async appendWorkspaceActionJournalEntry(
     record: WorkspaceActionJournalEntry,
   ): Promise<AppendWorkspaceActionJournalEntryResult> {
+    assertWorkspaceActionTraceScope(record);
     assertWorkspaceActionKindMatches(record);
     const namespace = this.#resolveHarnessName(record.harnessName);
     await this.#ensureWorkspaceActionsTable();
     const result = await this.#client.execute({
       sql: `INSERT INTO ${TABLE_HARNESS_WORKSPACE_ACTIONS}
             (id, harness_name, session_id, resource_id, thread_id, action_kind, operation, action,
-             policy_decision, policy_reasons, matched_rules, path, to_path, cwd, actor, request_id, result, created_at)
-            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             policy_decision, policy_reasons, matched_rules, path, to_path, cwd, actor, request_id,
+             trace_id, span_id, result, created_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             WHERE EXISTS (
               SELECT 1 FROM ${TABLE_HARNESS_SESSIONS}
               WHERE harness_name = ? AND id = ? AND resource_id = ? AND thread_id = ?
@@ -1555,6 +1557,8 @@ export class HarnessLibSQL extends HarnessStorage {
         record.cwd === undefined ? null : JSON.stringify(record.cwd),
         record.actor === undefined ? null : JSON.stringify(record.actor),
         record.requestId ?? null,
+        record.traceId ?? null,
+        record.spanId ?? null,
         record.result === undefined ? null : JSON.stringify(record.result),
         record.createdAt,
         namespace,
@@ -1575,10 +1579,15 @@ export class HarnessLibSQL extends HarnessStorage {
     operation,
     policyDecision,
     requestId,
+    traceId,
+    spanId,
     affectedPath,
     after,
     limit,
   }: ListWorkspaceActionJournalInput): Promise<WorkspaceActionJournalEntry[]> {
+    if (spanId !== undefined && traceId === undefined) {
+      throw new Error('Workspace action journal spanId filter requires traceId');
+    }
     if (limit <= 0) return [];
     const namespace = this.#resolveHarnessName(harnessName);
     await this.#ensureWorkspaceActionsTable();
@@ -1603,6 +1612,14 @@ export class HarnessLibSQL extends HarnessStorage {
     if (requestId !== undefined) {
       conditions.push('request_id = ?');
       args.push(requestId);
+    }
+    if (traceId !== undefined) {
+      conditions.push('trace_id = ?');
+      args.push(traceId);
+    }
+    if (spanId !== undefined) {
+      conditions.push('span_id = ?');
+      args.push(spanId);
     }
     addWorkspaceActionPathFilter(conditions, args, affectedPath);
     if (after !== undefined) {
@@ -3855,6 +3872,11 @@ export class HarnessLibSQL extends HarnessStorage {
         schema: TABLE_SCHEMAS[TABLE_HARNESS_WORKSPACE_ACTIONS],
         compositePrimaryKey: workspaceActionsConfig?.compositePrimaryKey,
       });
+      await this.#db.alterTable({
+        tableName: TABLE_HARNESS_WORKSPACE_ACTIONS,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_WORKSPACE_ACTIONS],
+        ifNotExists: ['trace_id', 'span_id'],
+      });
       await this.#client.execute({
         sql: `CREATE INDEX IF NOT EXISTS idx_harness_workspace_actions_session
               ON "${TABLE_HARNESS_WORKSPACE_ACTIONS}" ("harness_name", "session_id", "resource_id", "thread_id", "created_at", "id")`,
@@ -5129,6 +5151,8 @@ function rowToWorkspaceActionJournalEntry(row: Record<string, unknown>): Workspa
     ...(row.cwd == null ? {} : { cwd: parseJson(row.cwd) as WorkspaceActionJournalEntry['cwd'] }),
     ...(row.actor == null ? {} : { actor: parseJson(row.actor) as JsonValue }),
     ...(row.request_id == null ? {} : { requestId: String(row.request_id) }),
+    ...(row.trace_id == null ? {} : { traceId: String(row.trace_id) }),
+    ...(row.span_id == null ? {} : { spanId: String(row.span_id) }),
     ...(row.result == null ? {} : { result: parseJson(row.result) as JsonValue }),
     createdAt: Number(row.created_at),
   };
@@ -5143,6 +5167,12 @@ function assertWorkspaceActionKindMatches(record: WorkspaceActionJournalEntry): 
     if (actionKind !== undefined && actionKind !== record.actionKind) {
       throw new Error(`Workspace action journal kind mismatch: ${String(actionKind)} != ${record.actionKind}`);
     }
+  }
+}
+
+function assertWorkspaceActionTraceScope(record: WorkspaceActionJournalEntry): void {
+  if (record.spanId !== undefined && record.traceId === undefined) {
+    throw new Error('Workspace action journal spanId requires traceId');
   }
 }
 

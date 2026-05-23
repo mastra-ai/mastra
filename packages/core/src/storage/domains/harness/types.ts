@@ -504,6 +504,12 @@ export interface WorkspaceActionJournalEntry {
   cwd?: WorkspaceActionJournalPath;
   actor?: JsonValue;
   requestId?: string;
+  /**
+   * Optional observability correlation. Workspace action journaling is durable
+   * audit evidence and must not depend on tracing being enabled.
+   */
+  traceId?: string;
+  spanId?: string;
   result?: JsonValue;
   createdAt: number;
 }
@@ -527,7 +533,8 @@ export interface WorkspaceActionJournalPathFilter {
  * at least one concrete selector (`rootId`, `path`, or `relativePath`) and
  * matches those selectors with AND semantics against the source `path` by
  * default; set `includeToPath` when rename/move destinations should also be
- * considered affected. Command `cwd` is not an affected path.
+ * considered affected. Command `cwd` is not an affected path. `spanId` is only
+ * meaningful within a trace and requires `traceId` when filtering.
  */
 export interface ListWorkspaceActionJournalInput {
   harnessName?: string;
@@ -538,6 +545,8 @@ export interface ListWorkspaceActionJournalInput {
   operation?: string;
   policyDecision?: WorkspaceActionJournalEntry['policyDecision'];
   requestId?: string;
+  traceId?: string;
+  spanId?: string;
   affectedPath?: WorkspaceActionJournalPathFilter;
   after?: {
     createdAt: number;

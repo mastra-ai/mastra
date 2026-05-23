@@ -49,6 +49,8 @@ function createMockSpan() {
       childSpans.push(childRecord);
 
       return {
+        id: `span-${childSpans.length}`,
+        traceId: 'trace-1',
         end: vi.fn((options?: any) => {
           childRecord.ended = true;
           childRecord.endAttributes = options?.attributes;
@@ -81,6 +83,8 @@ describe('startWorkspaceSpan', () => {
     });
 
     expect(handle.span).toBeDefined();
+    expect(handle.traceId).toBe('trace-1');
+    expect(handle.spanId).toBe('span-1');
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.type).toBe(SpanType.WORKSPACE_ACTION);
     expect(childSpans[0]!.name).toBe('workspace:filesystem:readFile');
@@ -98,6 +102,8 @@ describe('startWorkspaceSpan', () => {
     });
 
     expect(handle.span).toBeUndefined();
+    expect(handle.traceId).toBeUndefined();
+    expect(handle.spanId).toBeUndefined();
     // Should not throw
     handle.end();
     handle.error(new Error('test'));
@@ -114,6 +120,29 @@ describe('startWorkspaceSpan', () => {
     handle.error(new Error('test'));
   });
 
+  it('does not expose invalid span sentinel ids as journal correlation ids', () => {
+    const invalidSpan = {
+      createChildSpan: vi.fn(() => ({
+        id: '0000000000000000',
+        traceId: '00000000000000000000000000000000',
+        externalTraceId: undefined,
+        isValid: false,
+        end: vi.fn(),
+        error: vi.fn(),
+        update: vi.fn(),
+        createChildSpan: vi.fn(),
+      })),
+    } as unknown as AnySpan;
+
+    const handle = startWorkspaceSpan({ tracing: { currentSpan: invalidSpan } } as any, undefined, {
+      category: 'filesystem',
+      operation: 'readFile',
+    });
+
+    expect(handle.traceId).toBeUndefined();
+    expect(handle.spanId).toBeUndefined();
+  });
+
   it('end() passes through attributes and output separately', async () => {
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -127,6 +156,22 @@ describe('startWorkspaceSpan', () => {
     expect(childSpans[0]!.ended).toBe(true);
     expect(childSpans[0]!.endAttributes?.success).toBe(true);
     expect(childSpans[0]!.endOutput).toEqual({ resultCount: 3 });
+  });
+
+  it('end() can attach a durable workspace action journal entry id', () => {
+    const { mockParentSpan, childSpans } = createMockSpan();
+
+    const handle = startWorkspaceSpan({ tracing: { currentSpan: mockParentSpan } } as any, undefined, {
+      category: 'filesystem',
+      operation: 'writeFile',
+    });
+
+    handle.end({ success: true, journalEntryId: 'journal-1' }, { bytesTransferred: 12 });
+
+    expect(childSpans[0]!.endAttributes).toMatchObject({
+      success: true,
+      journalEntryId: 'journal-1',
+    });
   });
 
   it('end() does not set success when caller omits it', () => {

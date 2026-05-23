@@ -385,6 +385,128 @@ describe('HarnessPG', () => {
     await expect(listIds({ harnessName: 'other-harness' })).resolves.toEqual(['other-namespace']);
   });
 
+  it('round-trips workspace action journal observability correlation fields', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'with-span',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      }),
+    );
+    await harness!.appendWorkspaceActionJournalEntry(
+      sampleWorkspaceActionJournalEntry({
+        id: 'other-span',
+        traceId: 'trace-2',
+        spanId: 'span-2',
+      }),
+    );
+
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'with-span',
+        requestId: 'request-1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      }),
+    ]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-1',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'with-span' })]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        traceId: 'trace-2',
+        spanId: 'span-2',
+        limit: 10,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'other-span' })]);
+    await expect(
+      harness!.listWorkspaceActionJournalEntries({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        spanId: 'span-2',
+        limit: 10,
+      }),
+    ).rejects.toThrow('spanId filter requires traceId');
+    await expect(
+      harness!.appendWorkspaceActionJournalEntry(
+        sampleWorkspaceActionJournalEntry({
+          id: 'invalid-span',
+          spanId: 'span-without-trace',
+        }),
+      ),
+    ).rejects.toThrow('spanId requires traceId');
+  });
+
+  it('widens existing workspace action journal tables with observability columns', async () => {
+    const schemaName = `pf_593_workspace_actions_${randomUUID().replaceAll('-', '_')}`;
+    await store.db.none(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      await store.db.none(`CREATE TABLE "${schemaName}"."${TABLE_HARNESS_WORKSPACE_ACTIONS}" (
+        id TEXT NOT NULL,
+        harness_name TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        resource_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        action_kind TEXT NOT NULL,
+        operation TEXT,
+        action JSONB NOT NULL,
+        policy_decision TEXT NOT NULL,
+        policy_reasons JSONB NOT NULL,
+        matched_rules JSONB NOT NULL,
+        path JSONB,
+        to_path JSONB,
+        cwd JSONB,
+        actor JSONB,
+        request_id TEXT,
+        result JSONB,
+        created_at BIGINT NOT NULL,
+        PRIMARY KEY (harness_name, session_id, id)
+      )`);
+      const harness = new HarnessPG({ client: store.db, schemaName });
+      await harness.init();
+      await harness.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+      await expect(
+        harness.appendWorkspaceActionJournalEntry(
+          sampleWorkspaceActionJournalEntry({
+            id: 'with-span',
+            traceId: 'trace-1',
+            spanId: 'span-1',
+          }),
+        ),
+      ).resolves.toEqual({ created: true });
+      await expect(
+        harness.listWorkspaceActionJournalEntries({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          traceId: 'trace-1',
+          limit: 10,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ id: 'with-span', spanId: 'span-1' })]);
+    } finally {
+      await store.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
   it('filters workspace action journal rows by request and affected path', async () => {
     const harness = store.stores.harness;
     expect(harness).toBeDefined();

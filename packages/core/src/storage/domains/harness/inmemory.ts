@@ -1054,6 +1054,7 @@ export class InMemoryHarness extends HarnessStorage {
   async appendWorkspaceActionJournalEntry(
     record: WorkspaceActionJournalEntry,
   ): Promise<AppendWorkspaceActionJournalEntryResult> {
+    assertWorkspaceActionTraceScope(record);
     assertWorkspaceActionKindMatches(record);
     const namespaced = { ...record, harnessName: resolveHarnessName(record.harnessName, this.harnessName) };
     const session = this.db.harnessSessions.get(sessionKey(namespaced.harnessName, namespaced.sessionId));
@@ -1077,10 +1078,15 @@ export class InMemoryHarness extends HarnessStorage {
     operation,
     policyDecision,
     requestId,
+    traceId,
+    spanId,
     affectedPath,
     after,
     limit,
   }: ListWorkspaceActionJournalInput): Promise<WorkspaceActionJournalEntry[]> {
+    if (spanId !== undefined && traceId === undefined) {
+      throw new Error('Workspace action journal spanId filter requires traceId');
+    }
     if (limit <= 0) return [];
     const namespace = resolveHarnessName(harnessName, this.harnessName);
     const rows = Array.from(this.db.harnessWorkspaceActionJournal.values()).filter(entry => {
@@ -1091,6 +1097,8 @@ export class InMemoryHarness extends HarnessStorage {
       if (operation !== undefined && entry.operation !== operation) return false;
       if (policyDecision !== undefined && entry.policyDecision !== policyDecision) return false;
       if (requestId !== undefined && entry.requestId !== requestId) return false;
+      if (traceId !== undefined && entry.traceId !== traceId) return false;
+      if (spanId !== undefined && entry.spanId !== spanId) return false;
       if (affectedPath !== undefined && !workspaceActionJournalEntryMatchesPath(entry, affectedPath)) return false;
       if (after !== undefined && compareWorkspaceActionJournalCursor(entry, after) <= 0) return false;
       return true;
@@ -3525,6 +3533,12 @@ function assertWorkspaceActionKindMatches(record: WorkspaceActionJournalEntry): 
     if (actionKind !== undefined && actionKind !== record.actionKind) {
       throw new Error(`Workspace action journal kind mismatch: ${String(actionKind)} != ${record.actionKind}`);
     }
+  }
+}
+
+function assertWorkspaceActionTraceScope(record: WorkspaceActionJournalEntry): void {
+  if (record.spanId !== undefined && record.traceId === undefined) {
+    throw new Error('Workspace action journal spanId requires traceId');
   }
 }
 

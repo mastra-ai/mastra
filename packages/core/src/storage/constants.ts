@@ -986,6 +986,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     cwd: { type: 'jsonb', nullable: true },
     actor: { type: 'jsonb', nullable: true },
     request_id: { type: 'text', nullable: true },
+    trace_id: { type: 'text', nullable: true },
+    span_id: { type: 'text', nullable: true },
     result: { type: 'jsonb', nullable: true },
     created_at: { type: 'bigint', nullable: false },
   },
