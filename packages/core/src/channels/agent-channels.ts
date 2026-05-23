@@ -309,11 +309,6 @@ export class AgentChannels {
         });
       }
 
-      // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>".
-      // A user-supplied onAction is fully responsible for the event; call
-      // defaultHandler() to delegate to the built-in tool_approve / tool_deny routing.
-      // defaultHandler() returns { kind: 'approved' | 'denied', toolCallId } when it
-      // handled the action, or undefined for any other action ID.
       if (onAction !== false) {
         chat.onAction(async event => {
           if (typeof onAction === 'function') {
@@ -324,8 +319,6 @@ export class AgentChannels {
         });
       }
 
-      // Reactions: no built-in behavior. Subscribe so a user override can fire.
-      // defaultHandler is a no-op; provided for parity with the other handler hooks.
       if (onReaction !== false) {
         chat.onReaction(async event => {
           if (typeof onReaction === 'function') {
