@@ -123,9 +123,9 @@ Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text inste
 
 ## Custom action and reaction handlers
 
-For approval flows that need extra buttons, reaction-driven approval, or programmatic approval from a workflow, combine three pieces:
+For approval flows that need extra buttons or programmatic approval from a workflow, combine three pieces:
 
-- `toolDisplay: fn` posts whatever message you want (custom buttons, plain text awaiting reactions, etc.).
+- `toolDisplay: fn` posts whatever message you want (custom buttons, plain text, etc.).
 - `handlers.onAction` / `handlers.onReaction` route inbound events to your code.
 - `channels.approveTool(toolCallId, source)` / `channels.denyTool(toolCallId, source)` resume the suspended tool call.
 
@@ -161,46 +161,6 @@ const agent = new Agent({
         }
         // Fall through to built-in tool_approve / tool_deny routing.
         return defaultHandler()
-      },
-    },
-  },
-})
-```
-
-### Reaction-driven approval
-
-Useful on platforms or channels where buttons aren't appropriate. `toolDisplay` posts a plain message and stashes the `toolCallId` keyed by `messageId`; `onReaction` resolves the approval based on emoji:
-
-```typescript
-const pendingApprovals = new Map<string, string>() // messageId -> toolCallId
-
-const agent = new Agent({
-  name: 'ops',
-  channels: {
-    adapters: {
-      slack: {
-        adapter: slackAdapter,
-        toolDisplay: async (event, ctx) => {
-          if (event.kind !== 'approval') return undefined
-          const posted = await event.thread.post(
-            `Awaiting approval to run \`${event.displayName}(${event.argsSummary})\` — react ✅ to run, ❌ to deny`,
-          )
-          pendingApprovals.set(posted.id, event.toolCallId)
-          return undefined // we already posted
-        },
-      },
-    },
-    handlers: {
-      onReaction: async event => {
-        const toolCallId = pendingApprovals.get(event.messageId)
-        if (!toolCallId) return
-        if (event.emoji === 'white_check_mark') {
-          await agent.channels.approveTool(toolCallId, event)
-          pendingApprovals.delete(event.messageId)
-        } else if (event.emoji === 'x') {
-          await agent.channels.denyTool(toolCallId, event)
-          pendingApprovals.delete(event.messageId)
-        }
       },
     },
   },
