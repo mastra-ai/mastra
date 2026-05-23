@@ -129,6 +129,29 @@ export class HarnessValidationError extends Error {
 }
 
 /**
+ * Internal error thrown by `Session._callJudge(...)` when a judge model
+ * invocation fails. The `kind` discriminator drives the goal-loop's
+ * recovery behavior — `'timeout'` is retried once with backoff,
+ * `'provider_error'` and `'invalid_verdict'` are terminal. Classified
+ * inside `_callJudge` so `_runGoalJudge` can map directly to a paused
+ * reason and stamp `GoalState.lastFailure`.
+ *
+ * Not part of the public Harness API surface — consumers observe failures
+ * via the `goal_paused` event and `GoalState.lastFailure`.
+ */
+export type HarnessGoalJudgeFailureKind = 'timeout' | 'provider_error' | 'invalid_verdict';
+
+export class HarnessGoalJudgeFailedError extends Error {
+  readonly name = 'HarnessGoalJudgeFailedError';
+  constructor(
+    public readonly kind: HarnessGoalJudgeFailureKind,
+    message?: string,
+  ) {
+    super(message ?? `Goal judge invocation failed (${kind})`);
+  }
+}
+
+/**
  * `session.queue(...)` rejected at admission because `pendingQueue` has
  * already reached `sessions.maxQueueDepth` (default 100). The capacity check
  * and durable append are atomic per session, so two concurrent `queue()`

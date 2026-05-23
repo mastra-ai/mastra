@@ -612,10 +612,23 @@ export interface GoalDoneEvent extends HarnessEventBase {
   turnsUsed: number;
 }
 
+/**
+ * Reason discriminator for `goal_paused`. The three `judge_*` variants
+ * replace the legacy catch-all `'judge_failed'`; emitters classify the
+ * failure mode so subscribers can distinguish a recoverable transient
+ * timeout from a malformed-verdict bug or a non-transient provider error.
+ */
+export type GoalPausedReason =
+  | 'requested'
+  | 'budget_exhausted'
+  | 'judge_timeout'
+  | 'judge_provider_error'
+  | 'judge_invalid_verdict';
+
 export interface GoalPausedEvent extends HarnessEventBase {
   type: 'goal_paused';
   goalId: string;
-  reason: 'requested' | 'budget_exhausted' | 'judge_failed';
+  reason: GoalPausedReason;
 }
 
 export interface GoalResumedEvent extends HarnessEventBase {

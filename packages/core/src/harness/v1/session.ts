@@ -45,6 +45,8 @@ import {
 } from '../../storage/domains/harness';
 import type {
   GoalJudgeDecision,
+  GoalJudgeFailure,
+  GoalJudgeFailureKind,
   GoalState,
   AgentSignalResultEvidence,
   AgentSignalResultStatus,
@@ -79,6 +81,7 @@ import {
   HarnessConfigError,
   HarnessInboxItemNotFoundError,
   HarnessInboxResponseConflictError,
+  HarnessGoalJudgeFailedError,
   HarnessOverrideConflictError,
   HarnessQueueFullError,
   HarnessSessionClosedError,
@@ -93,6 +96,7 @@ import {
 import { EventEmitter, parseHarnessEventId, projectHarnessPublicError, snapshotHarnessEventForJson } from './events';
 import type {
   EmitInput,
+  GoalPausedReason,
   HarnessEvent,
   HarnessEventListener,
   HarnessEventUnsubscribe,
@@ -419,6 +423,30 @@ const GoalJudgeSchema = z.object({
 
 /** Per-message cap on judge-context strings to keep judge latency bounded. */
 const JUDGE_TRUNCATE_LIMIT = 4000;
+
+/** Total judge-call attempts (1 initial + 1 retry on timeout-class errors). */
+const GOAL_JUDGE_MAX_ATTEMPTS = 2;
+/** Linear backoff between judge-call attempts. Small on purpose — the goal
+ * loop already runs per assistant turn; an aggressive retry just delays
+ * the operator-visible `goal_paused` signal without changing the outcome. */
+const GOAL_JUDGE_RETRY_BACKOFF_MS = 1_000;
+
+/**
+ * Map a judge-failure {@link GoalJudgeFailureKind} to the `goal_paused`
+ * event reason emitted when the loop gives up. The taxonomy lets
+ * subscribers distinguish recoverable transient timeouts from non-
+ * transient provider errors and malformed-verdict bugs.
+ */
+const JUDGE_FAILURE_TO_PAUSED_REASON: Record<GoalJudgeFailureKind, GoalPausedReason> = {
+  timeout: 'judge_timeout',
+  provider_error: 'judge_provider_error',
+  invalid_verdict: 'judge_invalid_verdict',
+  // `max_turns` reaches the budget-exhausted branch directly, not the
+  // failure-classification path. Mapped here for completeness so future
+  // call sites that want to re-emit a paused event for budget exhaustion
+  // pick up the existing `budget_exhausted` reason.
+  max_turns: 'budget_exhausted',
+};
 
 // ---------------------------------------------------------------------------
 // Permission helpers (§4.2e). Tiny shape validators kept module-scoped so the
@@ -5457,16 +5485,18 @@ export class Session {
 
     let decision: GoalJudgeDecision;
     try {
-      decision = await this._callJudge(goal, turn);
-    } catch {
+      decision = await this._callJudgeWithRetry(goal, turn);
+    } catch (err) {
       // Gate 2a — goal might have changed during the judge call.
       if (this._record.goal?.id !== evaluatedGoalId) return;
+      const failure = this._classifyJudgeFailure(err);
+      const pausedReason = JUDGE_FAILURE_TO_PAUSED_REASON[failure.kind];
       await this._flushUpdate(prev =>
         prev.goal && prev.goal.id === evaluatedGoalId
-          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const, lastFailure: failure } }
           : prev,
       );
-      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'judge_failed' });
+      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: pausedReason });
       return;
     }
 
@@ -5474,7 +5504,14 @@ export class Session {
     if (this._record.goal?.id !== evaluatedGoalId) return;
 
     const turnsUsed = decision.decision === 'waiting' ? goal.turnsUsed : goal.turnsUsed + 1;
-    const updated: GoalState = { ...goal, turnsUsed, lastDecision: decision };
+    // Clear any prior `lastFailure` — the judge succeeded this turn, so the
+    // failure state from a previous pause-then-resume cycle is stale and
+    // would otherwise mislead recovered sessions that inspect it.
+    // Destructure to strip the field rather than setting it to `undefined`,
+    // so storage adapters that preserve undefined keys don't keep a tombstone.
+    const { lastFailure: _staleFailure, ...goalWithoutFailure } = goal;
+    void _staleFailure;
+    const updated: GoalState = { ...goalWithoutFailure, turnsUsed, lastDecision: decision };
 
     await this._flushUpdate(prev =>
       prev.goal && prev.goal.id === evaluatedGoalId ? { ...prev, goal: updated } : prev,
@@ -5502,9 +5539,14 @@ export class Session {
 
     // decision.decision === 'continue'
     if (turnsUsed >= updated.maxTurns) {
+      const failure: GoalJudgeFailure = {
+        kind: 'max_turns',
+        message: `goal exhausted ${updated.maxTurns}-turn budget`,
+        failedAt: Date.now(),
+      };
       await this._flushUpdate(prev =>
         prev.goal && prev.goal.id === evaluatedGoalId
-          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const, lastFailure: failure } }
           : prev,
       );
       this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'budget_exhausted' });
@@ -5522,6 +5564,53 @@ export class Session {
         judgeReason: decision.reason,
       }),
     );
+  }
+
+  /**
+   * Run the judge with one bounded retry on timeout-class errors. Non-
+   * timeout failures (provider error, invalid verdict) fail fast — retrying
+   * a deterministic schema or API misbehavior won't change the outcome and
+   * would delay the operator-visible `goal_paused` signal.
+   */
+  private async _callJudgeWithRetry(goal: GoalState, turn: FullOutput<unknown>): Promise<GoalJudgeDecision> {
+    for (let attempt = 0; attempt < GOAL_JUDGE_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await this._callJudge(goal, turn);
+      } catch (err) {
+        const kind = this._judgeFailureKind(err);
+        const isLastAttempt = attempt === GOAL_JUDGE_MAX_ATTEMPTS - 1;
+        if (kind !== 'timeout' || isLastAttempt) throw err;
+        await new Promise(resolve => setTimeout(resolve, GOAL_JUDGE_RETRY_BACKOFF_MS));
+      }
+    }
+    // Unreachable — the loop either returns a decision or throws on the
+    // final attempt. Cast satisfies TypeScript's reachability checker.
+    throw new HarnessGoalJudgeFailedError('provider_error', 'judge retry loop exited without a decision');
+  }
+
+  /**
+   * Classify a thrown value into a {@link GoalJudgeFailureKind}. The
+   * `HarnessGoalJudgeFailedError` thrown by `_callJudge` carries the kind
+   * directly; other thrown values are pattern-matched on `name` and
+   * message text. Network/socket-class messages (`ECONNRESET`,
+   * `ETIMEDOUT`) and `AbortError` map to `'timeout'`; everything else
+   * maps to `'provider_error'` so the loop fails fast.
+   */
+  private _judgeFailureKind(err: unknown): GoalJudgeFailureKind {
+    if (err instanceof HarnessGoalJudgeFailedError) return err.kind;
+    const name = err instanceof Error ? err.name : '';
+    const message = err instanceof Error ? err.message : '';
+    if (name === 'AbortError' || /timeout|timed[ -]out|ECONNRESET|ETIMEDOUT/i.test(message)) {
+      return 'timeout';
+    }
+    return 'provider_error';
+  }
+
+  /** Build a {@link GoalJudgeFailure} record for `GoalState.lastFailure`. */
+  private _classifyJudgeFailure(err: unknown): GoalJudgeFailure {
+    const kind = this._judgeFailureKind(err);
+    const message = err instanceof Error ? err.message : undefined;
+    return { kind, ...(message ? { message } : {}), failedAt: Date.now() };
   }
 
   /**
@@ -5584,11 +5673,22 @@ export class Session {
     const full = (await (stream as { getFullOutput: () => Promise<unknown> }).getFullOutput()) as {
       object?: unknown;
     };
-    const obj = full.object as { decision: 'done' | 'continue' | 'waiting'; reason: string } | undefined;
-    if (!obj || typeof obj !== 'object') {
-      throw new Error('judge returned no structured output');
+    // Validate the judge output against the verdict schema rather than
+    // casting blindly. A malformed object (missing `decision`, wrong enum
+    // value, non-string `reason`) MUST NOT fall through to the
+    // `continue` branch — surface it as `invalid_verdict` so the loop
+    // pauses with the right taxonomy.
+    if (full.object === undefined || full.object === null) {
+      throw new HarnessGoalJudgeFailedError('invalid_verdict', 'judge returned no structured output');
     }
-    return { decision: obj.decision, reason: obj.reason, judgedAt: Date.now() };
+    const parsed = GoalJudgeSchema.safeParse(full.object);
+    if (!parsed.success) {
+      throw new HarnessGoalJudgeFailedError(
+        'invalid_verdict',
+        `judge output failed schema validation: ${parsed.error.message}`,
+      );
+    }
+    return { decision: parsed.data.decision, reason: parsed.data.reason, judgedAt: Date.now() };
   }
 
   /** @internal — test-only hook used by `session.goal.test.ts`. */

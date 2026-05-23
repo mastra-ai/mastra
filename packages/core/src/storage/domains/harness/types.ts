@@ -193,6 +193,27 @@ export interface GoalJudgeDecision {
 }
 
 /**
+ * Discriminated failure modes for goal-judge invocations. Persisted on
+ * `GoalState.lastFailure` so a recovered or replayed session can introspect
+ * what went wrong without re-running the judge.
+ *
+ * - `timeout` — the judge model invocation timed out (AbortError or
+ *   network-class timeout message). Retried with backoff before pausing.
+ * - `provider_error` — non-transient provider/API error. Not retried.
+ * - `invalid_verdict` — judge returned output that failed schema
+ *   validation. Never falls through as `'continue'`.
+ * - `max_turns` — the goal's `maxTurns` budget was exhausted while still
+ *   `decision === 'continue'`. The judge itself succeeded.
+ */
+export type GoalJudgeFailureKind = 'timeout' | 'provider_error' | 'invalid_verdict' | 'max_turns';
+
+export interface GoalJudgeFailure {
+  kind: GoalJudgeFailureKind;
+  message?: string;
+  failedAt: number;
+}
+
+/**
  * Active goal state. Set via `session.setGoal(...)`, evaluated by the judge
  * model after each assistant turn. See HARNESS_V1_SPEC.md §4.7.
  */
@@ -206,6 +227,10 @@ export interface GoalState {
   createdAt: number;
   /** Most recent judge verdict, persisted so subscribers can read it. */
   lastDecision?: GoalJudgeDecision;
+  /** Most recent judge-loop failure, persisted so recovered sessions can
+   * introspect what went wrong. Cleared by `setGoal` and on a successful
+   * judge verdict. */
+  lastFailure?: GoalJudgeFailure;
 }
 
 /**
