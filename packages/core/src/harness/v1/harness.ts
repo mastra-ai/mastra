@@ -126,6 +126,7 @@ import type {
   ThreadSetSettingsOptions,
   ToolCategory,
 } from './types';
+import type { WorkspacePolicy } from './workspace-policy';
 import { WorkspaceRegistry } from './workspace-registry';
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
@@ -706,6 +707,7 @@ export class Harness {
   /** Snapshot of the workspace kind for fast read paths. `undefined` when not configured. */
   readonly _workspaceKind?: 'shared' | 'per-resource' | 'per-session';
   private readonly _workspaceEager: boolean;
+  private readonly _workspacePolicy?: WorkspacePolicy;
 
   private _initialized = false;
   private _initPromise?: Promise<void>;
@@ -913,6 +915,7 @@ export class Harness {
     // Cross-checks against the subagent registry happen below.
     this._workspaceKind = config.workspace?.kind;
     this._workspaceEager = Boolean(config.workspace?.eager);
+    this._workspacePolicy = config.workspace?.policy;
     this._workspaceRegistry = new WorkspaceRegistry({
       config: config.workspace,
       emitter: this._emitter,
@@ -4142,6 +4145,14 @@ export class Harness {
    * cannot shrink an already-default-TTL lease. */
   get _internalLeaseTtlMs(): number {
     return this._leaseTtlMs;
+  }
+
+  /** @internal — workspace policy for the runtime to evaluate against
+   * classified actions. Returns `undefined` when no policy is configured
+   * on `HarnessConfig.workspace.policy`; in that case the journal records
+   * the caller-driven `policyDecision` verbatim. */
+  _internalGetWorkspacePolicy(): WorkspacePolicy | undefined {
+    return this._workspacePolicy;
   }
 
   /** @internal — goal-loop defaults, consumed by `Session.setGoal()` (§4.7). */

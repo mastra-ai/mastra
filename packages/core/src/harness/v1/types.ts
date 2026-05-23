@@ -40,6 +40,7 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
 import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
+import type { WorkspacePolicy } from './workspace-policy';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
 
 // ---------------------------------------------------------------------------
@@ -1067,16 +1068,23 @@ export type HarnessWorkspaceConfig =
       kind: 'shared';
       workspace: Workspace | ((ctx: { requestContext: RequestContext }) => Workspace | Promise<Workspace>);
       eager?: boolean;
+      /** Optional workspace-action allow/ask/deny policy. When set, the
+       * runtime evaluates every classified workspace action against this
+       * policy and journals the decision + matched rules as evidence.
+       * Absent = legacy caller-driven `policyDecision`. */
+      policy?: WorkspacePolicy;
     }
   | {
       kind: 'per-resource';
       provider: WorkspaceProvider | ((ctx: WorkspaceProviderContext) => Workspace | Promise<Workspace>);
       eager?: boolean;
+      policy?: WorkspacePolicy;
     }
   | {
       kind: 'per-session';
       provider: WorkspaceProvider;
       eager?: boolean;
+      policy?: WorkspacePolicy;
     };
 
 /**

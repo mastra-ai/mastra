@@ -148,6 +148,8 @@ import type {
 } from './types';
 import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace-actions';
 import { classifyHarnessWorkspaceToolAction } from './workspace-actions';
+import type { WorkspaceFileOperation, WorkspacePolicyAction } from './workspace-policy';
+import { evaluateWorkspacePolicy } from './workspace-policy';
 
 type MessageAdmissionIdentity = {
   signalId: string;
@@ -4469,6 +4471,36 @@ export class Session {
       },
       'workspaceActionJournal.result',
     );
+    // If a workspace policy is configured AND the classified action maps
+    // cleanly into a `WorkspacePolicyAction`, evaluate it and overlay the
+    // verdict + reasons + matchedRules onto the journal entry. The caller's
+    // `params.policyDecision` is still preserved under `actor.callerDecision`
+    // for operator-side comparison (caller intent vs. policy verdict).
+    // When no policy is configured OR the action shape can't be mapped
+    // (e.g. command tools without a string command), fall back to the
+    // legacy caller-driven path.
+    const policy = this._harness._internalGetWorkspacePolicy();
+    const policyAction = policy ? this._toPolicyAction(mapped) : undefined;
+    let resolvedDecision: PermissionPolicy = params.policyDecision;
+    let resolvedReasons: string[] = [`harness.tool_permission_${params.policyDecision}`];
+    let resolvedMatched: JsonValue[] = [];
+    if (policy && policyAction) {
+      const evaluation = evaluateWorkspacePolicy(policy, policyAction);
+      resolvedDecision = evaluation.decision;
+      resolvedReasons = evaluation.reasons;
+      resolvedMatched = evaluation.matchedRules.map(rule => ({
+        ...(rule.id !== undefined ? { id: rule.id } : {}),
+        decision: rule.decision,
+        ...(rule.reason !== undefined ? { reason: rule.reason } : {}),
+      }));
+    } else if (policy && !policyAction) {
+      // Policy configured but the classifier output doesn't translate
+      // (e.g. a 'command' kind whose `mapped.action.command` is not a
+      // string — process_output / kill_process). Surface this with an
+      // extra reason so operators can see which surfaces still rely on
+      // the caller-driven decision.
+      resolvedReasons = [...resolvedReasons, `harness.policy_unmappable_${mapped.actionKind}_${mapped.operation}`];
+    }
     try {
       await this._storage.appendWorkspaceActionJournalEntry({
         id: `waj-${randomUUID()}`,
@@ -4479,9 +4511,9 @@ export class Session {
         actionKind: mapped.actionKind,
         operation: mapped.operation,
         action,
-        policyDecision: params.policyDecision,
-        policyReasons: [`harness.tool_permission_${params.policyDecision}`],
-        matchedRules: [],
+        policyDecision: resolvedDecision,
+        policyReasons: resolvedReasons,
+        matchedRules: resolvedMatched,
         ...(mapped.path ? { path: mapped.path } : {}),
         ...(mapped.toPath ? { toPath: mapped.toPath } : {}),
         ...(mapped.cwd ? { cwd: mapped.cwd } : {}),
@@ -4494,6 +4526,7 @@ export class Session {
             ...(params.observability ? { observability: params.observability } : {}),
             source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
             ...(this._record.parentSessionId ? { parentSessionId: this._record.parentSessionId } : {}),
+            ...(policy ? { callerDecision: params.policyDecision } : {}),
           },
           'workspaceActionJournal.actor',
         ),
@@ -4529,6 +4562,84 @@ export class Session {
       toolNameConfig: this._workspace?.getToolsConfig?.() as HarnessWorkspaceToolNameConfig | undefined,
       mcpServerKeys: this._harness._listMcpServerKeys(),
     });
+  }
+
+  /**
+   * Translate a classifier output into a `WorkspacePolicyAction` the
+   * `evaluateWorkspacePolicy` evaluator can consume. Returns `undefined`
+   * for action shapes the evaluator does not model (e.g. command tools
+   * without a string `command`, or file operations outside the policy's
+   * `WorkspaceFileOperation` union such as `'index'` / `'search'`).
+   * When `undefined` is returned the runtime falls back to the
+   * caller-driven `policyDecision`.
+   */
+  private _toPolicyAction(mapped: HarnessWorkspaceToolAction<WorkspaceJournalPath>): WorkspacePolicyAction | undefined {
+    if (mapped.actionKind === 'file') {
+      const fileOps = new Set<WorkspaceFileOperation>(['read', 'write', 'delete', 'rename', 'patch']);
+      if (!fileOps.has(mapped.operation as WorkspaceFileOperation)) return undefined;
+      // Prefer the classifier's already-resolved absolute path so the
+      // policy evaluator does not reinterpret a relative input under
+      // every configured root. With nested roots (`/ws` + `/ws/readonly`)
+      // a relative `src/index.ts` could otherwise match the wrong root
+      // and produce an incorrect verdict. Fall back to `pathInput` only
+      // when the classifier did not compute an absolute path (e.g. no
+      // `pathFor` resolver wired).
+      const absolutePath = mapped.path?.path;
+      const path = typeof absolutePath === 'string' && absolutePath.length > 0 ? absolutePath : mapped.pathInput;
+      if (typeof path !== 'string' || path.length === 0) return undefined;
+      const absoluteToPath = mapped.toPath?.path;
+      const toPath =
+        typeof absoluteToPath === 'string' && absoluteToPath.length > 0 ? absoluteToPath : mapped.toPathInput;
+      // Intentionally do NOT pass `rootId` here. The Session's filesystem id
+      // (used as the journal's `path.rootId`) is unrelated to the operator-
+      // configured policy root ids; letting the policy resolver pick the
+      // root from the absolute path avoids identifier-namespace collisions.
+      return {
+        kind: 'file',
+        operation: mapped.operation as WorkspaceFileOperation,
+        path,
+        ...(typeof toPath === 'string' && toPath.length > 0 ? { toPath } : {}),
+      };
+    }
+    if (mapped.actionKind === 'command') {
+      const command = mapped.action.command;
+      if (typeof command !== 'string' || command.length === 0) return undefined;
+      const cwd = mapped.cwdInput;
+      const argsRaw = mapped.action.args;
+      const cmdArgs =
+        Array.isArray(argsRaw) && argsRaw.every((arg): arg is string => typeof arg === 'string')
+          ? (argsRaw as string[])
+          : undefined;
+      return {
+        kind: 'command',
+        command,
+        ...(typeof cwd === 'string' && cwd.length > 0 ? { cwd } : {}),
+        ...(cmdArgs ? { args: cmdArgs } : {}),
+      };
+    }
+    if (mapped.actionKind === 'network') {
+      const host = mapped.action.host;
+      if (typeof host !== 'string' || host.length === 0) return undefined;
+      const portRaw = mapped.action.port;
+      const protocol = mapped.action.protocol;
+      return {
+        kind: 'network',
+        host,
+        ...(typeof portRaw === 'number' && Number.isFinite(portRaw) ? { port: portRaw } : {}),
+        ...(typeof protocol === 'string' && protocol.length > 0 ? { protocol } : {}),
+      };
+    }
+    if (mapped.actionKind === 'mcp') {
+      const serverId = mapped.action.serverId;
+      if (typeof serverId !== 'string' || serverId.length === 0) return undefined;
+      const toolName = mapped.action.toolName;
+      return {
+        kind: 'mcp',
+        serverId,
+        ...(typeof toolName === 'string' && toolName.length > 0 ? { toolName } : {}),
+      };
+    }
+    return undefined;
   }
 
   private _workspaceJournalPath(inputPath: string): WorkspaceJournalPath {
