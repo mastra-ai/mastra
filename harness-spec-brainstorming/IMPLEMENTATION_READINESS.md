@@ -179,114 +179,79 @@ classDiagram
   mode/model/state mutation, display snapshots, `listMessages`, skills,
   permissions, subagents, goals, abort, idle waiting, and workspace lifecycle.
 - Current `Mastra` has `harnesses?: Record<string, HarnessV1>`,
-  `getHarness(name)`, and `getHarnesses()`. Harnesses bind after agents are
-  registered. It still has no awaited Harness boot/readiness barrier, no
-  Harness-owned worker startup/shutdown semantics, no singular/default
-  `harness` config sugar, and no `mastra.harnessChannels` operator surface.
-  Channel and background task initialization are currently fire-and-forget from
-  construction time.
-- Current channel support is split between platform `ChannelProvider` routes and
-  legacy `AgentChannels`. It does not have the Harness v1 `ChannelBinding`,
-  `ChannelInboxItem`, `ChannelActionReceipt`, or `ChannelOutboxItem` ledgers.
-- Current Harness storage owns `SessionRecord` rows, session leases, and
-  attachment metadata/bytes through core in-memory storage and the LibSQL
-  adapter. It does not yet own durable operation admission/result/tombstone
-  rows, channel ledgers, wakeup rows, or worker claim/receipt rows.
-- Current `Harness.attachments.upload(...)` and `Harness.attachments.delete(...)`
-  still throw even though the storage domain has attachment primitives.
-- Current per-turn `HarnessRequestContext` exposes identity, state,
-  workspace, subagent, and `useSkill(...)` helpers, but `ctx.registerQuestion`
-  and `ctx.registerPlanApproval` still throw.
-- Current server packages expose `/channels/...` and other existing route
-  families, but no `/harness/...` route family. Current `client-js` and React
-  packages have no `RemoteHarness` / `RemoteSession` resource or hooks.
-- Current `WorkflowScheduler` claims schedule fires by advancing `nextFireAt`
-  before publishing `workflow.start`; Harness v1 needs `HarnessWakeupItem` as
-  the durable recovery boundary before session queue admission.
-- Current `BackgroundTaskManager` persists task rows, but executors and
-  completion hooks are process-local task contexts. A raw background task row is
-  not a Harness-visible durability boundary unless executor and completion
-  policy can be rebuilt or an owning Harness row remains retryable. Current
-  `Mastra.shutdown()` does not stop the background task manager.
-- Current `EventedAgent.executeWorkflow(...)` uses `startAsync({ inputData })`
-  without forwarding `requestContext`; trusted channel-origin work must stay
-  disabled on that path until fixed and tested.
-- Current durable agent execution is keyed by `runId` through
-  `stream(...)` / `resume(...)` / `observe(...)`; there is no current
-  `sendSignal(...)`, `signalId`, or accepted-signal admission receipt surface.
-  Harness v1 queue replay and channel ingress must add or adapt that boundary
-  before claiming duplicate accepted signals are suppressed.
+  `getHarness(name)`, and `getHarnesses()`, plus singular/default
+  `harness?: HarnessV1` sugar. Harnesses bind after agents are registered and
+  initialize through the Mastra lifecycle readiness path before worker startup;
+  `Mastra.shutdown()` now stops registered Harness instances and the background
+  task manager.
+- Current channel support still includes platform `ChannelProvider` routes and
+  legacy `AgentChannels`, but Harness v1 now has channel provider/binding
+  registration plus storage ledgers for `ChannelInboxItem`,
+  `ChannelActionToken`, `ChannelActionReceipt`, and `ChannelOutboxItem`.
+  Source-confirmed runtime support is currently the Harness-owned outbox enqueue
+  / per-harness dispatch path plus diagnostics; inbound callback routes,
+  cross-harness operator dispatch, repair APIs, and product-specific operator UI
+  stay deferred unless Linear records a new scope decision.
+- Current Harness storage owns `SessionRecord` rows, session leases,
+  attachment metadata/bytes, operation admission/result/tombstone evidence,
+  channel ledgers, wakeup rows, and claim/receipt metadata across the core
+  in-memory domain, LibSQL adapter, and PG adapter.
+- Current `Harness.attachments.upload(...)` and
+  `Harness.attachments.delete(...)` are implemented for file, primitive, and
+  element refs, with guarded delete and admission validation.
+- Current per-turn `HarnessRequestContext` exposes identity, state, workspace,
+  subagent, `useSkill(...)`, `registerQuestion(...)`, and
+  `registerPlanApproval(...)` helpers.
+- Current server packages mount authenticated `/harness/...` routes for session
+  create/list/snapshot, attachments, mutations, inbox responses, goal controls,
+  state/mode/model/permission updates, channel diagnostics, SSE event replay,
+  and message/queue result lookup. `client-js` exports `RemoteHarness` /
+  `RemoteSession`; React exports `useHarnessSession` and
+  `useRemoteHarnessSession`.
+- Current Harness wakeup storage and worker slices use `HarnessWakeupItem` as
+  the durable recovery boundary before queue admission; scheduler/pubsub
+  acceleration remains separate from the durable row.
+- Current `BackgroundTaskManager` still has process-local executor boundaries,
+  but Harness-related recovery now fails closed where executor or completion
+  policy cannot be rebuilt, and `Mastra.shutdown()` stops the manager.
+- Current Harness message, queue, wakeup, and remote-recovery paths have
+  admission and ownership boundaries through supported routes/workers.
+  `EventedAgent.executeWorkflow(...)` still uses `startAsync({ inputData })`
+  without forwarding `requestContext`, and inbound channel callback routes are
+  not source-confirmed; any new platform route or workflow path must stay
+  disabled until it proves the same `requestContext` forwarding and ownership
+  checks.
+- Current durable agent execution exposes `signalId` / `runId` admission
+  evidence, retained result lookup, and queued-item correlation for message,
+  queue, wakeup, and remote recovery flows.
 
-## Missing Implementation Capabilities
+## Remaining Implementation and Release Checks
 
-1. **Local v1 parity gaps.** Complete the local surface that still throws or is
-   intentionally narrow: `Harness.attachments.upload/delete`,
-   request-context `registerQuestion` / `registerPlanApproval`, code-registered
-   skills plus stronger skill-schema validation, and close/delete fences that
-   rely on the durable row families below. Keep legacy Harness behavior isolated
-   until migration is intentional.
-2. **Harness storage domain.** Extend the current session/lease/attachment
-   domain with storage interfaces and adapters for `QueueAdmissionReceipt`,
-   operation tombstones/results, pending inbox response receipts,
-   `HarnessRunOperationalState`, `HarnessWakeupItem`, channel ledgers, and
-   worker claim/receipt rows. Thread/message reads and writes must stay on the
-   configured MemoryStorage-backed message log or an equivalent shared adapter,
-   not a Harness-only duplicate log.
-3. **Admission idempotency and result correlation.** Implement `admissionId`
-   plus stable admission hash handling for `message(...)` accepted signals and
-   `queue(...)` durable appends. Accepted signals must expose terminal status by
-   `signalId` and an operation-scoped result/error; queued items must bind
-   `queuedItemId` to the drained `signalId`.
-   Exact retries must return the original metadata/result state while the
-   required receipt or tombstone evidence is retained; same id with different
-   hash must fail before a second admission. Queue drain recovery must split
-   pre-acceptance retry from post-acceptance reconciliation: retry unaccepted
-   signal admissions with the same key, and reconcile accepted signals by
-   `signalId` / `runId` without sending a second signal.
-4. **Session lease and recovery loop.** Implement one-owner session mutation,
-   lease acquisition/renewal/release, stale-owner rejection, queue replay after
-   crash, pending response recovery, and current-run projection under the lease.
-   Queue drain is session-owner work at idle/recovery boundaries, not a
-   separately claimed worker lane.
-5. **Provider/model/subagent flexibility.** Preserve serializable per-turn
-   overrides (`mode`, `model`, `yolo`, request context), reject non-serializable
-   `addTools` where storage must replay, persist subagent sessions with
-   `parentSessionId`, and fail closed when agents, models, tools, MCP bindings,
-   or workspace providers drift.
-6. **Mastra harness lifecycle.** Extend the existing
-   `new Mastra({ harnesses })` / `getHarness(name)` registry with any accepted
-   default/singular sugar, then wire Harness readiness into the Mastra/server
-   bootstrap and shutdown lifecycle before server routes accept Harness traffic.
-7. **Harness channel registry.** Build an init-time registry for
-   `(harnessName, channelId, providerId)`, provider-owned callback bindings,
-   route uniqueness, persisted binding namespaces, and legacy `AgentChannels`
-   overlap checks.
-8. **Channel bridge ledgers and workers.** Implement durable channel ingress,
-   action, outbox, projection, claim/renew/retry/dead-letter workers, and
-   `dispatchOutbox(...)` operator surfaces. Live `agent.stream(...)` /
-   direct-platform delivery cannot be the Harness channel durability contract.
-   Keep these as channel-specific rows and workers; do not introduce a generic
-   integration inbox/outbox/action-receipt abstraction for v1.
-9. **Wakeup integration.** Add `HarnessWakeupItem` creation/claim/retry/dead
-   behavior and a wakeup worker that admits due work through `session.queue(...)`
-   with the persisted `admissionId`. Scheduler pubsub should accelerate work,
-   not be the durable record.
-10. **Execution substrate fixes.** Forward `requestContext` through
-    `EventedAgent.startAsync`, add `resumeAttemptId = responseId` de-dupe before
-    enabling channel actions for pending kinds, and make background-task
-    recovery fail closed unless executor/completion policy is reconstructable or
-    an owning Harness row can retry.
-11. **Server routes and SDK.** Add `/harness/...` server routes, settle API-prefix
-    behavior, map wire errors to Harness error classes, resolve authenticated
-    `resourceId` server-side, add operation result lookup for `signalId` /
-    `queuedItemId` recovery after SSE gaps, and reject caller-writable
-    `requestContext.channel` outside trusted integration paths.
-12. **Focused tests.** Implement §15.2 as the acceptance matrix: duplicate
-    admission, same-key conflicts, claim races, claim renewal failure, restart
-    recovery, provider acknowledgement reconciliation, stale tokens,
-    request-context propagation, runtime drift, background-task missing executor,
-    background-task shutdown, local interval validation, multi-harness route
-    ambiguity, tenant mismatch, and process-local-default documentation.
+1. **Release-evidence pass.** §15.2 remains a release gate: every row needs an
+   executable test, explicit PR evidence, or an owning §15.3 deferral. PF-376,
+   PF-377, and PF-378 added broad core, client attachment, and channel
+   acceptance coverage, but the final release pass still needs a row-by-row
+   evidence map before Harness v1 is called complete.
+2. **Worker readiness and operator surfaces.** Harness readiness now gates
+   route startup and worker initialization, while read-only diagnostics exist
+   for session-scoped channel state. Current operator dispatch is the
+   per-harness `harness.channels.dispatchOutbox(...)` surface; cross-harness
+   operator routes or repair APIs remain deferred by §15.3 and must not be
+   inferred from diagnostics.
+3. **Background-task reconstruction limits.** Shutdown is wired and recovery
+   fails closed for missing executor/completion policy, but background task rows
+   remain source-specific diagnostics rather than a generic durable work ledger.
+4. **Auth transport and scoped token hardening.** Header/cookie auth and
+   resource-scoped Harness routes are implemented, and SSE supports a scoped
+   `subscriptionToken` fallback. That fallback must preserve §13.2
+   bearer-query-token rejection and must not become a bearer-equivalent URL
+   credential.
+5. **PapersFlow integration polish.** PapersFlow-facing needs around
+   file/primitive/element attachment refs, provider object metadata for
+   product-owned blob stores such as R2, observability/OM correlation, action
+   catalogs, and workspace journals now have Mastra-side primitives. Remaining
+   product-specific read state, notification state, repair UI, and artifact
+   browsing are outside v1 unless Linear records a new accepted scope decision.
 
 ## Implementation Mapping Checks
 
@@ -346,29 +311,33 @@ classDiagram
 - **Existing background task lifecycle.** Include `BackgroundTaskManager`
   shutdown in Mastra shutdown while adding Harness-owned worker drain.
 
-## Next Project Phases
+## Completed Project Phases and Release Tail
 
-1. **Foundations.** Add v1 module boundaries, storage interfaces, in-memory
-   storage, error classes, and focused storage tests.
-2. **Session core.** Implement `Harness.session(...)`, durable `Session`, leases,
-   queue/idempotency, pending response receipts, and lifecycle close/delete.
-3. **Runtime integration.** Wire `Session.message(...)` / `queue(...)` to
-   DurableAgent/EventedAgent, persist current-run state, preserve requestContext,
-   and add runtime-drift fail-closed checks.
-4. **Subagents and flexibility.** Move subagents to first-class child sessions,
-   persist model/provider choices, enforce serializable overrides, and preserve
-   workspace/tool/memory ownership on resume.
-5. **Mastra/server lifecycle.** Add `harness` registration, `getHarness`,
-   awaited boot/readiness and shutdown, server route mounting, and route-prefix
-   policy without assuming the current package already has a public
-   `Mastra.init()` method.
-6. **Channel registry.** Implement registry validation, provider callback
-   binding, legacy AgentChannels fencing, and multi-harness shared-provider tests.
-7. **Channel workers.** Implement ingress/action/outbox ledgers, projection,
-   dispatch, claim renewal, retry, dead-letter, and operator dispatch.
-8. **Wakeups and background execution.** Add `HarnessWakeupItem` workers,
-   decide/restrict background-task reconstruction semantics, and include
-   background-task manager shutdown in lifecycle tests.
-9. **Acceptance matrix.** Land the §15.2 tests incrementally and run the
-   narrowest package checks first, expanding only when the touched surface
-   requires it.
+1. **Foundations.** V1 module boundaries, storage interfaces, in-memory storage,
+   error classes, and focused storage tests are present.
+2. **Session core.** `Harness.session(...)`, durable `Session`, leases,
+   queue/idempotency, pending response receipts, and lifecycle close/delete are
+   implemented.
+3. **Runtime integration.** `Session.message(...)` / `queue(...)` route through
+   durable agent execution with current-run evidence and runtime-drift
+   fail-closed checks. Request-context preservation is proven for the supported
+   Harness paths; the raw EventedAgent `startAsync` path remains an explicit
+   mapping check before it can be used for trusted channel-origin work.
+4. **Subagents and flexibility.** Subagents use first-class child sessions,
+   serializable per-turn mode/model/yolo/request-context overrides are
+   preserved, and workspace/tool/memory ownership is checked on resume.
+5. **Mastra/server lifecycle.** Harness registration, default sugar, readiness,
+   shutdown, server route mounting, and API-prefix policy are implemented.
+6. **Channel registry.** Registry validation, provider callback binding,
+   legacy AgentChannels fencing, and shared-provider tests are implemented.
+7. **Channel storage and outbox.** Registry/binding support,
+   inbox/action/outbox ledgers, outbox projection, per-harness dispatch, retry
+   metadata, and diagnostics are implemented within the v1 scope. Inbound
+   callback routes, cross-harness operator dispatch, and repair APIs remain
+   deferred unless Linear records new scope.
+8. **Wakeups and background execution.** `HarnessWakeupItem` storage/workers,
+   background-task reconstruction restrictions, and background-task manager
+   shutdown are implemented.
+9. **Acceptance and release evidence.** §15.2 coverage is now incremental
+   release evidence rather than an unstarted phase. Keep this matrix current
+   after upstream syncs and any follow-up PRs that change Harness behavior.

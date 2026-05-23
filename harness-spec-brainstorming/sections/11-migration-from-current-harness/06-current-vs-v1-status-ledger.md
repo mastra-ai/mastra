@@ -33,39 +33,67 @@ records (§5.1, §5.2) stay with their owning sections and are not re-exported
 through the v1 runtime entry; clients reach them via the §13.3 wire surface
 or §5.2 `HarnessStorageDomain` instead.
 
-#### PF-342 source-alignment snapshot
+#### PF-344 source-alignment snapshot
 
 This ledger still classifies spec names against legacy/current Mastra collision
 risk. It is not a claim that `@mastra/core/harness/v1` is empty: as of
-`9770d5c86efcd3533008a650ae266393828b0e0b`, the v1 subpath has a local
-implementation in `packages/core/src/harness/v1/**`.
+`ba5a939ff9d0256ff6bc1a175aef378e9cf8dd26`, the v1 subpath and remote
+contract have a substantial implementation across core, server, storage, and
+SDK packages.
 
 Source-confirmed local surfaces now present:
 
 - `Harness` and `Session` classes under `packages/core/src/harness/v1`.
-- Mastra registry support through `harnesses?: Record<string, HarnessV1>`,
-  `getHarness(name)`, and `getHarnesses()` in
+- Mastra registry support through `harness?: HarnessV1`,
+  `harnesses?: Record<string, HarnessV1>`, `getHarness(name)`,
+  `getHarnesses()`, lifecycle readiness, and shutdown in
   `packages/core/src/mastra/index.ts`.
-- Local session resolver/lifecycle, thread CRUD/settings, model catalog reads,
-  event subscription, message/signal/queue execution, inbox response methods,
-  display state, message listing, mode/model/state mutation, permissions,
-  workspace-backed skills, subagents, goals, abort, and idle waiting.
-- Harness storage for session records, leases, and attachments in core
-  in-memory storage and the LibSQL adapter.
+- Local session resolver/lifecycle, thread CRUD/settings, model catalog/auth
+  reads, event subscription/replay, message/signal/queue execution, durable
+  admission/result lookup, inbox response methods, display state, message
+  listing, mode/model/state mutation, permissions, workspace-backed skills,
+  subagents, goals, abort, idle waiting, and guarded close/delete.
+- File, primitive, and element attachment upload/delete through
+  `Harness.attachments`, including guarded delete and session admission
+  validation.
+- Request-context question and plan approval registration through
+  `ctx.registerQuestion(...)` and `ctx.registerPlanApproval(...)`.
+- Harness storage for session records, leases, attachments, operation
+  admission/result/tombstone evidence, channel inbox/action/outbox rows,
+  wakeup rows, and claim/receipt metadata in the core in-memory domain,
+  LibSQL adapter, and PG adapter.
+- Server route support for `/harness/...` session, attachment, mutation,
+  inbox, goal, state, diagnostics, SSE replay, and result lookup flows under
+  `packages/server/src/server/handlers/harness.ts`.
+- Remote SDK support through `RemoteHarness` / `RemoteSession` in
+  `client-sdks/client-js/src/resources/harness.ts` and
+  `useHarnessSession` / `useRemoteHarnessSession` in
+  `client-sdks/react/src/harness/hooks.ts`.
+- Harness channel registry, provider callback binding storage, durable
+  channel inbox/action/outbox rows, session-scoped diagnostics, and wakeup
+  worker/storage slices.
 
-Source-confirmed gaps that remain missing or intentionally throwing:
+Source-confirmed remaining limitations or deferred boundaries:
 
-- `Harness.attachments.upload(...)` and `Harness.attachments.delete(...)` throw
-  in `packages/core/src/harness/v1/harness.ts`.
-- `ctx.registerQuestion(...)` and `ctx.registerPlanApproval(...)` throw in
-  `packages/core/src/harness/v1/session.ts`.
-- The Harness storage domain has no durable operation admission/result/
-  tombstone rows, channel ledger rows, wakeup rows, or worker claim/receipt
-  rows.
-- No `/harness/...` server route family exists under `packages/server/src`.
-- No `RemoteHarness` / `RemoteSession` client-js or React SDK surface exists.
-- No Harness channel registry/bridge ledgers/workers or `HarnessWakeupItem`
-  worker implementation exists.
+- First-class durable artifact list/fetch APIs, generic MCP/app callback
+  ledgers, generic non-read external action receipts, a generic durable work
+  ledger/table, automatic closed-session garbage collection, per-principal
+  read/notification state, richer stream-chunk replay, and retry-safe typed
+  generate admission remain deferred by §15.3 unless a future Linear issue
+  records a new scope decision.
+- Operator repair APIs beyond dispatch and product-specific repair UI are not
+  implied by the read-only diagnostics surfaces.
+- Inbound Harness channel callback routes/workers and a cross-harness
+  `mastra.harnessChannels.dispatchOutbox(...)` operator surface are not
+  source-confirmed; current source-confirmed dispatch is per-harness
+  `harness.channels.dispatchOutbox(...)`.
+- The supported Harness paths preserve request context, but raw
+  `EventedAgent.executeWorkflow(...)` still calls `startAsync({ inputData })`
+  without forwarding `requestContext`; new platform routes or workflow paths
+  must prove request-context forwarding and ownership checks before trusted
+  channel-origin work uses them.
+- Background task rows remain source-specific diagnostics unless executor and
+  completion policy are reconstructable or an owning Harness row can retry.
 
 #### 11.6a Names that overlap with current Mastra code
 
