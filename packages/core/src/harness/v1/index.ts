@@ -119,6 +119,20 @@ export type {
   WorkspaceRestoreStepStatus,
 } from './workspace-restore';
 
+export type {
+  HarnessAdmissionEvidence,
+  HarnessEvidence,
+  HarnessEvidenceKind,
+  HarnessRun,
+  HarnessRunFinishReason,
+  HarnessTask,
+  HarnessTaskIndexEntry,
+  HarnessTaskOrigin,
+  HarnessTaskStatus,
+  PendingInteraction,
+  TaskIdFieldMapping,
+} from './contracts';
+
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version
  * interfaces (spec §11.1). They are re-exported from v1 and back the same

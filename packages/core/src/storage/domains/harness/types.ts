@@ -385,15 +385,14 @@ export interface HarnessStoredPublicError {
   message: string;
 }
 
-export type AgentSignalResultStatus =
-  (
-    | { status: 'pending'; signalId: string; runId?: string }
-    | { status: 'completed'; signalId: string; runId: string; result: unknown }
-    | { status: 'failed'; signalId: string; runId?: string; error: HarnessStoredPublicError }
-  ) & {
-    modeId?: string;
-    modelId?: string;
-  };
+export type AgentSignalResultStatus = (
+  | { status: 'pending'; signalId: string; runId?: string }
+  | { status: 'completed'; signalId: string; runId: string; result: unknown }
+  | { status: 'failed'; signalId: string; runId?: string; error: HarnessStoredPublicError }
+) & {
+  modeId?: string;
+  modelId?: string;
+};
 
 export interface AgentSignalAccepted {
   runId: string;
@@ -987,6 +986,14 @@ export type OperationAdmissionEvidence =
   | AgentSignalResultStatus
   | QueueAdmissionReceipt
   | OperationAdmissionTombstone;
+
+/**
+ * Canonical public name for the evidence rows returned by
+ * `resolveOperationAdmissionEvidence`. Internal storage call sites still use
+ * `OperationAdmissionEvidence`; this alias gives the Harness v1 public
+ * contract a stable name without renaming adapter surfaces.
+ */
+export type HarnessOperationAdmissionEvidence = OperationAdmissionEvidence;
 
 // ---------------------------------------------------------------------------
 // Attachment metadata
