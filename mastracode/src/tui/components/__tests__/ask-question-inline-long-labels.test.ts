@@ -118,12 +118,7 @@ describe('AskQuestionInlineComponent long-label wrapping (issue #17002)', () => 
   });
 
   it('wraps long labels in answered cancelled state without overflowing', () => {
-    const component = AskQuestionInlineComponent.fromHistory(
-      'Pick one',
-      [{ label: LONG_LABEL }],
-      '',
-      true,
-    );
+    const component = AskQuestionInlineComponent.fromHistory('Pick one', [{ label: LONG_LABEL }], '', true);
     const box = (component as any).borderedBox;
     const lines = box.render(TERMINAL_WIDTH) as string[];
     expect(maxLineWidth(lines)).toBeLessThanOrEqual(TERMINAL_WIDTH);
