@@ -2,4 +2,18 @@
 '@mastra/acp': minor
 ---
 
-Added `model` option to `createACPTool` and `AcpAgent` for programmatic model selection via the ACP `session/set_model` method, removing the need to configure models through environment variables.
+Added programmatic model selection for ACP agents using the `model` option.
+
+You can now set the model directly when creating `AcpAgent` or `createACPTool`, instead of relying on environment variables.
+
+```ts
+const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'ACP-compatible coding agent',
+  command: 'claude',
+  args: ['--acp'],
+  model: 'claude-sonnet-4-20250514',
+});
+```
+
+Discover available models with `getAvailableModels()` and change the model at runtime with `setModel()`. Invalid model IDs throw a descriptive error listing valid options.
