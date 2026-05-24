@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
+import { HarnessStorage, HarnessStorageSessionEventReplayUnsupportedError } from '../../storage/domains/harness/base';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { buildFakeOutput } from './__test-utils__/fake-output';
@@ -308,6 +309,118 @@ describe('Session.subscribe()', () => {
     });
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0]!.sequence).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Replay-unsupported adapter: every replay-aware public API surface
+  // raises the typed HarnessEventReplayUnsupportedError when the storage
+  // adapter declares `sessionEventReplay: false`. The harness used to leak
+  // the storage-internal HarnessStorageSessionEventReplayUnsupportedError
+  // (and Session.listEventsAfter silently no-op'd persistence), which made
+  // it impossible for server routes / A2A `tasks/resubscribe` / headless
+  // workers to surface a clean "this backend can't replay" signal.
+  // -------------------------------------------------------------------------
+
+  function setupReplayUnsupported() {
+    const agent = new FakeAgent('default');
+    // Subclass that opts out of the durable event ledger. Overriding the
+    // method back to the base no-op flips the capability matrix's
+    // prototype-detection to false.
+    class NoReplayHarness extends InMemoryHarness {
+      override appendSessionEvent = HarnessStorage.prototype.appendSessionEvent;
+      override getSessionEventReplayState = HarnessStorage.prototype.getSessionEventReplayState;
+      override listSessionEvents = HarnessStorage.prototype.listSessionEvents;
+    }
+    const storage = new NoReplayHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    return { harness, agent, storage };
+  }
+
+  it('Session.getEventReplayState throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(session.getEventReplayState()).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  it('Session.listEventsAfter throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(session.listEventsAfter({ epoch: 'any', afterSequence: -1, limit: 10 })).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  it('Harness.getSessionEventReplayState throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(
+      harness.getSessionEventReplayState({ sessionId: session.id, resourceId: session.resourceId }),
+    ).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  it('Harness.listSessionEventsAfter throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(
+      harness.listSessionEventsAfter({
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        epoch: 'any',
+        afterSequence: -1,
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  // Defense-in-depth: an adapter that DECLARES replay support but then
+  // throws the storage-internal unsupported error on a specific call shape
+  // must still translate to the typed public error on all four surfaces.
+  // This pins the misdeclared-adapter contract beyond the upfront
+  // capability check.
+  it('Session APIs translate misdeclared HarnessStorageSessionEventReplayUnsupportedError', async () => {
+    const { harness, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    // Adapter declares replay-supported (default InMemoryHarness does), but
+    // we stub the storage calls to throw the storage-internal error.
+    const throwUnsupported = () => {
+      throw new HarnessStorageSessionEventReplayUnsupportedError();
+    };
+    storage.getSessionEventReplayState = throwUnsupported as any;
+    storage.listSessionEvents = throwUnsupported as any;
+
+    await expect(session.getEventReplayState()).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+    });
+    await expect(session.listEventsAfter({ epoch: 'e', afterSequence: -1, limit: 10 })).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+    });
+    await expect(
+      harness.getSessionEventReplayState({ sessionId: session.id, resourceId: session.resourceId }),
+    ).rejects.toMatchObject({ name: 'HarnessEventReplayUnsupportedError' });
+    await expect(
+      harness.listSessionEventsAfter({
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        epoch: 'e',
+        afterSequence: -1,
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessEventReplayUnsupportedError' });
   });
 });
 

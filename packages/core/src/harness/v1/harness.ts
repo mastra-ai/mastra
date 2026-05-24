@@ -71,6 +71,7 @@ import {
   HarnessAttachmentInUseError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
+  HarnessEventReplayUnsupportedError,
   HarnessModelNotFoundError,
   HarnessRuntimeDependencyDriftError,
   HarnessSessionClosedError,
@@ -3073,6 +3074,9 @@ export class Harness {
     resourceId: string;
   }): Promise<HarnessSessionEventReplayState | null> {
     const storage = this._requireStorage('getSessionEventReplayState()');
+    if (!storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Harness.getSessionEventReplayState()');
+    }
     const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored || stored.resourceId !== opts.resourceId) return null;
     try {
@@ -3083,7 +3087,11 @@ export class Harness {
         threadId: stored.threadId,
       });
     } catch (err) {
-      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) throw err;
+      // Defense-in-depth: capability-true adapters that throw the storage
+      // unsupported error on a specific call shape get translated here too.
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Harness.getSessionEventReplayState()');
+      }
       throw new HarnessStorageError(stored.id, 'load', err);
     }
   }
@@ -3096,6 +3104,9 @@ export class Harness {
     limit: number;
   }): Promise<HarnessSessionEventRecord[]> {
     const storage = this._requireStorage('listSessionEventsAfter()');
+    if (!storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Harness.listSessionEventsAfter()');
+    }
     const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored || stored.resourceId !== opts.resourceId) return [];
     try {
@@ -3109,7 +3120,9 @@ export class Harness {
         limit: opts.limit,
       });
     } catch (err) {
-      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) throw err;
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Harness.listSessionEventsAfter()');
+      }
       throw new HarnessStorageError(stored.id, 'load', err);
     }
   }

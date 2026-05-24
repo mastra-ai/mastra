@@ -80,6 +80,7 @@ import {
   HarnessAdmissionConflictError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
+  HarnessEventReplayUnsupportedError,
   HarnessInboxItemNotFoundError,
   HarnessInboxResponseConflictError,
   HarnessGoalJudgeFailedError,
@@ -942,14 +943,28 @@ export class Session {
 
   async getEventReplayState() {
     this._assertLive('getEventReplayState()');
+    if (!this._storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Session.getEventReplayState()');
+    }
     await this._flushEventPersistence();
     const record = this.getRecord();
-    return this._storage.getSessionEventReplayState({
-      harnessName: record.harnessName,
-      sessionId: record.id,
-      resourceId: record.resourceId,
-      threadId: record.threadId,
-    });
+    try {
+      return await this._storage.getSessionEventReplayState({
+        harnessName: record.harnessName,
+        sessionId: record.id,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+      });
+    } catch (err) {
+      // Defense-in-depth: a misdeclared adapter that claims
+      // `sessionEventReplay: true` but still throws the storage-internal
+      // unsupported error on a specific call shape must surface as the
+      // typed public error, not leak the storage internal.
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Session.getEventReplayState()');
+      }
+      throw err;
+    }
   }
 
   async listEventsAfter(opts: { epoch: string; afterSequence: number; limit: number }) {
@@ -970,17 +985,28 @@ export class Session {
     if (!Number.isSafeInteger(opts.limit) || opts.limit < 1) {
       throw new HarnessValidationError('listEventsAfter().limit', 'limit must be a positive safe integer');
     }
+    if (!this._storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Session.listEventsAfter()');
+    }
     await this._flushEventPersistence();
     const record = this.getRecord();
-    return this._storage.listSessionEvents({
-      harnessName: record.harnessName,
-      sessionId: record.id,
-      resourceId: record.resourceId,
-      threadId: record.threadId,
-      epoch: opts.epoch,
-      afterSequence: opts.afterSequence,
-      limit: opts.limit,
-    });
+    try {
+      return await this._storage.listSessionEvents({
+        harnessName: record.harnessName,
+        sessionId: record.id,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+        epoch: opts.epoch,
+        afterSequence: opts.afterSequence,
+        limit: opts.limit,
+      });
+    } catch (err) {
+      // Defense-in-depth: see `getEventReplayState()` above.
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Session.listEventsAfter()');
+      }
+      throw err;
+    }
   }
 
   /** @internal — used by the Harness to publish events on this session's emitter. */

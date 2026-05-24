@@ -461,6 +461,26 @@ export class HarnessWorkspaceInUseError extends Error {
   }
 }
 
+/**
+ * Replay-aware Session/Harness APIs (`listEventsAfter`,
+ * `getEventReplayState`, `listSessionEventsAfter`,
+ * `getSessionEventReplayState`) were called against a storage adapter
+ * that does not implement the durable session-event ledger
+ * (`HarnessStorageCapabilities.sessionEventReplay === false`).
+ *
+ * This is a typed public error: callers (server routes, A2A
+ * `tasks/resubscribe`, headless workers) need to surface a clear
+ * "this adapter does not support replay" signal instead of leaking
+ * the storage-internal `HarnessStorageSessionEventReplayUnsupportedError`.
+ */
+export class HarnessEventReplayUnsupportedError extends Error {
+  readonly name = 'HarnessEventReplayUnsupportedError';
+  readonly code = 'harness.event_replay_unsupported';
+  constructor(public readonly api: string) {
+    super(`${api}: durable session event replay is not supported by this storage adapter`);
+  }
+}
+
 const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessConfigError: 'harness.validation',
   HarnessRuntimeDependencyDriftError: 'harness.runtime_dependency_drifted',
@@ -490,6 +510,7 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessWorkspaceLostError: 'harness.workspace_lost',
   HarnessWorkspaceProvisioningError: 'harness.workspace_provisioning',
   HarnessWorkspaceInUseError: 'harness.workspace_in_use',
+  HarnessEventReplayUnsupportedError: 'harness.event_replay_unsupported',
 };
 
 export function getHarnessPublicErrorCode(err: unknown): string | undefined {
