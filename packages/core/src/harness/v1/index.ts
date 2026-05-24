@@ -63,6 +63,15 @@ export type {
 
 export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
 export {
+  bridgeReplayAndLive,
+  HarnessEventReplayAbortedError,
+  HarnessEventReplayBufferOverflowError,
+  HarnessEventReplayEpochMismatchError,
+  HarnessEventReplayFutureCursorError,
+  HarnessEventReplayStaleCursorError,
+} from './replay-bridge';
+export type { BridgeReplayCursor, BridgeReplayOptions } from './replay-bridge';
+export {
   classifyHarnessWorkspaceToolAction,
   getHarnessWorkspaceActionPathInput,
   isHarnessWorkspaceFileMutationTool,

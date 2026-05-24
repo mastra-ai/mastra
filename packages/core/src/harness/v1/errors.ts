@@ -511,6 +511,11 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessWorkspaceProvisioningError: 'harness.workspace_provisioning',
   HarnessWorkspaceInUseError: 'harness.workspace_in_use',
   HarnessEventReplayUnsupportedError: 'harness.event_replay_unsupported',
+  HarnessEventReplayStaleCursorError: 'harness.event_replay_stale_cursor',
+  HarnessEventReplayEpochMismatchError: 'harness.event_replay_epoch_mismatch',
+  HarnessEventReplayFutureCursorError: 'harness.event_replay_future_cursor',
+  HarnessEventReplayBufferOverflowError: 'harness.event_replay_buffer_overflow',
+  HarnessEventReplayAbortedError: 'harness.event_replay_aborted',
 };
 
 export function getHarnessPublicErrorCode(err: unknown): string | undefined {
