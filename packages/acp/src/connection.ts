@@ -123,8 +123,8 @@ export class ACPConnection {
 
     const available = this.session?.models?.availableModels;
 
-    if (available?.length && !available.some(m => m.modelId === modelId)) {
-      const ids = available.map(m => m.modelId).join(', ');
+    if (available && !available.some(m => m.modelId === modelId)) {
+      const ids = available.map(m => m.modelId).join(', ') || '(none)';
       throw new Error(`Model "${modelId}" is not available. Available models: ${ids}`);
     }
 
@@ -282,8 +282,8 @@ export class ACPConnection {
       if (this.options.model) {
         const available = this.session.models?.availableModels;
 
-        if (available?.length && !available.some(m => m.modelId === this.options.model)) {
-          const ids = available.map(m => m.modelId).join(', ');
+        if (available && !available.some(m => m.modelId === this.options.model)) {
+          const ids = available.map(m => m.modelId).join(', ') || '(none)';
           throw new Error(`Model "${this.options.model}" is not available. Available models: ${ids}`);
         }
 

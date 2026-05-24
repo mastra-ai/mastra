@@ -461,6 +461,27 @@ describe('ACPConnection', () => {
       'Model "nonexistent" is not available. Available models: claude-sonnet-4-20250514',
     );
   });
+
+  it('throws when available models is an empty array', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    mocks.sessionResponse = {
+      sessionId: 'session-1',
+      models: { availableModels: [], currentModelId: undefined },
+    };
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      model: 'any-model',
+      persistSession: true,
+    });
+
+    await expect(connection.prompt('implement feature')).rejects.toThrow(
+      'Model "any-model" is not available. Available models: (none)',
+    );
+  });
 });
 
 describe('AcpAgent', () => {
