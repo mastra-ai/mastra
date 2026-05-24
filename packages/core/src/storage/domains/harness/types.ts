@@ -1027,6 +1027,102 @@ export interface AttachmentRecord {
 }
 
 // ---------------------------------------------------------------------------
+// Artifacts.
+//
+// Artifacts are immutable, versioned work products produced during a
+// Harness v1 session — plans, diffs, test reports, screenshots, patches,
+// review output. Each record is a metadata row whose `attachmentId`
+// references the actual bytes in the existing attachment / blob store
+// (re-using its sha256 + mimeType + bytes invariants). Lineage is
+// captured via `lineageRootId` + `parentArtifactId` + `version`, where
+// `version` is computed storage-side under CAS so concurrent writers
+// against the same parent can never claim the same version.
+//
+// Foreign keys to `taskId` / `runId` are deliberately omitted from this
+// schema — the canonical Task / Run contracts are still pending (see
+// PF-631 / next-roadmap-issue). Consumers that need to associate
+// artifacts with a task or run today use the opaque `metadata` map.
+// ---------------------------------------------------------------------------
+
+export type HarnessArtifactType = 'plan' | 'diff' | 'report' | 'screenshot' | 'patch' | 'custom';
+
+export interface HarnessArtifactCreator {
+  /** Agent id that produced the artifact, if known. */
+  agentId?: string;
+  /** Subagent session id when the artifact came from a child run. */
+  subagentSessionId?: string;
+  /** Tool-call handle the artifact was emitted from (e.g. `spawn_subagent`). */
+  toolCallId?: string;
+}
+
+export interface HarnessArtifactRecord {
+  harnessName: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  /** Stable id for this specific version. */
+  artifactId: string;
+  /** Id of the root artifact in the lineage (`=== artifactId` for v1). */
+  lineageRootId: string;
+  /** Id of the immediate parent version (undefined for v1). */
+  parentArtifactId?: string;
+  /** 1-indexed, monotonic within a `lineageRootId`. */
+  version: number;
+  artifactType: HarnessArtifactType;
+  /** Reference to the attachment that holds the bytes. */
+  attachmentId: string;
+  /** Copied from the referenced attachment record. */
+  mimeType: string;
+  bytes: number;
+  sha256: string;
+  /** Optional JSON-schema URI describing structured artifacts. */
+  schemaUri?: string;
+  createdAt: number;
+  createdBy: HarnessArtifactCreator;
+  /** Opaque caller-supplied metadata. Use for taskId / runId / etc. */
+  metadata?: { [key: string]: JsonValue };
+}
+
+export interface WriteArtifactInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  artifactId: string;
+  artifactType: HarnessArtifactType;
+  /** Must reference an attachment already saved on `sessionId`. */
+  attachmentId: string;
+  /**
+   * When set, this write produces a new version off the named parent.
+   * The parent must live in the same `(sessionId, resourceId)` scope.
+   * Storage computes `version = parent.version + 1` under CAS and
+   * inherits `lineageRootId`.
+   */
+  parentArtifactId?: string;
+  schemaUri?: string;
+  createdBy: HarnessArtifactCreator;
+  metadata?: HarnessArtifactRecord['metadata'];
+}
+
+export interface ListArtifactsInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  artifactType?: HarnessArtifactType;
+  limit: number;
+  /** Stable `(createdAt, artifactId)` cursor from a prior page. */
+  cursor?: string;
+}
+
+export interface ListArtifactVersionsInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  /** May be any artifact id in the lineage; storage resolves to root. */
+  artifactId: string;
+}
+
+// ---------------------------------------------------------------------------
 // Method input/output shapes
 // ---------------------------------------------------------------------------
 

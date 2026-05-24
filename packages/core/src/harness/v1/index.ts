@@ -42,9 +42,11 @@ export type {
   PermissionGrantedEvent,
   PermissionPolicyChangedEvent,
   PermissionRevokedEvent,
+  ArtifactCreatedEvent,
   SessionClosedEvent,
   SessionClosingEvent,
   SessionCreatedEvent,
+  SessionDeletedEvent,
   SessionEvictedEvent,
   StateChangedEvent,
   SuspensionRequiredEvent,
@@ -81,6 +83,12 @@ export {
 export type { HarnessWorkspaceActionKind, HarnessWorkspaceToolAction } from './workspace/actions';
 
 export {
+  HarnessArtifactAttachmentMissingError,
+  HarnessArtifactDuplicateIdError,
+  HarnessArtifactLineageMismatchError,
+  HarnessArtifactNotFoundError,
+  HarnessArtifactVersionConflictError,
+  HarnessArtifactsUnsupportedError,
   HarnessAttachmentInUseError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
@@ -145,6 +153,14 @@ export type { HarnessMessage, HarnessMessageContent } from '../types';
  * captures one judge verdict.
  */
 export type { GoalJudgeDecision, GoalState } from '../../storage/domains/harness';
+export type {
+  HarnessArtifactCreator,
+  HarnessArtifactRecord,
+  HarnessArtifactType,
+  ListArtifactsInput,
+  ListArtifactVersionsInput,
+  WriteArtifactInput,
+} from '../../storage/domains/harness';
 
 export type {
   AttachmentDeleteOptions,

@@ -43,6 +43,7 @@ import type {
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
   AgentSignalResultStatus,
+  HarnessArtifactRecord,
   InboxResponseReceipt,
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
@@ -51,6 +52,12 @@ import type {
   HarnessSessionEventReplayState,
 } from '../../storage/domains/harness';
 import {
+  HarnessStorageArtifactAttachmentMissingError,
+  HarnessStorageArtifactDuplicateIdError,
+  HarnessStorageArtifactLineageMismatchError,
+  HarnessStorageArtifactNotFoundError,
+  HarnessStorageArtifactVersionConflictError,
+  HarnessStorageArtifactsUnsupportedError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageLeaseConflictError,
@@ -70,6 +77,12 @@ import { HarnessChannelRegistry } from './channel-registry';
 import {
   HarnessAttachmentInUseError,
   HarnessAttachmentUnavailableError,
+  HarnessArtifactAttachmentMissingError,
+  HarnessArtifactDuplicateIdError,
+  HarnessArtifactLineageMismatchError,
+  HarnessArtifactNotFoundError,
+  HarnessArtifactVersionConflictError,
+  HarnessArtifactsUnsupportedError,
   HarnessConfigError,
   HarnessEventReplayUnsupportedError,
   HarnessModelNotFoundError,
@@ -3995,6 +4008,179 @@ export class Harness {
       }
     },
   };
+
+  // -------------------------------------------------------------------------
+  // Artifacts.
+  //
+  // Immutable, versioned work products produced during a session — plans,
+  // diffs, test reports, screenshots, patches, review output. Content is
+  // referenced via an attachment (caller uploads via
+  // `harness.attachments.upload` first, then passes the resulting
+  // `attachmentId` to `artifacts.write`). Hash/MIME/bytes are copied from
+  // the attachment record so the artifact captures canonical, immutable
+  // values. Versioning is captured via `parentArtifactId` +
+  // `lineageRootId` + `version`, computed storage-side under CAS.
+  // -------------------------------------------------------------------------
+
+  artifacts = Object.freeze({
+    write: async (input: {
+      sessionId: string;
+      resourceId: string;
+      threadId: string;
+      artifactId: string;
+      artifactType: HarnessArtifactRecord['artifactType'];
+      attachmentId: string;
+      parentArtifactId?: string;
+      schemaUri?: string;
+      createdBy?: HarnessArtifactRecord['createdBy'];
+      metadata?: HarnessArtifactRecord['metadata'];
+    }): Promise<HarnessArtifactRecord> => {
+      const storage = this._requireStorage('artifacts.write()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.write()');
+      }
+      let record: HarnessArtifactRecord;
+      try {
+        record = await storage.writeArtifact({
+          harnessName: this._harnessName,
+          sessionId: input.sessionId,
+          resourceId: input.resourceId,
+          threadId: input.threadId,
+          artifactId: input.artifactId,
+          artifactType: input.artifactType,
+          attachmentId: input.attachmentId,
+          ...(input.parentArtifactId !== undefined ? { parentArtifactId: input.parentArtifactId } : {}),
+          ...(input.schemaUri !== undefined ? { schemaUri: input.schemaUri } : {}),
+          createdBy: input.createdBy ?? {},
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.write()');
+        }
+        if (err instanceof HarnessStorageArtifactNotFoundError) {
+          throw new HarnessArtifactNotFoundError(err.artifactId);
+        }
+        if (err instanceof HarnessStorageArtifactDuplicateIdError) {
+          throw new HarnessArtifactDuplicateIdError(err.artifactId);
+        }
+        if (err instanceof HarnessStorageArtifactAttachmentMissingError) {
+          throw new HarnessArtifactAttachmentMissingError(err.attachmentId);
+        }
+        if (err instanceof HarnessStorageArtifactLineageMismatchError) {
+          throw new HarnessArtifactLineageMismatchError(err.parentArtifactId, err.reason);
+        }
+        if (err instanceof HarnessStorageArtifactVersionConflictError) {
+          throw new HarnessArtifactVersionConflictError(err.lineageRootId, err.version);
+        }
+        throw err;
+      }
+      // Emit on the live session's emitter (so session-level subscribers
+      // see it and the harness bridge forwards to harness-level
+      // subscribers). When the writer holds no live Session handle —
+      // e.g. a server-route caller without a live session in this
+      // process — fall back to the harness emitter so harness-level
+      // subscribers still observe the lifecycle.
+      const live = this._liveSessions.get(input.sessionId);
+      const event = {
+        type: 'artifact_created' as const,
+        artifactId: record.artifactId,
+        artifactType: record.artifactType,
+        lineageRootId: record.lineageRootId,
+        ...(record.parentArtifactId !== undefined ? { parentArtifactId: record.parentArtifactId } : {}),
+        version: record.version,
+        mimeType: record.mimeType,
+        sha256: record.sha256,
+        bytes: record.bytes,
+      };
+      try {
+        if (live !== undefined) {
+          live._emit(event);
+        } else {
+          this._emitter.emit(event, { sessionId: input.sessionId });
+        }
+      } catch {
+        // Emitter failure must never block the artifact write.
+      }
+      return record;
+    },
+
+    get: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      artifactId: string;
+    }): Promise<HarnessArtifactRecord | null> => {
+      const storage = this._requireStorage('artifacts.get()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.get()');
+      }
+      try {
+        return await storage.loadArtifact({
+          harnessName: this._harnessName,
+          sessionId: opts.sessionId,
+          resourceId: opts.resourceId,
+          artifactId: opts.artifactId,
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.get()');
+        }
+        throw err;
+      }
+    },
+
+    list: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      artifactType?: HarnessArtifactRecord['artifactType'];
+      limit?: number;
+      cursor?: string;
+    }): Promise<HarnessArtifactRecord[]> => {
+      const storage = this._requireStorage('artifacts.list()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.list()');
+      }
+      try {
+        return await storage.listArtifacts({
+          harnessName: this._harnessName,
+          sessionId: opts.sessionId,
+          resourceId: opts.resourceId,
+          ...(opts.artifactType !== undefined ? { artifactType: opts.artifactType } : {}),
+          limit: opts.limit ?? 100,
+          ...(opts.cursor !== undefined ? { cursor: opts.cursor } : {}),
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.list()');
+        }
+        throw err;
+      }
+    },
+
+    versions: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      artifactId: string;
+    }): Promise<HarnessArtifactRecord[]> => {
+      const storage = this._requireStorage('artifacts.versions()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.versions()');
+      }
+      try {
+        return await storage.listArtifactVersions({
+          harnessName: this._harnessName,
+          sessionId: opts.sessionId,
+          resourceId: opts.resourceId,
+          artifactId: opts.artifactId,
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.versions()');
+        }
+        throw err;
+      }
+    },
+  });
 
   // -------------------------------------------------------------------------
   // Internals.

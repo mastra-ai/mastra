@@ -101,6 +101,23 @@ export interface SessionDeletedEvent extends HarnessEventBase {
   reason: 'requested' | 'cascade';
 }
 
+/**
+ * A new artifact (or a new version of an existing artifact) was written.
+ * The event carries only safe metadata — no payload bytes. Consumers
+ * fetch full content via `harness.artifacts.get()`.
+ */
+export interface ArtifactCreatedEvent extends HarnessEventBase {
+  type: 'artifact_created';
+  artifactId: string;
+  artifactType: 'plan' | 'diff' | 'report' | 'screenshot' | 'patch' | 'custom';
+  lineageRootId: string;
+  parentArtifactId?: string;
+  version: number;
+  mimeType: string;
+  sha256: string;
+  bytes: number;
+}
+
 export interface ModeChangedEvent extends HarnessEventBase {
   type: 'mode_changed';
   modeId: string;
@@ -700,6 +717,7 @@ export type HarnessEvent =
   | SessionClosedEvent
   | SessionEvictedEvent
   | SessionDeletedEvent
+  | ArtifactCreatedEvent
   | ModeChangedEvent
   | ModelChangedEvent
   | ModelOverrideSetEvent
@@ -1008,6 +1026,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_closed',
   'session_evicted',
   'session_deleted',
+  'artifact_created',
   'session_pin_overflow',
   'mode_changed',
   'model_changed',

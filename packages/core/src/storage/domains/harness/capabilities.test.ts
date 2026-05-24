@@ -19,6 +19,7 @@ describe('HarnessStorage.capabilities()', () => {
     expect(storage.capabilities()).toEqual({
       workspaceActionJournal: true,
       sessionEventReplay: true,
+      harnessArtifacts: true,
       admissionConflictDetection: true,
       attachmentBlobs: true,
       channelOutbox: true,

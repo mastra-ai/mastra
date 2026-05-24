@@ -462,6 +462,86 @@ export class HarnessWorkspaceInUseError extends Error {
 }
 
 /**
+ * Replay/list/get/version artifact APIs were called against a storage
+ * adapter that does not implement the artifact substrate
+ * (`HarnessStorageCapabilities.harnessArtifacts === false`).
+ */
+export class HarnessArtifactsUnsupportedError extends Error {
+  readonly name = 'HarnessArtifactsUnsupportedError';
+  readonly code = 'harness.artifacts_unsupported';
+  constructor(public readonly api: string) {
+    super(`${api}: artifact substrate is not supported by this storage adapter`);
+  }
+}
+
+/**
+ * The named artifact does not exist on the target `(sessionId, resourceId)`.
+ */
+export class HarnessArtifactNotFoundError extends Error {
+  readonly name = 'HarnessArtifactNotFoundError';
+  readonly code = 'harness.artifact_not_found';
+  constructor(public readonly artifactId: string) {
+    super(`Artifact "${artifactId}" not found`);
+  }
+}
+
+/**
+ * `harness.artifacts.write({ parentArtifactId })` referenced a parent
+ * artifact that does not exist in the target scope, or that lives in a
+ * different `(sessionId, resourceId)`.
+ */
+export class HarnessArtifactLineageMismatchError extends Error {
+  readonly name = 'HarnessArtifactLineageMismatchError';
+  readonly code = 'harness.artifact_lineage_mismatch';
+  constructor(
+    public readonly parentArtifactId: string,
+    public readonly reason: 'parent_missing' | 'parent_wrong_session' | 'parent_wrong_resource',
+  ) {
+    super(`Artifact lineage mismatch on parent "${parentArtifactId}": ${reason}`);
+  }
+}
+
+/**
+ * Two concurrent `harness.artifacts.write({ parentArtifactId })` calls
+ * raced for the same next-version slot on a lineage. The losing caller
+ * should retry against the latest version of the lineage.
+ */
+export class HarnessArtifactVersionConflictError extends Error {
+  readonly name = 'HarnessArtifactVersionConflictError';
+  readonly code = 'harness.artifact_version_conflict';
+  constructor(
+    public readonly lineageRootId: string,
+    public readonly version: number,
+  ) {
+    super(`Artifact version ${version} for lineage "${lineageRootId}" already exists`);
+  }
+}
+
+/**
+ * `harness.artifacts.write({ artifactId })` collided with an existing
+ * artifact id. Artifact ids are caller-supplied and immutable.
+ */
+export class HarnessArtifactDuplicateIdError extends Error {
+  readonly name = 'HarnessArtifactDuplicateIdError';
+  readonly code = 'harness.artifact_duplicate_id';
+  constructor(public readonly artifactId: string) {
+    super(`Artifact "${artifactId}" already exists`);
+  }
+}
+
+/**
+ * `harness.artifacts.write({ attachmentId })` referenced an attachment
+ * that has not been uploaded on this session.
+ */
+export class HarnessArtifactAttachmentMissingError extends Error {
+  readonly name = 'HarnessArtifactAttachmentMissingError';
+  readonly code = 'harness.artifact_attachment_missing';
+  constructor(public readonly attachmentId: string) {
+    super(`Artifact references attachment "${attachmentId}" which does not exist on this session`);
+  }
+}
+
+/**
  * Replay-aware Session/Harness APIs (`listEventsAfter`,
  * `getEventReplayState`, `listSessionEventsAfter`,
  * `getSessionEventReplayState`) were called against a storage adapter
@@ -516,6 +596,12 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessEventReplayFutureCursorError: 'harness.event_replay_future_cursor',
   HarnessEventReplayBufferOverflowError: 'harness.event_replay_buffer_overflow',
   HarnessEventReplayAbortedError: 'harness.event_replay_aborted',
+  HarnessArtifactsUnsupportedError: 'harness.artifacts_unsupported',
+  HarnessArtifactNotFoundError: 'harness.artifact_not_found',
+  HarnessArtifactLineageMismatchError: 'harness.artifact_lineage_mismatch',
+  HarnessArtifactVersionConflictError: 'harness.artifact_version_conflict',
+  HarnessArtifactDuplicateIdError: 'harness.artifact_duplicate_id',
+  HarnessArtifactAttachmentMissingError: 'harness.artifact_attachment_missing',
 };
 
 export function getHarnessPublicErrorCode(err: unknown): string | undefined {

@@ -22,6 +22,10 @@ import type {
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
+  HarnessArtifactRecord,
+  ListArtifactsInput,
+  ListArtifactVersionsInput,
+  WriteArtifactInput,
   EnqueueChannelOutboxResult,
   HarnessRowErrorCode,
   HarnessSessionEventRecord,
@@ -204,6 +208,60 @@ export class HarnessStorageSessionEventReplayUnsupportedError extends Error {
   readonly code = 'harness.storage.session_event_replay_unsupported' as const;
   constructor() {
     super('HarnessStorage session event replay must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageArtifactsUnsupportedError extends Error {
+  readonly name = 'HarnessStorageArtifactsUnsupportedError';
+  readonly code = 'harness.storage.artifacts_unsupported' as const;
+  constructor() {
+    super('HarnessStorage artifact substrate must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageArtifactNotFoundError extends Error {
+  readonly name = 'HarnessStorageArtifactNotFoundError';
+  readonly code = 'harness.storage.artifact_not_found' as const;
+  constructor(public readonly artifactId: string) {
+    super(`Artifact "${artifactId}" not found`);
+  }
+}
+
+export class HarnessStorageArtifactLineageMismatchError extends Error {
+  readonly name = 'HarnessStorageArtifactLineageMismatchError';
+  readonly code = 'harness.storage.artifact_lineage_mismatch' as const;
+  constructor(
+    public readonly parentArtifactId: string,
+    public readonly reason: 'parent_missing' | 'parent_wrong_session' | 'parent_wrong_resource',
+  ) {
+    super(`Artifact lineage mismatch on parent "${parentArtifactId}": ${reason}`);
+  }
+}
+
+export class HarnessStorageArtifactVersionConflictError extends Error {
+  readonly name = 'HarnessStorageArtifactVersionConflictError';
+  readonly code = 'harness.storage.artifact_version_conflict' as const;
+  constructor(
+    public readonly lineageRootId: string,
+    public readonly version: number,
+  ) {
+    super(`Artifact version ${version} for lineage "${lineageRootId}" already exists`);
+  }
+}
+
+export class HarnessStorageArtifactDuplicateIdError extends Error {
+  readonly name = 'HarnessStorageArtifactDuplicateIdError';
+  readonly code = 'harness.storage.artifact_duplicate_id' as const;
+  constructor(public readonly artifactId: string) {
+    super(`Artifact "${artifactId}" already exists`);
+  }
+}
+
+export class HarnessStorageArtifactAttachmentMissingError extends Error {
+  readonly name = 'HarnessStorageArtifactAttachmentMissingError';
+  readonly code = 'harness.storage.artifact_attachment_missing' as const;
+  constructor(public readonly attachmentId: string) {
+    super(`Artifact references attachment "${attachmentId}" which does not exist on this session`);
   }
 }
 
@@ -413,6 +471,12 @@ export class HarnessStorageWakeupTransitionError extends Error {
 export interface HarnessStorageCapabilities {
   workspaceActionJournal: boolean;
   sessionEventReplay: boolean;
+  /**
+   * `writeArtifact` / `loadArtifact` / `listArtifacts` /
+   * `listArtifactVersions`. Optional today (base methods throw
+   * {@link HarnessStorageArtifactsUnsupportedError}).
+   */
+  harnessArtifacts: boolean;
   admissionConflictDetection: boolean;
   attachmentBlobs: boolean;
   channelOutbox: boolean;
@@ -442,6 +506,11 @@ export abstract class HarnessStorage extends StorageDomain {
         this.appendSessionEvent !== HarnessStorage.prototype.appendSessionEvent &&
         this.getSessionEventReplayState !== HarnessStorage.prototype.getSessionEventReplayState &&
         this.listSessionEvents !== HarnessStorage.prototype.listSessionEvents,
+      harnessArtifacts:
+        this.writeArtifact !== HarnessStorage.prototype.writeArtifact &&
+        this.loadArtifact !== HarnessStorage.prototype.loadArtifact &&
+        this.listArtifacts !== HarnessStorage.prototype.listArtifacts &&
+        this.listArtifactVersions !== HarnessStorage.prototype.listArtifactVersions,
       // Abstract families — every concrete adapter implements these. Adapters
       // that ship explicit no-op variants may override `capabilities()` to
       // flip the corresponding bit off.
@@ -797,6 +866,34 @@ export abstract class HarnessStorage extends StorageDomain {
     limit: number;
   }): Promise<HarnessSessionEventRecord[]> {
     throw new HarnessStorageSessionEventReplayUnsupportedError();
+  }
+
+  // -------------------------------------------------------------------------
+  // Artifacts.
+  //
+  // Optional; adapters that do not implement the four methods declare
+  // `harnessArtifacts: false` in {@link HarnessStorageCapabilities}.
+  // -------------------------------------------------------------------------
+
+  async writeArtifact(_input: WriteArtifactInput): Promise<HarnessArtifactRecord> {
+    throw new HarnessStorageArtifactsUnsupportedError();
+  }
+
+  async loadArtifact(_opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    artifactId: string;
+  }): Promise<HarnessArtifactRecord | null> {
+    throw new HarnessStorageArtifactsUnsupportedError();
+  }
+
+  async listArtifacts(_opts: ListArtifactsInput): Promise<HarnessArtifactRecord[]> {
+    throw new HarnessStorageArtifactsUnsupportedError();
+  }
+
+  async listArtifactVersions(_opts: ListArtifactVersionsInput): Promise<HarnessArtifactRecord[]> {
+    throw new HarnessStorageArtifactsUnsupportedError();
   }
 
   // -------------------------------------------------------------------------
