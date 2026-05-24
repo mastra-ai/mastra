@@ -5,11 +5,11 @@ export {
   TASK_CHECK_TOOL_ID,
   TASK_METADATA_NAMESPACE,
   TASK_METADATA_KEY,
-  taskItemSchema,
+  harnessTodoSchema,
   askUserOptionSchema,
   askUserSelectionModeSchema,
 } from './shared';
-export type { TaskItem, AskUserOption, AskUserSelectionMode } from './shared';
+export type { HarnessTodo, AskUserOption, AskUserSelectionMode } from './shared';
 
 export { askUser } from './ask-user';
 export { submitPlan } from './submit-plan';

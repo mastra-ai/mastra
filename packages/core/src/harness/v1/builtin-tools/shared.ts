@@ -19,14 +19,18 @@ export const TASK_CHECK_TOOL_ID = 'task_check';
 export const TASK_METADATA_NAMESPACE = 'mastra' as const;
 export const TASK_METADATA_KEY = 'tasks' as const;
 
-/** A single tracked task. Shape matches the legacy harness `TaskItem`. */
-export const taskItemSchema = z.object({
+/**
+ * A single tracked todo item kept on the active conversation thread. The
+ * name is deliberately `HarnessTodo` (not `Task`) — `Task` is reserved for
+ * the canonical Harness v1 work-unit primitive.
+ */
+export const harnessTodoSchema = z.object({
   content: z.string().describe('Task description in imperative form'),
   status: z.enum(['pending', 'in_progress', 'completed']),
   activeForm: z.string().describe('Present-continuous form shown during execution'),
 });
 
-export type TaskItem = z.infer<typeof taskItemSchema>;
+export type HarnessTodo = z.infer<typeof harnessTodoSchema>;
 
 /** Question options surfaced by `askUser`. */
 export const askUserOptionSchema = z.object({

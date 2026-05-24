@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '../../../tools/tool';
-import { TASK_CHECK_TOOL_ID, TASK_METADATA_KEY, TASK_METADATA_NAMESPACE, taskItemSchema } from './shared';
-import type { TaskItem } from './shared';
+import { TASK_CHECK_TOOL_ID, TASK_METADATA_KEY, TASK_METADATA_NAMESPACE, harnessTodoSchema } from './shared';
+import type { HarnessTodo } from './shared';
 
 const inputSchema = z.object({});
 
@@ -11,10 +11,10 @@ const outputSchema = z.object({
   inProgress: z.number().int().nonnegative(),
   completed: z.number().int().nonnegative(),
   allComplete: z.boolean(),
-  tasks: z.array(taskItemSchema),
+  tasks: z.array(harnessTodoSchema),
 });
 
-function summarize(tasks: TaskItem[]) {
+function summarize(tasks: HarnessTodo[]) {
   let pending = 0;
   let inProgress = 0;
   let completed = 0;
@@ -59,7 +59,7 @@ export const taskCheck = createTool({
     const namespace = (metadata[TASK_METADATA_NAMESPACE] ?? {}) as Record<string, unknown>;
     const raw = namespace[TASK_METADATA_KEY];
 
-    const parsed = z.array(taskItemSchema).safeParse(raw);
+    const parsed = z.array(harnessTodoSchema).safeParse(raw);
     const tasks = parsed.success ? parsed.data : [];
     return summarize(tasks);
   },

@@ -24,7 +24,7 @@ import type {
   PendingResume,
   SessionRecord,
 } from '../../storage/domains/harness';
-import type { TaskItem } from './builtin-tools/shared';
+import type { HarnessTodo } from './builtin-tools/shared';
 
 import { HarnessEventSerializationError, HarnessValidationError, getHarnessPublicErrorCode } from './errors';
 import type { EventSerializationReason } from './errors';
@@ -315,7 +315,7 @@ export interface ShellOutputEvent extends HarnessEventBase {
  */
 export interface TaskUpdatedEvent extends HarnessEventBase {
   type: 'task_updated';
-  tasks: TaskItem[];
+  tasks: HarnessTodo[];
 }
 
 export type OMBufferedStatus = 'idle' | 'running' | 'complete';
