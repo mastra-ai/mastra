@@ -86,6 +86,21 @@ export interface SessionEvictedEvent extends HarnessEventBase {
   reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown' | 'lease_lost';
 }
 
+/**
+ * The session row has been hard-deleted from storage. Emitted as the
+ * LAST event a subscriber will receive on this session before the
+ * emitter is torn down. Mirrors `session_closed` / `session_evicted`
+ * lifecycle parity for the stream-terminal contract.
+ *
+ * - `requested` — caller invoked `harness.deleteSession()` directly.
+ * - `cascade`   — parent or ancestor was deleted; this session was
+ *                 removed as part of the subtree cascade.
+ */
+export interface SessionDeletedEvent extends HarnessEventBase {
+  type: 'session_deleted';
+  reason: 'requested' | 'cascade';
+}
+
 export interface ModeChangedEvent extends HarnessEventBase {
   type: 'mode_changed';
   modeId: string;
@@ -684,6 +699,7 @@ export type HarnessEvent =
   | SessionClosingEvent
   | SessionClosedEvent
   | SessionEvictedEvent
+  | SessionDeletedEvent
   | ModeChangedEvent
   | ModelChangedEvent
   | ModelOverrideSetEvent
@@ -991,6 +1007,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_closing',
   'session_closed',
   'session_evicted',
+  'session_deleted',
   'session_pin_overflow',
   'mode_changed',
   'model_changed',

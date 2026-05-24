@@ -1061,4 +1061,70 @@ describe('Harness.subscribe()', () => {
       reason: 'shutdown',
     });
   });
+
+  // Stream-terminal semantics: deleteSession() must emit
+  // `session_deleted` as the LAST event subscribers see on the deleted
+  // session before the emitter is torn down. Close + evict already
+  // covered above; delete was the missing lifecycle slot.
+
+  it('emits session_deleted with reason "requested" when the caller deletes the session directly', async () => {
+    const { harness } = setup();
+    const events: HarnessEvent[] = [];
+    harness.subscribe(e => {
+      events.push(e);
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.close();
+    await harness.deleteSession({ sessionId: session.id, resourceId: session.resourceId });
+
+    const deleted = events.find(e => e.type === 'session_deleted' && e.sessionId === session.id) as any;
+    expect(deleted).toBeDefined();
+    expect(deleted.reason).toBe('requested');
+  });
+
+  it('emits session_deleted on harness subscribers even when force-delete tears the bridge down first', async () => {
+    // Force-delete path: _closeSessionRecord tears down the session's
+    // harness bridge before _deleteClosedTree → _markDeletedSession
+    // runs. The live Session is still reachable via the deletedLiveSessions
+    // map. If we emit only via live._emit at that point, the bridge is
+    // gone and harness-level subscribers miss the event. The fix in
+    // _markDeletedSession emits on the harness emitter directly when
+    // the bridge has already been torn down.
+    const { harness } = setup();
+    const harnessEvents: HarnessEvent[] = [];
+    harness.subscribe(e => {
+      harnessEvents.push(e);
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await harness.deleteSession({ sessionId: session.id, resourceId: 'u1', force: true });
+
+    const deleted = harnessEvents.find(e => e.type === 'session_deleted' && e.sessionId === session.id) as any;
+    expect(deleted).toBeDefined();
+    expect(deleted.reason).toBe('requested');
+  });
+
+  it('emits session_deleted with reason "cascade" for child sessions deleted alongside their parent', async () => {
+    const { harness } = setup();
+    const events: HarnessEvent[] = [];
+    harness.subscribe(e => {
+      events.push(e);
+    });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const child = await harness.session({
+      resourceId: 'u1',
+      threadId: { fresh: true },
+      parentSessionId: parent.id,
+    });
+    await child.close();
+    await parent.close();
+    await harness.deleteSession({ sessionId: parent.id, resourceId: 'u1' });
+
+    const parentDeleted = events.find(e => e.type === 'session_deleted' && e.sessionId === parent.id) as any;
+    const childDeleted = events.find(e => e.type === 'session_deleted' && e.sessionId === child.id) as any;
+    expect(parentDeleted).toBeDefined();
+    expect(parentDeleted.reason).toBe('requested');
+    expect(childDeleted).toBeDefined();
+    expect(childDeleted.reason).toBe('cascade');
+  });
 });

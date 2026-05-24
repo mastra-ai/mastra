@@ -2939,6 +2939,12 @@ export class Harness {
     deletedLiveSessions = new Map<string, Session>(),
   ): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
+    // `_collectDeleteTree` builds the tree with the requested root at
+    // `tree[0]` (depth 0) and descendants pushed afterwards. Capture the
+    // root id so `_markDeletedSession` can emit the correct
+    // `session_deleted.reason`: 'requested' for the explicitly-deleted
+    // session, 'cascade' for every descendant cleaned up alongside it.
+    const rootId = tree[0]?.record.id;
     // Tear down per-session workspace state from the persisted record before
     // the storage rows go away. `releaseDormant` resolves to a no-op for
     // sessions that are still live in `_perSession` (the close path already
@@ -2992,7 +2998,11 @@ export class Harness {
             continue;
           }
           if (stillExists) continue;
-          const live = this._markDeletedSession(node, deletedLiveSessions);
+          const live = this._markDeletedSession(
+            node,
+            deletedLiveSessions,
+            node.record.id === rootId ? 'requested' : 'cascade',
+          );
           // Preserve the original guarded-delete error; the caller already sees
           // this delete attempt as failed, and retry/reconciliation can clean up
           // any remaining operation evidence from this live session's active turn.
@@ -3001,15 +3011,24 @@ export class Harness {
         throw err;
       }
       for (const node of bottomUp) {
-        const live = this._markDeletedSession(node, deletedLiveSessions);
+        const live = this._markDeletedSession(
+          node,
+          deletedLiveSessions,
+          node.record.id === rootId ? 'requested' : 'cascade',
+        );
         await this._cleanupDeletedOperationEvidence(storage, node.record, live).catch(() => {});
       }
       return;
     }
     for (let index = 0; index < bottomUp.length; index++) {
       await storage.deleteSession(sessions[index]!);
-      const live = this._markDeletedSession(bottomUp[index]!, deletedLiveSessions);
-      await this._cleanupDeletedOperationEvidence(storage, bottomUp[index]!.record, live).catch(() => {});
+      const node = bottomUp[index]!;
+      const live = this._markDeletedSession(
+        node,
+        deletedLiveSessions,
+        node.record.id === rootId ? 'requested' : 'cascade',
+      );
+      await this._cleanupDeletedOperationEvidence(storage, node.record, live).catch(() => {});
     }
   }
 
@@ -3029,10 +3048,40 @@ export class Harness {
     }
   }
 
-  private _markDeletedSession(node: CloseTreeNode, deletedLiveSessions: Map<string, Session>): Session | undefined {
+  private _markDeletedSession(
+    node: CloseTreeNode,
+    deletedLiveSessions: Map<string, Session>,
+    reason: 'requested' | 'cascade',
+  ): Session | undefined {
     const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
-    live?._markDeleted();
     const bridge = this._sessionEventBridges.get(node.record.id);
+    // Emit session_deleted as the LAST event for this session, after
+    // storage commits the delete so we never claim a delete that failed.
+    // Coverage rules:
+    //   - If a live Session is present, emit via its own emitter so
+    //     session-level subscribers see the event.
+    //   - If the bridge to the harness emitter has already been torn
+    //     down (force-delete cascades close-first, which tears the
+    //     bridge before we get here), emit directly on the harness
+    //     emitter too so harness-level subscribers do not silently miss
+    //     the terminal lifecycle.
+    //   - If no live Session exists at all, emit only on the harness
+    //     emitter (session-level subscribers were torn down with the
+    //     Session instance during close).
+    // Wrapped — best-effort terminal, never block the delete.
+    try {
+      if (live !== undefined) {
+        live._emit({ type: 'session_deleted', reason });
+        if (bridge === undefined) {
+          this._emitter.emit({ type: 'session_deleted', reason }, { sessionId: node.record.id });
+        }
+      } else {
+        this._emitter.emit({ type: 'session_deleted', reason }, { sessionId: node.record.id });
+      }
+    } catch {
+      // Swallow — terminal lifecycle must not abort the delete path.
+    }
+    live?._markDeleted();
     if (bridge) {
       bridge();
       this._sessionEventBridges.delete(node.record.id);
