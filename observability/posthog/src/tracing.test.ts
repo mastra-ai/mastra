@@ -1,4 +1,4 @@
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import type { AnyExportedSpan, LogEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -7,6 +7,7 @@ import { PosthogExporter } from './tracing';
 
 // Mock PostHog client
 const mockCapture = vi.fn();
+const mockCaptureExceptionImmediate = vi.fn();
 const mockShutdown = vi.fn();
 const mockPostHogConstructor = vi.fn();
 
@@ -17,6 +18,7 @@ vi.mock('posthog-node', () => {
         mockPostHogConstructor(...args);
       }
       capture = mockCapture;
+      captureExceptionImmediate = mockCaptureExceptionImmediate;
       shutdown = mockShutdown;
     },
   };
@@ -236,6 +238,174 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
           distinctId: 'system',
+        }),
+      );
+    });
+  });
+
+  // --- Log Event Tests ---
+  describe('Log Events', () => {
+    function createLogEvent(overrides: Partial<LogEvent['log']> = {}): LogEvent {
+      return {
+        type: 'log',
+        log: {
+          logId: 'log-1',
+          timestamp: new Date('2026-05-01T00:00:00.000Z'),
+          level: 'info',
+          message: 'Operation completed',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          correlationContext: {
+            userId: 'user-1',
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            runId: 'run-1',
+            threadId: 'thread-1',
+            requestId: 'request-1',
+            serviceName: 'test-service',
+            environment: 'test',
+            tags: ['log-tag'],
+          },
+          data: { durationMs: 42 },
+          metadata: { source: 'test' },
+          ...overrides,
+        },
+      };
+    }
+
+    it('should capture enabled log events with generic Mastra properties', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, logs: true });
+
+      await exporter.onLogEvent(createLogEvent());
+
+      expect(mockCapture).toHaveBeenCalledWith({
+        distinctId: 'user-1',
+        event: 'mastra_log',
+        timestamp: new Date('2026-05-01T00:00:00.000Z'),
+        uuid: 'log-1',
+        properties: expect.objectContaining({
+          mastra_signal: 'log',
+          mastra_log_id: 'log-1',
+          mastra_log_level: 'info',
+          mastra_log_message: 'Operation completed',
+          mastra_log_data: { durationMs: 42 },
+          mastra_log_metadata: { source: 'test' },
+          mastra_log_tags: ['log-tag'],
+          $ai_trace_id: 'trace-1',
+          $ai_span_id: 'span-1',
+          $ai_session_id: 'session-1',
+          mastra_resource_id: 'resource-1',
+          mastra_run_id: 'run-1',
+          mastra_thread_id: 'thread-1',
+          mastra_request_id: 'request-1',
+          service_name: 'test-service',
+          environment: 'test',
+        }),
+      });
+    });
+
+    it('should skip log events when logs are disabled', async () => {
+      exporter = new TestPosthogExporter(validConfig);
+
+      await exporter.onLogEvent(createLogEvent());
+
+      expect(mockCapture).not.toHaveBeenCalled();
+    });
+
+    it('should respect the configured minimum log level and event name', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, logs: { eventName: 'mastra_warning', minLevel: 'warn' } });
+
+      await exporter.onLogEvent(createLogEvent({ logId: 'log-debug', level: 'debug' }));
+      await exporter.onLogEvent(createLogEvent({ logId: 'log-warn', level: 'warn' }));
+
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: 'mastra_warning', uuid: 'log-warn' }));
+    });
+
+    it('should dedupe repeated log IDs by default', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, logs: true });
+      const event = createLogEvent();
+
+      await exporter.onLogEvent(event);
+      await exporter.onLogEvent(event);
+
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use configured log distinct ID resolver before correlation context', async () => {
+      exporter = new TestPosthogExporter({
+        ...validConfig,
+        logs: {
+          distinctId: event => `tenant:${event.log.correlationContext?.organizationId}`,
+        },
+      });
+
+      await exporter.onLogEvent(createLogEvent({ correlationContext: { organizationId: 'org-1', userId: 'user-1' } }));
+
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ distinctId: 'tenant:org-1' }));
+    });
+
+    it('should prefer canonical correlation user ID over metadata user ID', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, logs: true });
+
+      await exporter.onLogEvent(
+        createLogEvent({
+          metadata: { userId: 'metadata-user' },
+          correlationContext: { userId: 'correlation-user' },
+        }),
+      );
+
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ distinctId: 'correlation-user' }));
+    });
+
+    it('should fall back to configured default distinct ID for logs without user identity', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, defaultDistinctId: 'system', logs: true });
+
+      await exporter.onLogEvent(createLogEvent({ correlationContext: undefined, metadata: undefined }));
+
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ distinctId: 'system' }));
+    });
+
+    it('should redact freeform log payload fields when privacy mode is enabled', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, enablePrivacyMode: true, logs: true });
+
+      await exporter.onLogEvent(createLogEvent({ data: { prompt: 'secret' }, metadata: { source: 'test' } }));
+
+      const properties = mockCapture.mock.calls[0][0].properties;
+      expect(properties).toMatchObject({
+        mastra_log_message: '[redacted]',
+        mastra_log_id: 'log-1',
+        $ai_trace_id: 'trace-1',
+      });
+      expect(properties).not.toHaveProperty('mastra_log_data');
+      expect(properties).not.toHaveProperty('mastra_log_metadata');
+      expect(properties).not.toHaveProperty('mastra_log_tags');
+    });
+
+    it('should clear log dedupe state on shutdown', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, logs: true });
+      const event = createLogEvent();
+
+      await exporter.onLogEvent(event);
+      await exporter.shutdown();
+      await exporter.onLogEvent(event);
+
+      expect(mockCapture).toHaveBeenCalledTimes(2);
+    });
+
+    it('should fan out error logs with embedded errors to PostHog Error Tracking when enabled', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, logs: { captureExceptions: true } });
+      const error = new Error('database failed');
+
+      await exporter.onLogEvent(createLogEvent({ level: 'error', data: { error } }));
+
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+      expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(
+        error,
+        'user-1',
+        expect.objectContaining({
+          mastra_log_id: 'log-1',
+          mastra_log_level: 'error',
         }),
       );
     });

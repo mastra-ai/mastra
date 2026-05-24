@@ -1,4 +1,11 @@
-import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo, UsageStats } from '@mastra/core/observability';
+import type {
+  AnyExportedSpan,
+  LogEvent,
+  LogLevel,
+  ModelGenerationAttributes,
+  SpanErrorInfo,
+  UsageStats,
+} from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { TrackingExporter } from '@mastra/observability';
@@ -75,6 +82,37 @@ interface MastraContent {
 type SpanData = string | MastraMessage[] | Record<string, unknown> | unknown;
 
 const DISTINCT_ID = 'distinctId';
+const DEFAULT_LOG_EVENT_NAME = 'mastra_log';
+const DEFAULT_LOG_DEDUPE_CACHE_SIZE = 10_000;
+const LOG_LEVEL_ORDER: Record<LogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  fatal: 50,
+};
+
+export type PostHogLogDistinctIdResolver = (event: LogEvent) => string | undefined;
+
+export interface PostHogLogExportOptions {
+  /** PostHog event name used for Mastra operational logs. Defaults to `mastra_log`. */
+  eventName?: string;
+  /** Minimum log level to export. Defaults to `info`. */
+  minLevel?: LogLevel;
+  /** Static or dynamic distinct ID override for log events. */
+  distinctId?: string | PostHogLogDistinctIdResolver;
+  /** Whether to fan out error/fatal log events with embedded errors to PostHog Error Tracking. */
+  captureExceptions?: boolean;
+  /** Whether to drop duplicate log IDs within this exporter instance. Defaults to true. */
+  dedupe?: boolean;
+  /** Maximum remembered log IDs when dedupe is enabled. Defaults to 10000. */
+  dedupeCacheSize?: number;
+}
+
+type ResolvedPostHogLogExportOptions = Required<
+  Pick<PostHogLogExportOptions, 'eventName' | 'minLevel' | 'dedupe' | 'dedupeCacheSize' | 'captureExceptions'>
+> &
+  Pick<PostHogLogExportOptions, 'distinctId'>;
 
 export interface PosthogExporterConfig extends TrackingExporterConfig {
   /** PostHog API key. Defaults to POSTHOG_API_KEY environment variable. */
@@ -86,6 +124,8 @@ export interface PosthogExporterConfig extends TrackingExporterConfig {
   serverless?: boolean;
   defaultDistinctId?: string;
   enablePrivacyMode?: boolean;
+  /** Enable generic Mastra log-event export to PostHog. Disabled by default. */
+  logs?: boolean | PostHogLogExportOptions;
 }
 
 type PosthogRoot = unknown;
@@ -105,6 +145,7 @@ export class PosthogExporter extends TrackingExporter<
 > {
   name = 'posthog';
   #client: PostHog | undefined;
+  #seenLogIds = new Set<string>();
 
   private static readonly SERVERLESS_FLUSH_AT = 10;
   private static readonly SERVERLESS_FLUSH_INTERVAL = 2000;
@@ -230,6 +271,35 @@ export class PosthogExporter extends TrackingExporter<
     this.#client?.capture(eventMessage);
   }
 
+  async onLogEvent(event: LogEvent): Promise<void> {
+    const logOptions = this.getLogOptions();
+    if (this.isDisabled || !logOptions || !this.#client) return;
+
+    const { log } = event;
+    if (!this.shouldExportLog(log.level, logOptions.minLevel)) return;
+    if (logOptions.dedupe !== false && this.hasSeenLogId(log.logId, logOptions.dedupeCacheSize)) return;
+
+    const distinctId = this.getLogDistinctId(event, logOptions);
+    const properties = this.buildLogEventProperties(event);
+
+    this.#client.capture({
+      distinctId,
+      event: logOptions.eventName,
+      properties,
+      timestamp: log.timestamp,
+      uuid: log.logId,
+    });
+
+    if (logOptions.captureExceptions && this.shouldCaptureLogException(log.level)) {
+      const error = this.getLogError(log.data, log.metadata);
+      if (error) {
+        // Await the immediate Error Tracking path so request/serverless drains
+        // do not flush the log event before the derived exception is enqueued.
+        await this.#client.captureExceptionImmediate(error, distinctId, properties);
+      }
+    }
+  }
+
   private buildEventMessage(args: { span: AnyExportedSpan; traceData: PosthogTraceData }): EventMessage {
     const { span, traceData } = args;
 
@@ -349,6 +419,115 @@ export class PosthogExporter extends TrackingExporter<
     }
 
     return 'anonymous';
+  }
+
+  private getLogOptions(): ResolvedPostHogLogExportOptions | undefined {
+    const logs = this.config.logs;
+    if (!logs) return undefined;
+    const options = logs === true ? {} : logs;
+
+    return {
+      eventName: options.eventName ?? DEFAULT_LOG_EVENT_NAME,
+      minLevel: options.minLevel ?? 'info',
+      distinctId: options.distinctId,
+      captureExceptions: options.captureExceptions ?? false,
+      dedupe: options.dedupe ?? true,
+      dedupeCacheSize: options.dedupeCacheSize ?? DEFAULT_LOG_DEDUPE_CACHE_SIZE,
+    };
+  }
+
+  private shouldExportLog(level: LogLevel, minLevel: LogLevel): boolean {
+    return LOG_LEVEL_ORDER[level] >= LOG_LEVEL_ORDER[minLevel];
+  }
+
+  private hasSeenLogId(logId: string, cacheSize: number): boolean {
+    if (this.#seenLogIds.has(logId)) return true;
+
+    this.#seenLogIds.add(logId);
+    if (this.#seenLogIds.size > cacheSize) {
+      const first = this.#seenLogIds.values().next().value;
+      if (first) {
+        this.#seenLogIds.delete(first);
+      }
+    }
+
+    return false;
+  }
+
+  private getLogDistinctId(event: LogEvent, options: Pick<PostHogLogExportOptions, 'distinctId'>): string {
+    if (typeof options.distinctId === 'string') return options.distinctId;
+
+    const resolved = options.distinctId?.(event);
+    if (resolved) return resolved;
+
+    const correlationUserId = event.log.correlationContext?.userId;
+    if (correlationUserId) return correlationUserId;
+
+    const metadataUserId = event.log.metadata?.userId;
+    if (typeof metadataUserId === 'string' && metadataUserId.length > 0) return metadataUserId;
+
+    return this.config.defaultDistinctId ?? 'anonymous';
+  }
+
+  private buildLogEventProperties(event: LogEvent): Record<string, unknown> {
+    const { log } = event;
+    const properties: Record<string, unknown> = {
+      mastra_signal: 'log',
+      mastra_log_id: log.logId,
+      mastra_log_level: log.level,
+      mastra_log_message: this.config.enablePrivacyMode ? '[redacted]' : log.message,
+    };
+
+    if (log.traceId) properties.$ai_trace_id = log.traceId;
+    if (log.spanId) properties.$ai_span_id = log.spanId;
+    if (!this.config.enablePrivacyMode) {
+      const tags = log.correlationContext?.tags ?? log.tags;
+      if (this.hasObjectEntries(log.data)) properties.mastra_log_data = log.data;
+      if (this.hasObjectEntries(log.metadata)) properties.mastra_log_metadata = log.metadata;
+      if (tags?.length) properties.mastra_log_tags = tags;
+    }
+    if (log.correlationContext) {
+      if (log.correlationContext.sessionId) properties.$ai_session_id = log.correlationContext.sessionId;
+      if (log.correlationContext.resourceId) properties.mastra_resource_id = log.correlationContext.resourceId;
+      if (log.correlationContext.runId) properties.mastra_run_id = log.correlationContext.runId;
+      if (log.correlationContext.threadId) properties.mastra_thread_id = log.correlationContext.threadId;
+      if (log.correlationContext.requestId) properties.mastra_request_id = log.correlationContext.requestId;
+      if (log.correlationContext.serviceName) properties.service_name = log.correlationContext.serviceName;
+      if (log.correlationContext.environment) properties.environment = log.correlationContext.environment;
+    }
+
+    return properties;
+  }
+
+  private hasObjectEntries(value?: Record<string, unknown>): boolean {
+    return !!value && Object.keys(value).length > 0;
+  }
+
+  private shouldCaptureLogException(level: LogLevel): boolean {
+    return level === 'error' || level === 'fatal';
+  }
+
+  private getLogError(data?: Record<string, unknown>, metadata?: Record<string, unknown>): Error | undefined {
+    const error = data?.error ?? data?.err ?? data?.exception ?? metadata?.error;
+    return this.toError(error);
+  }
+
+  private toError(value: unknown): Error | undefined {
+    if (value instanceof Error) return value;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+    const record = value as Record<string, unknown>;
+    const message = typeof record.message === 'string' ? record.message : undefined;
+    if (!message) return undefined;
+
+    const error = new Error(message);
+    if (typeof record.name === 'string') {
+      error.name = record.name;
+    }
+    if (typeof record.stack === 'string') {
+      error.stack = record.stack;
+    }
+    return error;
   }
 
   /**
@@ -571,6 +750,7 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   override async _postShutdown(): Promise<void> {
+    this.#seenLogIds.clear();
     if (this.#client) {
       await this.#client.shutdown();
     }

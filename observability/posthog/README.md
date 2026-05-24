@@ -73,10 +73,59 @@ const mastra = new Mastra({
 - **Privacy mode**: Optional exclusion of input/output data for sensitive applications
 - **Serverless optimized**: Auto-configures batching for serverless environments
 
+### Log Events
+
+Mastra operational logs can also be exported to PostHog. Log export is disabled by default so existing tracing setups do not start sending new events unless you opt in:
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  logs: true,
+});
+```
+
+By default, enabled log export sends `info` and higher events as `mastra_log` with generic Mastra properties such as:
+
+- `mastra_log_id`
+- `mastra_log_level`
+- `mastra_log_message`
+- `mastra_log_data`
+- `mastra_log_metadata`
+- `mastra_log_tags`
+- `$ai_trace_id`
+- `$ai_span_id`
+- `$ai_session_id`
+- `mastra_resource_id`
+- `mastra_run_id`
+- `mastra_thread_id`
+- `mastra_request_id`
+- `service_name`
+- `environment`
+
+You can customize the event name, minimum level, distinct ID selection, duplicate handling, and Error Tracking fanout:
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  logs: {
+    eventName: 'mastra_log',
+    minLevel: 'warn',
+    distinctId: event => event.log.correlationContext?.userId,
+    captureExceptions: true,
+    dedupe: true,
+  },
+});
+```
+
+When `captureExceptions` is enabled, `error` and `fatal` logs with an embedded error in `data.error`, `data.err`, `data.exception`, or `metadata.error` are also sent to PostHog Error Tracking through the immediate exception capture path.
+
+When `enablePrivacyMode` is enabled, log export redacts `mastra_log_message` and omits freeform `data`, `metadata`, and `tags` fields. Duplicate handling is per exporter instance and drops repeated `logId` values from the in-memory dedupe cache.
+
 ### Supported Event Types
 
 - `$ai_generation`: LLM model calls (MODEL_GENERATION, MODEL_STEP)
 - `$ai_span`: Operations like tool calls, workflows, and streaming chunks
+- `mastra_log`: Mastra operational log events when `logs` is enabled
 - Hierarchical traces with parent-child relationships via `$ai_parent_id`
 - Session grouping with `$ai_session_id`
 
@@ -114,6 +163,13 @@ new PosthogExporter({
 
   // Optional: Privacy
   enablePrivacyMode: false, // Set to true to exclude input/output from LLM events
+
+  // Optional: Log export
+  logs: {
+    eventName: 'mastra_log',
+    minLevel: 'info',
+    captureExceptions: false,
+  },
 });
 ```
 
@@ -141,7 +197,7 @@ new PosthogExporter({
 });
 ```
 
-Note: Privacy mode only applies to `$ai_generation` events. Span events (tool calls, etc.) still include input/output state.
+Note: Privacy mode redacts `$ai_generation` payloads and log-event freeform fields. Span events (tool calls, etc.) still include input/output state.
 
 ## Metadata
 
