@@ -622,6 +622,53 @@ describe('Harness Resource', () => {
     secondUnsubscribe();
   });
 
+  it('refreshes the snapshot and clears stale replay cursors after a 412 replay gap', async () => {
+    mockJson({ session: makeSnapshot() });
+    mockJson(
+      {
+        code: 'harness.event_replay_unavailable',
+        message: 'Harness event replay cursor cannot be served',
+        details: { reason: 'stale_epoch' },
+      },
+      { status: 412, statusText: 'Precondition Failed' },
+    );
+    mockJson(makeSnapshot({ state: { refreshed: true }, summary: { lastActivityAt: 42 } }));
+    mockSse([]);
+    const listener = vi.fn();
+    const onReplayGap = vi.fn();
+
+    const session = await client.getHarness().session();
+    const unsubscribe = session.subscribe(listener, {
+      lastEventId: 'harness-v1:epoch-1:7',
+      onReplayGap,
+    });
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(4));
+
+    expect(onReplayGap).toHaveBeenCalledTimes(1);
+    expect(listener).not.toHaveBeenCalled();
+    expect(session.getState()).toEqual({ refreshed: true });
+    expect(session.lastActivityAt).toBe(42);
+    expect((global.fetch as any).mock.calls[1]).toEqual([
+      'http://localhost:4111/api/harness/default/sessions/session-1/events',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'Last-Event-ID': 'harness-v1:epoch-1:7' }),
+      }),
+    ]);
+    expect((global.fetch as any).mock.calls[2][0]).toBe('http://localhost:4111/api/harness/default/sessions/session-1');
+    const reconnectCall = (global.fetch as any).mock.calls[3];
+    expect(reconnectCall[0]).toBe('http://localhost:4111/api/harness/default/sessions/session-1/events');
+    expect(reconnectCall[1].headers).not.toHaveProperty('Last-Event-ID');
+    unsubscribe();
+
+    mockSse([]);
+    const secondUnsubscribe = session.subscribe(() => {});
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(5));
+    const nextSubscribeCall = (global.fetch as any).mock.calls[4];
+    expect(nextSubscribeCall[0]).toBe('http://localhost:4111/api/harness/default/sessions/session-1/events');
+    expect(nextSubscribeCall[1].headers).not.toHaveProperty('Last-Event-ID');
+    secondUnsubscribe();
+  });
+
   it('stops reconnecting on non-replay 4xx event stream failures', async () => {
     mockJson({ session: makeSnapshot() });
     mockJson({ code: 'harness.permission_denied', message: 'denied' }, { status: 403, statusText: 'Forbidden' });
