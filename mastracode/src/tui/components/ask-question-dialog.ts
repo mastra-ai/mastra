@@ -4,7 +4,7 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, Component, TUI } from '@mariozechner/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
@@ -21,8 +21,9 @@ export interface AskQuestionDialogOptions {
   defaultValue?: string;
   allowCustomResponse?: boolean;
   selectedOptionLabel?: string;
+  selectionMode?: 'single_select' | 'multi_select';
   tui?: TUI;
-  onSubmit: (answer: string) => void;
+  onSubmit: (answer: string | string[]) => void;
   onCancel: () => void;
 }
 
@@ -37,7 +38,9 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private defaultValue?: string;
   private allowCustomResponse = true;
   private selectedOptionLabel?: string;
-  private onSubmit: (answer: string) => void;
+  private selectionMode: 'single_select' | 'multi_select' = 'single_select';
+  private selectedValues = new Set<string>();
+  private onSubmit: (answer: string | string[]) => void;
   private onCancel: () => void;
 
   /** Children added by buildSelectMode/buildInputMode, tracked for removal on mode switch */
@@ -63,6 +66,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.defaultValue = options.defaultValue;
     this.allowCustomResponse = options.allowCustomResponse ?? true;
     this.selectedOptionLabel = options.selectedOptionLabel;
+    this.selectionMode = options.selectionMode ?? 'single_select';
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
@@ -92,6 +96,36 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
         value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
         label: `  ${theme.fg('dim', '✎ Custom response...')}`,
       });
+    }
+
+    if (this.selectionMode === 'multi_select') {
+      const multiItems: SelectItem[] = items.map(item => ({
+        ...item,
+        label: `[ ] ${item.value}`,
+      }));
+
+      this.selectList = new SelectList(multiItems, Math.min(multiItems.length, 8), getSelectListTheme());
+
+      this.selectList.onSelect = () => {};
+
+      this.selectList.onCancel = this.onCancel;
+
+      this.modeChildren = [];
+
+      const selectChild = this.selectList;
+      this.addChild(selectChild);
+      this.modeChildren.push(selectChild);
+
+      const spacer = new Spacer(1);
+      this.addChild(spacer);
+      this.modeChildren.push(spacer);
+
+      const hint = new Text(theme.fg('dim', '  Space to toggle · Enter to submit · Esc to skip'), 0, 0);
+
+      this.addChild(hint);
+      this.modeChildren.push(hint);
+
+      return;
     }
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
@@ -182,13 +216,52 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
 
   handleInput(data: string): void {
     if (this.selectList) {
+      if (this.selectionMode === 'multi_select') {
+        if (data === '\u001b') {
+          this.onCancel();
+          return;
+        }
+
+        if (data === ' ') {
+          const item = this.selectList.getSelectedItem();
+
+          if (!item) return;
+
+          if (item.value === AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE) {
+            this.switchToCustomInput();
+            return;
+          }
+
+          if (this.selectedValues.has(item.value)) {
+            this.selectedValues.delete(item.value);
+          } else {
+            this.selectedValues.add(item.value);
+          }
+
+          const renderedItems = (this.selectList as any).items as SelectItem[];
+
+          renderedItems.forEach(i => {
+            const checked = this.selectedValues.has(i.value);
+            i.label = `${checked ? '[x]' : '[ ]'} ${i.value}`;
+          });
+
+          this.selectList.invalidate();
+          return;
+        }
+
+        if (data === '\r') {
+          this.onSubmit(Array.from(this.selectedValues));
+          return;
+        }
+      }
+
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getKeybindings();
-      if (kb.matches(data, 'tui.select.cancel')) {
+      if (data === '\u001b') {
         this.onCancel();
         return;
       }
+
       this.input.handleInput(data);
     }
   }

@@ -12,15 +12,7 @@
  * 3. **Answered** — After the user responds, the box freezes with ✓/✗ icons.
  */
 
-import {
-  Container,
-  getKeybindings,
-  Input,
-  SelectList,
-  Spacer,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from '@mariozechner/pi-tui';
+import { Container, Input, SelectList, Spacer, visibleWidth, wrapTextWithAnsi } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
@@ -36,6 +28,7 @@ export interface AskQuestionInlineOptions {
   allowEmptyInput?: boolean;
   /** Show the "Custom response..." option in select mode. Defaults to true. */
   allowCustomResponse?: boolean;
+  selectionMode?: 'single_select' | 'multi_select';
   /**
    * Use a multiline editor for free-text input (Shift+Enter / \+Enter for new lines).
    * Defaults to false — most prompts ask for short answers like names, paths, or yes/no.
@@ -239,6 +232,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private allowEmptyInput = false;
   private multiline = false;
   private allowCustomResponse = true;
+  private selectionMode: 'single_select' | 'multi_select' = 'single_select';
+  private selectedValues = new Set<string>();
   private answered = false;
 
   /**
@@ -312,6 +307,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       this.allowEmptyInput = Boolean(options.allowEmptyInput);
       this.multiline = Boolean(options.multiline);
       this.allowCustomResponse = options.allowCustomResponse ?? true;
+      this.selectionMode = options.selectionMode ?? 'single_select';
 
       const questionLines = options.question.split('\n');
 
@@ -371,9 +367,10 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
     allowCustomResponse?: boolean;
+    selectionMode?: 'single_select' | 'multi_select';
     multiline?: boolean;
     tui?: TUI;
-    onSubmit: (answer: string) => void;
+    onSubmit: (answer: string | string[]) => void;
     onCancel: () => void;
   }): void {
     if (this.answered) return;
@@ -383,6 +380,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.isNegativeAnswer = options.isNegativeAnswer;
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
     this.allowCustomResponse = options.allowCustomResponse ?? true;
+    this.selectionMode = options.selectionMode ?? 'single_select';
     this.multiline = Boolean(options.multiline);
 
     // Update question text and items to final values
@@ -421,6 +419,23 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       });
     }
 
+    if (this.selectionMode === 'multi_select') {
+      const multiItems: SelectItem[] = items.map(item => ({
+        ...item,
+        label: `[ ] ${item.value}`,
+      }));
+
+      this.selectList = new SelectList(multiItems, Math.min(multiItems.length, 8), getSelectListTheme());
+
+      this.selectList.onSelect = () => {};
+
+      this.selectList.onCancel = () => {
+        this.handleCancel();
+      };
+
+      return;
+    }
+
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
     this.selectList.onSelect = (item: SelectItem) => {
@@ -428,8 +443,10 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         this.switchToCustomInput();
         return;
       }
+
       this.handleAnswer(item.value);
     };
+
     this.selectList.onCancel = () => {
       this.handleCancel();
     };
@@ -481,7 +498,6 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
           this.handleAnswer(trimmed);
         }
       };
-      (this.input as any).keybindings = getKeybindings();
     }
 
     // Carry focus over so callers (constructor, activate, switchToCustomInput)
@@ -517,10 +533,48 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.answered) return;
 
     if (this.selectList) {
+      if (this.selectionMode === 'multi_select') {
+        if (data === '\u001b') {
+          this.handleCancel();
+          return;
+        }
+
+        if (data === ' ') {
+          const item = this.selectList.getSelectedItem();
+
+          if (!item) return;
+
+          if (item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE) {
+            this.switchToCustomInput();
+            return;
+          }
+
+          if (this.selectedValues.has(item.value)) {
+            this.selectedValues.delete(item.value);
+          } else {
+            this.selectedValues.add(item.value);
+          }
+
+          const renderedItems = (this.selectList as any).items as SelectItem[];
+
+          renderedItems.forEach(i => {
+            const checked = this.selectedValues.has(i.value);
+            i.label = `${checked ? '[x]' : '[ ]'} ${i.value}`;
+          });
+
+          this.selectList.invalidate();
+          return;
+        }
+
+        if (data === '\r') {
+          this.handleAnswer(Array.from(this.selectedValues).join(', '));
+          return;
+        }
+      }
+
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getKeybindings();
-      if (kb.matches(data, 'tui.select.cancel')) {
+      if (data === '\u001b') {
         this.handleCancel();
         return;
       }
