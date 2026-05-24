@@ -254,6 +254,7 @@ export class Harness<TState = {}> {
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private stateUpdateQueue: Promise<void> = Promise.resolve();
+  private switchModeVersion: number = 0;
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -540,25 +541,32 @@ export class Harness<TState = {}> {
 
     this.abort();
 
-    // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
-    if (currentModelId) {
-      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
-    }
-
     const previousModeId = this.currentModeId;
+    const version = ++this.switchModeVersion;
+
+    // Update local state and emit events immediately so UIs can update
+    // without waiting for storage round-trips.
     this.currentModeId = modeId;
+    this.emit({ type: 'mode_changed', modeId, previousModeId });
+
+    // Save current model to the outgoing mode before switching
+    if (currentModelId) {
+      await this.setThreadSetting({ key: `modeModelId_${previousModeId}`, value: currentModelId });
+    }
+    if (this.switchModeVersion !== version) return;
 
     await this.setThreadSetting({ key: 'currentModeId', value: modeId });
+    if (this.switchModeVersion !== version) return;
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
+    if (this.switchModeVersion !== version) return;
     if (modeModelId) {
       void this.setState({ currentModelId: modeModelId } as unknown as Partial<TState>);
       this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
     }
 
-    this.emit({ type: 'mode_changed', modeId, previousModeId });
     await this.ensureCurrentAgentThreadSubscription();
   }
 

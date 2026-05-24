@@ -214,6 +214,11 @@ export interface TUIState {
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
+  // ── Dedup ────────────────────────────────────────────────────────────
+  /** Texts of queued messages that were locally rendered and fired — used to
+   *  suppress the subscription echo that would otherwise create a duplicate. */
+  firedQueuedMessageTexts?: Set<string>;
+
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
