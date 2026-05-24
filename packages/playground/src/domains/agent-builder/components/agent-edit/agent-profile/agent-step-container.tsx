@@ -1,7 +1,10 @@
-import { cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
 import type { CSSProperties, ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
+import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
+import { startViewTransition } from '@/lib/routing';
 
 export interface AgentStepContainerProps {
   children: React.ReactNode;
@@ -13,19 +16,21 @@ export interface AgentStepContainerProps {
 export const AgentStepContainer = ({ children, cta, title, description }: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
   const isStreaming = useStreamRunning();
+  const { isLast, next } = useWizard();
+  const navigate = useNavigate();
+  const { id: agentId } = useParams<{ id: string }>();
 
   const bannerStyle: CSSProperties = {
     backgroundImage: `conic-gradient(from 0deg at 50% 50%, ${agentColor.background}, ${agentColor.foreground}, ${agentColor.background})`,
   };
 
+  const showLastStepCtas = isLast && agentId;
+
   return (
-    <div className="relative w-full h-full border border-border1 rounded-3xl overflow-hidden overflow-y-auto p-4">
+    <div className="relative w-full h-full min-h-0 border border-border1 rounded-3xl overflow-hidden p-4">
       <div
         aria-hidden
-        className={cn(
-          'agent-step-banner pointer-events-none',
-          isStreaming && 'agent-step-banner-rotating',
-        )}
+        className={cn('agent-step-banner pointer-events-none', isStreaming && 'agent-step-banner-rotating')}
         style={bannerStyle}
       />
       <div
@@ -41,7 +46,22 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
           </div>
         )}
         <div className="h-full overflow-y-auto">{children}</div>
-        <div className="flex justify-center items-center shrink-0 pb-6">{cta}</div>
+        {showLastStepCtas ? (
+          <div className="flex justify-center items-center gap-2 shrink-0 pb-6">
+            <Button variant="outline" onClick={() => startViewTransition(() => next())} disabled={isStreaming}>
+              See agent configuration
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
+              disabled={isStreaming}
+            >
+              Try agent
+            </Button>
+          </div>
+        ) : (
+          <div className="flex justify-center items-center shrink-0 pb-6">{cta}</div>
+        )}
       </div>
     </div>
   );

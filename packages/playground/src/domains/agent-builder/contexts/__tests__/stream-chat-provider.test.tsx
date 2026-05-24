@@ -66,10 +66,12 @@ describe('StreamChatProvider', () => {
     chatState.isRunning = false;
     chatState.messages = [];
     sentMessages.length = 0;
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it('only re-renders running subscribers when isRunning changes (not when messages change)', () => {
@@ -90,11 +92,20 @@ describe('StreamChatProvider', () => {
     setMessages([{ id: '1' }, { id: '2' }]);
     expect(runningRender.mock.calls.length).toBe(baseline);
 
-    // isRunning change SHOULD cause running subscriber to re-render.
+    // isRunning change SHOULD cause running subscriber to re-render — but only
+    // after the 100 ms debounce window has elapsed (flicker suppression).
     setRunning(true);
+    expect(runningRender.mock.calls.length).toBe(baseline); // debounced, no flicker yet
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
     expect(runningRender.mock.calls.length).toBe(baseline + 1);
 
     setRunning(false);
+    expect(runningRender.mock.calls.length).toBe(baseline + 1); // debounced, no flicker yet
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
     expect(runningRender.mock.calls.length).toBe(baseline + 2);
   });
 
