@@ -144,6 +144,7 @@ import type {
   QueueOptions,
   RegisterPlanApprovalParams,
   RegisterQuestionParams,
+  RegisterSandboxAccessParams,
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionSignalOptions,
@@ -6131,6 +6132,44 @@ export class Session {
   }
 
   /**
+   * Resume a pending sandbox-access request. The approver passes
+   * `approved: true` to grant or `approved: false` to deny. The
+   * resumed tool reads the response via its suspendPayload handler.
+   *
+   * `sandbox_access_resolved` is emitted from inside the resume
+   * machinery AFTER the CAS commit on `pendingResume.resumedAt` —
+   * see `_resume`. Invalid responses, duplicate receipts, and
+   * concurrent losers do NOT emit a resolved event, so audit
+   * consumers can trust the event as an authoritative verdict.
+   *
+   * The pending request is routed by the session's current
+   * `pendingResume.kind === 'sandbox-access'` slot (one outstanding
+   * sandbox request per session at a time, mirroring every other
+   * `respond*` API).
+   */
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & InboxReceiptResponseOptions,
+  ): Promise<InboxResponseResult>;
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & LegacyInboxResponseOptions,
+  ): Promise<AgentResult>;
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult>;
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult> {
+    return this._resume(
+      'sandbox-access',
+      compactJsonObject({
+        approved: opts.approved,
+        reason: opts.reason,
+      }),
+      opts,
+    );
+  }
+
+  /**
    * Resume a pending `submit_plan` approval.
    *
    * On `approved: true` the harness flips the active mode to:
@@ -6812,6 +6851,28 @@ export class Session {
         `respond[${expectedKind}]`,
         'pending resume already responded; awaiting agent confirmation',
       );
+    }
+
+    // Sandbox-access verdict event fires AFTER the CAS commit so
+    // invalid responses, duplicate receipts, and concurrent losers
+    // never emit a false `sandbox_access_resolved`. The pending
+    // payload still has the original semanticType + reason; we read
+    // them from `pending` (captured pre-flush) which is value-equal
+    // to the committed record.
+    if (expectedKind === 'sandbox-access') {
+      const approved =
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData &&
+        (resumeData as { approved: unknown }).approved === true;
+      const sandboxAccess = pending.payload?.sandboxAccess;
+      this._emitTurnEvent({
+        type: 'sandbox_access_resolved',
+        requestId: pending.itemId ?? pending.toolCallId,
+        toolCallId: pending.toolCallId,
+        semanticType: sandboxAccess?.semanticType ?? 'custom',
+        approved,
+      });
     }
 
     // Resumed runs run under a session-owned AbortController too, so
@@ -8473,6 +8534,97 @@ export class Session {
     });
   }
 
+  private async _registerSandboxAccess(
+    params: RegisterSandboxAccessParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
+  ): Promise<void> {
+    this._assertOpenForTurn('ctx.registerSandboxAccess');
+    if (typeof params.requestId !== 'string' || params.requestId.length === 0) {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.requestId', 'must be a non-empty string');
+    }
+    const validSemanticTypes = new Set(['file', 'command', 'network', 'mcp', 'custom']);
+    if (!validSemanticTypes.has(params.semanticType)) {
+      throw new HarnessValidationError(
+        'ctx.registerSandboxAccess.semanticType',
+        "must be one of 'file' | 'command' | 'network' | 'mcp' | 'custom'",
+      );
+    }
+    if (params.reason !== undefined && typeof params.reason !== 'string') {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.reason', 'must be a string when provided');
+    }
+    // Strictly validate the opaque payload before we persist it on
+    // `pendingResume.payload` or stamp it on the event. The harness's
+    // strict `assertJsonValue` rejects functions, class instances,
+    // NaN/Infinity, sparse arrays, Date objects, BigInt, and any
+    // other non-plain JSON value — preventing a malformed payload
+    // from poisoning the durable session row or the event ledger.
+    // Same validator used for `respond*` payload hashing and
+    // admission-id derivation, so the contract is consistent across
+    // every harness surface that accepts JSON from a tool.
+    const sanitizedPayload =
+      params.payload !== undefined ? assertJsonValue(params.payload, 'ctx.registerSandboxAccess.payload') : undefined;
+    const runId = params.runId ?? this._currentRunId;
+    const toolCallId = params.toolCallId ?? params.requestId;
+    if (!runId) {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.runId', 'active run id is required');
+    }
+    const modeId = params.modeId ?? this._record.modeId;
+    const pending: PendingResume = {
+      kind: 'sandbox-access',
+      itemId: params.requestId,
+      runId,
+      toolCallId,
+      source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      requestedAt: Date.now(),
+      modeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(
+        modeId,
+        params.modelId ?? this._modelIdForQueuedItem(this._currentQueuedItemId),
+      ),
+      payload: {
+        sandboxAccess: {
+          semanticType: params.semanticType,
+          ...(params.reason !== undefined ? { reason: params.reason } : {}),
+          ...(sanitizedPayload !== undefined ? { payload: sanitizedPayload } : {}),
+        },
+      },
+    };
+    let registered = false;
+    await this._flushUpdate(prev => {
+      const current = prev.pendingResume;
+      if (current) {
+        // Idempotency: same requestId (itemId) under same runId is a
+        // no-op even when caller used a custom toolCallId. Without
+        // this `itemId` check, a re-registration with the same
+        // requestId but a different default toolCallId would throw.
+        if (
+          current.kind === 'sandbox-access' &&
+          current.runId === runId &&
+          (current.toolCallId === toolCallId || current.itemId === params.requestId)
+        ) {
+          return prev;
+        }
+        throw new HarnessValidationError('ctx.registerSandboxAccess', `pending resume is already "${current.kind}"`);
+      }
+      registered = true;
+      return { ...prev, pendingResume: pending };
+    });
+    if (!registered) return;
+    this._emitTurnEvent({
+      type: 'sandbox_access_requested',
+      requestId: params.requestId,
+      toolCallId,
+      semanticType: params.semanticType,
+      ...(params.reason !== undefined ? { reason: params.reason } : {}),
+      ...(sanitizedPayload !== undefined ? { payload: sanitizedPayload } : {}),
+    });
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind: 'sandbox-access',
+      toolCallId,
+      runId,
+    });
+  }
+
   private async _registerPlanApproval(
     params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
   ): Promise<void> {
@@ -8974,6 +9126,8 @@ export class Session {
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      registerSandboxAccess: params =>
+        session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       resolveToolPermission: params =>
         session._resolveToolPermissionPolicy(params.toolName, {
           // Prefer caller-supplied actor (an upstream resolver may have

@@ -473,6 +473,38 @@ export interface SuspensionResolvedEvent extends HarnessEventBase {
   toolCallId: string;
 }
 
+/**
+ * A sandbox-access request was registered via
+ * `ctx.registerSandboxAccess(...)`. Mirrors `suspension_required`
+ * but carries the structured sandbox-access payload (semantic type,
+ * reason, opaque payload) so the approval UI / route can route on
+ * shape without inspecting pendingResume state.
+ */
+export interface SandboxAccessRequestedEvent extends HarnessEventBase {
+  type: 'sandbox_access_requested';
+  requestId: string;
+  toolCallId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  reason?: string;
+  payload?: JsonValue;
+}
+
+/**
+ * The pending sandbox-access request was resolved via
+ * `session.respondToSandboxAccess({approved, reason?})`. Fires after
+ * the resume CAS commits but before the requesting tool's resume
+ * runs — invalid responses, duplicate receipts, and concurrent
+ * losers do not emit a resolved event, so subscribers can treat
+ * this as an authoritative verdict for audit.
+ */
+export interface SandboxAccessResolvedEvent extends HarnessEventBase {
+  type: 'sandbox_access_resolved';
+  requestId: string;
+  toolCallId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  approved: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Queue events (§10.2). The queue's lifecycle is: `enqueued → started →
 // removed`. Outcome is observable through the turn's own `agent_end`
@@ -782,6 +814,8 @@ export type HarnessEvent =
   | AgentEndEvent
   | SuspensionRequiredEvent
   | SuspensionResolvedEvent
+  | SandboxAccessRequestedEvent
+  | SandboxAccessResolvedEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
   | ThreadCreatedEvent
@@ -1090,6 +1124,8 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_end',
   'suspension_required',
   'suspension_resolved',
+  'sandbox_access_requested',
+  'sandbox_access_resolved',
   'queue_item_started',
   'queue_item_replayed',
   'queue_item_failed',

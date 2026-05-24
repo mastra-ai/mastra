@@ -236,6 +236,7 @@ describe('Session — surface area (M1)', () => {
         'respondToToolSuspension',
         'respondToQuestion',
         'respondToPlanApproval',
+        'respondToSandboxAccess',
         'subscribe',
         'listEventsAfter',
         'lookupMessageResult',

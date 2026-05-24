@@ -124,7 +124,7 @@ export interface QueuedItem {
  * See HARNESS_V1_SPEC.md §5.1 ("Persistence shapes — `pendingResume`").
  */
 export interface PendingResume {
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   /** Stable pending interaction id used by inbox/route callers. */
   itemId?: string;
   runId: string;
@@ -167,6 +167,26 @@ export interface PendingResume {
     // plan-approval
     title?: string;
     plan?: string;
+    // sandbox-access
+    sandboxAccess?: {
+      /**
+       * Semantic shape of the requested access. Aligned with
+       * `WorkspacePolicyActionKind` so transport adapters that
+       * already render workspace policy verdicts can reuse the
+       * same kind taxonomy. `'custom'` covers caller-defined
+       * sandbox surfaces (e.g. a specialized provider request).
+       */
+      semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+      /** Operator-facing rationale shown in the approval UI. */
+      reason?: string;
+      /**
+       * Opaque payload — caller-defined shape. The harness does not
+       * interpret these fields; the UI / approver routes on
+       * `semanticType` and renders `payload` according to its own
+       * conventions.
+       */
+      payload?: JsonValue;
+    };
   };
   /**
    * Plan-approval only. Frozen at registration from the submitting mode's

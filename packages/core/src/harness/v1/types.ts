@@ -1714,7 +1714,7 @@ export interface InboxResponseOptions {
 
 export interface InboxResponseResult {
   itemId: string;
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   status: 'accepted' | 'applied';
   responseId: string;
   duplicate: boolean;
@@ -1937,6 +1937,37 @@ export interface RegisterPlanApprovalParams {
 }
 
 /**
+ * Parameters accepted by `ctx.registerSandboxAccess(...)` from a tool
+ * that needs to request sandbox-level approval (filesystem mount,
+ * shell command, outbound network endpoint, MCP server access, or a
+ * caller-defined `custom` surface). The harness records a pending
+ * resume of kind `'sandbox-access'`, emits
+ * `sandbox_access_requested`, and suspends the turn until the
+ * approver calls `session.respondToSandboxAccess({approved, reason?})`.
+ * The respond API routes via the session's current
+ * `pendingResume.kind === 'sandbox-access'` slot — one outstanding
+ * sandbox request per session at a time — mirroring every other
+ * `respond*` API on `Session`.
+ *
+ * Semantic types include the four `WorkspacePolicyActionKind` values
+ * (`'file'`, `'command'`, `'network'`, `'mcp'`) so existing
+ * workspace-policy renderers can render the prompt without a
+ * translation layer, plus `'custom'` for caller-defined surfaces
+ * that don't fit any of the four.
+ */
+export interface RegisterSandboxAccessParams {
+  /** Stable id for this request; doubles as the inbox itemId. */
+  requestId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  /** Operator-facing rationale shown in the approval UI. */
+  reason?: string;
+  /** Opaque caller-defined payload (e.g. path, command, host). */
+  payload?: JsonValue;
+  runId?: string;
+  toolCallId?: string;
+}
+
+/**
  * Harness-specific context surfaced on the agent's `RequestContext` under
  * the `'harness'` key. See spec §6 for the full contract.
  *
@@ -2002,6 +2033,15 @@ export interface HarnessRequestContext<TState = unknown> {
   registerQuestion: (params: RegisterQuestionParams) => Promise<void>;
   /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
   registerPlanApproval: (params: RegisterPlanApprovalParams) => Promise<void>;
+  /**
+   * Register a pending sandbox-access request (filesystem, command,
+   * network, mcp, or custom). The harness records a pending resume
+   * of kind `'sandbox-access'`, emits `sandbox_access_requested`,
+   * and suspends the turn until `session.respondToSandboxAccess` is
+   * called. The harness does NOT itself enforce sandbox access at
+   * the OS / process layer; this is the APPROVAL workflow.
+   */
+  registerSandboxAccess?: (params: RegisterSandboxAccessParams) => Promise<void>;
   /**
    * Resolve the Harness permission policy for one tool invocation. The agent
    * tool dispatcher calls this before execution so per-tool/category rules and
