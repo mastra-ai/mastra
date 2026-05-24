@@ -246,6 +246,16 @@ export type {
 } from './types';
 
 export type {
+  HarnessTask,
+  HarnessTaskOrigin,
+  HarnessTaskStatus,
+  HarnessRun,
+  HarnessRunFinishReason,
+  TaskIndexEntry,
+  TaskIdFieldMapping,
+} from './contracts';
+
+export type {
   AttachmentObjectPointer,
   AttachmentRendererDescriptor,
   ChannelDeliverySemantics,
