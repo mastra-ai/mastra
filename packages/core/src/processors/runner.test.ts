@@ -2477,6 +2477,7 @@ describe('ProcessorRunner', () => {
             contents: 'remember this',
             metadata: { type: 'test-reminder' },
           }),
+          transient: true,
         }),
       ]);
     });

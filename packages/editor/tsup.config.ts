@@ -1,4 +1,3 @@
-import { cp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { defineConfig } from 'tsup';
 
@@ -14,7 +13,4 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  onSuccess: async () => {
-    await cp(join('src', 'ee', 'workspace'), join('dist', 'ee', 'workspace'), { recursive: true });
-  },
 });

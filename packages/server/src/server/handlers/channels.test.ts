@@ -239,6 +239,21 @@ describe('Channel Handlers RBAC', () => {
 
       expect(slackChannel.connect).toHaveBeenCalledWith('agent-owned-by-alice', undefined);
     });
+
+    it('returns 404 when the agent does not exist in the runtime registry', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'alice');
+
+      const error = await CONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'no-such-agent',
+        options: undefined,
+      }).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+      expect(slackChannel.connect).not.toHaveBeenCalled();
+    });
   });
 
   describe('DISCONNECT_CHANNEL_ROUTE', () => {
@@ -360,8 +375,34 @@ describe('Channel Handlers RBAC', () => {
       expect(slackChannel.disconnect).toHaveBeenCalledWith('agent-owned-by-alice');
     });
 
-    it('returns 404 when the agent does not exist in the runtime registry', async () => {
-      const ctx = asAuthenticatedUser(createContext(mastra), 'alice');
+    it('allows orphan disconnect for a caller with channels:write', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'alice', ['channels:write']);
+
+      const result = await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'no-such-agent',
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('no-such-agent');
+    });
+
+    it('allows orphan disconnect for a caller with channels:* admin bypass', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'admin', ['channels:*']);
+
+      const result = await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'no-such-agent',
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('no-such-agent');
+    });
+
+    it('rejects orphan disconnect for a caller without channels:write', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'mallory', ['agents:read']);
 
       const error = await DISCONNECT_CHANNEL_ROUTE.handler({
         ...ctx,
@@ -372,6 +413,19 @@ describe('Channel Handlers RBAC', () => {
       expect(error).toBeInstanceOf(HTTPException);
       expect(error.status).toBe(404);
       expect(slackChannel.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('allows orphan disconnect when auth is not configured', async () => {
+      const ctx = createContext(mastra);
+
+      const result = await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'no-such-agent',
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('no-such-agent');
     });
 
     it('does not call channel.disconnect when ownership check rejects (no leaked side effects)', async () => {

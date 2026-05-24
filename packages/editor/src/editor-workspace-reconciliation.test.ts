@@ -3,7 +3,8 @@ import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
 import { Workspace } from '@mastra/core/workspace';
 import { LocalFilesystem } from '@mastra/core/workspace';
-import { MastraEditor, snapshotsMatch } from './index';
+import { MastraEditor } from './index';
+import { snapshotsMatch } from './snapshots-match';
 
 // =============================================================================
 // Helpers
@@ -390,6 +391,52 @@ describe('reconcileBuilderWorkspaces', () => {
     // User workspace should NOT be touched
     const userWs = await workspaceStore.getById('user-ws');
     expect(userWs!.status).toBe('draft');
+  });
+
+  it('does not archive any builder workspaces when no workspace ref is configured', async () => {
+    // Regression: without a resolvable current workspace ID, the reconciler
+    // must NOT mass-archive every builder-tagged workspace. It should bail.
+    const storage = new LibSQLStore({ id: `ws-noref-${testStorageCount++}`, url: ':memory:' });
+    await storage.init();
+
+    const workspaceStore = (await storage.getStore('workspaces'))!;
+
+    // Pre-create two builder-tagged workspaces from a prior run
+    await workspaceStore.create({
+      workspace: {
+        id: 'prior-builder-ws-1',
+        name: 'Prior Builder Workspace 1',
+        metadata: { source: 'builder', builderWorkspaceId: 'prior-builder-ws-1' },
+        filesystem: { provider: 'local', config: { basePath: '/tmp/prior1' } },
+      },
+    });
+    await workspaceStore.create({
+      workspace: {
+        id: 'prior-builder-ws-2',
+        name: 'Prior Builder Workspace 2',
+        metadata: { source: 'builder', builderWorkspaceId: 'prior-builder-ws-2' },
+        filesystem: { provider: 'local', config: { basePath: '/tmp/prior2' } },
+      },
+    });
+
+    // Builder is enabled but no workspace ref is configured
+    const editor = new MastraEditor({
+      logger: mockLogger() as any,
+      builder: {
+        enabled: true,
+        configuration: { agent: {} },
+      } as any,
+    });
+
+    new Mastra({ storage, editor });
+
+    // Give reconciliation time to (incorrectly) run if the guard were missing
+    await new Promise(r => setTimeout(r, 500));
+
+    const ws1 = await workspaceStore.getById('prior-builder-ws-1');
+    const ws2 = await workspaceStore.getById('prior-builder-ws-2');
+    expect(ws1!.status).not.toBe('archived');
+    expect(ws2!.status).not.toBe('archived');
   });
 
   it('does not archive the current builder workspace', async () => {

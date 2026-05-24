@@ -26,7 +26,7 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
-import { isZodObject } from '../../utils/zod-utils';
+import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
@@ -38,6 +38,7 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
+import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -113,12 +114,12 @@ export class CoreToolBuilder extends MastraBase {
         if (isZodObject(schema)) {
           let nextSchema = schema;
           if (isBackgroundEligible) {
-            nextSchema = nextSchema.extend({
+            nextSchema = safeExtendZodObject(nextSchema, {
               _background: backgroundOverrideZodSchema,
             });
           }
           if (isResumableTool) {
-            nextSchema = nextSchema.extend({
+            nextSchema = safeExtendZodObject(nextSchema, {
               suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
               resumeData: z
                 .any()
@@ -420,6 +421,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
+            observe: execOptions.observe ?? noopObserve,
             writer: new ToolStream(
               {
                 prefix: 'tool',

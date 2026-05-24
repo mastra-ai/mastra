@@ -82,9 +82,14 @@ export {
   PROVIDER_REGISTRY,
   parseModelString,
   getProviderConfig,
-  isProviderRegistered,
+  modelSupportsAttachments,
 } from './model/provider-registry.js';
-export type { ModelRouterModelId, Provider, ModelForProvider } from './model/provider-registry.js';
+export type {
+  ModelRouterModelId,
+  Provider,
+  ModelForProvider,
+  AttachmentCapabilities,
+} from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;

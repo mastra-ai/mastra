@@ -53,7 +53,6 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
     >
       <div className="mt-0.5">
         <Checkbox
-          variant="neutral"
           checked={isChecked}
           onCheckedChange={next => onToggle(skill.id, next === true)}
           disabled={!editable}

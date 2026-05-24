@@ -11,7 +11,7 @@ import type {
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
-import type { BlobStore, StorageWorkspaceSnapshotType } from '@mastra/core/storage';
+import type { BlobStore } from '@mastra/core/storage';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
@@ -26,6 +26,7 @@ import {
   EditorFavoritesNamespace,
 } from './namespaces';
 import { localFilesystemProvider, localSandboxProvider } from './providers';
+import { snapshotsMatch } from './snapshots-match';
 
 export type { MastraEditorConfig };
 
@@ -242,6 +243,12 @@ export class MastraEditor implements IMastraEditor {
     // (computed in agent.ensureStoredWorkspace), but since ensureBuilderWorkspaces
     // only handles type='id', we just need the current ID here.
 
+    // Without a resolvable current workspace ID we can't safely distinguish
+    // orphans from the active workspace, so skip reconciliation entirely.
+    // (Bailing out leaves orphans untouched, which is recoverable; archiving
+    // every builder-tagged workspace would not be.)
+    if (!currentWorkspaceId) return;
+
     // List all builder-tagged workspaces
     const { workspaces: allWorkspaces } = await this.workspace.listResolved({
       perPage: false, // fetch all
@@ -287,6 +294,8 @@ export class MastraEditor implements IMastraEditor {
       return undefined;
     }
 
+    await this.assertAgentBuilderLicensed();
+
     const { EditorAgentBuilder } = await import('./ee');
     this.__builderInstance = new EditorAgentBuilder(this.__builderConfig);
 
@@ -314,6 +323,34 @@ export class MastraEditor implements IMastraEditor {
     return this.__builderInstance;
   }
 
+  /**
+   * Defense-in-depth license guard for the Agent Builder. Mirrors the
+   * startup-time check in `MastraServer.validateAgentBuilderLicense()` so the
+   * builder cannot be instantiated outside the server boot path without a
+   * valid EE license. Dev environments bypass via `isEEEnabled()`.
+   */
+  private async assertAgentBuilderLicensed(): Promise<void> {
+    try {
+      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      if (!isEEEnabled()) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined {
     return this.__toolProviders[id];
@@ -326,7 +363,9 @@ export class MastraEditor implements IMastraEditor {
   getToolProviderOrThrow(id: string): ToolProvider {
     const provider = this.__toolProviders[id];
     if (!provider) {
-      throw new UnknownToolProviderError(id, Object.keys(this.__toolProviders));
+      throw new Error(
+        `Unknown tool provider "${id}". Available: ${Object.keys(this.__toolProviders).join(', ') || '(none)'}`,
+      );
     }
     return provider;
   }
@@ -394,40 +433,4 @@ export class MastraEditor implements IMastraEditor {
   }
 }
 
-/**
- * Compare a resolved workspace's config fields against a runtime snapshot.
- * Returns true if all snapshot config fields match.
- */
-export function snapshotsMatch(
-  stored: { name: string } & Partial<StorageWorkspaceSnapshotType>,
-  runtime: StorageWorkspaceSnapshotType,
-): boolean {
-  const keys: (keyof StorageWorkspaceSnapshotType)[] = [
-    'name',
-    'description',
-    'filesystem',
-    'sandbox',
-    'mounts',
-    'search',
-    'skills',
-    'tools',
-    'autoSync',
-    'operationTimeout',
-  ];
 
-  // JSON replacer that strips falsy leaf values (false, null, 0) so DB-hydrated
-  // defaults don't cause spurious mismatches against runtime snapshots.
-  const replacer = (_k: string, v: unknown) => (v === false || v === null || v === 0 ? undefined : v);
-
-  for (const key of keys) {
-    const storedVal = stored[key];
-    const runtimeVal = runtime[key];
-
-    const storedJSON = storedVal == null || storedVal === false ? undefined : JSON.stringify(storedVal, replacer);
-    const runtimeJSON = runtimeVal == null || runtimeVal === false ? undefined : JSON.stringify(runtimeVal, replacer);
-
-    if (storedJSON !== runtimeJSON) return false;
-  }
-
-  return true;
-}

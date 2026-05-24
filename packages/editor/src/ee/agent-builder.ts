@@ -1,6 +1,5 @@
 import type { AgentBuilderOptions, AgentFeatures, IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import { isBuilderModelPolicyActive, isModelAllowed, resolveAgentFeatures } from '@mastra/core/agent-builder/ee';
-import { isProviderRegistered } from '@mastra/core/llm';
 
 /**
  * Concrete implementation of the Agent Builder EE feature.
@@ -36,7 +35,20 @@ export class EditorAgentBuilder implements IAgentBuilder {
   private readonly resolvedFeatures: AgentBuilderOptions['features'];
 
   constructor(options?: AgentBuilderOptions) {
-    this.options = options ?? {};
+    // Shallow-clone the paths the validators mutate so we never leak side
+    // effects into the caller's `MastraEditorConfig.builder` object.
+    // `validateBrowserConfig` writes to `features.agent.browser`; nothing
+    // else is mutated, so `configuration` and `registries` stay aliased.
+    const source = options ?? {};
+    this.options = {
+      ...source,
+      features: source.features
+        ? {
+            ...source.features,
+            agent: source.features.agent ? { ...source.features.agent } : undefined,
+          }
+        : undefined,
+    };
     this.validateModelPolicy();
     this.validateBrowserConfig();
     // Resolve features AFTER browser-config validation so that an explicit
@@ -166,22 +178,6 @@ export class EditorAgentBuilder implements IAgentBuilder {
             'Either add it to `editor.builder.configuration.agent.models.allowed` ' +
             'or change `editor.builder.configuration.agent.models.default`.',
         );
-      }
-    }
-
-    // Sanity warnings for entries with unknown provider strings that aren't
-    // tagged as custom gateways. Non-fatal — gateways may register lazily.
-    if (allowed !== undefined) {
-      for (const entry of allowed) {
-        const isCustom = 'kind' in entry && entry.kind === 'custom';
-        if (isCustom) continue;
-        if (isProviderRegistered(entry.provider)) continue;
-        const warning =
-          `Agent Builder allowlist contains unknown provider "${entry.provider}". ` +
-          `If this is a custom gateway, tag it with \`kind: 'custom'\`. Otherwise, check for a typo.`;
-        this.modelPolicyWarnings.push(warning);
-        // eslint-disable-next-line no-console
-        console.warn(`[mastra:editor:builder] ${warning}`);
       }
     }
   }

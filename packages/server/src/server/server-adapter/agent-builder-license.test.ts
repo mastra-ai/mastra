@@ -1,3 +1,4 @@
+import { clearLicenseCache } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from './index';
@@ -36,10 +37,12 @@ describe('MastraServer.validateAgentBuilderLicense', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
+    clearLicenseCache();
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    clearLicenseCache();
     vi.resetModules();
   });
 

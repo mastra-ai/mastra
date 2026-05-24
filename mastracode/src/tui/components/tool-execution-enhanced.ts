@@ -4,14 +4,14 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
-import { BOX_INDENT, getTermWidth, theme, mastra, tintHex } from '../theme.js';
+import { BOX_INDENT, getTermWidth, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
@@ -46,7 +46,7 @@ const CODE_HIGHLIGHT_THEME: HighlightTheme = {
 };
 
 const COMPACT_TOOL_COLOR = mastra.orange;
-const COMPACT_TOOL_ARGS_BG = '#0f0f0f';
+const COMPACT_TOOL_ARGS_BG = '#141414';
 const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
 
 function normalizeHexColor(color: string | undefined): string | undefined {
@@ -540,36 +540,60 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       currentWidth = 0;
     };
 
-    for (const token of this.tokenizeQuietShellCommand(command)) {
-      let remaining = token.text;
+    const takeVisiblePrefix = (text: string, maxWidth: number): string => {
+      let chunk = '';
+      let chunkWidth = 0;
 
-      while (remaining.length > 0) {
-        if (currentWidth === 0 && /^\s+$/.test(remaining)) break;
-
-        const available = width - currentWidth;
-        if (available <= 0) {
-          pushCurrent();
-          continue;
-        }
-
-        if (remaining.length <= available) {
-          current += token.color(remaining);
-          currentWidth += remaining.length;
-          break;
-        }
-
-        if (currentWidth > 0 && !/^\s+$/.test(remaining)) {
-          pushCurrent();
-          continue;
-        }
-
-        const chunk = remaining.slice(0, available);
-        current += token.color(chunk);
-        currentWidth += chunk.length;
-        remaining = remaining.slice(available);
-        pushCurrent();
+      for (const char of text) {
+        const charWidth = visibleWidth(char);
+        if (chunk && chunkWidth + charWidth > maxWidth) break;
+        chunk += char;
+        chunkWidth += charWidth;
+        if (chunkWidth >= maxWidth) break;
       }
-    }
+
+      return chunk;
+    };
+
+    const wrapSourceLine = (sourceLine: string) => {
+      for (const token of this.tokenizeQuietShellCommand(sourceLine)) {
+        let remaining = token.text;
+
+        while (remaining.length > 0) {
+          if (currentWidth === 0 && /^\s+$/.test(remaining)) break;
+
+          const available = width - currentWidth;
+          if (available <= 0) {
+            pushCurrent();
+            continue;
+          }
+
+          const remainingWidth = visibleWidth(remaining);
+          if (remainingWidth <= available) {
+            current += token.color(remaining);
+            currentWidth += remainingWidth;
+            break;
+          }
+
+          if (currentWidth > 0 && !/^\s+$/.test(remaining)) {
+            pushCurrent();
+            continue;
+          }
+
+          const chunk = takeVisiblePrefix(remaining, available);
+          current += token.color(chunk);
+          currentWidth += visibleWidth(chunk);
+          remaining = remaining.slice(chunk.length);
+          pushCurrent();
+        }
+      }
+    };
+
+    const sourceLines = command.split('\n');
+    sourceLines.forEach((sourceLine, index) => {
+      wrapSourceLine(sourceLine);
+      if (index < sourceLines.length - 1) pushCurrent();
+    });
 
     if (current) lines.push(current);
     return lines.length ? lines : [''];
@@ -651,8 +675,20 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private getQuietToolRailColor(): string {
-    if (this.isErrorResult()) return tintHex(mastra.red, 0.35);
-    return this.compactToolModeColor ? tintHex(this.compactToolModeColor, 0.35) : QUIET_TOOL_RAIL;
+    const color = this.isErrorResult()
+      ? tintHex(mastra.red, 0.35)
+      : this.compactToolModeColor
+        ? tintHex(this.compactToolModeColor, 0.35)
+        : QUIET_TOOL_RAIL;
+    return ensureTerminalGlyphContrast(color);
+  }
+
+  private getQuietToolCircleColor(color: string): string {
+    return ensureTerminalGlyphContrast(color);
+  }
+
+  private formatToolBorder(char: string): string {
+    return theme.bold(chalk.hex(ensureTerminalGlyphContrast(theme.getTheme().toolBorderSuccess))(char));
   }
 
   getCompactToolLabelColor(): CompactToolLabelColor {
@@ -897,8 +933,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private formatEmptyCompactContinuationLine(): string {
     const railColor = this.getQuietToolRailColor();
     const isStreamingContinuation = !this.isComplete() && this.quietPreviewLineLimit > 0;
-    if (isStreamingContinuation)
-      return `${chalk.hex(this.getCompactToolAccentColor(this.getCompactToolLabelColor()))('●')}${chalk.hex(railColor)('─')}`;
+    if (isStreamingContinuation) {
+      const circleColor = this.getQuietToolCircleColor(this.getCompactToolAccentColor(this.getCompactToolLabelColor()));
+      return `${chalk.hex(circleColor)('●')}${chalk.hex(railColor)('─')}`;
+    }
     return chalk.hex(railColor)(this.compactToolHasFollowingContinuation ? '├─' : '╰─');
   }
 
@@ -913,11 +951,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsBg = this.getCompactToolArgsBg(toolLabelColor);
     const argsColor = this.getCompactToolArgsColor(toolLabelColor);
     const railColor = this.getQuietToolRailColor();
+    const circleColor = this.getQuietToolCircleColor(color);
     const isStreamingContinuation =
       this.compactToolContinuation && !this.isComplete() && this.quietPreviewLineLimit > 0;
     const branch =
       hasFollowing || isStreamingContinuation
-        ? `${hasPreview || isStreamingContinuation ? chalk.hex(color)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
+        ? `${hasPreview || isStreamingContinuation ? chalk.hex(circleColor)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
         : chalk.hex(railColor)(`╰─${separator}${linePrefix}`);
     const continuationSummary = ` ${summary.slice(linePrefix.length)}`;
     const trail = continuationSummary ? chalk.hex(argsBg)('▌') : '';
@@ -1260,7 +1299,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       rangeDisplay = theme.fg('muted', to ? `:${from}-${to}` : `:${from}`);
     }
 
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
 
     if (!this.result || this.isPartial) {
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
@@ -1355,7 +1394,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // Helper to render shell command with terminal-like bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
-      const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+      const border = (char: string) => this.formatToolBorder(char);
       const footerPrompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
       const footerSuffix = `${cwdSuffix}${timeSuffix}${status}`;
       const termWidth = getTermWidth();
@@ -1363,7 +1402,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const horizontal = '─'.repeat(contentWidth + 2);
       const renderLine = (line: string, color: (value: string) => string = value => theme.fg('toolOutput', value)) => {
         const truncated = truncateAnsi(line, contentWidth);
-        const padding = ' '.repeat(Math.max(0, contentWidth - this.stripAnsi(truncated).length));
+        const padding = ' '.repeat(Math.max(0, contentWidth - visibleWidth(truncated)));
         return `${border('│')} ${color(truncated)}${padding} ${border('│')}`;
       };
       const displayOutput = outputLines.map(line => renderLine(line)).join('\n');
@@ -1374,13 +1413,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text(displayOutput, 0, 0));
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
-      const footerWrapWidth = Math.max(1, contentWidth - 2);
+      const footerWrapWidth = Math.max(1, contentWidth - 4);
       const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
-      const footerSuffixWidth = this.stripAnsi(footerSuffix).length;
+      const footerSuffixWidth = visibleWidth(footerSuffix);
       footerLines.forEach((footerLine, index) => {
         const prefix = index === 0 ? footerPrompt : '  ';
         const isLast = index === footerLines.length - 1;
-        const suffixFits = isLast && this.stripAnsi(footerLine).length + footerSuffixWidth <= footerWrapWidth;
+        const suffixFits = isLast && visibleWidth(footerLine) + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
         this.contentBox.addChild(
           new Text(
@@ -1391,7 +1430,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         );
       });
       const lastFooterLine = footerLines[footerLines.length - 1] ?? '';
-      if (this.stripAnsi(lastFooterLine).length + footerSuffixWidth > footerWrapWidth) {
+      if (visibleWidth(lastFooterLine) + footerSuffixWidth > footerWrapWidth) {
         this.contentBox.addChild(
           new Text(
             renderLine(`  ${footerSuffix}`, value => value),
@@ -1477,7 +1516,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const label = isKill ? 'kill' : isWait ? 'wait' : 'output';
 
     const renderBorderedProcess = (status: string, outputLines: string[]) => {
-      const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+      const border = (char: string) => this.formatToolBorder(char);
       const footerText = `${theme.bold(theme.fg('toolTitle', label))} ${theme.fg('toolArgs', `PID ${pid}`)}${timeSuffix}${status}`;
 
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -1537,7 +1576,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const oldStr = argsObj?.old_str ?? argsObj?.old_string;
       const newStr = argsObj?.new_str ?? argsObj?.new_string;
       if (oldStr != null && newStr != null) {
-        const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+        const border = (char: string) => this.formatToolBorder(char);
         const termWidth = getTermWidth();
         const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
         const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
@@ -1575,14 +1614,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       }
 
       // No diff args yet — show bordered header
-      const editBorder = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+      const editBorder = (char: string) => this.formatToolBorder(char);
       const headerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
       this.contentBox.addChild(new Text(editBorder('╭──'), 0, 0));
       this.contentBox.addChild(new Text(`${editBorder('╰──')} ${headerText}`, 0, 0));
       return;
     }
 
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
 
     // Calculate available width for path and truncate from beginning if needed
@@ -1788,7 +1827,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (!this.result || this.isPartial) {
       if (!content) {
         // No content yet — show bordered pending header
-        const writeBorder = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+        const writeBorder = (char: string) => this.formatToolBorder(char);
         const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
         const status = this.getStatusIndicator();
         const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
@@ -1799,7 +1838,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       }
 
       // Content is streaming in — show bordered box with syntax-highlighted preview
-      const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+      const border = (char: string) => this.formatToolBorder(char);
       const status = this.getStatusIndicator();
       const termWidth = getTermWidth();
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
@@ -1845,7 +1884,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
 
     // Complete — show final bordered result
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
     const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
@@ -1905,7 +1944,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '/';
     const pattern = argsObj?.pattern ? String(argsObj.pattern) : '';
     const patternDisplay = pattern ? ' ' + theme.fg('muted', pattern) : '';
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
     const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
@@ -1961,7 +2000,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private renderLspInspectEnhanced(): void {
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
     const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
@@ -2185,7 +2224,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsObj = this.args as { tasks?: TaskItemInput[] } | undefined;
     const tasks = argsObj?.tasks;
     const status = this.getStatusIndicator();
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
 
     // Show a compact bordered header — the pinned TaskProgressComponent handles live rendering
     const count = tasks?.length ?? 0;
@@ -2223,7 +2262,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const queryDisplay = query ? ` ${theme.fg('toolArgs', `"${query}"`)}` : '';
     const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
 
     if (!this.result || this.isPartial) {
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -2347,7 +2386,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private renderGenericToolEnhanced(): void {
-    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
 
     const argsSummary = this.formatArgsSummary();

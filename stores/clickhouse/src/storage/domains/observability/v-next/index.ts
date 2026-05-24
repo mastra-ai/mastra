@@ -97,6 +97,7 @@ import {
   ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
+  DELTA_CURSOR_COUNTER_NAMES,
   DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
@@ -455,6 +456,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
         for (const entry of pendingRetention) {
           await this.#client.command({ query: entry.sql });
+        }
+      }
+
+      // Burn `cursorId = 0` for every delta stream on the `serial` strategy.
+      // `generateSerialID` is server-lifetime keyed and returns 0 on first
+      // call; `max(cursorId)` on an empty delta table also returns 0. Without
+      // this step the very first row inserted after a server cold-start lands
+      // at `cursorId = 0` and is skipped by callers that read with
+      // `WHERE cursorId > 0` after capturing a head cursor on the empty
+      // stream. Advancing each counter once at init guarantees real rows
+      // start at `cursorId >= 1`. Safe to repeat: the cost is one extra
+      // counter tick per signal per init, and the only observable effect is
+      // that the stream skips the value 0 (which carries no row).
+      if (this.#deltaCursorStrategy === 'serial') {
+        for (const counterName of DELTA_CURSOR_COUNTER_NAMES) {
+          await this.#client.query({
+            query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
+            query_params: { counterName },
+            format: 'JSONEachRow',
+          });
         }
       }
     } catch (error) {

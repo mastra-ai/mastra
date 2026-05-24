@@ -230,7 +230,6 @@ const ProviderFilterBadges = ({ providers, isProviderChecked, onToggle, disabled
             )}
           >
             <Checkbox
-              variant="neutral"
               checked={checked}
               disabled={disabled}
               onCheckedChange={() => onToggle(providerId)}

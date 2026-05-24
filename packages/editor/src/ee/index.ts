@@ -1,2 +1,2 @@
 export { EditorAgentBuilder } from './agent-builder';
-export * from './agent-builder-agent';
+export { createBuilderAgent } from './agent-builder-agent';

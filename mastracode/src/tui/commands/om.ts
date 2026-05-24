@@ -72,9 +72,9 @@ function persistOmCavemanObservations(enabled: boolean): void {
   saveSettings(settings);
 }
 
-export function persistOmObserveAttachments(enabled: boolean): void {
+export function persistOmObserveAttachments(value: 'auto' | boolean): void {
   const settings = loadSettings();
-  settings.models.omObserveAttachments = enabled;
+  settings.models.omObserveAttachments = value;
   saveSettings(settings);
 }
 
@@ -89,7 +89,8 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
     cavemanObservations:
       ((ctx.state.harness.getState() as Record<string, unknown>).cavemanObservations as boolean | undefined) ?? false,
     observeAttachments:
-      ((ctx.state.harness.getState() as Record<string, unknown>).observeAttachments as boolean | undefined) ?? true,
+      ((ctx.state.harness.getState() as Record<string, unknown>).observeAttachments as 'auto' | boolean | undefined) ??
+      'auto',
   };
 
   return new Promise<void>(resolve => {
@@ -126,10 +127,12 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
           persistOmCavemanObservations(enabled);
           ctx.showInfo(`Caveman observations → ${enabled ? 'on' : 'off'}`);
         },
-        onObserveAttachmentsChange: async enabled => {
-          await ctx.state.harness.setState({ observeAttachments: enabled } as any);
-          persistOmObserveAttachments(enabled);
-          ctx.showInfo(`Observe attachments → ${enabled ? 'on' : 'off'}`);
+        onObserveAttachmentsChange: async value => {
+          await ctx.state.harness.setState({ observeAttachments: value } as any);
+          await ctx.state.harness.setThreadSetting({ key: 'observeAttachments', value });
+          persistOmObserveAttachments(value);
+          const label = value === 'auto' ? 'auto' : value ? 'on' : 'off';
+          ctx.showInfo(`Observe attachments → ${label}`);
         },
         onClose: () => {
           ctx.state.ui.hideOverlay();
