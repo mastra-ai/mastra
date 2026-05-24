@@ -8,6 +8,8 @@ export { BackgroundTaskWorker } from './workers/background-task-worker';
 export type { BackgroundTaskWorkerConfig } from './workers/background-task-worker';
 export { HarnessWakeupWorker } from './workers/harness-wakeup-worker';
 export type { HarnessWakeupWorkerConfig } from './workers/harness-wakeup-worker';
+export { HarnessChannelOutboxWorker } from './workers/harness-channel-outbox-worker';
+export type { HarnessChannelOutboxWorkerConfig } from './workers/harness-channel-outbox-worker';
 export type { StepExecutionStrategy, StepExecutionParams } from './types';
 export { InProcessStrategy } from './strategies/in-process-strategy';
 export { HttpRemoteStrategy, StepExecutionError } from './strategies/http-remote-strategy';

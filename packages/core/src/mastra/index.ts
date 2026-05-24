@@ -50,8 +50,14 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker, HarnessWakeupWorker } from '../worker';
-import type { HarnessWakeupWorkerConfig, MastraWorker, WorkerDeps } from '../worker';
+import {
+  OrchestrationWorker,
+  SchedulerWorker,
+  BackgroundTaskWorker,
+  HarnessWakeupWorker,
+  HarnessChannelOutboxWorker,
+} from '../worker';
+import type { HarnessWakeupWorkerConfig, HarnessChannelOutboxWorkerConfig, MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
@@ -443,6 +449,14 @@ export interface Config<
   harnessWakeups?: HarnessWakeupWorkerConfig;
 
   /**
+   * Worker configuration for durable Harness channel outbox delivery.
+   * The worker periodically invokes each registered Harness channel outbox
+   * dispatcher and leaves claim, retry, and provider delivery semantics to the
+   * Harness channel runtime.
+   */
+  harnessChannelOutbox?: HarnessChannelOutboxWorkerConfig;
+
+  /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
@@ -644,6 +658,7 @@ export class Mastra<
   #latestWorkerStartTokens = new WeakMap<MastraWorker, number>();
   #latestWorkerStartLifecycleGenerations = new WeakMap<MastraWorker, number>();
   #harnessWakeupConfig?: HarnessWakeupWorkerConfig;
+  #harnessChannelOutboxConfig?: HarnessChannelOutboxWorkerConfig;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -1042,6 +1057,7 @@ export class Mastra<
     const rawWorkersEnv = process.env.MASTRA_WORKERS;
     let workersOption: MastraWorker[] | false | undefined;
     this.#harnessWakeupConfig = config?.harnessWakeups;
+    this.#harnessChannelOutboxConfig = config?.harnessChannelOutbox;
     if (rawWorkersEnv === 'false') {
       workersOption = false;
     } else {
@@ -1322,6 +1338,7 @@ export class Mastra<
         harness.__registerMastra(this, key);
         this.#harnesses[key] = harness;
       }
+      this.#ensureHarnessChannelOutboxWorker();
     }
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
@@ -1448,6 +1465,69 @@ export class Mastra<
         },
       });
     }
+  }
+
+  #ensureHarnessChannelOutboxWorker(): void {
+    if (
+      !this.#autoCreateWorkers ||
+      this.#harnessChannelOutboxConfig?.enabled === false ||
+      this.#workers.some(worker => worker.name === 'harnessChannelOutbox')
+    ) {
+      return;
+    }
+    if (Object.keys(this.#harnesses).length === 0) {
+      return;
+    }
+    const hasHarnessStorage =
+      this.#storage !== undefined ||
+      Object.values(this.#harnesses).some(harness => harness?._internalGetSessionStorage() !== undefined);
+    if (!hasHarnessStorage || !this.#hasDispatchableHarnessChannelBindings()) {
+      return;
+    }
+
+    const worker = new HarnessChannelOutboxWorker(this.#harnessChannelOutboxConfig);
+    worker.__registerMastra(this);
+    this.#workers.push(worker);
+
+    if (this.#workersStarted && (!this.#workerFilter || this.#workerFilter.has(worker.name))) {
+      void this.#trackWorkerStart(worker, {
+        onlyIfWorkersStarted: true,
+        onlyIfLifecycleGeneration: this.#workerLifecycleGeneration,
+        startLifecycleGeneration: this.#workerLifecycleGeneration,
+        stopIfWorkersStopped: true,
+        stopIfLifecycleGenerationChangesFrom: this.#workerLifecycleGeneration,
+        onError: error => {
+          this.#logger?.error?.('Failed to start worker "harnessChannelOutbox"', error);
+        },
+      });
+    }
+  }
+
+  #hasDispatchableHarnessChannelBindings(): boolean {
+    const harnessFilter = this.#harnessChannelOutboxFilter('harnesses', this.#harnessChannelOutboxConfig?.harnesses);
+    const channelFilter = this.#harnessChannelOutboxFilter('channels', this.#harnessChannelOutboxConfig?.channels);
+    const hasGlobalHarnessStorage = this.#storage?.stores?.harness !== undefined;
+    return Object.entries(this.#harnesses).some(([harnessName, harness]) => {
+      if (harnessFilter && !harnessFilter.has(harnessName)) return false;
+      if (!hasGlobalHarnessStorage && harness._internalGetSessionStorage() === undefined) return false;
+      return harness.listChannelBindings().some(binding => !channelFilter || channelFilter.has(binding.channelId));
+    });
+  }
+
+  #harnessChannelOutboxFilter(
+    field: 'harnesses' | 'channels',
+    values: readonly string[] | undefined,
+  ): Set<string> | undefined {
+    if (values === undefined) return undefined;
+    if (!Array.isArray(values)) {
+      throw new Error(`HarnessChannelOutboxWorker: ${field} must be an array`);
+    }
+    for (const value of values) {
+      if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`HarnessChannelOutboxWorker: ${field} entries must be non-empty strings`);
+      }
+    }
+    return new Set(values);
   }
 
   /**
@@ -3687,6 +3767,7 @@ export class Mastra<
     // is available so declarative schedules still get registered + fired.
     this.#ensureScheduler();
     this.#ensureHarnessWakeupWorker();
+    this.#ensureHarnessChannelOutboxWorker();
   }
 
   public setLogger({ logger }: { logger: TLogger }) {

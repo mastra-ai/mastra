@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Mastra } from '../mastra';
 import type { HarnessWakeupItem } from '../storage/domains/harness';
+import { InMemoryStore } from '../storage/mock';
 import { MastraWorker } from './worker';
 import type { WorkerDeps } from './worker';
 import { BackgroundTaskWorker } from './workers/background-task-worker';
+import { HarnessChannelOutboxWorker } from './workers/harness-channel-outbox-worker';
 import { HarnessWakeupWorker } from './workers/harness-wakeup-worker';
 import { OrchestrationWorker } from './workers/orchestration-worker';
 import { SchedulerWorker } from './workers/scheduler-worker';
@@ -57,6 +60,22 @@ function createMockDeps(): WorkerDeps & { _pubsub: any; _storage: any; _logger: 
     _storage: storage,
     _logger: logger,
   };
+}
+
+function sampleChannelBinding(channelId = 'support') {
+  return {
+    harnessName: 'default',
+    channelId,
+    bindingId: channelId,
+    providerId: 'provider',
+    platform: 'provider',
+    callbackTarget: channelId,
+    durableId: `default:${channelId}:${channelId}`,
+  };
+}
+
+function sampleOutboxDispatchResult(claimed = 0) {
+  return { claimed, sent: claimed, failed: 0, dead: 0, items: [] };
 }
 
 describe('MastraWorker (abstract)', () => {
@@ -171,6 +190,276 @@ describe('BackgroundTaskWorker', () => {
   it('start() before init() throws', async () => {
     const worker = new BackgroundTaskWorker();
     await expect(worker.start()).rejects.toThrow('call init() before start()');
+  });
+});
+
+describe('HarnessChannelOutboxWorker', () => {
+  it('rejects invalid configuration values', () => {
+    const cases: Array<[string, ConstructorParameters<typeof HarnessChannelOutboxWorker>[0]]> = [
+      ['batchSize', { batchSize: 0 }],
+      ['batchSize', { batchSize: 1.5 }],
+      ['pollIntervalMs', { pollIntervalMs: 0 }],
+      ['pollIntervalMs', { pollIntervalMs: Number.POSITIVE_INFINITY }],
+    ];
+
+    for (const [name, config] of cases) {
+      expect(() => new HarnessChannelOutboxWorker(config)).toThrow(`${name} must be a positive integer`);
+    }
+    expect(() => new HarnessChannelOutboxWorker({ harnesses: ['default'], channels: ['support'] })).not.toThrow();
+    expect(() => new HarnessChannelOutboxWorker({ harnesses: [''] })).toThrow(
+      'harnesses entries must be non-empty strings',
+    );
+    expect(() => new HarnessChannelOutboxWorker({ enabled: 'false' as any })).toThrow('enabled must be a boolean');
+  });
+
+  it('start() before init() throws and stop() is idempotent', async () => {
+    const worker = new HarnessChannelOutboxWorker();
+    await expect(worker.start()).rejects.toThrow('call init() before start()');
+
+    await worker.init(createMockDeps());
+    await worker.start();
+    expect(worker.isRunning).toBe(true);
+    await worker.stop();
+    expect(worker.isRunning).toBe(false);
+    await worker.stop();
+    expect(worker.isRunning).toBe(false);
+  });
+
+  it('dispatches outbox once per harness by default instead of once per channel', async () => {
+    const dispatchOutbox = vi.fn().mockResolvedValue(sampleOutboxDispatchResult(2));
+    const worker = new HarnessChannelOutboxWorker({ pollIntervalMs: 60_000 });
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          listChannelBindings: () => [sampleChannelBinding('support'), sampleChannelBinding('alerts')],
+          _internalGetSessionStorage: () => ({}),
+          channels: { dispatchOutbox },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(2);
+
+    expect(dispatchOutbox).toHaveBeenCalledTimes(1);
+    expect(dispatchOutbox).toHaveBeenCalledWith({});
+  });
+
+  it('dispatches only explicitly configured channels', async () => {
+    const dispatchOutbox = vi
+      .fn()
+      .mockResolvedValueOnce(sampleOutboxDispatchResult(1))
+      .mockResolvedValueOnce(sampleOutboxDispatchResult(3));
+    const worker = new HarnessChannelOutboxWorker({ channels: ['support', 'alerts'], batchSize: 5 });
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          listChannelBindings: () => [
+            sampleChannelBinding('support'),
+            sampleChannelBinding('support'),
+            sampleChannelBinding('ignored'),
+            sampleChannelBinding('alerts'),
+          ],
+          _internalGetSessionStorage: () => ({}),
+          channels: { dispatchOutbox },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(4);
+
+    expect(dispatchOutbox).toHaveBeenCalledTimes(2);
+    expect(dispatchOutbox).toHaveBeenNthCalledWith(1, { limit: 5, channelId: 'support' });
+    expect(dispatchOutbox).toHaveBeenNthCalledWith(2, { limit: 5, channelId: 'alerts' });
+  });
+
+  it('skips concurrent runOnce calls while a tick is in flight', async () => {
+    let releaseDispatch!: () => void;
+    const dispatchOutbox = vi.fn(
+      () =>
+        new Promise(resolve => {
+          releaseDispatch = () => resolve(sampleOutboxDispatchResult(1));
+        }),
+    );
+    const worker = new HarnessChannelOutboxWorker();
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          listChannelBindings: () => [sampleChannelBinding()],
+          _internalGetSessionStorage: () => ({}),
+          channels: { dispatchOutbox },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    const first = worker.runOnce();
+    await expect(worker.runOnce()).resolves.toBe(0);
+    releaseDispatch();
+    await expect(first).resolves.toBe(1);
+    expect(dispatchOutbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues processing later harnesses when one harness dispatch fails', async () => {
+    const failure = new Error('provider unavailable');
+    const badDispatch = vi.fn().mockRejectedValue(failure);
+    const goodDispatch = vi.fn().mockResolvedValue(sampleOutboxDispatchResult(2));
+    const worker = new HarnessChannelOutboxWorker();
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        bad: {
+          listChannelBindings: () => [sampleChannelBinding()],
+          _internalGetSessionStorage: () => ({}),
+          channels: { dispatchOutbox: badDispatch },
+        },
+        good: {
+          listChannelBindings: () => [sampleChannelBinding()],
+          _internalGetSessionStorage: () => ({}),
+          channels: { dispatchOutbox: goodDispatch },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(2);
+
+    expect(deps._logger.error).toHaveBeenCalledWith(
+      'HarnessChannelOutboxWorker: failed to dispatch harness channel outbox',
+      expect.objectContaining({ harnessName: 'bad', error: failure }),
+    );
+    expect(goodDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips channel-bound harnesses without storage while dispatching storage-backed harnesses', async () => {
+    const skippedDispatch = vi.fn().mockRejectedValue(new Error('should not dispatch'));
+    const goodDispatch = vi.fn().mockResolvedValue(sampleOutboxDispatchResult(1));
+    const worker = new HarnessChannelOutboxWorker();
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        skipped: {
+          listChannelBindings: () => [sampleChannelBinding()],
+          _internalGetSessionStorage: () => undefined,
+          channels: { dispatchOutbox: skippedDispatch },
+        },
+        good: {
+          listChannelBindings: () => [sampleChannelBinding()],
+          _internalGetSessionStorage: () => ({}),
+          channels: { dispatchOutbox: goodDispatch },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(1);
+
+    expect(skippedDispatch).not.toHaveBeenCalled();
+    expect(goodDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns once when channel bindings exist but none have storage', async () => {
+    const worker = new HarnessChannelOutboxWorker();
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          listChannelBindings: () => [sampleChannelBinding()],
+          _internalGetSessionStorage: () => undefined,
+          channels: { dispatchOutbox: vi.fn() },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(0);
+    await expect(worker.runOnce()).resolves.toBe(0);
+
+    expect(deps._logger.warn).toHaveBeenCalledWith(
+      'HarnessChannelOutboxWorker: no storage-backed Harness channel bindings registered, worker will not dispatch outbox items',
+    );
+    expect(deps._logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns once when no harness channel bindings are registered', async () => {
+    const worker = new HarnessChannelOutboxWorker();
+    const deps = createMockDeps();
+    deps.mastra = {
+      getHarnesses: () => ({
+        default: {
+          listChannelBindings: () => [],
+          channels: { dispatchOutbox: vi.fn() },
+        },
+      }),
+    } as any;
+
+    await worker.init(deps);
+    await expect(worker.runOnce()).resolves.toBe(0);
+    await expect(worker.runOnce()).resolves.toBe(0);
+
+    expect(deps._logger.warn).toHaveBeenCalledWith(
+      'HarnessChannelOutboxWorker: no Harness channel bindings registered, worker will not dispatch outbox items',
+    );
+    expect(deps._logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('auto-registers on Mastra only when Harness channel bindings exist', () => {
+    const channelHarness = {
+      __registerMastra: vi.fn(),
+      _internalGetSessionStorage: () => undefined,
+      listChannelBindings: () => [sampleChannelBinding()],
+      channels: { dispatchOutbox: vi.fn() },
+      shutdown: vi.fn(),
+    };
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      harnesses: { default: channelHarness as any },
+    });
+
+    expect(mastra.workers.some(worker => worker.name === 'harnessChannelOutbox')).toBe(true);
+
+    const noChannelHarness = {
+      __registerMastra: vi.fn(),
+      _internalGetSessionStorage: () => undefined,
+      listChannelBindings: () => [],
+      channels: { dispatchOutbox: vi.fn() },
+      shutdown: vi.fn(),
+    };
+    const noChannelMastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      harnesses: { default: noChannelHarness as any },
+    });
+    const disabledMastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      harnessChannelOutbox: { enabled: false },
+      harnesses: { default: channelHarness as any },
+    });
+
+    expect(noChannelMastra.workers.some(worker => worker.name === 'harnessChannelOutbox')).toBe(false);
+    expect(disabledMastra.workers.some(worker => worker.name === 'harnessChannelOutbox')).toBe(false);
+    expect(() => {
+      new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        harnessChannelOutbox: { channels: [''] },
+        harnesses: { default: channelHarness as any },
+      });
+    }).toThrow('channels entries must be non-empty strings');
+    expect(() => {
+      new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        harnessChannelOutbox: { harnesses: 'default' as any },
+        harnesses: { default: channelHarness as any },
+      });
+    }).toThrow('harnesses must be an array');
   });
 });
 

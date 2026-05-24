@@ -22,6 +22,7 @@ export interface WorkerDeps {
  * - SchedulerWorker: fires cron-based workflow schedules
  * - BackgroundTaskWorker: manages background tool execution
  * - HarnessWakeupWorker: admits durable Harness wakeups into sessions
+ * - HarnessChannelOutboxWorker: dispatches durable Harness channel outbox rows
  *
  * Workers are registered on a Mastra instance and run inline by default.
  * They can also be launched standalone via the CLI for separate deployment.
