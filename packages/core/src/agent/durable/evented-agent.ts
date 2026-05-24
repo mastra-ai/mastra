@@ -80,12 +80,13 @@ export class EventedAgent<
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     try {
       const workflow = this.getWorkflow();
+      const requestContext = this.runRegistryInternal.get(runId)?.requestContext;
       const run = await workflow.createRun({
         runId,
         pubsub: this.pubsubInternal,
       });
       // Fire and forget - use startAsync for non-blocking execution
-      await run.startAsync({ inputData: workflowInput });
+      await run.startAsync({ inputData: workflowInput, requestContext });
     } catch (error) {
       await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));
     }
