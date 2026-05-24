@@ -512,6 +512,34 @@ type CreateToolOpts<
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
 };
+
+// Overload: when inputSchema is provided, bind TIn directly from PublicSchema<TIn> so
+// TypeScript can contextually type execute's inputData without deferred conditional types.
+export function createTool<
+  TId extends string = string,
+  TIn = unknown,
+  TOut = unknown,
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
+>(
+  opts: Omit<
+    ToolAction<TIn, TOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+    'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+  > & {
+    inputSchema: PublicSchema<TIn>;
+    outputSchema?: PublicSchema<TOut>;
+    suspendSchema?: PublicSchema<TSuspend>;
+    resumeSchema?: PublicSchema<TResume>;
+  },
+): Tool<TIn, TOut, TSuspend, TResume, TContext, TId, TRequestContext>;
+
+// Fallback: no inputSchema (or explicitly typed generics via TInputSchema).
 export function createTool<
   TId extends string = string,
   TInputSchema extends SchemaLike = undefined,
@@ -531,6 +559,8 @@ export function createTool<
   TContext,
   TId,
   TRequestContext
-> {
+>;
+
+export function createTool(opts: any): any {
   return new Tool(opts);
 }
