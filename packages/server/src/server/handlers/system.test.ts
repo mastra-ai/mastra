@@ -1,6 +1,7 @@
 import { writeFileSync, unlinkSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ObservabilityStorage } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 
@@ -254,13 +255,7 @@ describe('System Handlers', () => {
     });
 
     it('should omit inherited base observability storage capabilities', async () => {
-      class BaseObservabilityStorage {
-        getCapabilities() {
-          return mockObservabilityStorageCapabilities;
-        }
-      }
-
-      class LegacyObservabilityStorage extends BaseObservabilityStorage {
+      class LegacyObservabilityStorage extends ObservabilityStorage {
         runtimeTracingStrategy = 'realtime';
       }
 
@@ -281,6 +276,38 @@ describe('System Handlers', () => {
         storageType: 'mock-storage',
         observabilityStorageType: 'LegacyObservabilityStorage',
         observabilityRuntimeStrategy: 'realtime',
+      });
+    });
+
+    it('should return inherited explicit observability storage capabilities', async () => {
+      class SupportedObservabilityStorage extends ObservabilityStorage {
+        getCapabilities() {
+          return mockObservabilityStorageCapabilities;
+        }
+      }
+
+      class WrappedObservabilityStorage extends SupportedObservabilityStorage {
+        runtimeTracingStrategy = 'realtime';
+      }
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: new WrappedObservabilityStorage(),
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'WrappedObservabilityStorage',
+        observabilityRuntimeStrategy: 'realtime',
+        observabilityStorageCapabilities: mockObservabilityStorageCapabilities,
       });
     });
 

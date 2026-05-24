@@ -211,7 +211,7 @@ describe('ObservabilityStorageDuckDB', () => {
     }
   });
 
-  it('reports delta list capabilities through the lazy store facade before init', async () => {
+  it('reports delta list feature support but conservative capabilities through the lazy store facade before init', async () => {
     const originalFeatures = new Set(coreFeatures);
     const lazyStore = new DuckDBStore({ path: ':memory:' });
 
@@ -221,15 +221,15 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(lazyStore.observability.getFeatures()).toEqual(['delta-polling']);
       expect(lazyStore.observability.getCapabilities()).toMatchObject({
         metrics: {
-          persist: true,
-          list: true,
-          aggregate: true,
-          breakdown: true,
-          timeSeries: true,
-          percentiles: true,
-          discovery: true,
+          persist: false,
+          list: false,
+          aggregate: false,
+          breakdown: false,
+          timeSeries: false,
+          percentiles: false,
+          discovery: false,
         },
-        persistence: 'memory',
+        persistence: 'unknown',
       });
     } finally {
       coreFeatures.clear();

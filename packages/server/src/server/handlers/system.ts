@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { ObservabilityStorage } from '@mastra/core/storage';
+
 import type { MastraPackage, SystemPackagesResponse } from '../schemas/system';
 import {
   apiSchemaManifestResponseSchema,
@@ -33,11 +35,13 @@ function getObservabilityStorageCapabilities(
     return undefined;
   }
 
-  const prototype = Object.getPrototypeOf(candidate);
-  const hasExplicitCapabilities =
-    Object.prototype.hasOwnProperty.call(candidate, 'getCapabilities') ||
-    (prototype && Object.prototype.hasOwnProperty.call(prototype, 'getCapabilities'));
-  if (!hasExplicitCapabilities) {
+  let owner = Object.prototype.hasOwnProperty.call(candidate, 'getCapabilities')
+    ? candidate
+    : Object.getPrototypeOf(candidate);
+  while (owner && owner !== Object.prototype && !Object.prototype.hasOwnProperty.call(owner, 'getCapabilities')) {
+    owner = Object.getPrototypeOf(owner);
+  }
+  if (!owner || owner === Object.prototype || owner === ObservabilityStorage.prototype) {
     return undefined;
   }
 

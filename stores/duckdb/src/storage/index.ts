@@ -162,52 +162,11 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   }
 
   getCapabilities() {
-    if (this.unavailableError) {
+    if (this.unavailableError || !this.delegate) {
       return DUCKDB_UNAVAILABLE_OBSERVABILITY_CAPABILITIES;
     }
 
-    const runtimeStrategy = this.runtimeTracingStrategy;
-
-    return (
-      this.delegate?.getCapabilities() ?? {
-        tracing: {
-          preferredStrategy: this.observabilityStrategy.preferred,
-          supportedStrategies: this.observabilityStrategy.supported,
-          ...(runtimeStrategy ? { runtimeStrategy } : {}),
-        },
-        logs: {
-          persist: true,
-          list: true,
-        },
-        metrics: {
-          persist: true,
-          list: true,
-          aggregate: true,
-          breakdown: true,
-          timeSeries: true,
-          percentiles: true,
-          discovery: true,
-        },
-        scores: {
-          persist: true,
-          list: true,
-          getById: true,
-          aggregate: true,
-          breakdown: true,
-          timeSeries: true,
-          percentiles: true,
-        },
-        feedback: {
-          persist: true,
-          list: true,
-          aggregate: true,
-          breakdown: true,
-          timeSeries: true,
-          percentiles: true,
-        },
-        persistence: this.db.isEphemeral ? ('memory' as const) : ('persistent' as const),
-      }
-    );
+    return this.delegate.getCapabilities();
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
