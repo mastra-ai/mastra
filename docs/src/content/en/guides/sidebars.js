@@ -87,6 +87,11 @@ const sidebars = {
           id: 'agent-frameworks/ai-sdk',
           label: 'AI SDK',
         },
+        {
+          type: 'doc',
+          id: 'agent-frameworks/x402station-preflight',
+          label: 'x402station',
+        },
       ],
     },
     {

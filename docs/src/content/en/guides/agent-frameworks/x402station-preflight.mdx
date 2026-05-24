@@ -1,0 +1,98 @@
+---
+title: "x402station | Agent Frameworks"
+description: "Preflight x402 endpoints with x402station.io before a Mastra agent pays them"
+packages:
+  - "mastra-x402station"
+  - "@mastra/core"
+  - "zod"
+---
+
+# x402station
+
+Use [`mastra-x402station`](https://www.npmjs.com/package/mastra-x402station) when a Mastra agent can pay arbitrary [x402](https://x402.org) endpoints and you want it to ask an independent risk signal source before it signs a payment.
+
+x402station.io probes public x402 endpoints and returns operational signals such as dead services, zombie services, extreme-price decoys, slow endpoints, and new providers. The Mastra package exposes those checks as tools so your agent can preflight a target URL before calling a paid endpoint.
+
+## Installation
+
+Install the x402station tools in an existing Mastra project:
+
+```bash npm2yarn
+npm install mastra-x402station @mastra/core zod
+```
+
+The paid tools use x402, so the agent needs a low-limit wallet that can sign x402 challenges. Set a private key with USDC on Base:
+
+```bash
+X402STATION_PRIVATE_KEY=0x...
+```
+
+## Add the tools to an agent
+
+Register the x402station tools alongside your own x402 payment tool. The preflight tool costs `$0.001` USDC per call and returns `{ ok, warnings, metadata }` plus the x402 payment receipt.
+
+```typescript title="src/mastra/agents/x402-buyer-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createX402StationTools } from 'mastra-x402station'
+
+export const x402BuyerAgent = new Agent({
+  id: 'x402-buyer-agent',
+  name: 'x402 buyer agent',
+  instructions: [
+    'You can evaluate x402 endpoints before payment.',
+    'Before paying an unfamiliar x402 URL, call x402StationPreflight.',
+    'If preflight returns ok:false, do not sign a payment for that URL.',
+    'If warnings include unknown_endpoint, slow, or new_provider, ask for confirmation or call x402StationAlternatives.',
+    'Never retry a rejected paid endpoint in a loop.',
+  ].join('\n'),
+  model: 'openai/gpt-5-mini',
+  tools: {
+    ...createX402StationTools({
+      privateKey: process.env.X402STATION_PRIVATE_KEY,
+      timeoutMs: 15_000,
+    }),
+    // Add your x402 payment tool here.
+  },
+})
+```
+
+## Use a narrower tool surface
+
+If the agent only needs the fast preflight check, register a single tool instead of the full set:
+
+```typescript title="src/mastra/agents/x402-buyer-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createX402StationPreflightTool } from 'mastra-x402station'
+
+export const x402BuyerAgent = new Agent({
+  id: 'x402-buyer-agent',
+  name: 'x402 buyer agent',
+  instructions:
+    'Call x402StationPreflight before paying unfamiliar x402 URLs. If ok is false, stop and explain the warning.',
+  model: 'openai/gpt-5-mini',
+  tools: {
+    x402StationPreflight: createX402StationPreflightTool({
+      privateKey: process.env.X402STATION_PRIVATE_KEY,
+    }),
+  },
+})
+```
+
+## Signal-aware routing
+
+Use the warnings to decide what the agent should do next:
+
+| Signal | Suggested action |
+| - | - |
+| `dead`, `zombie`, `decoy_price_extreme` | Stop. Do not pay the endpoint. |
+| `unknown_endpoint`, `no_history` | Ask for confirmation or require a stricter budget limit. |
+| `slow`, `new_provider` | Continue only when latency or provider age is acceptable for the task. |
+| `high_concentration`, `price_outlier_high` | Consider calling `x402StationAlternatives` before payment. |
+
+The package does not enforce spending policy for you. Keep your final allow, deny, and budget rules in your own agent instructions, workflow, or payment tool. x402station provides measurement and verification signals before the payment step.
+
+## Related
+
+- [`mastra-x402station` on npm](https://www.npmjs.com/package/mastra-x402station)
+- [x402station.io](https://x402station.io)
+- [x402 protocol](https://x402.org)
