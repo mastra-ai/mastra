@@ -923,7 +923,11 @@ export class EventEmitter {
         console.error('[harness/v1] event persistence threw:', err);
       }
     }
-    for (const listener of this.listeners) {
+    // Snapshot before iteration: a listener may call its own `unsubscribe()`
+    // (or another listener's) synchronously, and `unsubscribe()` mutates
+    // `this.listeners` via `splice()`. Iterating the live array would skip
+    // the sibling that occupied the index of the removed listener.
+    for (const listener of [...this.listeners]) {
       try {
         const result = listener(event);
         if (result && typeof (result as Promise<void>).catch === 'function') {
