@@ -264,6 +264,15 @@ export class ACPConnection {
       this.session = await this.connection.newSession(this.getNewSessionRequest());
 
       if (this.options.model) {
+        const available = this.session.models?.availableModels;
+
+        if (available?.length && !available.some(m => m.modelId === this.options.model)) {
+          const ids = available.map(m => m.modelId).join(', ');
+          throw new Error(
+            `Model "${this.options.model}" is not available. Available models: ${ids}`,
+          );
+        }
+
         await this.connection.unstable_setSessionModel({
           sessionId: this.session.sessionId,
           modelId: this.options.model,
