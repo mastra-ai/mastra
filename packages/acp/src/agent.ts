@@ -92,6 +92,10 @@ export class AcpAgent<
     return this.connection.getAvailableModels();
   }
 
+  async setModel(modelId: string): Promise<void> {
+    return this.connection.setModel(modelId);
+  }
+
   async generate(messages: MessageListInput, options?: AgentGenerateOptions): Promise<SubAgentGenerateResult> {
     const prompt = this.getPrompt(messages, options?.instructions);
     const text = await this.connection.prompt(

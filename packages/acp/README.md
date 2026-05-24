@@ -190,7 +190,13 @@ const codeAgent = new AcpAgent({
 });
 ```
 
-If the ACP agent advertises available models and your `model` value doesn't match any of them, Mastra throws an error listing the valid options:
+You can also change the model at runtime with `setModel()`:
+
+```typescript
+await codeAgent.setModel('claude-sonnet-4-20250514');
+```
+
+If the ACP agent advertises available models and your model ID doesn't match any of them, Mastra throws an error listing the valid options:
 
 ```
 Model "bad-model-id" is not available. Available models: claude-sonnet-4-20250514, claude-haiku-4-20250514

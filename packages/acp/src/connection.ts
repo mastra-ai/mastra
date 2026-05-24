@@ -118,6 +118,22 @@ export class ACPConnection {
     return this.session?.models?.availableModels ?? [];
   }
 
+  async setModel(modelId: string): Promise<void> {
+    await this.ensureConnected();
+
+    const available = this.session?.models?.availableModels;
+
+    if (available?.length && !available.some(m => m.modelId === modelId)) {
+      const ids = available.map(m => m.modelId).join(', ');
+      throw new Error(`Model "${modelId}" is not available. Available models: ${ids}`);
+    }
+
+    await this.connection!.unstable_setSessionModel({
+      sessionId: this.session!.sessionId,
+      modelId,
+    });
+  }
+
   async prompt(task: string, signal?: AbortSignal): Promise<string> {
     const parts: string[] = [];
 

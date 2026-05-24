@@ -419,6 +419,48 @@ describe('ACPConnection', () => {
       modelId: 'any-model-id',
     });
   });
+
+  it('setModel calls unstable_setSessionModel with the given model ID', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    await connection.setModel('claude-sonnet-4-20250514');
+    const acpConnection = mocks.connectionInstances[0];
+
+    expect(acpConnection?.unstable_setSessionModel).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      modelId: 'claude-sonnet-4-20250514',
+    });
+  });
+
+  it('setModel throws when model does not match available models', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    mocks.sessionResponse = {
+      sessionId: 'session-1',
+      models: {
+        availableModels: [{ modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet' }],
+        currentModelId: 'claude-sonnet-4-20250514',
+      },
+    };
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    await expect(connection.setModel('nonexistent')).rejects.toThrow(
+      'Model "nonexistent" is not available. Available models: claude-sonnet-4-20250514',
+    );
+  });
 });
 
 describe('AcpAgent', () => {
