@@ -152,6 +152,7 @@ type Deferred<T> = {
 type MessageAdmissionStart = {
   admissionHash: string;
   modeId: string;
+  modelId: string;
   promise: Promise<AgentSignalResultEvidence | OperationAdmissionTombstone>;
 };
 
@@ -690,7 +691,13 @@ export class Session {
   private readonly _activeTools = new Map<string, ActiveToolState>();
   private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
-  /** Cumulative usage for the session's thread. Updated on `agent_end`. */
+  /**
+   * Cumulative usage for the session's thread. Live counter, single source of
+   * truth in-process. Seeded from `internals.record.tokenUsage` in the
+   * constructor so reopens carry the persisted aggregate; flushed back into
+   * `_record.tokenUsage` on every `_flushUpdate` so the next reopen sees the
+   * latest value.
+   */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
@@ -786,9 +793,19 @@ export class Session {
     string,
     { ok: true; full: FullOutput<unknown> } | { ok: false; err: unknown }
   >();
+  /**
+   * Message admission retries can observe `_completedRuns` before the original
+   * message continuation has accounted usage. Track run ids accounted through
+   * either path so the retry can persist before writing evidence without the
+   * original continuation double-counting later.
+   */
+  private readonly _messageTokenAccountedRunIds = new Set<string>();
+  private readonly _messageTokenAccountingRunIds = new Set<string>();
+  private readonly _messageTokenAccountingReservations = new Map<string, Deferred<void>>();
   private readonly _messageAdmissionStarts = new Map<string, MessageAdmissionStart>();
   private _eventPersistenceTail: Promise<void> = Promise.resolve();
   private _eventPersistenceError: unknown;
+  private readonly _backgroundTurnCompletions = new Set<Promise<unknown>>();
 
   /** @internal — constructed by the Harness, not directly. */
   constructor(internals: SessionInternals) {
@@ -800,6 +817,41 @@ export class Session {
     this.createdAt = internals.record.createdAt;
 
     this._record = internals.record;
+    // Seed the live token-usage counter from the persisted aggregate so reopens
+    // (after eviction / process restart) continue accumulating instead of
+    // restarting at zero. Accept only non-negative integer fields because rows
+    // written before tokenUsage durability shipped may carry partially-populated
+    // or malformed objects; a bad component would otherwise poison the
+    // aggregate.
+    {
+      const persisted = internals.record.tokenUsage as Partial<TokenUsage> | undefined;
+      const promptTokens =
+        typeof persisted?.promptTokens === 'number' &&
+        Number.isInteger(persisted.promptTokens) &&
+        persisted.promptTokens >= 0
+          ? persisted.promptTokens
+          : 0;
+      const completionTokens =
+        typeof persisted?.completionTokens === 'number' &&
+        Number.isInteger(persisted.completionTokens) &&
+        persisted.completionTokens >= 0
+          ? persisted.completionTokens
+          : 0;
+      const derivedTotalTokens = promptTokens + completionTokens;
+      const totalTokens =
+        typeof persisted?.totalTokens === 'number' &&
+        Number.isInteger(persisted.totalTokens) &&
+        persisted.totalTokens >= 0
+          ? persisted.totalTokens < derivedTotalTokens
+            ? derivedTotalTokens
+            : persisted.totalTokens
+          : derivedTotalTokens;
+      this._tokenUsage = {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+      };
+    }
     if (this._record.closedAt !== undefined) {
       this._state = 'closed';
     } else if (this._record.closingAt !== undefined) {
@@ -1089,6 +1141,16 @@ export class Session {
     return activeTurnWaiter ? Promise.race([promise, activeTurnWaiter]) : promise;
   }
 
+  private _trackBackgroundTurnCompletion<T>(promise: Promise<T>): Promise<T> {
+    this._backgroundTurnCompletions.add(promise);
+    void promise
+      .finally(() => {
+        this._backgroundTurnCompletions.delete(promise);
+      })
+      .catch(() => {});
+    return promise;
+  }
+
   private _shouldWriteTurnFailureEvidence(err: unknown): boolean {
     return this._state !== 'deleted' && !(err instanceof HarnessSessionDeletedError);
   }
@@ -1103,15 +1165,15 @@ export class Session {
     }
   }
 
-  /**
-   * Fold the `FullOutput` from a completed (or suspended) agent run into the
-   * session's transient display state: capture `runId` if not yet set and
-   * accumulate token usage. Called from every site that has the full output.
-   */
-  private _recordTurnCompletion(full: FullOutput<unknown>): void {
+  /** Capture the first run id for the active turn display state. */
+  private _captureTurnRunId(full: FullOutput<unknown>): void {
+    if (this._currentTurnAbortController === undefined) return;
     if (full.runId && this._currentRunId === undefined) {
       this._currentRunId = full.runId;
     }
+  }
+
+  private _tokenUsageDeltaFromFullOutput(full: FullOutput<unknown>): TokenUsage | undefined {
     const usage = (full as { totalUsage?: unknown; usage?: unknown }).totalUsage ?? (full as { usage?: unknown }).usage;
     if (usage && typeof usage === 'object') {
       const u = usage as {
@@ -1123,11 +1185,352 @@ export class Session {
       };
       const prompt = u.promptTokens ?? u.inputTokens;
       const completion = u.completionTokens ?? u.outputTokens;
-      if (typeof prompt === 'number') this._tokenUsage.promptTokens += prompt;
-      if (typeof completion === 'number') this._tokenUsage.completionTokens += completion;
-      if (typeof u.totalTokens === 'number') this._tokenUsage.totalTokens += u.totalTokens;
+      const promptNumber = typeof prompt === 'number' && Number.isInteger(prompt) && prompt >= 0 ? prompt : undefined;
+      const completionNumber =
+        typeof completion === 'number' && Number.isInteger(completion) && completion >= 0 ? completion : undefined;
+      const delta: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      const incremented =
+        promptNumber !== undefined ||
+        completionNumber !== undefined ||
+        (typeof u.totalTokens === 'number' && Number.isInteger(u.totalTokens) && u.totalTokens >= 0);
+      if (promptNumber !== undefined) delta.promptTokens += promptNumber;
+      if (completionNumber !== undefined) delta.completionTokens += completionNumber;
+      const derivedTotalTokens = (promptNumber ?? 0) + (completionNumber ?? 0);
+      if (typeof u.totalTokens === 'number' && Number.isInteger(u.totalTokens) && u.totalTokens >= 0) {
+        delta.totalTokens += u.totalTokens < derivedTotalTokens ? derivedTotalTokens : u.totalTokens;
+      } else if (promptNumber !== undefined || completionNumber !== undefined) {
+        // Providers that only emit `inputTokens`/`outputTokens` leave `totalTokens`
+        // off; derive it so the aggregate stays consistent with its parts.
+        delta.totalTokens += derivedTotalTokens;
+      }
+      return incremented ? delta : undefined;
+    }
+    return undefined;
+  }
+
+  private _applyTokenUsageDelta(delta: TokenUsage | undefined): void {
+    if (delta === undefined) return;
+    this._tokenUsage = {
+      promptTokens: this._tokenUsage.promptTokens + delta.promptTokens,
+      completionTokens: this._tokenUsage.completionTokens + delta.completionTokens,
+      totalTokens: this._tokenUsage.totalTokens + delta.totalTokens,
+    };
+  }
+
+  private _clearPendingTokenUsageFlushErrorIfSaved(tokenUsage: TokenUsage | undefined): void {
+    if (
+      tokenUsage !== undefined &&
+      tokenUsage.promptTokens === this._tokenUsage.promptTokens &&
+      tokenUsage.completionTokens === this._tokenUsage.completionTokens &&
+      tokenUsage.totalTokens === this._tokenUsage.totalTokens
+    ) {
+      this._pendingTokenUsageFlushError = undefined;
+      if (this._pendingDurableTurnFlushError?.pendingResume === undefined) {
+        this._pendingDurableTurnFlushError = undefined;
+      }
     }
   }
+
+  private _latchDurableTurnFlushError(err: unknown, full?: FullOutput<unknown>): void {
+    if (!this._isExpectedFlushLifecycleError(err)) {
+      this._pendingDurableTurnFlushError ??= { error: err, pendingResume: this._pendingResumeKeyFromOutput(full) };
+    }
+  }
+
+  private _pendingResumeKeyFromOutput(
+    full: FullOutput<unknown> | undefined,
+  ): { runId: string; toolCallId: string } | undefined {
+    if (!full?.runId || full.finishReason !== 'suspended') return undefined;
+    const payload = full.suspendPayload as { toolCallId?: unknown } | undefined;
+    return typeof payload?.toolCallId === 'string' ? { runId: full.runId, toolCallId: payload.toolCallId } : undefined;
+  }
+
+  private _clearPendingDurableTurnFlushErrorIfRepaired(full?: FullOutput<unknown>): void {
+    const latched = this._pendingDurableTurnFlushError;
+    if (latched === undefined) return;
+    const latchedPending = latched.pendingResume;
+    if (latchedPending === undefined) {
+      this._pendingDurableTurnFlushError = undefined;
+      return;
+    }
+    const repairedPending = this._pendingResumeKeyFromOutput(full);
+    if (
+      repairedPending?.runId === latchedPending.runId &&
+      repairedPending.toolCallId === latchedPending.toolCallId &&
+      this._record.pendingResume?.runId === latchedPending.runId &&
+      this._record.pendingResume.toolCallId === latchedPending.toolCallId
+    ) {
+      this._pendingDurableTurnFlushError = undefined;
+    }
+  }
+
+  private _recordTokenUsageMatchesLive(opts: { tolerateInvalidZero?: boolean } = {}): boolean {
+    const stored = this._record.tokenUsage;
+    const liveIsZero =
+      this._tokenUsage.promptTokens === 0 && this._tokenUsage.completionTokens === 0 && this._tokenUsage.totalTokens === 0;
+    if (
+      stored === undefined ||
+      !this._isValidTokenCount(stored.promptTokens) ||
+      !this._isValidTokenCount(stored.completionTokens) ||
+      !this._isValidTokenCount(stored.totalTokens)
+    ) {
+      return opts.tolerateInvalidZero === true && liveIsZero;
+    }
+    return (
+      stored.promptTokens === this._tokenUsage.promptTokens &&
+      stored.completionTokens === this._tokenUsage.completionTokens &&
+      stored.totalTokens === this._tokenUsage.totalTokens
+    );
+  }
+
+  private _isValidTokenCount(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  }
+
+  private _recordTurnCompletion(full: FullOutput<unknown>, opts: { persist?: boolean } = {}): TokenUsage | undefined {
+    this._captureTurnRunId(full);
+    const delta = this._tokenUsageDeltaFromFullOutput(full);
+    this._applyTokenUsageDelta(delta);
+    if (delta !== undefined && opts.persist !== false) this._schedulePersistTokenUsage();
+    return delta;
+  }
+
+  private _recordMessageTurnCompletion(
+    full: FullOutput<unknown>,
+    opts: { persist?: boolean } = {},
+  ): { tokenUsageDelta?: TokenUsage; tokenUsageAccounted: boolean } {
+    this._captureTurnRunId(full);
+    if (full.runId && this._messageTokenAccountedRunIds.has(full.runId)) {
+      return { tokenUsageAccounted: true };
+    }
+    const tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full);
+    this._applyTokenUsageDelta(tokenUsageDelta);
+    if (tokenUsageDelta !== undefined) {
+      if (full.runId) this._messageTokenAccountedRunIds.add(full.runId);
+      if (opts.persist !== false) this._schedulePersistTokenUsage();
+      return { tokenUsageDelta, tokenUsageAccounted: true };
+    }
+    return { tokenUsageAccounted: false };
+  }
+
+  private _messageSuspendedTokenUsageDelta(full: FullOutput<unknown>): TokenUsage | undefined {
+    if (
+      full.runId &&
+      (this._messageTokenAccountedRunIds.has(full.runId) || this._messageTokenAccountingRunIds.has(full.runId))
+    ) {
+      return undefined;
+    }
+    return this._tokenUsageDeltaFromFullOutput(full);
+  }
+
+  private _reserveMessageSuspendedTokenUsage(full: FullOutput<unknown>): {
+    tokenUsageDelta?: TokenUsage;
+    reservedRunId?: string;
+    reservation?: Deferred<void>;
+  } {
+    const tokenUsageDelta = this._messageSuspendedTokenUsageDelta(full);
+    if (tokenUsageDelta !== undefined && full.runId) {
+      const reservation = createDeferred<void>();
+      this._messageTokenAccountingRunIds.add(full.runId);
+      this._messageTokenAccountingReservations.set(full.runId, reservation);
+      void reservation.promise.catch(() => {});
+      return { tokenUsageDelta, reservedRunId: full.runId, reservation };
+    }
+    return { tokenUsageDelta };
+  }
+
+  private _commitMessageSuspendedTokenUsage(
+    full: FullOutput<unknown>,
+    reservation: { tokenUsageDelta?: TokenUsage; reservedRunId?: string; reservation?: Deferred<void> },
+  ): void {
+    if (reservation.reservedRunId !== undefined) {
+      this._messageTokenAccountingRunIds.delete(reservation.reservedRunId);
+      if (this._messageTokenAccountingReservations.get(reservation.reservedRunId) === reservation.reservation) {
+        this._messageTokenAccountingReservations.delete(reservation.reservedRunId);
+      }
+      this._messageTokenAccountedRunIds.add(reservation.reservedRunId);
+      reservation.reservation?.resolve();
+    } else if (reservation.tokenUsageDelta !== undefined && full.runId) {
+      this._messageTokenAccountedRunIds.add(full.runId);
+    }
+  }
+
+  private _rollbackMessageSuspendedTokenUsage(reservation: {
+    reservedRunId?: string;
+    reservation?: Deferred<void>;
+  }): void {
+    if (reservation.reservedRunId !== undefined) {
+      this._messageTokenAccountingRunIds.delete(reservation.reservedRunId);
+      if (this._messageTokenAccountingReservations.get(reservation.reservedRunId) === reservation.reservation) {
+        this._messageTokenAccountingReservations.delete(reservation.reservedRunId);
+      }
+      reservation.reservation?.resolve();
+    }
+  }
+
+  private async _waitForMessageSuspendedTokenUsageOwner(
+    full: FullOutput<unknown>,
+    activeTurnWaiter?: Promise<never>,
+  ): Promise<void> {
+    if (!full.runId) return;
+    while (!this._messageTokenAccountedRunIds.has(full.runId)) {
+      const reservation = this._messageTokenAccountingReservations.get(full.runId);
+      if (reservation === undefined) return;
+      await this._raceActiveTurnWaiter(reservation.promise, activeTurnWaiter);
+    }
+  }
+
+  private async _captureMessageSuspendWithTokenUsage(
+    full: FullOutput<unknown>,
+    queuedItemId: string | undefined,
+    modeId: string,
+    modelId: string,
+    activeTurnWaiter?: Promise<never>,
+  ): Promise<void> {
+    await this._waitForMessageSuspendedTokenUsageOwner(full, activeTurnWaiter);
+    const reservation = this._reserveMessageSuspendedTokenUsage(full);
+    try {
+      await this._raceActiveTurnWaiter(
+        this._maybeCaptureSuspend(full, queuedItemId, modeId, modelId, {
+          tokenUsageDelta: reservation.tokenUsageDelta,
+        }),
+        activeTurnWaiter,
+      );
+      this._commitMessageSuspendedTokenUsage(full, reservation);
+    } catch (err) {
+      this._rollbackMessageSuspendedTokenUsage(reservation);
+      throw err;
+    }
+  }
+
+  /**
+   * Trigger a no-op `_flushUpdate` so the latest `_tokenUsage` is overlaid into
+   * `SessionRecord.tokenUsage` on disk. Fire-and-forget — serialized via
+   * `_flushChain` so it never races concurrent setters, and skipped when the
+   * session is no longer in a state that accepts writes. Non-lifecycle storage
+   * failures are latched onto `_pendingTokenUsageFlushError` so
+   * `_internalAwaitFlushChain()` can surface them to shutdown/test callers.
+   */
+  private _schedulePersistTokenUsage(): void {
+    if (this._state !== 'live' && this._state !== 'closing') return;
+    void this._persistTokenUsageOrLatch().catch(err => {
+      if (this._isExpectedFlushLifecycleError(err)) return;
+      this._pendingTokenUsageFlushError ??= err;
+    });
+  }
+
+  private _persistTokenUsage(): Promise<void> {
+    if (this._state !== 'live' && this._state !== 'closing') return Promise.resolve();
+    return this._flushUpdate(prev => prev);
+  }
+
+  private async _persistTokenUsageOrLatch(): Promise<void> {
+    try {
+      await this._persistTokenUsage();
+    } catch (err) {
+      if (!this._isExpectedFlushLifecycleError(err)) this._pendingTokenUsageFlushError ??= err;
+      throw err;
+    }
+  }
+
+  async _internalPersistTokenUsageForShutdown(opts: { deadlineAt?: number } = {}): Promise<void> {
+    const timeoutMs = opts.deadlineAt === undefined ? undefined : Math.max(0, opts.deadlineAt - Date.now());
+    if (
+      this._pendingTokenUsageFlushError === undefined &&
+      this._recordTokenUsageMatchesLive({ tolerateInvalidZero: timeoutMs === 0 })
+    ) {
+      return;
+    }
+    const persist = this._persistTokenUsageOrLatch();
+    void persist.catch(() => {});
+    if (timeoutMs === undefined) {
+      await persist;
+      return;
+    }
+    if (timeoutMs === 0) {
+      throw new HarnessValidationError('shutdown()', 'Session token usage did not flush before shutdown deadline');
+    }
+    const timedOut = Symbol('harness-token-usage-timeout');
+    const result = await Promise.race([persist.then(() => undefined), delay(timeoutMs).then(() => timedOut)]);
+    if (result === timedOut) {
+      throw new HarnessValidationError('shutdown()', 'Session token usage did not flush before shutdown deadline');
+    }
+  }
+
+  private _persistTokenUsageDelta(delta: TokenUsage | undefined): Promise<void> {
+    if (delta === undefined) return Promise.resolve();
+    if (this._state !== 'live' && this._state !== 'closing') return Promise.resolve();
+    return this._flushUpdate(prev => prev, { tokenUsageDelta: delta });
+  }
+
+  private _isExpectedFlushLifecycleError(err: unknown): boolean {
+    return (
+      err instanceof HarnessSessionClosedError ||
+      err instanceof HarnessSessionDeletedError ||
+      err instanceof HarnessStateConflictError
+    );
+  }
+
+  /**
+   * Wait for any in-flight `_flushUpdate` writes (including the trailing
+   * persist scheduled by `_recordTurnCompletion`) to settle. Throws if a
+   * scheduled token-usage flush hit a non-lifecycle storage error so shutdown
+   * and tests surface durability gaps instead of silently dropping them.
+   *
+   * @internal
+   */
+  async _internalAwaitFlushChain(opts: { deadlineAt?: number } = {}): Promise<void> {
+    const waitUntilDeadline = async (promise: Promise<unknown>): Promise<boolean> => {
+      if (opts.deadlineAt === undefined) {
+        await promise;
+        return true;
+      }
+      const timeoutMs = Math.max(0, opts.deadlineAt - Date.now());
+      const timedOut = Symbol('harness-flush-timeout');
+      const result = await Promise.race([promise.then(() => undefined), delay(timeoutMs).then(() => timedOut)]);
+      return result !== timedOut;
+    };
+
+    while (true) {
+      const backgroundTurnCompletions = Array.from(this._backgroundTurnCompletions);
+      if (backgroundTurnCompletions.length > 0) {
+        const completed = await waitUntilDeadline(Promise.allSettled(backgroundTurnCompletions));
+        if (!completed) {
+          throw new HarnessValidationError('shutdown()', 'Session background work did not flush before shutdown deadline');
+        }
+      }
+      const chain = this._flushChain;
+      const completed = await waitUntilDeadline(chain);
+      if (!completed) {
+        throw new HarnessValidationError('shutdown()', 'Session storage writes did not flush before shutdown deadline');
+      }
+      if (this._flushChain === chain && this._backgroundTurnCompletions.size === 0) break;
+    }
+    const latched = this._pendingTokenUsageFlushError;
+    if (latched !== undefined) {
+      this._pendingTokenUsageFlushError = undefined;
+      throw latched;
+    }
+    const durableTurnLatched = this._pendingDurableTurnFlushError;
+    if (durableTurnLatched !== undefined) {
+      if (
+        durableTurnLatched.pendingResume !== undefined &&
+        this._record.pendingResume?.runId === durableTurnLatched.pendingResume.runId &&
+        this._record.pendingResume.toolCallId === durableTurnLatched.pendingResume.toolCallId
+      ) {
+        this._pendingDurableTurnFlushError = undefined;
+        return;
+      }
+      throw durableTurnLatched.error;
+    }
+  }
+
+  /** Latched storage error from a scheduled token-usage persist; surfaced by
+   * `_internalAwaitFlushChain()` so shutdown and tests can act on it. */
+  private _pendingTokenUsageFlushError: unknown;
+  private _pendingDurableTurnFlushError:
+    | { error: unknown; pendingResume?: { runId: string; toolCallId: string } }
+    | undefined;
 
   /**
    * True while a turn (message or queued) is in flight against the agent.
@@ -1160,6 +1563,14 @@ export class Session {
     return false;
   }
 
+  private _isShutdownDrainBusy(): boolean {
+    if (this._currentTurnAbortController !== undefined) return true;
+    if (this._record.pendingResume !== undefined) return false;
+    if (this._draining) return true;
+    if (this._currentQueuedItemId !== undefined) return true;
+    return (this._record.pendingQueue?.length ?? 0) > 0;
+  }
+
   /**
    * Number of items currently waiting in `pendingQueue` (excluding any
    * queued item already drained into a live turn — that one is tracked
@@ -1174,10 +1585,10 @@ export class Session {
    * completed turn (manual or queued). Returns a fresh shallow copy so
    * callers can't mutate the running aggregate.
    *
-   * Note: this is **not** persisted across rehydration — token counts
-   * reset to zero when a closed/evicted session is hydrated from storage.
-   * Callers that need cross-process aggregates should sum from message
-   * history themselves.
+   * Durable across rehydration: counters are persisted into
+   * `SessionRecord.tokenUsage` on every save and seeded from there on
+   * construction, so reopens after eviction or process restart carry the
+   * accumulated value instead of resetting to zero.
    */
   getTokenUsage(): TokenUsage {
     return { ...this._tokenUsage };
@@ -1230,14 +1641,13 @@ export class Session {
   }
 
   /**
-   * Re-check `isBusy()` and resolve every `waitForIdle()` waiter whose
-   * predicate is now satisfied. Cheap when there are no waiters (common
-   * case). Called from every state transition that might tip the session
-   * idle: `_endTurn`, queue drain shutdown, queued-turn settlement.
+   * Re-check every idle/drain waiter whose predicate is now satisfied. Cheap
+   * when there are no waiters (common case). Called from every state
+   * transition that might tip the session idle or durably parked: `_endTurn`,
+   * queue drain shutdown, queued-turn settlement, suspension parking.
    */
   private _notifyMaybeIdle(): void {
     if (this._idleWaiters.size === 0) return;
-    if (this.isBusy()) return;
     const waiters = Array.from(this._idleWaiters);
     for (const w of waiters) w.check();
   }
@@ -1285,6 +1695,54 @@ export class Session {
           timer = undefined;
           this.abort({ reason: 'session_close_timeout' });
           resolveAfter(this._failPendingQueueForClose(new HarnessSessionClosingError(this.id)));
+        }, timeoutMs);
+      }
+    });
+  }
+
+  /** @internal — shutdown waits for admitted work without turning queued items into close failures. */
+  _waitForShutdownDrain(drainDeadlineAt: number): Promise<void> {
+    void this._maybeDrainQueue();
+    if (!this._isShutdownDrainBusy()) return Promise.resolve();
+    const timeoutMs = Math.max(0, drainDeadlineAt - Date.now());
+
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let waiter!: IdleWaiter;
+      const cleanup = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        this._idleWaiters.delete(waiter);
+      };
+      const resolveAfter = () => {
+        cleanup();
+        resolve();
+      };
+      waiter = {
+        check: () => {
+          if (!this._isShutdownDrainBusy()) {
+            resolveAfter();
+            return true;
+          }
+          return false;
+        },
+        reject: () => {
+          resolveAfter();
+        },
+        cleanup,
+      };
+      this._idleWaiters.add(waiter);
+      if (waiter.check()) return;
+      const rejectAfterTimeout = () => {
+        this.abort({ reason: 'session_shutdown_timeout' });
+        cleanup();
+        reject(new HarnessValidationError('shutdown()', 'Session did not drain before shutdown deadline'));
+      };
+      if (timeoutMs === 0) {
+        rejectAfterTimeout();
+      } else {
+        timer = setTimeout(() => {
+          timer = undefined;
+          rejectAfterTimeout();
         }, timeoutMs);
       }
     });
@@ -2727,6 +3185,9 @@ export class Session {
       const oldest = this._completedRuns.keys().next().value;
       if (oldest === undefined) return;
       this._completedRuns.delete(oldest);
+      this._messageTokenAccountedRunIds.delete(oldest);
+      this._messageTokenAccountingRunIds.delete(oldest);
+      this._messageTokenAccountingReservations.delete(oldest);
     }
   }
 
@@ -2976,6 +3437,7 @@ export class Session {
       this._messageAdmissionStarts.set(opts.admissionId!, {
         admissionHash,
         modeId: effectiveModeId,
+        modelId: effectiveModelId,
         promise: admissionStart.promise,
       });
     }
@@ -3044,11 +3506,20 @@ export class Session {
           activeTurnWaiter.promise,
         ]);
         const full = result as FullOutput<unknown>;
-        this._recordTurnCompletion(full);
-        await Promise.race([
-          this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
-          activeTurnWaiter.promise,
-        ]);
+        if (full.finishReason === 'suspended') {
+          await this._captureMessageSuspendWithTokenUsage(
+            full,
+            undefined,
+            effectiveModeId,
+            effectiveModelId,
+            activeTurnWaiter.promise,
+          );
+        } else {
+          const tokenUsageDelta = this._recordTurnCompletion(full, { persist: false });
+          if (tokenUsageDelta !== undefined) {
+            await Promise.race([this._persistTokenUsageOrLatch(), activeTurnWaiter.promise]);
+          }
+        }
         this._emitTurnEvent({
           type: 'agent_end',
           reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -3087,6 +3558,8 @@ export class Session {
               status: 'pending',
               signalId: admissionIdentity.signalId,
               runId: admissionIdentity.runId,
+              modeId: effectiveModeId,
+              modelId: effectiveModelId,
               admissionId: opts.admissionId!,
               admissionHash,
             },
@@ -3147,6 +3620,8 @@ export class Session {
                 status: 'failed',
                 signalId: admissionIdentity.signalId,
                 runId: admissionIdentity.runId,
+                modeId: effectiveModeId,
+                modelId: effectiveModelId,
                 admissionId: opts.admissionId!,
                 admissionHash,
                 error: projectHarnessPublicError(err),
@@ -3188,6 +3663,8 @@ export class Session {
         threadId: this.threadId,
         signalId: signal.signal.id,
         runId: signal.runId,
+        modeId: effectiveModeId,
+        modelId: effectiveModelId,
         admissionId: opts.admissionId!,
         admissionHash,
         createdAt: now,
@@ -3207,6 +3684,8 @@ export class Session {
               status: 'pending',
               signalId: signal.signal.id,
               runId: signal.runId,
+              modeId: effectiveModeId,
+              modelId: effectiveModelId,
               ...(opts.admissionId !== undefined ? { admissionId: opts.admissionId } : {}),
               ...(admissionHash !== undefined ? { admissionHash } : {}),
             },
@@ -3230,6 +3709,8 @@ export class Session {
             status: 'failed',
             signalId: signal.signal.id,
             runId: signal.runId,
+            modeId: effectiveModeId,
+            modelId: effectiveModelId,
             error: projectHarnessPublicError(err),
             admissionId: opts.admissionId!,
             admissionHash: admissionHash!,
@@ -3283,6 +3764,8 @@ export class Session {
                 status: 'failed',
                 signalId: signal.signal.id,
                 runId: signal.runId,
+                modeId: effectiveModeId,
+                modelId: effectiveModelId,
                 error: projectHarnessPublicError(err),
                 admissionId: opts.admissionId!,
                 admissionHash: admissionHash!,
@@ -3309,9 +3792,27 @@ export class Session {
         throw err;
       }
       let streamCompletedEvidenceWriteFailed = false;
-      void Promise.race([completion, activeTurnWaiter.promise])
+      const streamBookkeeping = Promise.race([completion, activeTurnWaiter.promise])
         .then(async full => {
-          this._recordTurnCompletion(full);
+          try {
+            if (full.finishReason === 'suspended') {
+              await this._captureMessageSuspendWithTokenUsage(
+                full,
+                undefined,
+                effectiveModeId,
+                effectiveModelId,
+                activeTurnWaiter.promise,
+              );
+            } else {
+              const { tokenUsageAccounted } = this._recordMessageTurnCompletion(full, { persist: false });
+              if (tokenUsageAccounted) {
+                await Promise.race([this._persistTokenUsageOrLatch(), activeTurnWaiter.promise]);
+              }
+            }
+          } catch (err) {
+            this._latchDurableTurnFlushError(err, full);
+            throw err;
+          }
           if (admissionIdentity === undefined) return full;
           await Promise.race([
             this._writeMessageResultEvidence(
@@ -3319,6 +3820,8 @@ export class Session {
                 status: 'completed',
                 signalId: signal.signal.id,
                 runId: signal.runId,
+                modeId: effectiveModeId,
+                modelId: effectiveModelId,
                 result: full,
                 admissionId: opts.admissionId!,
                 admissionHash: admissionHash!,
@@ -3333,10 +3836,6 @@ export class Session {
           return full;
         })
         .then(async full => {
-          await Promise.race([
-            this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
-            activeTurnWaiter.promise,
-          ]);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -3355,6 +3854,8 @@ export class Session {
                 status: 'failed',
                 signalId: signal.signal.id,
                 runId: signal.runId,
+                modeId: effectiveModeId,
+                modelId: effectiveModelId,
                 error: projectHarnessPublicError(err),
                 admissionId: opts.admissionId!,
                 admissionHash: admissionHash!,
@@ -3369,6 +3870,7 @@ export class Session {
           finishOwnedMessageTurn();
           void this._maybeDrainQueue();
         });
+      void this._trackBackgroundTurnCompletion(streamBookkeeping);
       return out;
     }
 
@@ -3387,32 +3889,45 @@ export class Session {
         streamStarted = true;
       }
       const full = await Promise.race([completion, activeTurnWaiter.promise]);
-      this._recordTurnCompletion(full);
-      if (admissionIdentity !== undefined) {
-        try {
+      try {
+        if (full.finishReason === 'suspended') {
+          await this._captureMessageSuspendWithTokenUsage(
+            full,
+            undefined,
+            effectiveModeId,
+            effectiveModelId,
+            activeTurnWaiter.promise,
+          );
+        } else {
+          const { tokenUsageAccounted } = this._recordMessageTurnCompletion(full, { persist: false });
+          if (tokenUsageAccounted) {
+            await Promise.race([this._persistTokenUsageOrLatch(), activeTurnWaiter.promise]);
+          }
+        }
+        if (admissionIdentity !== undefined) {
           await Promise.race([
             this._writeMessageResultEvidenceBestEffort(
               {
                 status: 'completed',
                 signalId: signal.signal.id,
                 runId: signal.runId,
+                modeId: effectiveModeId,
+                modelId: effectiveModelId,
                 result: full,
                 admissionId: opts.admissionId!,
                 admissionHash: admissionHash!,
               },
               { compatibleAdmissionHashes },
-            ),
+            ).catch(err => {
+              completedEvidenceWriteFailed = true;
+              throw err;
+            }),
             activeTurnWaiter.promise,
           ]);
-        } catch (err) {
-          completedEvidenceWriteFailed = true;
-          throw err;
         }
+      } catch (err) {
+        throw err;
       }
-      await Promise.race([
-        this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
-        activeTurnWaiter.promise,
-      ]);
       this._emitTurnEvent({
         type: 'agent_end',
         reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -3439,6 +3954,8 @@ export class Session {
               status: 'failed',
               signalId: signal.signal.id,
               runId: signal.runId,
+              modeId: effectiveModeId,
+              modelId: effectiveModelId,
               error: projectHarnessPublicError(err),
               admissionId: opts.admissionId!,
               admissionHash: admissionHash!,
@@ -3627,16 +4144,21 @@ export class Session {
       if ('status' in evidence) {
         if (opts.stream === true) {
           if (evidence.status === 'pending') {
-            const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
+            const duplicateModeId = this._messageDuplicateModeId(evidence, opts);
+            const duplicateModelId = this._messageDuplicateModelId(evidence, opts);
+            const agent = this._harness.getAgentForMode(duplicateModeId);
             await this._raceActiveTurnWaiter(this._ensureThreadSubscription(agent), activeDeleted);
             const runId = await this._pendingMessageRunId(evidence);
             if (runId && this._completedRuns.has(runId)) {
               const cached = this._completedRuns.get(runId);
               if (cached?.ok && evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+                await this._prepareCachedDuplicateMessageCompletion(cached.full, evidence, opts, activeDeleted);
                 await this._writeMessageResultEvidenceBestEffort({
                   status: 'completed',
                   signalId: evidence.signalId,
                   runId,
+                  modeId: duplicateModeId,
+                  modelId: duplicateModelId,
                   result: cached.full,
                   admissionId: evidence.admissionId,
                   admissionHash: evidence.admissionHash,
@@ -3688,16 +4210,21 @@ export class Session {
         if (evidence.status === 'failed') throw publicErrorProjectionToError(evidence.error);
         const runId = await this._pendingMessageRunId(evidence);
         if (runId) {
-          const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
+          const duplicateModeId = this._messageDuplicateModeId(evidence, opts);
+          const duplicateModelId = this._messageDuplicateModelId(evidence, opts);
+          const agent = this._harness.getAgentForMode(duplicateModeId);
           await this._raceActiveTurnWaiter(this._ensureThreadSubscription(agent), activeDeleted);
           const cached = this._completedRuns.get(runId);
           if (cached) {
             if (!cached.ok) throw cached.err;
             if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+              await this._prepareCachedDuplicateMessageCompletion(cached.full, evidence, opts, activeDeleted);
               await this._writeMessageResultEvidenceBestEffort({
                 status: 'completed',
                 signalId: evidence.signalId,
                 runId,
+                modeId: duplicateModeId,
+                modelId: duplicateModelId,
                 result: cached.full,
                 admissionId: evidence.admissionId,
                 admissionHash: evidence.admissionHash,
@@ -3715,6 +4242,29 @@ export class Session {
     });
   }
 
+  private async _prepareCachedDuplicateMessageCompletion(
+    full: FullOutput<unknown>,
+    evidence: AgentSignalResultEvidence,
+    opts: MessageOptions,
+    activeDeleted?: Promise<never>,
+  ): Promise<void> {
+    if (full.finishReason === 'suspended') {
+      await this._captureMessageSuspendWithTokenUsage(
+        full,
+        undefined,
+        this._messageDuplicateModeId(evidence, opts),
+        this._messageDuplicateModelId(evidence, opts),
+        activeDeleted,
+      );
+      return;
+    }
+
+    const { tokenUsageAccounted } = this._recordMessageTurnCompletion(full, { persist: false });
+    if (tokenUsageAccounted) {
+      await this._raceActiveTurnWaiter(this._persistTokenUsageOrLatch(), activeDeleted);
+    }
+  }
+
   private async _pendingMessageRunId(evidence: AgentSignalResultEvidence): Promise<string | undefined> {
     if (evidence.status !== 'pending') return evidence.runId;
     const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
@@ -3729,7 +4279,12 @@ export class Session {
 
   private _messageDuplicateModeId(evidence: AgentSignalResultEvidence, opts: MessageOptions): string {
     const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
-    return starting?.modeId ?? opts.mode ?? this._record.modeId;
+    return starting?.modeId ?? evidence.modeId ?? opts.mode ?? this._record.modeId;
+  }
+
+  private _messageDuplicateModelId(evidence: AgentSignalResultEvidence, opts: MessageOptions): string {
+    const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
+    return starting?.modelId ?? evidence.modelId ?? opts.model ?? this._record.modelId;
   }
 
   private _hasLiveMessageRun(agent: Agent, runId: string): boolean {
@@ -4038,25 +4593,44 @@ export class Session {
 
       // Background continuation runs the post-turn bookkeeping so the
       // caller's `result` promise resolves with the final AgentResult.
-      const result: Promise<AgentResult> = completionOrDelete
-        .then(async full => {
-          this._recordTurnCompletion(full);
-          await Promise.race([
-            this._maybeCaptureSuspend(full, undefined, effectiveModeId, this._record.modelId),
-            activeTurnWaiter.promise,
-          ]);
-          this._emitTurnEvent({
-            type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-            runId: full.runId,
-          });
-          await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
-          return full as AgentResult;
-        })
-        .finally(() => {
-          finishOwnedSignalTurn();
-          void this._maybeDrainQueue();
-        });
+      const result: Promise<AgentResult> = this._trackBackgroundTurnCompletion(
+        completionOrDelete
+          .then(async full => {
+            const tokenUsageDelta =
+              full.finishReason === 'suspended'
+                ? this._tokenUsageDeltaFromFullOutput(full)
+                : this._recordTurnCompletion(full, { persist: false });
+            await Promise.race([
+              this._maybeCaptureSuspend(full, undefined, effectiveModeId, this._record.modelId, {
+                tokenUsageDelta: full.finishReason === 'suspended' ? tokenUsageDelta : undefined,
+              }).catch(err => {
+                this._latchDurableTurnFlushError(err, full);
+                throw err;
+              }),
+              activeTurnWaiter.promise,
+            ]);
+            if (tokenUsageDelta !== undefined && full.finishReason !== 'suspended') {
+              await Promise.race([
+                this._persistTokenUsageOrLatch().catch(err => {
+                  if (!this._isExpectedFlushLifecycleError(err)) this._pendingTokenUsageFlushError ??= err;
+                  throw err;
+                }),
+                activeTurnWaiter.promise,
+              ]);
+            }
+            this._emitTurnEvent({
+              type: 'agent_end',
+              reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+              runId: full.runId,
+            });
+            await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
+            return full as AgentResult;
+          })
+          .finally(() => {
+            finishOwnedSignalTurn();
+            void this._maybeDrainQueue();
+          }),
+      );
 
       // Swallow `result` rejections at the inner level so the
       // background continuation doesn't surface as an unhandled
@@ -4192,24 +4766,43 @@ export class Session {
 
       const completion = this._awaitRunCompletion(dispatched.runId);
       const completionOrDelete = Promise.race([completion, activeTurnWaiter.promise]);
-      const result = completionOrDelete
-        .then(async full => {
-          this._recordTurnCompletion(full);
-          await Promise.race([
-            this._maybeCaptureSuspend(full, undefined, effectiveModeId, this._record.modelId),
-            activeTurnWaiter.promise,
-          ]);
-          this._emitTurnEvent({
-            type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-            runId: full.runId,
-          });
-          await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
-        })
-        .finally(() => {
-          finishOwnedReminderTurn();
-          void this._maybeDrainQueue();
-        });
+      const result = this._trackBackgroundTurnCompletion(
+        completionOrDelete
+          .then(async full => {
+            const tokenUsageDelta =
+              full.finishReason === 'suspended'
+                ? this._tokenUsageDeltaFromFullOutput(full)
+                : this._recordTurnCompletion(full, { persist: false });
+            await Promise.race([
+              this._maybeCaptureSuspend(full, undefined, effectiveModeId, this._record.modelId, {
+                tokenUsageDelta: full.finishReason === 'suspended' ? tokenUsageDelta : undefined,
+              }).catch(err => {
+                this._latchDurableTurnFlushError(err, full);
+                throw err;
+              }),
+              activeTurnWaiter.promise,
+            ]);
+            if (tokenUsageDelta !== undefined && full.finishReason !== 'suspended') {
+              await Promise.race([
+                this._persistTokenUsageOrLatch().catch(err => {
+                  if (!this._isExpectedFlushLifecycleError(err)) this._pendingTokenUsageFlushError ??= err;
+                  throw err;
+                }),
+                activeTurnWaiter.promise,
+              ]);
+            }
+            this._emitTurnEvent({
+              type: 'agent_end',
+              reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+              runId: full.runId,
+            });
+            await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
+          })
+          .finally(() => {
+            finishOwnedReminderTurn();
+            void this._maybeDrainQueue();
+          }),
+      );
       void result.catch(() => {});
 
       return {
@@ -4264,23 +4857,56 @@ export class Session {
     queuedItemId = this._currentQueuedItemId,
     modeId = this._record.modeId,
     modelId = this._modelIdForQueuedItem(queuedItemId),
+    opts: { tokenUsageDelta?: TokenUsage } = {},
   ): Promise<void> {
     if (full.finishReason !== 'suspended') return;
+    this._captureTurnRunId(full);
     const payload = full.suspendPayload as
       | { toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown }
       | undefined;
-    if (!payload || !full.runId) return;
+    if (!payload || !full.runId) {
+      await this._persistTokenUsageDelta(opts.tokenUsageDelta);
+      this._clearPendingDurableTurnFlushErrorIfRepaired(full);
+      return;
+    }
 
-    const kind = this._classifyResumeKind(payload);
+    const pending = this._pendingResumeFromSuspendedOutput(full, payload, queuedItemId, modeId, modelId);
+    if (pending === undefined) return;
     const existing = this._record.pendingResume;
     if (
       existing &&
-      existing.kind === kind &&
+      existing.kind === pending.kind &&
       existing.runId === full.runId &&
       existing.toolCallId === payload.toolCallId
     ) {
+      await this._flushUpdate(prev => prev, { tokenUsageDelta: opts.tokenUsageDelta });
+      this._clearPendingDurableTurnFlushErrorIfRepaired(full);
       return;
     }
+    await this._flushUpdate(prev => ({ ...prev, pendingResume: pending }), { tokenUsageDelta: opts.tokenUsageDelta });
+    this._clearPendingDurableTurnFlushErrorIfRepaired(full);
+
+    // Emit suspension_required AFTER the durable-parking barrier (§5.4) so
+    // any subscriber observing this event can reconstruct the pending state
+    // from storage.
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind: pending.kind,
+      toolCallId: pending.toolCallId,
+      toolName: pending.toolName,
+      runId: pending.runId,
+    });
+  }
+
+  private _pendingResumeFromSuspendedOutput(
+    full: FullOutput<unknown>,
+    payload: { toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown },
+    queuedItemId = this._currentQueuedItemId,
+    modeId = this._record.modeId,
+    modelId = this._modelIdForQueuedItem(queuedItemId),
+  ): PendingResume | undefined {
+    if (!full.runId) return undefined;
+    const kind = this._classifyResumeKind(payload);
     const pending: PendingResume = {
       kind,
       itemId: `${kind}:${payload.toolCallId}`,
@@ -4299,19 +4925,7 @@ export class Session {
       const mode = this._harness._getMode(modeId);
       if (mode.transitionsTo) pending.transitionModeId = mode.transitionsTo;
     }
-
-    await this._flushUpdate(prev => ({ ...prev, pendingResume: pending }));
-
-    // Emit suspension_required AFTER the durable-parking barrier (§5.4) so
-    // any subscriber observing this event can reconstruct the pending state
-    // from storage.
-    this._emitTurnEvent({
-      type: 'suspension_required',
-      kind,
-      toolCallId: pending.toolCallId,
-      toolName: pending.toolName,
-      runId: pending.runId,
-    });
+    return pending;
   }
 
   private _classifyResumeKind(payload: { toolName: string; suspendPayload?: unknown }): PendingResume['kind'] {
@@ -5695,6 +6309,26 @@ export class Session {
     // accepted".
     const completingQueuedItemId = full.finishReason !== 'suspended' ? pendingQueuedItemId : undefined;
     try {
+      const suspendedPayload =
+        full.finishReason === 'suspended'
+          ? (full.suspendPayload as
+              | { toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown }
+              | undefined)
+          : undefined;
+      const suspendedPending =
+        suspendedPayload !== undefined
+          ? this._pendingResumeFromSuspendedOutput(
+              full,
+              suspendedPayload,
+              pendingQueuedItemId,
+              resumeModeId,
+              resumeRuntimeDependencies.modelId,
+            )
+          : undefined;
+      const suspendedTokenUsageDelta =
+        full.finishReason === 'suspended' ? this._tokenUsageDeltaFromFullOutput(full) : undefined;
+      if (full.finishReason === 'suspended') this._captureTurnRunId(full);
+      let alreadyAccounted = false;
       if (completingQueuedItemId !== undefined) {
         if (modeFlipTarget && modeFlipTarget !== previousModeId) {
           await Promise.race([
@@ -5704,56 +6338,75 @@ export class Session {
         }
         const queuedItem = this._record.pendingQueue.find(item => item.id === completingQueuedItemId);
         if (queuedItem) {
+          let tokenUsageDelta: TokenUsage | undefined;
           try {
-            await Promise.race([this._markQueuedPostRunFinalized(completingQueuedItemId), activeTurnWaiter.promise]);
+            this._captureTurnRunId(full);
+            tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full);
+            alreadyAccounted = true;
+            await Promise.race([
+              this._markQueuedPostRunFinalized(completingQueuedItemId, { tokenUsageDelta }),
+              activeTurnWaiter.promise,
+            ]);
           } catch (err) {
             if (err instanceof HarnessSessionDeletedError) throw err;
             throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
           }
         }
-        this._recordTurnCompletion(full);
-      } else {
-        this._recordTurnCompletion(full);
+        if (!alreadyAccounted) this._recordTurnCompletion(full, { persist: false });
+      } else if (full.finishReason !== 'suspended') {
+        this._recordTurnCompletion(full, { persist: false });
       }
       const queueCompletedAt = Date.now();
       const responseAppliedAt = queueCompletedAt;
       await Promise.race([
-        this._flushUpdate(prev => {
-          const next: SessionRecord = { ...prev };
-          delete next.pendingResume;
-          const receipt =
-            responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
-          if (receipt) {
-            next.inboxResponseReceipts = {
-              ...(prev.inboxResponseReceipts ?? {}),
-              [receipt.responseId]: {
-                ...receipt,
-                status: 'applied',
-                result: full,
-                appliedAt: receipt.appliedAt ?? responseAppliedAt,
-                updatedAt: responseAppliedAt,
-              },
-            };
-          }
-          if (modeFlipTarget) next.modeId = modeFlipTarget;
-          if (completingQueuedItemId !== undefined) {
-            next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
-            const receipt = prev.queueAdmissionReceipts?.[completingQueuedItemId];
+        this._flushUpdate(
+          prev => {
+            const next: SessionRecord = { ...prev };
+            if (full.finishReason === 'suspended' && suspendedPending !== undefined) {
+              next.pendingResume = suspendedPending;
+            } else {
+              delete next.pendingResume;
+            }
+            const receipt =
+              responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
             if (receipt) {
-              next.queueAdmissionReceipts = {
-                ...(prev.queueAdmissionReceipts ?? {}),
-                [completingQueuedItemId]: {
+              next.inboxResponseReceipts = {
+                ...(prev.inboxResponseReceipts ?? {}),
+                [receipt.responseId]: {
                   ...receipt,
-                  status: 'completed',
+                  status: 'applied',
                   result: full,
-                  completedAt: receipt.completedAt ?? queueCompletedAt,
-                  updatedAt: queueCompletedAt,
+                  appliedAt: receipt.appliedAt ?? responseAppliedAt,
+                  updatedAt: responseAppliedAt,
                 },
               };
             }
-          }
-          return next;
-        }),
+            if (modeFlipTarget) next.modeId = modeFlipTarget;
+            if (completingQueuedItemId !== undefined) {
+              next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
+              const receipt = prev.queueAdmissionReceipts?.[completingQueuedItemId];
+              if (receipt) {
+                next.queueAdmissionReceipts = {
+                  ...(prev.queueAdmissionReceipts ?? {}),
+                  [completingQueuedItemId]: {
+                    ...receipt,
+                    status: 'completed',
+                    result: full,
+                    completedAt: receipt.completedAt ?? queueCompletedAt,
+                    updatedAt: queueCompletedAt,
+                  },
+                };
+              }
+            }
+            return next;
+          },
+          {
+            tokenUsageDelta:
+              full.finishReason === 'suspended' && suspendedTokenUsageDelta !== undefined
+                ? suspendedTokenUsageDelta
+                : undefined,
+          },
+        ),
         activeTurnWaiter.promise,
       ]);
 
@@ -5773,13 +6426,15 @@ export class Session {
         });
       }
 
-      // The resumed run can itself suspend again (multi-step approval chains).
-      // Mirror message()'s post-run hook so the next respond* call sees the
-      // new pending record.
-      await Promise.race([
-        this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId, resumeRuntimeDependencies.modelId),
-        activeTurnWaiter.promise,
-      ]);
+      if (suspendedPending !== undefined) {
+        this._emitTurnEvent({
+          type: 'suspension_required',
+          kind: suspendedPending.kind,
+          toolCallId: suspendedPending.toolCallId,
+          toolName: suspendedPending.toolName,
+          runId: suspendedPending.runId,
+        });
+      }
 
       // If the resumed run did NOT suspend again, the turn is complete from
       // the harness's perspective. Surface that to subscribers via agent_end.
@@ -6093,9 +6748,15 @@ export class Session {
     if (currentReceipt?.status === 'completed') {
       const queuedItem = this._record.pendingQueue.find(item => item.id === queuedItemId);
       const shouldRunPostRunSideEffects = queuedItem !== undefined && currentReceipt.postRunFinalizedAt === undefined;
+      let alreadyAccounted = false;
       if (shouldRunPostRunSideEffects) {
+        let tokenUsageDelta: TokenUsage | undefined;
         try {
-          await this._markQueuedPostRunFinalized(queuedItemId);
+          const full = currentReceipt.result as FullOutput<unknown>;
+          this._captureTurnRunId(full);
+          tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full);
+          alreadyAccounted = true;
+          await this._markQueuedPostRunFinalized(queuedItemId, { tokenUsageDelta });
         } catch (err) {
           this._deferQueuedTurnRetry(
             new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err),
@@ -6125,6 +6786,8 @@ export class Session {
           queuedItem,
           currentReceipt.result as FullOutput<unknown>,
           pending.modeId ?? currentReceipt.modeId ?? queuedItem.mode ?? this._record.modeId,
+          undefined,
+          { skipTokenAccounting: alreadyAccounted },
         );
       }
       this._currentQueuedItemId = undefined;
@@ -7068,18 +7731,30 @@ export class Session {
     modeId: string,
     activeTurnWaiter?: Promise<never>,
   ): Promise<void> {
+    let alreadyAccounted = false;
     if (this._record.queueAdmissionReceipts?.[item.id]?.postRunFinalizedAt === undefined) {
-      // Mark before running non-idempotent post-run side effects. Recovery may
-      // retry a failed marker write, but must not replay goal continuations,
-      // token accounting, or terminal turn events after the marker persists.
+      // Account for the turn's tokens BEFORE writing the no-replay marker so
+      // the marker's CAS save piggybacks the live `_tokenUsage` via the
+      // `_flushUpdate` overlay. Without this ordering, a
+      // crash between the marker save and a later scheduled token persist
+      // would resume with `postRunFinalizedAt` set and never re-account.
+      let tokenUsageDelta: TokenUsage | undefined;
       try {
-        await this._raceActiveTurnWaiter(this._markQueuedPostRunFinalized(item.id), activeTurnWaiter);
+        this._captureTurnRunId(full);
+        tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full);
+        alreadyAccounted = true;
+        await this._raceActiveTurnWaiter(
+          this._markQueuedPostRunFinalized(item.id, { tokenUsageDelta }),
+          activeTurnWaiter,
+        );
       } catch (err) {
         if (err instanceof HarnessSessionDeletedError) throw err;
         throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
       }
     }
-    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter);
+    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter, {
+      skipTokenAccounting: alreadyAccounted,
+    });
   }
 
   private async _markQueuedTurnCompleted(
@@ -7124,12 +7799,22 @@ export class Session {
     full: FullOutput<unknown>,
     modeId?: string,
     activeTurnWaiter?: Promise<never>,
+    opts: { skipTokenAccounting?: boolean } = {},
   ): Promise<FullOutput<unknown>> {
-    this._recordTurnCompletion(full);
+    const tokenUsageDelta = opts.skipTokenAccounting
+      ? undefined
+      : full.finishReason === 'suspended'
+        ? this._tokenUsageDeltaFromFullOutput(full)
+        : this._recordTurnCompletion(full, { persist: false });
     await this._raceActiveTurnWaiter(
-      this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId),
+      this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId, undefined, {
+        tokenUsageDelta: full.finishReason === 'suspended' ? tokenUsageDelta : undefined,
+      }),
       activeTurnWaiter,
     );
+    if (tokenUsageDelta !== undefined && full.finishReason !== 'suspended') {
+      await this._raceActiveTurnWaiter(this._persistTokenUsageOrLatch(), activeTurnWaiter);
+    }
     this._emitTurnEvent({
       type: 'agent_end',
       reason: full.finishReason === 'suspended' ? 'suspended' : full.finishReason === 'error' ? 'error' : 'complete',
@@ -7139,15 +7824,34 @@ export class Session {
     return full;
   }
 
-  private async _markQueuedPostRunFinalized(queuedItemId: string): Promise<void> {
-    await this._updateQueueAdmissionReceipt(queuedItemId, (receipt, now) =>
-      receipt.postRunFinalizedAt !== undefined
-        ? receipt
-        : {
-            ...receipt,
-            postRunFinalizedAt: now,
-            updatedAt: now,
+  private async _markQueuedPostRunFinalized(
+    queuedItemId: string,
+    opts: { tokenUsageDelta?: TokenUsage } = {},
+  ): Promise<void> {
+    let tokenUsageDeltaToPersist: TokenUsage | undefined;
+    await this._flushUpdate(
+      prev => {
+        const current = prev.queueAdmissionReceipts?.[queuedItemId];
+        if (!current) return prev;
+        const now = Date.now();
+        const nextReceipt =
+          current.postRunFinalizedAt !== undefined
+            ? current
+            : {
+                ...current,
+                postRunFinalizedAt: now,
+                updatedAt: now,
+              };
+        if (current.postRunFinalizedAt === undefined) tokenUsageDeltaToPersist = opts.tokenUsageDelta;
+        return {
+          ...prev,
+          queueAdmissionReceipts: {
+            ...(prev.queueAdmissionReceipts ?? {}),
+            [queuedItemId]: nextReceipt,
           },
+        };
+      },
+      { tokenUsageDelta: () => tokenUsageDeltaToPersist },
     );
   }
 
@@ -7603,7 +8307,11 @@ export class Session {
    */
   private _flushUpdate(
     update: (prev: SessionRecord) => SessionRecord,
-    opts?: { attachmentReferences?: SaveAttachmentReferenceInput[]; ifVersion?: number },
+    opts?: {
+      attachmentReferences?: SaveAttachmentReferenceInput[];
+      ifVersion?: number;
+      tokenUsageDelta?: TokenUsage | (() => TokenUsage | undefined);
+    },
   ): Promise<void> {
     if (this._state === 'closed') {
       return Promise.reject(new HarnessSessionClosedError(this.id));
@@ -7618,8 +8326,25 @@ export class Session {
       if (opts?.ifVersion !== undefined && this._record.version !== opts.ifVersion) {
         throw new HarnessStateConflictError(this.id, opts.ifVersion, this._record.version);
       }
+      const updated = update(this._record);
+      const tokenUsageDelta =
+        typeof opts?.tokenUsageDelta === 'function' ? opts.tokenUsageDelta() : opts?.tokenUsageDelta;
+      const tokenUsageForSave =
+        tokenUsageDelta !== undefined
+          ? {
+              promptTokens: this._tokenUsage.promptTokens + tokenUsageDelta.promptTokens,
+              completionTokens: this._tokenUsage.completionTokens + tokenUsageDelta.completionTokens,
+              totalTokens: this._tokenUsage.totalTokens + tokenUsageDelta.totalTokens,
+            }
+          : this._tokenUsage;
       const next: SessionRecord = {
-        ...update(this._record),
+        ...updated,
+        // Overlay the live token-usage counter so every CAS write persists the
+        // latest aggregate. Updaters never need to thread `tokenUsage` through
+        // their closures, and `_recordTurnCompletion` mutations between save
+        // construction and post-save assignment are not lost — we re-overlay
+        // from the live counter below.
+        tokenUsage: { ...tokenUsageForSave },
         lastActivityAt: Date.now(),
       };
       const saveOpts = {
@@ -7631,7 +8356,9 @@ export class Session {
         opts?.attachmentReferences && opts.attachmentReferences.length > 0
           ? await this._storage.saveSessionWithAttachmentReferences(next, saveOpts, opts.attachmentReferences)
           : await this._storage.saveSession(next, saveOpts);
-      this._record = { ...next, version: saved.version };
+      this._applyTokenUsageDelta(tokenUsageDelta);
+      this._clearPendingTokenUsageFlushErrorIfSaved(next.tokenUsage);
+      this._record = { ...next, tokenUsage: { ...this._tokenUsage }, version: saved.version };
     };
     // Chain so concurrent callers serialize against the latest in-memory
     // version. Swallow chain-link errors so one caller's failure doesn't
@@ -7797,6 +8524,7 @@ export class Session {
         ...this._record,
         closingAt,
         closeDeadlineAt,
+        tokenUsage: { ...this._tokenUsage },
         lastActivityAt: Date.now(),
       };
       const saved = await this._storage.saveSession(next, {
@@ -7823,6 +8551,7 @@ export class Session {
       }
       const next: SessionRecord = {
         ...this._record,
+        tokenUsage: { ...this._tokenUsage },
         lastActivityAt: closedAt,
         closedAt,
       };

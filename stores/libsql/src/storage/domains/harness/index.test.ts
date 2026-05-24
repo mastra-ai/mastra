@@ -1109,6 +1109,8 @@ describe('HarnessLibSQL message result evidence', () => {
         threadId: 'thread-1',
         signalId: 'signal-1',
         runId: 'run-1',
+        modeId: 'mode-1',
+        modelId: 'model-1',
         admissionId: 'admission-1',
         admissionHash: 'hash-1',
         status: 'completed',
@@ -1126,6 +1128,8 @@ describe('HarnessLibSQL message result evidence', () => {
         threadId: 'thread-1',
         signalId: 'signal-1',
         runId: 'run-1',
+        modeId: 'mode-1',
+        modelId: 'model-1',
         admissionId: 'admission-1',
         admissionHash: 'hash-1',
         status: 'completed',
@@ -1164,7 +1168,12 @@ describe('HarnessLibSQL message result evidence', () => {
         threadId: 'thread-1',
         signalId: 'signal-1',
       }),
-    ).resolves.toMatchObject({ status: 'completed', result: { text: 'done' } });
+    ).resolves.toMatchObject({
+      status: 'completed',
+      modeId: 'mode-1',
+      modelId: 'model-1',
+      result: { text: 'done' },
+    });
     await expect(
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',

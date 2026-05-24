@@ -386,9 +386,14 @@ export interface HarnessStoredPublicError {
 }
 
 export type AgentSignalResultStatus =
-  | { status: 'pending'; signalId: string; runId?: string }
-  | { status: 'completed'; signalId: string; runId: string; result: unknown }
-  | { status: 'failed'; signalId: string; runId?: string; error: HarnessStoredPublicError };
+  (
+    | { status: 'pending'; signalId: string; runId?: string }
+    | { status: 'completed'; signalId: string; runId: string; result: unknown }
+    | { status: 'failed'; signalId: string; runId?: string; error: HarnessStoredPublicError }
+  ) & {
+    modeId?: string;
+    modelId?: string;
+  };
 
 export interface AgentSignalAccepted {
   runId: string;

@@ -744,6 +744,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     thread_id: { type: 'text', nullable: false },
     signal_id: { type: 'text', nullable: false },
     run_id: { type: 'text', nullable: true },
+    mode_id: { type: 'text', nullable: true },
+    model_id: { type: 'text', nullable: true },
     admission_id: { type: 'text', nullable: true },
     admission_hash: { type: 'text', nullable: true },
     status: { type: 'text', nullable: false },

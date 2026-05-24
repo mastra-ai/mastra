@@ -695,6 +695,7 @@ export class Harness {
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
   /** In-process close de-dupe by any session id currently covered by a close tree. */
   private readonly _closePromises = new Map<string, Promise<void>>();
+  private readonly _shutdownEvictedSessionIds = new Set<string>();
   /** Workspace registry — owns lifecycle across `shared`/`per-resource`/`per-session`. */
   readonly _workspaceRegistry: WorkspaceRegistry;
   /** Snapshot of the workspace kind for fast read paths. `undefined` when not configured. */
@@ -2908,7 +2909,7 @@ export class Harness {
    * Drain in-flight work and release every held lease. After `shutdown`,
    * `session()` rejects. Idempotent.
    */
-  async shutdown(_opts?: ShutdownOptions): Promise<void> {
+  async shutdown(opts?: ShutdownOptions): Promise<void> {
     if (this._shutdown) return;
     this._shutdown = true;
 
@@ -2935,18 +2936,64 @@ export class Harness {
     // Release every held lease. We keep the records active in storage —
     // shutdown is not a close.
     const sessions = Array.from(this._liveSessions.values());
+    for (const session of sessions) {
+      session._beginClosing();
+    }
+    const drainTimeoutMs = opts?.drainTimeoutMs ?? this._closeTimeoutMs;
+    const drainDeadlineAt = Date.now() + drainTimeoutMs;
     let eventPersistenceError: { sessionId: string; error: unknown } | undefined;
     for (const session of sessions) {
-      // Surface eviction to harness-level subscribers BEFORE we tear down
-      // the bridge so the event still propagates, and persist it before lease
-      // handoff so a fast new owner resumes from the correct event sequence.
-      session._emit({ type: 'session_evicted', reason: 'shutdown' });
+      try {
+        await session._waitForShutdownDrain(drainDeadlineAt);
+      } catch (err) {
+        eventPersistenceError ??= { sessionId: session.id, error: err };
+        continue;
+      }
+      try {
+        await session._internalPersistTokenUsageForShutdown({ deadlineAt: drainDeadlineAt });
+        await session._internalAwaitFlushChain({ deadlineAt: drainDeadlineAt });
+      } catch (err) {
+        eventPersistenceError ??= { sessionId: session.id, error: err };
+        continue;
+      }
       try {
         await session._flushEventPersistence();
       } catch (err) {
         eventPersistenceError ??= { sessionId: session.id, error: err };
+        continue;
       }
+    }
+    if (eventPersistenceError !== undefined) {
+      for (const session of sessions) {
+        session._restoreLiveAfterFailedClose();
+      }
+      this._shutdown = false;
+      throw new HarnessStorageError(eventPersistenceError.sessionId, 'flush', eventPersistenceError.error);
+    }
 
+    for (const session of sessions) {
+      // Surface eviction to harness-level subscribers after admitted turn work
+      // drains so replay observes terminal turn events before the handoff marker.
+      if (!this._shutdownEvictedSessionIds.has(session.id)) {
+        session._emit({ type: 'session_evicted', reason: 'shutdown' });
+        this._shutdownEvictedSessionIds.add(session.id);
+      }
+      try {
+        await session._flushEventPersistence();
+      } catch (err) {
+        eventPersistenceError ??= { sessionId: session.id, error: err };
+        continue;
+      }
+    }
+    if (eventPersistenceError !== undefined) {
+      for (const session of sessions) {
+        session._restoreLiveAfterFailedClose();
+      }
+      this._shutdown = false;
+      throw new HarnessStorageError(eventPersistenceError.sessionId, 'flush', eventPersistenceError.error);
+    }
+
+    for (const session of sessions) {
       try {
         await storage.releaseSessionLease({
           harnessName: session.getRecord().harnessName,
@@ -2962,8 +3009,10 @@ export class Harness {
         bridge();
         this._sessionEventBridges.delete(session.id);
       }
+      this._liveSessions.delete(session.id);
     }
     this._liveSessions.clear();
+    this._shutdownEvictedSessionIds.clear();
 
     // Tear down every provisioned workspace (shared + per-resource + per-session).
     try {
@@ -2972,9 +3021,6 @@ export class Harness {
       // Best-effort: errors surface through the workspace_error event.
     }
     this._untrackBoundStorage();
-    if (eventPersistenceError !== undefined) {
-      throw new HarnessStorageError(eventPersistenceError.sessionId, 'flush', eventPersistenceError.error);
-    }
   }
 
   // -------------------------------------------------------------------------

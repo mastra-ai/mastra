@@ -712,6 +712,8 @@ describe('HarnessPG', () => {
       threadId: 'thread-1',
       signalId: 'signal-1',
       runId: 'run-1',
+      modeId: 'mode-1',
+      modelId: 'model-1',
       admissionId: 'admission-1',
       admissionHash: 'hash-1',
       status: 'completed',
@@ -727,7 +729,13 @@ describe('HarnessPG', () => {
         threadId: 'thread-1',
         signalId: 'signal-1',
       }),
-    ).resolves.toMatchObject({ status: 'completed', runId: 'run-1', result: { ok: true } });
+    ).resolves.toMatchObject({
+      status: 'completed',
+      runId: 'run-1',
+      modeId: 'mode-1',
+      modelId: 'model-1',
+      result: { ok: true },
+    });
 
     await harness!.withThreadDeleteFence({ threadId: 'thread-1', ownerId: 'deleter', ttlMs: 30_000 }, async () => {
       await expect(

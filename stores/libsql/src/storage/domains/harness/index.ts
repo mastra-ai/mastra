@@ -1328,14 +1328,18 @@ export class HarnessLibSQL extends HarnessStorage {
         }
         const updated = {
           ...namespacedRecord,
+          modeId: namespacedRecord.modeId ?? current.modeId,
+          modelId: namespacedRecord.modelId ?? current.modelId,
           createdAt: current.createdAt,
         };
         await tx.execute({
           sql: `UPDATE ${TABLE_HARNESS_MESSAGE_RESULTS}
-                SET run_id = ?, status = ?, result = ?, error = ?, updated_at = ?
+                SET run_id = ?, mode_id = ?, model_id = ?, status = ?, result = ?, error = ?, updated_at = ?
                 WHERE id = ?`,
           args: [
             namespacedRecord.runId ?? null,
+            updated.modeId ?? null,
+            updated.modelId ?? null,
             namespacedRecord.status,
             'result' in namespacedRecord ? JSON.stringify(namespacedRecord.result) : null,
             'error' in namespacedRecord ? JSON.stringify(namespacedRecord.error) : null,
@@ -1349,9 +1353,9 @@ export class HarnessLibSQL extends HarnessStorage {
         created = true;
         await tx.execute({
           sql: `INSERT INTO ${TABLE_HARNESS_MESSAGE_RESULTS}
-                (id, harness_name, session_id, resource_id, thread_id, signal_id, run_id,
+                (id, harness_name, session_id, resource_id, thread_id, signal_id, run_id, mode_id, model_id,
                  admission_id, admission_hash, status, result, error, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             id,
             namespacedRecord.harnessName,
@@ -1360,6 +1364,8 @@ export class HarnessLibSQL extends HarnessStorage {
             namespacedRecord.threadId,
             namespacedRecord.signalId,
             namespacedRecord.runId ?? null,
+            namespacedRecord.modeId ?? null,
+            namespacedRecord.modelId ?? null,
             namespacedRecord.admissionId ?? null,
             namespacedRecord.admissionHash ?? null,
             namespacedRecord.status,
@@ -3827,6 +3833,11 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
       compositePrimaryKey: messageResultsConfig?.compositePrimaryKey,
     });
+    await this.#db.alterTable({
+      tableName: TABLE_HARNESS_MESSAGE_RESULTS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
+      ifNotExists: ['mode_id', 'model_id'],
+    });
   }
 
   async #ensureOperationTombstonesTable(): Promise<void> {
@@ -5230,6 +5241,8 @@ function rowToMessageResultEvidence(row: Record<string, unknown>): AgentSignalRe
     threadId: String(row.thread_id),
     signalId: String(row.signal_id),
     ...(row.run_id == null ? {} : { runId: String(row.run_id) }),
+    ...(row.mode_id == null ? {} : { modeId: String(row.mode_id) }),
+    ...(row.model_id == null ? {} : { modelId: String(row.model_id) }),
     ...(row.admission_id == null ? {} : { admissionId: String(row.admission_id) }),
     ...(row.admission_hash == null ? {} : { admissionHash: String(row.admission_hash) }),
     createdAt: Number(row.created_at),
