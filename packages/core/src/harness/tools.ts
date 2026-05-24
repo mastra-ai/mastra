@@ -791,7 +791,7 @@ export interface CreateSubagentToolOptions {
   /**
    * Returns the parent Agent that owns the current run. Invoked when a
    * subagent call is forked so the fork can reuse the parent's
-   * instructions, tools, and model to preserve prompt-cache prefix.
+   * instructions, tools, model, and processors to preserve prompt-cache prefix.
    */
   getParentAgent?: () => Agent | undefined;
   /**
@@ -1025,6 +1025,8 @@ Use this tool when:
           model,
           tools: mergedTools,
           workspace,
+          inputProcessors: definition.inputProcessors,
+          outputProcessors: definition.outputProcessors,
         });
 
         // Only resolve workspace tool names when an allowlist is configured,

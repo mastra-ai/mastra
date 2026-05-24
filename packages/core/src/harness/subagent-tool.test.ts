@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 
 // We need to mock Agent before importing tools.ts.
@@ -380,6 +381,108 @@ describe('createSubagentTool workspace propagation', () => {
     await (tool as any).execute({ agentType: 'explore', task: 'Find stuff' }, { agent: { toolCallId: 'tc-ws-2' } });
 
     expect(MockAgent.lastConstructorOpts.workspace).toBeUndefined();
+  });
+});
+
+describe('createSubagentTool processor propagation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes configured processors to fresh non-forked subagent Agents', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('processed'));
+
+    const inputProcessor: InputProcessorOrWorkflow = {
+      id: 'input-processor',
+      processInput: async ({ messages }) => messages,
+    };
+    const outputProcessor: OutputProcessorOrWorkflow = {
+      id: 'output-processor',
+      processOutputResult: async ({ messages }) => messages,
+    };
+    const inputProcessors = [inputProcessor];
+    const outputProcessors = [outputProcessor];
+
+    const processorSubagents: HarnessSubagent[] = [
+      {
+        id: 'specialist',
+        name: 'Specialist',
+        description: 'Uses processor chains.',
+        instructions: 'Specialist.',
+        inputProcessors,
+        outputProcessors,
+      },
+    ];
+
+    const tool = createSubagentTool({
+      subagents: processorSubagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const result = await (tool as any).execute(
+      { agentType: 'specialist', task: 'Process this' },
+      { agent: { toolCallId: 'tc-processors' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(MockAgent.lastConstructorOpts.inputProcessors).toBe(inputProcessors);
+    expect(MockAgent.lastConstructorOpts.outputProcessors).toBe(outputProcessors);
+  });
+
+  it('does not apply definition processors to forked subagents', async () => {
+    const parentStream = vi.fn().mockResolvedValue(createMockStreamResponse('forked processed'));
+    const parentAgent = { stream: parentStream } as any;
+    const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'fork-processor-thread', resourceId: 'rid' });
+
+    const processorSubagents: HarnessSubagent[] = [
+      {
+        id: 'specialist',
+        name: 'Specialist',
+        description: 'Defaults to forked.',
+        instructions: 'Specialist.',
+        inputProcessors: [
+          {
+            id: 'ignored-input',
+            processInput: async ({ messages }) => messages,
+          },
+        ],
+        outputProcessors: [
+          {
+            id: 'ignored-output',
+            processOutputResult: async ({ messages }) => messages,
+          },
+        ],
+        forked: true,
+      },
+    ];
+
+    const tool = createSubagentTool({
+      subagents: processorSubagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'specialist', task: 'Use parent context' },
+      { requestContext, agent: { toolCallId: 'tc-fork-processors' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(parentStream).toHaveBeenCalledTimes(1);
+    const [, streamOpts] = parentStream.mock.calls[0]!;
+    expect(streamOpts.inputProcessors).toBeUndefined();
+    expect(streamOpts.outputProcessors).toBeUndefined();
+    expect(mockStream).not.toHaveBeenCalled();
   });
 });
 

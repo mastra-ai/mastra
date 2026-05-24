@@ -6,6 +6,7 @@ import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -73,7 +74,8 @@ export interface HarnessMode<TState> {
 
 /**
  * Definition of a subagent that the Harness can spawn via the built-in `subagent` tool.
- * Each subagent runs as a fresh Agent with constrained tools and its own instructions.
+ * Non-forked subagents run as fresh Agents with constrained tools and their own
+ * instructions. Forked subagents reuse the parent Agent on a cloned thread.
  */
 export interface HarnessSubagent {
   /** Unique identifier for this subagent type (e.g., "explore", "plan", "execute") */
@@ -110,6 +112,17 @@ export interface HarnessSubagent {
   stopWhen?: LoopOptions['stopWhen'];
 
   /**
+   * Input processors for non-forked subagent runs.
+   *
+   * Forked subagents reuse the parent Agent and intentionally ignore
+   * definition-level processors to preserve the parent prompt/cache surface.
+   */
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+
+  /** Output processors for non-forked subagent runs. */
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+
+  /**
    * Workspace tool keys (after any renames) the model is allowed to call.
    * When set, workspace tools not in this list are hidden via `prepareStep`.
    * Non-workspace tools are never affected. When omitted, all workspace
@@ -121,11 +134,14 @@ export interface HarnessSubagent {
    * Default "forked" mode for this subagent type. When `true`, invocations
    * inherit the parent agent's conversation context: the parent thread is
    * cloned and the subagent runs on the fork with the parent agent's
-   * instructions and tools, preserving prompt-cache prefix.
+   * instructions, tools, model, and processors, preserving prompt-cache
+   * prefix.
    *
-   * The parent's `instructions`, `tools`, `allowedHarnessTools`,
-   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
-   * are ignored when a run is forked — the parent agent is used as-is.
+   * The `instructions`, `tools`, `allowedHarnessTools`,
+   * `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, `stopWhen`,
+   * `inputProcessors`, and `outputProcessors` fields on the definition are
+   * ignored when a run is forked — the parent agent is used with fork-specific
+   * loop controls.
    *
    * Callers can override per-invocation by passing `forked` in the tool
    * input. Forked subagents require memory to be configured on the Harness.

@@ -281,10 +281,24 @@ Use the returned `source` field to route execution through the owning surface, s
             isOptional: true,
           },
           {
+            name: 'inputProcessors',
+            type: 'InputProcessorOrWorkflow[] | ((args) => InputProcessorOrWorkflow[] | Promise<InputProcessorOrWorkflow[]>)',
+            description:
+              'Input processors for non-forked subagent runs. Passed to the fresh Agent created for the subagent.',
+            isOptional: true,
+          },
+          {
+            name: 'outputProcessors',
+            type: 'OutputProcessorOrWorkflow[] | ((args) => OutputProcessorOrWorkflow[] | Promise<OutputProcessorOrWorkflow[]>)',
+            description:
+              'Output processors for non-forked subagent runs. Passed to the fresh Agent created for the subagent.',
+            isOptional: true,
+          },
+          {
             name: 'forked',
             type: 'boolean',
             description:
-              'When `true`, calls to this subagent default to forked mode: the subagent runs on a clone of the parent thread, reusing the parent agent’s instructions, tools, and model so the prompt-cache prefix stays intact. Requires `memory` to be configured. The subagent definition’s own `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode. Callers can still override per-invocation via `forked: false` in the `subagent` tool input. See the [Forked subagents](#forked-subagents) section below for full semantics.',
+              'When `true`, calls to this subagent default to forked mode: the subagent runs on a clone of the parent thread, reusing the parent agent’s instructions, tools, model, and processors so the prompt-cache prefix stays intact. Requires `memory` to be configured. The subagent definition’s own `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, `stopWhen`, `inputProcessors`, and `outputProcessors` are ignored in forked mode. Callers can still override per-invocation via `forked: false` in the `subagent` tool input. See the [Forked subagents](#forked-subagents) section below for full semantics.',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -1059,8 +1073,8 @@ The model can also pass `forked: true` (or `forked: false`) per-invocation in th
 #### Semantics and constraints
 
 - **Memory required.** Forked mode calls `memory.cloneThread` to create the fork, so the harness must have `memory` configured and an active parent thread. Calls without those return a structured error rather than throwing.
-- **Parent agent reused.** The fork runs through the parent agent's `stream(...)` call. The parent's instructions, tools, model, `maxSteps`, and `stopWhen` apply. The subagent definition's `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode — this is what preserves the prompt-cache prefix.
-- **Toolsets inherited, recursive forks blocked at runtime.** Forks inherit the parent's toolsets verbatim (`ask_user`, `submit_plan`, user-configured harness tools, _including the `subagent` tool itself_) so the LLM request prefix — system prompt + tool list + tool schemas + tool descriptions — stays byte-identical to the parent's. This is what preserves the prompt cache. The `subagent` entry is kept on the model side but its `execute` is replaced inside the fork with a stub that returns a non-error "tool unavailable inside a forked subagent" message: nested forks are blocked at the runtime layer without perturbing the cached prefix.
+- **Parent agent reused.** The fork runs through the parent agent's `stream(...)` call. The parent's instructions, tools, model, and processors apply; reusing that parent agent surface is what preserves the prompt-cache prefix. The subagent definition's `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, `stopWhen`, `inputProcessors`, and `outputProcessors` are ignored in forked mode. The subagent tool uses fork-specific loop controls so the model can recover if it accidentally calls an inherited-but-disabled tool.
+- **Toolsets inherited, recursive forks blocked at runtime.** Forks inherit the parent's toolsets verbatim (`ask_user`, `submit_plan`, user-configured harness tools, _including the `subagent` tool itself_) so the LLM request prefix — system prompt + tool list + tool schemas + tool descriptions — stays byte-identical to the parent's. This is what preserves the prompt cache. The `subagent` entry is kept on the model side but its `execute` is replaced inside the fork with a stub that returns an error tool result with a clear "tool unavailable inside a forked subagent" message: nested forks are blocked at the runtime layer without perturbing the cached prefix.
 - **Fork threads are tagged.** Each fork thread is created with `metadata.forkedSubagent === true` and `metadata.parentThreadId === <parent>`. By default, [`listThreads`](#listthreadsoptions) hides these so they don't show up in user-facing thread pickers / startup flows. Pass `includeForkedSubagents: true` to see them in admin / debug tooling.
 - **Save-queue flushed before clone.** The agent stream batches message saves through a debounced `SaveQueueManager`, so the parent's latest user / assistant turn may not be on disk yet when the subagent tool call fires. The fork tool flushes pending saves first via the `flushMessages` callback on `AgentToolExecutionContext` before cloning, so the fork actually carries the latest turn. Flush failures are non-fatal — the clone still runs.
 - **Parent thread untouched.** All subagent activity (messages, OM writes) lands on the fork. The parent thread is never appended to during a forked subagent run.
