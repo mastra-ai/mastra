@@ -106,6 +106,18 @@ export type {
   WorkspaceResolvedPath,
   WorkspaceRootDescriptor,
 } from './workspace-policy';
+export { createWorkspaceRestorePlan, workspaceRestoreEntryMatchesScope } from './workspace-restore';
+export type {
+  CreateWorkspaceRestorePlanOptions,
+  WorkspaceRestoreAffectedPath,
+  WorkspaceRestoreConflict,
+  WorkspaceRestoreConflictStatus,
+  WorkspaceRestorePlan,
+  WorkspaceRestorePlanStep,
+  WorkspaceRestoreScope,
+  WorkspaceRestoreStepKind,
+  WorkspaceRestoreStepStatus,
+} from './workspace-restore';
 
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version

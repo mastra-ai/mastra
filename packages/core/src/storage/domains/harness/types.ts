@@ -515,6 +515,15 @@ export interface WorkspaceActionJournalEntry {
    */
   traceId?: string;
   spanId?: string;
+  /**
+   * Producer-specific action evidence. Harness restore planning treats
+   * `result.before` as the pre-action file state for file mutations:
+   * `null` means the file did not exist, while an absent key means the
+   * producer did not capture enough evidence for automatic restore planning.
+   * Rename producers must set `result.toBefore` to the pre-action destination
+   * state for automatic restore planning; `null` means the target path did not
+   * exist before the rename.
+   */
   result?: JsonValue;
   createdAt: number;
 }
