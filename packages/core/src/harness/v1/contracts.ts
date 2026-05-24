@@ -23,7 +23,13 @@
  *   - {@link OperationAdmissionEvidence} (admission evidence)
  */
 
-import type { JsonValue, TokenUsage } from '../../storage/domains/harness';
+import type {
+  HarnessOperationAdmissionEvidence,
+  InboxResponseReceipt,
+  JsonValue,
+  TokenUsage,
+  WorkspaceActionJournalEntry,
+} from '../../storage/domains/harness';
 
 // ---------------------------------------------------------------------------
 // Task — what is being attempted.
@@ -132,13 +138,38 @@ export interface TaskIndexEntry {
 // Field-mapping table — PF-631 deliverable §2.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Evidence — durable proof of admission, action, approval, completion.
+// ---------------------------------------------------------------------------
+
+/** Discriminator on {@link HarnessEvidence}. */
+export type HarnessEvidenceKind = 'admission' | 'workspace-action' | 'inbox-receipt';
+
+/**
+ * Canonical public union over durable proof rows accumulated during
+ * a Harness v1 session. Wraps the three existing source shapes —
+ * {@link HarnessOperationAdmissionEvidence} (admission / result /
+ * tombstone), {@link WorkspaceActionJournalEntry} (workspace audit),
+ * and {@link InboxResponseReceipt} (approval / question /
+ * sandbox-access decisions) — under a single tagged discriminator
+ * so consumers narrow on `evidenceKind` instead of property
+ * presence-checks.
+ *
+ * The wrapper is read-side only — existing storage rows are
+ * unchanged. Adapters wrap when surfacing evidence to public
+ * consumers; the underlying persisted shape stays as-is.
+ */
+export type HarnessEvidence =
+  | { evidenceKind: 'admission'; admission: HarnessOperationAdmissionEvidence }
+  | { evidenceKind: 'workspace-action'; entry: WorkspaceActionJournalEntry }
+  | { evidenceKind: 'inbox-receipt'; receipt: InboxResponseReceipt };
+
 /**
  * Documentation-only type. Maps every pre-existing identifier in the
  * harness to the canonical primitive it belongs to. Cells that
- * reference types not yet shipped (`HarnessEvidence`,
- * `PendingInteraction`) point at primitives introduced by later
- * slices in this same ticket — they are forward references, not
- * dangling links.
+ * reference `PendingInteraction` point at a primitive introduced by
+ * a later slice in this same ticket — it is a forward reference, not
+ * a dangling link.
  *
  * | Existing identifier             | Canonical primitive                                              |
  * | ------------------------------- | ---------------------------------------------------------------- |
@@ -149,7 +180,7 @@ export interface TaskIndexEntry {
  * | `admissionId` (queue / message) | {@link HarnessTask}.admissionId                                  |
  * | `signalId` (`session.signal`)   | Auxiliary id on signal admissions; carried alongside `admissionId` on `AgentSignalAccepted` — NOT folded into `HarnessTask.admissionId` |
  * | `queuedItemId`                  | {@link TaskIndexEntry}.queuedItemId                              |
- * | `WorkspaceActionJournalEntry.id`| Identifies one row in the workspace journal — surfaced via `HarnessEvidence` once that union is introduced |
+ * | `WorkspaceActionJournalEntry.id`| Identifies one row in the workspace journal — surfaced via {@link HarnessEvidence} (`evidenceKind: 'workspace-action'`) |
  * | `subagentSessionId`             | {@link HarnessTask}.sessionId on the child Task                  |
  * | `goalId`                        | `metadata.goalId` on {@link HarnessTask}                         |
  * | `PendingResume.itemId`          | The durable wait-point id. A later slice re-exports `PendingResume` as `PendingInteraction` — the field name does not change |

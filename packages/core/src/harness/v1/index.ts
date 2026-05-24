@@ -253,6 +253,8 @@ export type {
   HarnessRunFinishReason,
   TaskIndexEntry,
   TaskIdFieldMapping,
+  HarnessEvidence,
+  HarnessEvidenceKind,
 } from './contracts';
 
 export type {

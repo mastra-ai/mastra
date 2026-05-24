@@ -39,7 +39,7 @@ import type {
   ListSessionsInput,
   ListWorkspaceActionJournalInput,
   LoadedAttachment,
-  OperationAdmissionEvidence,
+  HarnessOperationAdmissionEvidence,
   OperationAdmissionTombstone,
   ProviderCallbackSelectorKind,
   QueueAdmissionReceipt,
@@ -815,7 +815,7 @@ export abstract class HarnessStorage extends StorageDomain {
     attemptedAdmissionHash: string;
   }): Promise<{
     status: 'none' | 'duplicate' | 'conflict';
-    evidence?: OperationAdmissionEvidence;
+    evidence?: HarnessOperationAdmissionEvidence;
     storedAdmissionHash?: string;
   }>;
 

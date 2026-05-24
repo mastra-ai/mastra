@@ -1022,12 +1022,28 @@ export interface OperationAdmissionTombstone {
   expiresAt: number;
 }
 
-export type OperationAdmissionEvidence =
+/**
+ * Narrow union of the five admission/result/tombstone shapes the
+ * storage layer hands back from `resolveOperationAdmissionEvidence`.
+ * Scoped intentionally — this type does NOT cover the broader work
+ * proof a Harness v1 session accumulates (workspace journal entries,
+ * inbox response receipts, …). Use `HarnessEvidence` from
+ * `@mastra/core/harness/v1` when you need the wide canonical union.
+ */
+export type HarnessOperationAdmissionEvidence =
   | AgentSignalAccepted
   | AgentSignalResultEvidence
   | AgentSignalResultStatus
   | QueueAdmissionReceipt
   | OperationAdmissionTombstone;
+
+/**
+ * @deprecated Renamed to {@link HarnessOperationAdmissionEvidence} for
+ * scope clarity. The new alias `HarnessEvidence` (in
+ * `@mastra/core/harness/v1`) covers the broader work-evidence union;
+ * this name is admission-only and is preserved for back-compat.
+ */
+export type OperationAdmissionEvidence = HarnessOperationAdmissionEvidence;
 
 // ---------------------------------------------------------------------------
 // Attachment metadata

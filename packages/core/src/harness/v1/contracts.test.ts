@@ -10,6 +10,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  HarnessOperationAdmissionEvidence,
+  InboxResponseReceipt,
+  OperationAdmissionEvidence,
+  WorkspaceActionJournalEntry,
+} from '../../storage/domains/harness';
+import type {
+  HarnessEvidence,
+  HarnessEvidenceKind,
   HarnessRun,
   HarnessRunFinishReason,
   HarnessTask,
@@ -82,5 +90,72 @@ describe('Harness v1 canonical contracts', () => {
     expect(entry.runId).toBeUndefined();
     expect(entry.queuedItemId).toBeUndefined();
     expect(entry.a2aTaskId).toBeUndefined();
+  });
+
+  it('HarnessEvidenceKind enumerates the three proof sources', () => {
+    const kinds: HarnessEvidenceKind[] = ['admission', 'workspace-action', 'inbox-receipt'];
+    expect(kinds).toHaveLength(3);
+  });
+
+  it('HarnessEvidence narrows on evidenceKind', () => {
+    const admission: HarnessEvidence = {
+      evidenceKind: 'admission',
+      admission: {
+        runId: 'run-1',
+        signalId: 'sig-1',
+        duplicate: false,
+      },
+    };
+    const workspaceEntry: WorkspaceActionJournalEntry = {
+      id: 'wa-1',
+      harnessName: 'h',
+      sessionId: 'sess-1',
+      resourceId: 'r-1',
+      threadId: 't-1',
+      actionKind: 'file',
+      action: { op: 'read', path: '/tmp/x' },
+      policyDecision: 'allow',
+      policyReasons: [],
+      matchedRules: [],
+      createdAt: 0,
+    };
+    const workspace: HarnessEvidence = { evidenceKind: 'workspace-action', entry: workspaceEntry };
+
+    const inboxReceipt: InboxResponseReceipt = {
+      responseId: 'resp-1',
+      responseHash: 'hash-1',
+      resumeAttemptId: 'attempt-1',
+      itemId: 'item-1',
+      kind: 'tool-approval',
+      runId: 'run-1',
+      toolCallId: 'tc-1',
+      pendingRequestedAt: 0,
+      response: { approved: true },
+      status: 'accepted',
+      acceptedAt: 0,
+      updatedAt: 0,
+    };
+    const inbox: HarnessEvidence = { evidenceKind: 'inbox-receipt', receipt: inboxReceipt };
+
+    function describeEvidence(e: HarnessEvidence): string {
+      switch (e.evidenceKind) {
+        case 'admission':
+          return `admission:${e.admission.signalId ?? 'n/a'}`;
+        case 'workspace-action':
+          return `workspace:${e.entry.id}`;
+        case 'inbox-receipt':
+          return `inbox:${e.receipt.responseId}`;
+      }
+    }
+
+    expect(describeEvidence(admission)).toBe('admission:sig-1');
+    expect(describeEvidence(workspace)).toBe('workspace:wa-1');
+    expect(describeEvidence(inbox)).toBe('inbox:resp-1');
+  });
+
+  it('OperationAdmissionEvidence (deprecated) resolves to HarnessOperationAdmissionEvidence', () => {
+    const sample: HarnessOperationAdmissionEvidence = { runId: 'r', signalId: 's', duplicate: false };
+    const aliased: OperationAdmissionEvidence = sample;
+    expect(aliased).toBe(sample);
   });
 });
