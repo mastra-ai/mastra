@@ -957,10 +957,14 @@ export class Session {
     if (opts.epoch.length === 0) {
       throw new HarnessValidationError('listEventsAfter().epoch', 'epoch must be a non-empty string');
     }
-    if (!Number.isSafeInteger(opts.afterSequence) || opts.afterSequence < 0) {
+    // afterSequence is exclusive (`sequence > afterSequence`), so the lower
+    // bound `-1` means "from the first event in the epoch" — sequences are
+    // minted starting at 0 (see `EventEmitter` constructor + `formatHarnessEventId`).
+    // Reject anything below -1 (no defined meaning) and non-safe-integers.
+    if (!Number.isSafeInteger(opts.afterSequence) || opts.afterSequence < -1) {
       throw new HarnessValidationError(
         'listEventsAfter().afterSequence',
-        'afterSequence must be a non-negative safe integer',
+        'afterSequence must be a safe integer >= -1 (use -1 to replay from the first event)',
       );
     }
     if (!Number.isSafeInteger(opts.limit) || opts.limit < 1) {

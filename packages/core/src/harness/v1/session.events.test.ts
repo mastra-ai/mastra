@@ -241,6 +241,74 @@ describe('Session.subscribe()', () => {
       await resumed.shutdown();
     }
   });
+
+  // -------------------------------------------------------------------------
+  // Replay cursor — the public listEventsAfter() API must let a caller fetch
+  // sequence 0 (the very first event in an epoch). The storage layer uses
+  // `sequence > afterSequence` semantics, so "from the beginning" requires
+  // `afterSequence: -1`. Earlier versions rejected negative values, leaving
+  // sequence 0 unreachable through the public API.
+  // -------------------------------------------------------------------------
+
+  it('Session.listEventsAfter accepts afterSequence=-1 to replay from the first event', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.message({ content: 'hi' });
+    await session._flushEventPersistence();
+
+    const state = await session.getEventReplayState();
+    expect(state).not.toBeNull();
+
+    const rows = await session.listEventsAfter({
+      epoch: state!.epoch,
+      afterSequence: -1,
+      limit: 100,
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]!.sequence).toBe(0);
+
+    const fromZero = await session.listEventsAfter({
+      epoch: state!.epoch,
+      afterSequence: 0,
+      limit: 100,
+    });
+    // afterSequence=0 still means "strictly after sequence 0", which is the
+    // documented (exclusive) cursor contract — pin both halves.
+    expect(fromZero.find(row => row.sequence === 0)).toBeUndefined();
+    expect(fromZero.length).toBe(rows.length - 1);
+  });
+
+  it('Session.listEventsAfter rejects afterSequence < -1', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.listEventsAfter({ epoch: 'any', afterSequence: -2, limit: 1 })).rejects.toThrow(
+      /afterSequence/,
+    );
+  });
+
+  it('Harness.listSessionEventsAfter accepts afterSequence=-1 (no-validation pass-through)', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.message({ content: 'hi' });
+    await session._flushEventPersistence();
+
+    const state = await harness.getSessionEventReplayState({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+    });
+    expect(state).not.toBeNull();
+
+    const rows = await harness.listSessionEventsAfter({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      epoch: state!.epoch,
+      afterSequence: -1,
+      limit: 100,
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]!.sequence).toBe(0);
+  });
 });
 
 describe('Session events — fullStream drain', () => {
