@@ -134,7 +134,29 @@ If the ACP agent requests permission, the tool can suspend and resume through Ma
 
 ## Model selection
 
-ACP agents may expose selectable models. Pass a `model` ID to select one programmatically instead of relying on environment variables.
+ACP agents may expose selectable models. Instead of setting an environment variable like `ANTHROPIC_MODEL`, you can pass a `model` ID directly in the configuration.
+
+### Discover available models
+
+Call `getAvailableModels()` to see which models the ACP agent supports. This starts the agent process and returns the model list from the session:
+
+```typescript title="src/mastra/agents/code-agent.ts"
+import { AcpAgent } from '@mastra/acp'
+
+const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'An ACP-compatible coding agent',
+  command: 'claude',
+  args: ['--acp'],
+})
+
+const models = await codeAgent.getAvailableModels()
+// [{ modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet' }, ...]
+```
+
+### Set the model
+
+Pass the `model` option to select a model at connection time:
 
 ```typescript title="src/mastra/agents/code-agent.ts"
 import { AcpAgent } from '@mastra/acp'
@@ -148,14 +170,13 @@ export const codeAgent = new AcpAgent({
 })
 ```
 
-The model is set via the ACP `session/set_model` method after the session is created. The ACP agent must support model selection for this option to take effect.
+If the ACP agent advertises available models and your `model` value doesn't match any of them, Mastra throws an error listing the valid options:
 
-Call `getAvailableModels()` to discover which models the ACP agent supports:
-
-```typescript
-const models = await codeAgent.getAvailableModels()
-// [{ modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet' }, ...]
 ```
+Model "bad-model-id" is not available. Available models: claude-sonnet-4-20250514, claude-haiku-4-20250514
+```
+
+If the agent doesn't advertise a model list, the value is passed through without validation.
 
 ## Session lifecycle
 
