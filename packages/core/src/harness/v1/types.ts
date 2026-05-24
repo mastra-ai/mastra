@@ -196,6 +196,8 @@ export function actorKey(actor: HarnessActorIdentity): string {
  */
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
+export type HarnessQueueBackpressurePolicy = 'reject' | 'drop-oldest';
+
 /**
  * Catalog entry exposed through `harness.models.*` (§9). Purely a UX
  * surface — the harness does not interpret these fields, it only stores
@@ -961,6 +963,15 @@ export interface HarnessConfigCommon {
      * Capacity check + durable append are atomic per session. Defaults to 100.
      */
     maxQueueDepth?: number;
+
+    /**
+     * Queue-full behavior. `reject` preserves the historical behavior and
+     * throws `HarnessQueueFullError` when the session queue is full.
+     * `drop-oldest` removes the oldest waiting queued item and records a
+     * `queue_full_dropped` event before admitting the replacement. The active
+     * queued head is never dropped by backpressure.
+     */
+    queueBackpressure?: HarnessQueueBackpressurePolicy;
 
     /**
      * Milliseconds allowed after the durable `closingAt` marker commits for

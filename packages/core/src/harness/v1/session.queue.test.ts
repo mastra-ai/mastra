@@ -27,6 +27,7 @@ import { InMemoryStore } from '../../storage/mock';
 import { extractSignalContents, MockAgent, setupHarness } from './__test-utils__';
 import {
   HarnessAdmissionConflictError,
+  HarnessQueueFullDroppedError,
   HarnessQueueFullError,
   HarnessSessionDeletedError,
   HarnessValidationError,
@@ -214,6 +215,180 @@ describe('Session.queue() — admission', () => {
     agent.enqueueRun({ finishReason: 'stop', runId: 'r1', text: 'done' });
     await session.respondToToolApproval({ approved: true });
     await first;
+    await session.close();
+  });
+
+  it('drop-oldest backpressure removes the oldest waiting item and admits the replacement', async () => {
+    const { harness } = setupHarness({ sessions: { maxQueueDepth: 1, queueBackpressure: 'drop-oldest' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => events.push(e));
+    const first = session.queue({
+      content: 'first',
+      admissionId: 'queue-drop-oldest-first',
+      notBefore: Date.now() + 60_000,
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const second = await session.admitQueue({
+      content: 'second',
+      admissionId: 'queue-drop-oldest-second',
+      notBefore: Date.now() + 60_000,
+    });
+
+    await expect(first).rejects.toBeInstanceOf(HarnessQueueFullDroppedError);
+    expect(session.getRecord().pendingQueue).toEqual([
+      expect.objectContaining({ id: second.queuedItemId, admissionId: 'queue-drop-oldest-second' }),
+    ]);
+    expect(session.getRecord().queueAdmissionReceipts?.[second.queuedItemId]?.status).toBe('queued');
+    const droppedReceipt = Object.values(session.getRecord().queueAdmissionReceipts ?? {}).find(
+      receipt => receipt.admissionId === 'queue-drop-oldest-first',
+    );
+    expect(droppedReceipt).toMatchObject({
+      status: 'failed',
+      error: expect.objectContaining({ code: 'harness.queue_full_dropped' }),
+    });
+    expect(events.find(e => e.type === 'queue_full_dropped')).toMatchObject({
+      source: 'queue',
+      policy: 'drop-oldest',
+      maxQueueDepth: 1,
+      admissionId: 'queue-drop-oldest-first',
+      replacementAdmissionId: 'queue-drop-oldest-second',
+    });
+    await session.cancelQueuedItem({ queuedItemId: second.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('rejects queue() if backpressure dropped the item before the local resolver was registered', async () => {
+    const { harness } = setupHarness({ sessions: { maxQueueDepth: 1, queueBackpressure: 'drop-oldest' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const admitQueue = (session as any)._admitQueue.bind(session);
+    vi.spyOn(session as any, '_admitQueue').mockImplementation(async (...args: any[]) => {
+      const admission = await admitQueue(...args);
+      const now = Date.now();
+      await (session as any)._flushUpdate((prev: any) => ({
+        ...prev,
+        pendingQueue: (prev.pendingQueue ?? []).filter((item: { id: string }) => item.id !== admission.queuedItemId),
+        queueAdmissionReceipts: {
+          ...(prev.queueAdmissionReceipts ?? {}),
+          [admission.queuedItemId]: {
+            ...prev.queueAdmissionReceipts[admission.queuedItemId],
+            status: 'failed',
+            error: {
+              code: 'harness.queue_full_dropped',
+              message: `Queued item "${admission.queuedItemId}" was dropped because the session queue was full`,
+            },
+            failedAt: now,
+            updatedAt: now,
+          },
+        },
+      }));
+      return admission;
+    });
+
+    await expect(session.queue({ content: 'first' })).rejects.toBeInstanceOf(HarnessQueueFullDroppedError);
+    await session.close();
+  });
+
+  it('drop-oldest backpressure preserves a rehydrated suspended queued head', async () => {
+    const { harness } = setupHarness({ sessions: { maxQueueDepth: 1, queueBackpressure: 'drop-oldest' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const now = Date.now();
+    const queuedItemId = 'q-suspended-head';
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        {
+          id: queuedItemId,
+          admissionId: 'suspended-head',
+          admissionHash: 'hash-suspended-head',
+          enqueuedAt: now,
+          content: 'resume me',
+          attachments: [],
+        },
+      ],
+      pendingResume: {
+        kind: 'tool-approval',
+        itemId: 'tool-approval:tc-suspended-head',
+        runId: 'run-suspended-head',
+        toolCallId: 'tc-suspended-head',
+        toolName: 'shell',
+        source: 'parent',
+        requestedAt: now,
+        queuedItemId,
+        payload: { input: { cmd: 'echo hold' } },
+      },
+      queueAdmissionReceipts: {
+        ...(prev.queueAdmissionReceipts ?? {}),
+        [queuedItemId]: {
+          admissionId: 'suspended-head',
+          admissionHash: 'hash-suspended-head',
+          queuedItemId,
+          status: 'accepted',
+          runId: 'run-suspended-head',
+          signalId: 'signal-suspended-head',
+          attempts: 1,
+          enqueuedAt: now,
+          acceptedAt: now,
+          updatedAt: now,
+        },
+      },
+    }));
+
+    await expect(session.admitQueue({ content: 'replacement', admissionId: 'replacement' })).rejects.toBeInstanceOf(
+      HarnessQueueFullError,
+    );
+    expect(session.getRecord().pendingQueue).toEqual([expect.objectContaining({ id: queuedItemId })]);
+    expect(session.getRecord().pendingResume).toMatchObject({ queuedItemId });
+    expect(session.getRecord().queueAdmissionReceipts?.[queuedItemId]?.status).toBe('accepted');
+    await (session as any)._flushUpdate((prev: any) => {
+      const next = { ...prev, pendingQueue: [] };
+      delete next.pendingResume;
+      return next;
+    });
+    await session.close();
+  });
+
+  it('drop-oldest backpressure preserves accepted queued items awaiting recovery', async () => {
+    const { harness } = setupHarness({ sessions: { maxQueueDepth: 1, queueBackpressure: 'drop-oldest' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const now = Date.now();
+    const queuedItemId = 'q-accepted-recovery';
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        {
+          id: queuedItemId,
+          admissionId: 'accepted-recovery',
+          admissionHash: 'hash-accepted-recovery',
+          enqueuedAt: now,
+          content: 'recover me',
+          attachments: [],
+        },
+      ],
+      queueAdmissionReceipts: {
+        ...(prev.queueAdmissionReceipts ?? {}),
+        [queuedItemId]: {
+          admissionId: 'accepted-recovery',
+          admissionHash: 'hash-accepted-recovery',
+          queuedItemId,
+          status: 'accepted',
+          runId: 'run-accepted-recovery',
+          signalId: 'signal-accepted-recovery',
+          attempts: 1,
+          enqueuedAt: now,
+          acceptedAt: now,
+          updatedAt: now,
+        },
+      },
+    }));
+
+    await expect(
+      session.admitQueue({ content: 'replacement', admissionId: 'replacement-after-accepted' }),
+    ).rejects.toBeInstanceOf(HarnessQueueFullError);
+    expect(session.getRecord().pendingQueue).toEqual([expect.objectContaining({ id: queuedItemId })]);
+    expect(session.getRecord().queueAdmissionReceipts?.[queuedItemId]?.status).toBe('accepted');
+    await (session as any)._flushUpdate((prev: any) => ({ ...prev, pendingQueue: [] }));
     await session.close();
   });
 

@@ -18,6 +18,7 @@ import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
+import { HarnessConfigError } from './errors';
 import { Harness } from './harness';
 
 function makeAgent() {
@@ -84,5 +85,15 @@ describe('Harness constructor — unknown HarnessConfig keys', () => {
       storage: undefined,
     } as any);
     expect(warnSpy.mock.calls.filter(c => String(c[0]).includes('[mastra:harness] ignoring unknown'))).toHaveLength(0);
+  });
+
+  it('rejects unknown queue backpressure policies', () => {
+    expect(
+      () =>
+        new Harness({
+          ...minimalValidConfig(),
+          sessions: { ...minimalValidConfig().sessions, queueBackpressure: 'block' as any },
+        }),
+    ).toThrow(HarnessConfigError);
   });
 });

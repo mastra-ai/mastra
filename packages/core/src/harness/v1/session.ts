@@ -86,6 +86,7 @@ import {
   HarnessInboxResponseConflictError,
   HarnessGoalJudgeFailedError,
   HarnessOverrideConflictError,
+  HarnessQueueFullDroppedError,
   HarnessQueueFullError,
   HarnessSessionCancelledError,
   HarnessSessionClosedError,
@@ -527,6 +528,16 @@ function withActionCatalogMcpListTimeout<T>(run: (abortSignal: AbortSignal) => P
 }
 
 export type SessionLifecycleState = 'live' | 'closing' | 'closed' | 'deleted' | 'evicted';
+
+interface QueueBackpressureDrop {
+  queuedItemId: string;
+  admissionId?: string;
+  replacementQueuedItemId?: string;
+  replacementAdmissionId?: string;
+  maxQueueDepth: number;
+  source: 'queue' | 'goal';
+  goalId?: string;
+}
 
 /**
  * System prompt for the goal judge. Lifted verbatim from
@@ -5943,11 +5954,6 @@ export class Session {
    */
   private async _enqueueGoalContinuation(goal: GoalState, content: string): Promise<void> {
     const cap = this._harness._internalMaxQueueDepth;
-    if ((this._record.pendingQueue?.length ?? 0) >= cap) {
-      // Drop continuation silently — user activity has filled the queue,
-      // we'll re-judge after they drain. Better than failing the judge call.
-      return;
-    }
     const item: QueuedItem = {
       id: `q-${randomUUID()}`,
       enqueuedAt: Date.now(),
@@ -5957,10 +5963,34 @@ export class Session {
       source: 'goal',
       goalId: goal.id,
     };
-    await this._flushUpdate(prev => ({
-      ...prev,
-      pendingQueue: [...(prev.pendingQueue ?? []), item],
-    }));
+    const droppedItems: QueueBackpressureDrop[] = [];
+    let admitted = false;
+    await this._flushUpdate(prev =>
+      this._applyQueueBackpressureForAppend(prev, {
+        item,
+        receipt: undefined,
+        maxQueueDepth: cap,
+        source: 'goal',
+        goalId: goal.id,
+        droppedItems,
+        onRejected: () => {
+          admitted = false;
+        },
+        onAdmitted: () => {
+          admitted = true;
+        },
+      }),
+    );
+    this._emitQueueBackpressureDrops(droppedItems);
+    if (!admitted) {
+      this._emitQueueFullRejected({
+        source: 'goal',
+        policy: this._harness._internalQueueBackpressure,
+        maxQueueDepth: cap,
+        goalId: goal.id,
+      });
+      return;
+    }
     void this._maybeDrainQueue();
   }
 
@@ -7759,6 +7789,13 @@ export class Session {
 
     const queued = createDeferred<AgentResult>();
     const promise = queued.promise;
+    const currentReceipt = this._record.queueAdmissionReceipts?.[admission.queuedItemId];
+    if (currentReceipt?.status === 'failed' && currentReceipt.error?.code === 'harness.queue_full_dropped') {
+      queued.reject(new HarnessQueueFullDroppedError(admission.queuedItemId));
+      void promise.catch(() => {});
+      return promise;
+    }
+
     this._queueResolvers.set(admission.queuedItemId, { promise, resolve: queued.resolve, reject: queued.reject });
     // Kick the drain — fire-and-forget. Drain handles its own errors and
     // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
@@ -7835,7 +7872,8 @@ export class Session {
     }
 
     const cap = this._harness._internalMaxQueueDepth;
-    if ((this._record.pendingQueue?.length ?? 0) >= cap) {
+    const queueBackpressure = this._harness._internalQueueBackpressure;
+    if (queueBackpressure === 'reject' && (this._record.pendingQueue?.length ?? 0) >= cap) {
       throw new HarnessQueueFullError(this.id, cap);
     }
     const queuedItemId = this._queueAdmissionQueuedItemId(admissionId);
@@ -7866,6 +7904,7 @@ export class Session {
         sourceId: item.id,
       }));
     let admittedReceipt: QueueAdmissionReceipt | undefined;
+    const droppedItems: QueueBackpressureDrop[] = [];
     const receipt: QueueAdmissionReceipt = {
       admissionId,
       admissionHash,
@@ -7899,17 +7938,16 @@ export class Session {
           if (prev.closingAt !== undefined || this.isClosing) {
             throw new HarnessSessionClosingError(this.id);
           }
-          if ((prev.pendingQueue?.length ?? 0) >= cap) {
+          if (queueBackpressure === 'reject' && (prev.pendingQueue?.length ?? 0) >= cap) {
             throw new HarnessQueueFullError(this.id, cap);
           }
-          return {
-            ...prev,
-            pendingQueue: [...(prev.pendingQueue ?? []), item],
-            queueAdmissionReceipts: {
-              ...(prev.queueAdmissionReceipts ?? {}),
-              [item.id]: receipt,
-            },
-          };
+          return this._applyQueueBackpressureForAppend(prev, {
+            item,
+            receipt,
+            maxQueueDepth: cap,
+            source: 'queue',
+            droppedItems,
+          });
         },
         { attachmentReferences },
       );
@@ -7925,6 +7963,7 @@ export class Session {
       return { queuedItemId: admittedReceipt.queuedItemId, evidence: admittedReceipt, duplicate: true };
     }
 
+    this._emitQueueBackpressureDrops(droppedItems);
     return { queuedItemId: item.id, evidence: receipt, duplicate: false };
   }
 
@@ -8133,6 +8172,142 @@ export class Session {
         throw new HarnessValidationError(`${methodName}.${field}`, 'must be a finite JSON number other than -0');
       }
     }
+  }
+
+  private _applyQueueBackpressureForAppend(
+    prev: SessionRecord,
+    opts: {
+      item: QueuedItem;
+      receipt?: QueueAdmissionReceipt;
+      maxQueueDepth: number;
+      source: 'queue' | 'goal';
+      goalId?: string;
+      droppedItems: QueueBackpressureDrop[];
+      onRejected?: () => void;
+      onAdmitted?: () => void;
+    },
+  ): SessionRecord {
+    const policy = this._harness._internalQueueBackpressure;
+    const activeId = this._currentQueuedItemId ?? prev.pendingResume?.queuedItemId;
+    const queue = [...(prev.pendingQueue ?? [])];
+    const existingReceipts = prev.queueAdmissionReceipts ?? {};
+    let nextReceipts: Record<string, QueueAdmissionReceipt> | undefined;
+    const now = opts.item.enqueuedAt;
+
+    while (queue.length >= opts.maxQueueDepth) {
+      if (policy === 'reject') {
+        opts.onRejected?.();
+        return prev;
+      }
+
+      let dropIdx = -1;
+      let dropEnqueuedAt = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < queue.length; i += 1) {
+        const candidate = queue[i]!;
+        if (activeId !== undefined && candidate.id === activeId) continue;
+        const receipt = existingReceipts[candidate.id];
+        if (receipt !== undefined && receipt.status !== 'queued') continue;
+        if (candidate.enqueuedAt < dropEnqueuedAt) {
+          dropIdx = i;
+          dropEnqueuedAt = candidate.enqueuedAt;
+        }
+      }
+      if (dropIdx < 0) {
+        if (opts.source === 'goal') {
+          opts.onRejected?.();
+          return prev;
+        }
+        throw new HarnessQueueFullError(this.id, opts.maxQueueDepth);
+      }
+
+      const [dropped] = queue.splice(dropIdx, 1);
+      if (!dropped) continue;
+      opts.droppedItems.push({
+        queuedItemId: dropped.id,
+        ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
+        replacementQueuedItemId: opts.item.id,
+        ...(opts.item.admissionId !== undefined ? { replacementAdmissionId: opts.item.admissionId } : {}),
+        maxQueueDepth: opts.maxQueueDepth,
+        source: opts.source,
+        ...(opts.goalId !== undefined ? { goalId: opts.goalId } : {}),
+      });
+
+      const receipt = existingReceipts[dropped.id];
+      if (receipt && !this._isTerminalQueueReceipt(receipt)) {
+        nextReceipts ??= { ...existingReceipts };
+        const dropError = new HarnessQueueFullDroppedError(dropped.id);
+        nextReceipts[dropped.id] = {
+          ...receipt,
+          status: 'failed',
+          error: projectHarnessPublicError(dropError),
+          failedAt: receipt.failedAt ?? now,
+          updatedAt: now,
+        };
+      }
+    }
+
+    opts.onAdmitted?.();
+    const next: SessionRecord = {
+      ...prev,
+      pendingQueue: [...queue, opts.item],
+    };
+    if (opts.receipt !== undefined) {
+      next.queueAdmissionReceipts = {
+        ...(nextReceipts ?? existingReceipts),
+        [opts.item.id]: opts.receipt,
+      };
+    } else if (nextReceipts !== undefined) {
+      next.queueAdmissionReceipts = nextReceipts;
+    }
+    return next;
+  }
+
+  private _emitQueueBackpressureDrops(droppedItems: QueueBackpressureDrop[]): void {
+    for (const dropped of droppedItems) {
+      this._emitter.emit({
+        type: 'queue_full_dropped',
+        source: dropped.source,
+        policy: 'drop-oldest',
+        maxQueueDepth: dropped.maxQueueDepth,
+        queuedItemId: dropped.queuedItemId,
+        ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
+        ...(dropped.replacementQueuedItemId !== undefined
+          ? { replacementQueuedItemId: dropped.replacementQueuedItemId }
+          : {}),
+        ...(dropped.replacementAdmissionId !== undefined
+          ? { replacementAdmissionId: dropped.replacementAdmissionId }
+          : {}),
+        ...(dropped.goalId !== undefined ? { goalId: dropped.goalId } : {}),
+      } as EmitInput);
+      const resolver = this._queueResolvers.get(dropped.queuedItemId);
+      if (resolver) {
+        this._queueResolvers.delete(dropped.queuedItemId);
+        resolver.reject(new HarnessQueueFullDroppedError(dropped.queuedItemId));
+      }
+    }
+  }
+
+  private _emitQueueFullRejected(opts: {
+    source: 'queue' | 'goal';
+    policy?: 'reject' | 'drop-oldest';
+    maxQueueDepth: number;
+    goalId?: string;
+    queuedItemId?: string;
+    admissionId?: string;
+  }): void {
+    this._emitter.emit({
+      type: 'queue_full_dropped',
+      source: opts.source,
+      policy: opts.policy ?? 'reject',
+      maxQueueDepth: opts.maxQueueDepth,
+      ...(opts.queuedItemId !== undefined ? { queuedItemId: opts.queuedItemId } : {}),
+      ...(opts.admissionId !== undefined ? { admissionId: opts.admissionId } : {}),
+      ...(opts.goalId !== undefined ? { goalId: opts.goalId } : {}),
+    } as EmitInput);
+  }
+
+  private _isTerminalQueueReceipt(receipt: QueueAdmissionReceipt): boolean {
+    return receipt.status === 'completed' || receipt.status === 'failed' || receipt.status === 'dead';
   }
 
   private async _updateQueueAdmissionReceipt(

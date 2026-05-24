@@ -554,6 +554,18 @@ export interface QueueItemExpiredEvent extends HarnessEventBase {
   deadline: number;
 }
 
+export interface QueueFullDroppedEvent extends HarnessEventBase {
+  type: 'queue_full_dropped';
+  source: 'queue' | 'goal';
+  policy: 'reject' | 'drop-oldest';
+  maxQueueDepth: number;
+  queuedItemId?: string;
+  admissionId?: string;
+  replacementQueuedItemId?: string;
+  replacementAdmissionId?: string;
+  goalId?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Queue events (§10.2). The queue's lifecycle is: `enqueued → started →
 // removed`. Outcome is observable through the turn's own `agent_end`
@@ -868,6 +880,7 @@ export type HarnessEvent =
   | TaskCancellationRequestedEvent
   | QueueItemCancelledEvent
   | QueueItemExpiredEvent
+  | QueueFullDroppedEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
   | ThreadCreatedEvent
@@ -1181,6 +1194,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'task_cancellation_requested',
   'queue_item_cancelled',
   'queue_item_expired',
+  'queue_full_dropped',
   'queue_item_started',
   'queue_item_replayed',
   'queue_item_failed',

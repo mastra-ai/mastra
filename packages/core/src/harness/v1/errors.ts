@@ -588,6 +588,18 @@ export class HarnessEventReplayUnsupportedError extends Error {
   }
 }
 
+export class HarnessQueueFullDroppedError extends Error {
+  readonly name = 'HarnessQueueFullDroppedError';
+  readonly code = 'harness.queue_full_dropped';
+  constructor(public readonly queuedItemId?: string) {
+    super(
+      queuedItemId
+        ? `Queued item "${queuedItemId}" was dropped because the session queue was full`
+        : 'Queued work was dropped because the session queue was full',
+    );
+  }
+}
+
 const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessConfigError: 'harness.validation',
   HarnessRuntimeDependencyDriftError: 'harness.runtime_dependency_drifted',
@@ -600,6 +612,7 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessSessionLockedError: 'harness.session_locked',
   HarnessValidationError: 'harness.validation',
   HarnessQueueFullError: 'harness.queue_full',
+  HarnessQueueFullDroppedError: 'harness.queue_full_dropped',
   HarnessAdmissionConflictError: 'harness.admission_conflict',
   HarnessInboxItemNotFoundError: 'harness.inbox_item_not_found',
   HarnessInboxResponseConflictError: 'harness.inbox_response_conflict',

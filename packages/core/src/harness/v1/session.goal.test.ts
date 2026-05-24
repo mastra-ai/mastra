@@ -312,6 +312,103 @@ describe('Session goal — continuation wording (TUI parity)', () => {
     expect(queued[0]!.source).toBe('goal');
   });
 
+  it('emits queue_full_dropped instead of silently dropping a goal continuation when queue is full', async () => {
+    const { harness } = setupHarness({
+      goals: { defaultJudgeModel: 'judge:test' },
+      sessions: { maxQueueDepth: 1 },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const existing = await session.admitQueue({
+      content: 'blocked user work',
+      admissionId: 'goal-full-existing',
+      notBefore: Date.now() + 60_000,
+    });
+    const events = record(session, ['queue_full_dropped']);
+
+    const goal = await session.setGoal({ objective: 'ship the thing' });
+
+    expect(session.getRecord().pendingQueue).toEqual([
+      expect.objectContaining({ id: existing.queuedItemId, admissionId: 'goal-full-existing' }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'queue_full_dropped',
+      source: 'goal',
+      policy: 'reject',
+      maxQueueDepth: 1,
+      goalId: goal.id,
+    });
+    await session.cancelQueuedItem({ queuedItemId: existing.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('drop-oldest backpressure admits a goal continuation and records the dropped queued item', async () => {
+    const { harness } = setupHarness({
+      goals: { defaultJudgeModel: 'judge:test' },
+      sessions: { maxQueueDepth: 1, queueBackpressure: 'drop-oldest' },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const existing = await session.admitQueue({
+      content: 'blocked user work',
+      admissionId: 'goal-drop-existing',
+      notBefore: Date.now() + 60_000,
+    });
+    const events = record(session, ['queue_full_dropped']);
+
+    const goal = await session.setGoal({ objective: 'ship the thing' });
+
+    const queue = session.getRecord().pendingQueue ?? [];
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ source: 'goal', goalId: goal.id });
+    expect(session.getRecord().queueAdmissionReceipts?.[existing.queuedItemId]).toMatchObject({
+      status: 'failed',
+      error: expect.objectContaining({ code: 'harness.queue_full_dropped' }),
+    });
+    expect(events[0]).toMatchObject({
+      type: 'queue_full_dropped',
+      source: 'goal',
+      policy: 'drop-oldest',
+      maxQueueDepth: 1,
+      queuedItemId: existing.queuedItemId,
+      admissionId: 'goal-drop-existing',
+      goalId: goal.id,
+    });
+    await session.cancelQueuedItem({ queuedItemId: queue[0]!.id, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('drop-oldest backpressure records a full goal queue when only the active queued head is present', async () => {
+    const { harness, agent } = setupHarness({
+      goals: { defaultJudgeModel: 'judge:test' },
+      sessions: { maxQueueDepth: 1, queueBackpressure: 'drop-oldest' },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'active-goal-head',
+      suspendPayload: { toolCallId: 'tc-active-goal-head', toolName: 'shell', args: { cmd: 'echo hold' } },
+    });
+    const active = session.queue({ content: 'active queued work' });
+    void active.catch(() => {});
+    await new Promise(resolve => setImmediate(resolve));
+    const events = record(session, ['queue_full_dropped']);
+
+    const goal = await session.setGoal({ objective: 'ship the thing' });
+
+    expect(session.getRecord().pendingQueue).toEqual([expect.objectContaining({ content: 'active queued work' })]);
+    expect(events[0]).toMatchObject({
+      type: 'queue_full_dropped',
+      source: 'goal',
+      policy: 'drop-oldest',
+      maxQueueDepth: 1,
+      goalId: goal.id,
+    });
+    agent.enqueueRun({ finishReason: 'stop', runId: 'active-goal-head', text: 'done' });
+    await session.respondToToolApproval({ approved: true });
+    await active;
+    await session.close();
+  });
+
   it('judge continue uses the [Goal attempt N/M] template wrapped in <system-reminder type="goal-judge">', async () => {
     const { harness, agent } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
