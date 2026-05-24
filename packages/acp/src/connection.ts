@@ -256,6 +256,13 @@ export class ACPConnection {
       }
 
       this.session = await this.connection.newSession(this.getNewSessionRequest());
+
+      if (this.options.model) {
+        await this.connection.unstable_setSessionModel({
+          sessionId: this.session.sessionId,
+          modelId: this.options.model,
+        });
+      }
     } catch (error) {
       this.disconnect();
       throw this.withStderr(error);

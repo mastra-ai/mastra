@@ -148,5 +148,24 @@ By default, the ACP workspace uses `cwd` as its filesystem root. Pass a Mastra `
 | `persistSession`      | `boolean`                        | Keep the ACP process alive after execution. Defaults to `true`.                        |
 | `onPermissionRequest` | `(request) => Promise<Response>` | Callback for ACP permission requests.                                                  |
 | `workspace`           | `Workspace`                      | Workspace used for ACP file reads and writes.                                          |
+| `model`               | `string`                         | Model ID to select after session creation via the ACP `session/set_model` method.      |
 
 `AcpAgent` also accepts `name` to set the display name used by Mastra agent delegation.
+
+## Configure the model
+
+ACP agents may expose selectable models. Pass a `model` ID to select one programmatically instead of relying on environment variables.
+
+```typescript
+import { AcpAgent } from '@mastra/acp';
+
+const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'An ACP-compatible coding agent',
+  command: 'claude',
+  args: ['--acp'],
+  model: 'claude-sonnet-4-20250514',
+});
+```
+
+The model is set via the ACP `session/set_model` method after the session is created. The ACP agent must support model selection for this option to take effect.

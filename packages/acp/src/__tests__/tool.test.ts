@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     authenticate = vi.fn().mockResolvedValue({});
     newSession = vi.fn().mockResolvedValue({ sessionId: 'session-1' });
     cancel = vi.fn().mockResolvedValue({});
+    unstable_setSessionModel = vi.fn().mockResolvedValue({});
     prompt = vi.fn(async () => {
       await onPrompt?.(this);
       return { stopReason: 'end_turn' };
@@ -287,6 +288,43 @@ describe('ACPConnection', () => {
 
     await expect(client.requestPermission(request)).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
     expect(handler).toHaveBeenCalledWith(request);
+  });
+
+  it('calls unstable_setSessionModel when model option is provided', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      args: ['--acp'],
+      model: 'claude-sonnet-4-20250514',
+      persistSession: true,
+    });
+
+    await connection.prompt('implement feature');
+    const acpConnection = mocks.connectionInstances[0];
+
+    expect(acpConnection?.unstable_setSessionModel).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      modelId: 'claude-sonnet-4-20250514',
+    });
+  });
+
+  it('does not call unstable_setSessionModel when model option is omitted', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    await connection.prompt('implement feature');
+    const acpConnection = mocks.connectionInstances[0];
+
+    expect(acpConnection?.unstable_setSessionModel).not.toHaveBeenCalled();
   });
 });
 
