@@ -542,6 +542,18 @@ export class HarnessArtifactAttachmentMissingError extends Error {
 }
 
 /**
+ * `harness.permissions.applyProfile({ profileName })` was called with a
+ * profile name that is not registered in the harness preset map.
+ */
+export class HarnessPermissionProfileNotFoundError extends Error {
+  readonly name = 'HarnessPermissionProfileNotFoundError';
+  readonly code = 'harness.permission_profile_not_found';
+  constructor(public readonly profileName: string) {
+    super(`Permission profile "${profileName}" is not registered`);
+  }
+}
+
+/**
  * Replay-aware Session/Harness APIs (`listEventsAfter`,
  * `getEventReplayState`, `listSessionEventsAfter`,
  * `getSessionEventReplayState`) were called against a storage adapter
@@ -602,6 +614,7 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessArtifactVersionConflictError: 'harness.artifact_version_conflict',
   HarnessArtifactDuplicateIdError: 'harness.artifact_duplicate_id',
   HarnessArtifactAttachmentMissingError: 'harness.artifact_attachment_missing',
+  HarnessPermissionProfileNotFoundError: 'harness.permission_profile_not_found',
 };
 
 export function getHarnessPublicErrorCode(err: unknown): string | undefined {

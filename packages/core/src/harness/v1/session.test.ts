@@ -258,7 +258,16 @@ describe('Session — surface area (M1)', () => {
     expect(typeof session.permissions).toBe('object');
     expect(Object.isFrozen(session.permissions)).toBe(true);
     expect(Object.keys(session.permissions).sort()).toEqual(
-      ['getGrants', 'getRules', 'grantCategory', 'grantTool', 'revokeCategory', 'revokeTool', 'setPolicy'].sort(),
+      [
+        'applyProfile',
+        'getGrants',
+        'getRules',
+        'grantCategory',
+        'grantTool',
+        'revokeCategory',
+        'revokeTool',
+        'setPolicy',
+      ].sort(),
     );
   });
 

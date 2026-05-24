@@ -118,6 +118,26 @@ export interface ArtifactCreatedEvent extends HarnessEventBase {
   bytes: number;
 }
 
+/**
+ * A permission profile was applied to the session. The event carries
+ * the profile identity, the resulting per-category posture, and the
+ * apply mode so subscribers and the durable event ledger record an
+ * auditable snapshot of every policy reset. The full per-tool rule
+ * map and the session grants are NOT included — consumers that need
+ * them call `session.permissions.getRules()` /
+ * `session.permissions.getGrants()` directly.
+ */
+export interface PermissionProfileAppliedEvent extends HarnessEventBase {
+  type: 'permission_profile_applied';
+  profileName: string;
+  previousProfileName?: string;
+  mode: 'replace' | 'replace-preserve-denies';
+  /** Snapshot of `permissionRules.categories` after the apply. */
+  categories: Record<string, 'allow' | 'ask' | 'deny'>;
+  /** Number of caller-set per-tool entries preserved (when applicable). */
+  preservedToolDenies: number;
+}
+
 export interface ModeChangedEvent extends HarnessEventBase {
   type: 'mode_changed';
   modeId: string;
@@ -718,6 +738,7 @@ export type HarnessEvent =
   | SessionEvictedEvent
   | SessionDeletedEvent
   | ArtifactCreatedEvent
+  | PermissionProfileAppliedEvent
   | ModeChangedEvent
   | ModelChangedEvent
   | ModelOverrideSetEvent
@@ -1027,6 +1048,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_evicted',
   'session_deleted',
   'artifact_created',
+  'permission_profile_applied',
   'session_pin_overflow',
   'mode_changed',
   'model_changed',

@@ -328,6 +328,14 @@ export interface SessionRecord {
   // Permissions
   permissionRules: PermissionRules;
   sessionGrants: SessionGrants;
+  /**
+   * Name of the last permission profile applied to this session, if
+   * any. Used by audit / replay consumers and by the
+   * `permission_profile_applied` event payload (`previousProfileName`).
+   * Stored as an opaque string so legacy records (no profile applied)
+   * load as `undefined`.
+   */
+  appliedPermissionProfile?: string;
 
   // Counters
   tokenUsage: TokenUsage;

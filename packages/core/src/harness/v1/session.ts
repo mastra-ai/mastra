@@ -82,6 +82,7 @@ import {
   HarnessConfigError,
   HarnessEventReplayUnsupportedError,
   HarnessInboxItemNotFoundError,
+  HarnessPermissionProfileNotFoundError,
   HarnessInboxResponseConflictError,
   HarnessGoalJudgeFailedError,
   HarnessOverrideConflictError,
@@ -111,6 +112,8 @@ import type {
   TaskUpdatedEvent,
 } from './events';
 import type { Harness } from './harness';
+import { HARNESS_PERMISSION_PROFILES, grantsFromProfile, rulesFromProfile } from './permission-profiles';
+import type { HarnessPermissionProfileName } from './permission-profiles';
 import type {
   AgentResult,
   AgentStream,
@@ -6083,6 +6086,10 @@ export class Session {
    * reject before any event or display projection is emitted.
    */
   readonly permissions = Object.freeze({
+    applyProfile: (opts: {
+      profileName: HarnessPermissionProfileName;
+      preserveCallerDenies?: boolean;
+    }): Promise<void> => this._permApplyProfile(opts),
     grantCategory: (opts: { category: ToolCategory }): Promise<void> => this._permGrantCategory(opts),
     grantTool: (opts: { toolName: string }): Promise<void> => this._permGrantTool(opts),
     revokeCategory: (opts: { category: ToolCategory }): Promise<void> => this._permRevokeCategory(opts),
@@ -6191,6 +6198,61 @@ export class Session {
    * dimensions separate so subscribers can route without inspecting the
    * payload. Emits `permission_policy_changed` on a transition.
    */
+  private async _permApplyProfile(opts: {
+    profileName: HarnessPermissionProfileName;
+    preserveCallerDenies?: boolean;
+  }): Promise<void> {
+    this._assertLive('permissions.applyProfile()');
+    const profile = HARNESS_PERMISSION_PROFILES[opts.profileName];
+    if (profile === undefined) {
+      throw new HarnessPermissionProfileNotFoundError(opts.profileName);
+    }
+    // Compute every snapshot from `prev` inside `_flushUpdate` so a
+    // concurrent permission mutation (setPolicy, grantTool, etc) that
+    // lands between the read and the write cannot leave us with a
+    // stale `previousProfileName` or drop a newly-added caller deny
+    // from `preserveCallerDenies`. The `_flushUpdate` callback runs
+    // under the same serialized lane as every other record write.
+    let resolved:
+      | {
+          previousProfileName?: string;
+          categories: Record<string, 'allow' | 'ask' | 'deny'>;
+          preservedToolDenies: number;
+        }
+      | undefined;
+    await this._flushUpdate(prev => {
+      const preserve = opts.preserveCallerDenies === true ? prev.permissionRules : undefined;
+      const nextRules = rulesFromProfile(
+        profile,
+        preserve !== undefined ? { preserveCallerDenies: preserve } : undefined,
+      );
+      const nextGrants = grantsFromProfile(profile);
+      const preservedToolDenies =
+        preserve !== undefined ? Object.values(preserve.tools ?? {}).filter(policy => policy === 'deny').length : 0;
+      resolved = {
+        ...(prev.appliedPermissionProfile !== undefined ? { previousProfileName: prev.appliedPermissionProfile } : {}),
+        categories: { ...nextRules.categories } as Record<string, 'allow' | 'ask' | 'deny'>,
+        preservedToolDenies,
+      };
+      return {
+        ...prev,
+        permissionRules: nextRules,
+        sessionGrants: nextGrants,
+        appliedPermissionProfile: profile.name,
+      };
+    });
+    // `_flushUpdate` always runs the callback at least once, so
+    // `resolved` is guaranteed set here.
+    this._emitter.emit({
+      type: 'permission_profile_applied',
+      profileName: profile.name,
+      ...(resolved!.previousProfileName !== undefined ? { previousProfileName: resolved!.previousProfileName } : {}),
+      mode: opts.preserveCallerDenies === true ? 'replace-preserve-denies' : 'replace',
+      categories: resolved!.categories,
+      preservedToolDenies: resolved!.preservedToolDenies,
+    });
+  }
+
   private async _permSetPolicy(
     opts:
       | { category: ToolCategory; toolName?: never; policy: PermissionPolicy }

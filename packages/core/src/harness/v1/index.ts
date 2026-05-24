@@ -43,6 +43,7 @@ export type {
   PermissionPolicyChangedEvent,
   PermissionRevokedEvent,
   ArtifactCreatedEvent,
+  PermissionProfileAppliedEvent,
   SessionClosedEvent,
   SessionClosingEvent,
   SessionCreatedEvent,
@@ -64,6 +65,12 @@ export type {
 } from './events';
 
 export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
+export { HARNESS_PERMISSION_PROFILES, grantsFromProfile, rulesFromProfile } from './permission-profiles';
+export type {
+  HarnessPermissionProfile,
+  HarnessPermissionProfileName,
+  HarnessPermissionProfileTag,
+} from './permission-profiles';
 export {
   bridgeReplayAndLive,
   HarnessEventReplayAbortedError,
@@ -98,6 +105,7 @@ export {
   HarnessEventSerializationError,
   HarnessModelNotFoundError,
   HarnessOverrideConflictError,
+  HarnessPermissionProfileNotFoundError,
   HarnessQueueFullError,
   HarnessRuntimeDependencyDriftError,
   HarnessSessionClosedError,

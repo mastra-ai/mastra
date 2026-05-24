@@ -99,6 +99,8 @@ import {
 } from './errors';
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
+import { HARNESS_PERMISSION_PROFILES } from './permission-profiles';
+import type { HarnessPermissionProfile, HarnessPermissionProfileName } from './permission-profiles';
 import { Session } from './session';
 import type {
   AttachmentDeleteOptions,
@@ -4179,6 +4181,39 @@ export class Harness {
         }
         throw err;
       }
+    },
+  });
+
+  // -------------------------------------------------------------------------
+  // Permissions — profile registry + apply convenience.
+  //
+  // Profiles are declarative permission baselines (read-only review,
+  // approval-gated patch, ci-fixer, trusted local YOLO) intended for
+  // server / A2A / channel routes that need a non-YOLO posture the
+  // local CLI's lenient defaults cannot bypass. `applyProfile`
+  // resolves the named session and delegates to the session-level
+  // `permissions.applyProfile()` so audit + emission stay in one
+  // place.
+  // -------------------------------------------------------------------------
+
+  permissions = Object.freeze({
+    profiles: Object.freeze({
+      get: (name: HarnessPermissionProfileName): HarnessPermissionProfile | undefined =>
+        HARNESS_PERMISSION_PROFILES[name],
+      list: (): readonly HarnessPermissionProfile[] =>
+        Object.values(HARNESS_PERMISSION_PROFILES) as readonly HarnessPermissionProfile[],
+    }),
+    applyProfile: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      profileName: HarnessPermissionProfileName;
+      preserveCallerDenies?: boolean;
+    }): Promise<void> => {
+      const session = await this.session({ sessionId: opts.sessionId, resourceId: opts.resourceId });
+      await session.permissions.applyProfile({
+        profileName: opts.profileName,
+        ...(opts.preserveCallerDenies !== undefined ? { preserveCallerDenies: opts.preserveCallerDenies } : {}),
+      });
     },
   });
 
