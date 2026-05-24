@@ -4460,6 +4460,15 @@ export class Harness {
   }
 
   /** @internal — exposed for inspection in tests. */
+  /**
+   * @internal — used by `Session.cancel(...)` to walk the subagent
+   * tree at cancellation time. Returns undefined when the session is
+   * not currently live in this Harness instance.
+   */
+  _internalGetLiveSession(sessionId: string): Session | undefined {
+    return this._liveSessions.get(sessionId);
+  }
+
   _internalLiveSessionCount(): number {
     return this._liveSessions.size;
   }

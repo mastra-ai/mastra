@@ -1772,6 +1772,27 @@ export class Session {
     this._currentQueuedItemId = undefined;
     this._currentQueuedItemSource = undefined;
     this._notifyMaybeIdle();
+
+    // Propagate cancellation through the live subagent tree. Children
+    // recursively cancel their own children via the same path, so
+    // arbitrary-depth subagent fan-out collapses correctly. Subagent
+    // cancellation does NOT propagate upward — a child cancel cannot
+    // take down a parent.
+    if (this._activeSubagents.size > 0) {
+      const childIds = Array.from(this._activeSubagents.values()).map(s => s.subagentSessionId);
+      await Promise.all(
+        childIds.map(async childId => {
+          const child = this._harness._internalGetLiveSession(childId);
+          if (!child) return;
+          try {
+            await child.cancel({ reason: reason ?? 'parent_cancelled', requestedBy: this.id });
+          } catch {
+            // Best-effort propagation — never bubble a child cancel
+            // failure up through the parent's commit path.
+          }
+        }),
+      );
+    }
   }
 
   /**
@@ -6911,7 +6932,18 @@ export class Session {
     const resumedAt = Date.now();
     let duplicateReceiptAfterAdmission: InboxResponseReceipt | undefined;
     let pendingAlreadyResumedAfterAdmission = false;
+    let cancelledBeforeResume: { reason?: string } | undefined;
     await this._flushUpdate(prev => {
+      // Cancellation precedence (PF-665): if a durable cancelRequest
+      // committed before this resume reached the CAS, refuse to
+      // mark resumedAt and let the outer code surface the cancel.
+      // Already-resumed paths are unaffected — the abort path
+      // handles in-flight cancellation separately.
+      if (prev.cancelRequest !== undefined && prev.pendingResume?.resumedAt === undefined) {
+        cancelledBeforeResume = { reason: prev.cancelRequest.reason };
+        return prev;
+      }
+
       const currentReceipt =
         responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
       if (currentReceipt !== undefined) {
@@ -6964,6 +6996,9 @@ export class Session {
       };
       return next;
     });
+    if (cancelledBeforeResume !== undefined) {
+      throw new HarnessSessionCancelledError(this.id, cancelledBeforeResume.reason);
+    }
     if (duplicateReceiptAfterAdmission !== undefined) {
       this._throwStoredInboxResponseFailure(duplicateReceiptAfterAdmission);
       return this._inboxReceiptResult(duplicateReceiptAfterAdmission, true);

@@ -231,6 +231,76 @@ describe('Session.cancelQueuedItem — fine-grained queue cancel', () => {
   });
 });
 
+describe('Session.cancel — subagent-tree propagation', () => {
+  it('cascades cancel to every live subagent in the tree', async () => {
+    const { harness, session } = await setup();
+    // Create a child session and register it as an active subagent on
+    // the parent. Use the harness session() factory so the child is
+    // registered in `_liveSessions` and looks up via the new
+    // `_internalGetLiveSession` shim.
+    const child1 = await harness.session({ resourceId: 'u2', threadId: { fresh: true } });
+    const child2 = await harness.session({ resourceId: 'u3', threadId: { fresh: true } });
+    (session as any)._activeSubagents.set('tc-1', {
+      subagentSessionId: child1.id,
+      agentType: 'default',
+      task: 't1',
+      parentToolCallId: 'tc-1',
+      startedAt: 1,
+    });
+    (session as any)._activeSubagents.set('tc-2', {
+      subagentSessionId: child2.id,
+      agentType: 'default',
+      task: 't2',
+      parentToolCallId: 'tc-2',
+      startedAt: 2,
+    });
+    await session.cancel({ reason: 'cascade' });
+    expect(child1.getRecord().cancelRequest).toBeDefined();
+    expect(child2.getRecord().cancelRequest).toBeDefined();
+    expect(child1.getRecord().cancelRequest?.requestedBy).toBe(session.id);
+    expect(child2.getRecord().cancelRequest?.requestedBy).toBe(session.id);
+  });
+
+  it('does NOT propagate upward — cancelling a subagent leaves the parent untouched', async () => {
+    const { harness, session: parent } = await setup();
+    const child = await harness.session({ resourceId: 'u2', threadId: { fresh: true } });
+    (parent as any)._activeSubagents.set('tc-1', {
+      subagentSessionId: child.id,
+      agentType: 'default',
+      task: 't1',
+      parentToolCallId: 'tc-1',
+      startedAt: 1,
+    });
+    await child.cancel({ reason: 'child-only' });
+    expect(child.getRecord().cancelRequest).toBeDefined();
+    // Parent untouched.
+    expect(parent.getRecord().cancelRequest).toBeUndefined();
+  });
+});
+
+describe('Session.cancel — resume gating', () => {
+  it('refuses to resume a pending interaction when cancelRequest is set', async () => {
+    const { session } = await setup();
+    // Manually wire a pendingResume so we can attempt to resume it.
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingResume: {
+        kind: 'tool-approval',
+        runId: 'run-1',
+        itemId: 'item-1',
+        toolCallId: 'tc-1',
+        source: 'parent',
+        requestedAt: 0,
+      },
+    }));
+    await session.cancel({ reason: 'no-resume' });
+    // Now attempt to resume — should throw HarnessSessionCancelledError.
+    await expect(session.respondToToolApproval({ approved: true })).rejects.toBeInstanceOf(
+      HarnessSessionCancelledError,
+    );
+  });
+});
+
 describe('Heartbeat — cancel short-circuits lease renewal', () => {
   it('the heartbeat does not call renewSessionLease on cancelled sessions', async () => {
     const { harness, session, storage } = await setup();
