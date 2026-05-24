@@ -172,6 +172,57 @@ describe('Session.cancel — durable session cancellation', () => {
     expect(session.getRecord().pendingQueue).toEqual([]);
   });
 
+  it('concurrent cancels emit task_cancellation_requested exactly once', async () => {
+    const { session } = await setup();
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => events.push(e));
+    // Fire two cancels with overlapping timing. The second loses the
+    // CAS but should not double-emit the verdict event or double-abort.
+    await Promise.all([session.cancel({ reason: 'first' }), session.cancel({ reason: 'second' })]);
+    const requested = events.filter(e => e.type === 'task_cancellation_requested');
+    expect(requested).toHaveLength(1);
+    const winner = requested[0] as any;
+    expect(winner.reason).toBe('first');
+  });
+
+  it('marks failed status on queueAdmissionReceipts for cancelled items', async () => {
+    const { session } = await setup();
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [{ id: 'q-receipt', admissionId: 'a-receipt', enqueuedAt: 1, content: 'x', attachments: [] }],
+      queueAdmissionReceipts: {
+        'q-receipt': {
+          admissionId: 'a-receipt',
+          admissionHash: 'hash',
+          queuedItemId: 'q-receipt',
+          status: 'queued',
+          attempts: 0,
+          enqueuedAt: 1,
+          updatedAt: 1,
+        },
+      },
+    }));
+    await session.cancel({ reason: 'mark-failed' });
+    const receipt = (session.getRecord().queueAdmissionReceipts ?? {})['q-receipt'];
+    expect(receipt?.status).toBe('failed');
+    expect(receipt?.failedAt).toBeDefined();
+  });
+
+  it('does not remove the currently-running queued head', async () => {
+    const { session } = await setup();
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        { id: 'q-active', admissionId: 'a-active', enqueuedAt: 1, content: 'active', attachments: [] },
+        { id: 'q-pending', admissionId: 'a-pending', enqueuedAt: 2, content: 'pending', attachments: [] },
+      ],
+    }));
+    (session as any)._currentQueuedItemId = 'q-active';
+    await session.cancel({ reason: 'keep-active' });
+    const queue = session.getRecord().pendingQueue ?? [];
+    expect(queue.map(i => i.id)).toEqual(['q-active']);
+  });
+
   it('aborts the in-flight turn when called', async () => {
     const { session } = await setup();
     // Stub controller to observe abort

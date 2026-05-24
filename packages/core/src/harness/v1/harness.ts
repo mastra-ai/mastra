@@ -4459,7 +4459,6 @@ export class Harness {
     return `thread-${randomUUID()}`;
   }
 
-  /** @internal — exposed for inspection in tests. */
   /**
    * @internal — used by `Session.cancel(...)` to walk the subagent
    * tree at cancellation time. Returns undefined when the session is
@@ -4469,6 +4468,7 @@ export class Harness {
     return this._liveSessions.get(sessionId);
   }
 
+  /** @internal — exposed for inspection in tests. */
   _internalLiveSessionCount(): number {
     return this._liveSessions.size;
   }

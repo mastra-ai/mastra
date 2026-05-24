@@ -1714,45 +1714,77 @@ export class Session {
     const requestedBy = opts?.requestedBy;
     const requestedAt = Date.now();
     const removedItems: { queuedItemId: string; admissionId?: string }[] = [];
+    let wasWinner = false;
+    const cancelErrorForReceipt = new HarnessSessionCancelledError(this.id, reason);
 
     await this._flushUpdate(prev => {
       if (prev.cancelRequest !== undefined) {
         // Lost the CAS race against a concurrent cancel; honor the winner.
+        // The winner already drained the queue, marked receipts failed, and
+        // will run the post-commit emit / abort path. Bail out cleanly.
         return prev;
       }
+      wasWinner = true;
       // Snapshot the queued items being dropped so we can both reject
-      // their resolvers and emit per-item events AFTER commit.
+      // their resolvers and emit per-item events AFTER commit. The active
+      // head (`_currentQueuedItemId`) stays in pendingQueue — the abort
+      // path settles it through its normal failure flow.
+      const activeId = this._currentQueuedItemId;
+      const keptHead: QueuedItem[] = [];
+      const existingReceipts = prev.queueAdmissionReceipts ?? {};
+      const nextReceipts: Record<string, QueueAdmissionReceipt> = { ...existingReceipts };
       for (const item of prev.pendingQueue ?? []) {
+        if (activeId !== undefined && item.id === activeId) {
+          keptHead.push(item);
+          continue;
+        }
         removedItems.push({ queuedItemId: item.id, admissionId: item.admissionId });
+        const receipt = existingReceipts[item.id];
+        if (receipt && receipt.status !== 'completed' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+          nextReceipts[item.id] = {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(cancelErrorForReceipt),
+            failedAt: receipt.failedAt ?? requestedAt,
+            updatedAt: requestedAt,
+          };
+        }
       }
-      return {
+      const next: SessionRecord = {
         ...prev,
         cancelRequest: {
           requestedAt,
           ...(reason !== undefined ? { reason } : {}),
           ...(requestedBy !== undefined ? { requestedBy } : {}),
         },
-        pendingQueue: [],
+        pendingQueue: keptHead,
       };
+      if (Object.keys(nextReceipts).length > 0) {
+        next.queueAdmissionReceipts = nextReceipts;
+      }
+      return next;
     });
 
-    // The CAS may have committed somebody else's cancelRequest if we lost
-    // the race; in that case the loop body above returned `prev` and no
-    // queue was cleared. Either way, post-commit our local record now
-    // reflects the durable state, so honor it.
+    // CAS-loser path — the durable cancelRequest committed by the winner is
+    // observable, but the winner already emitted events + ran the abort.
+    // The post-commit work below MUST run only on the winning invocation
+    // to avoid double-emit / double-abort.
+    if (!wasWinner) return;
+
     const committedCancel = this._currentCancelRequest();
     if (committedCancel === undefined) return;
+    const durableReason = committedCancel.reason;
 
     // Abort in-flight work after the marker is durable. This keeps the
     // tool layer's abort callback observing a committed cancel state.
-    this.abort({ reason: reason ?? 'session_cancelled' });
+    this.abort({ reason: durableReason ?? 'session_cancelled' });
 
     // Emit the session-scope verdict event first, then per-item events
     // in queue order.
     this._emitter.emit({
       type: 'task_cancellation_requested',
       requestedAt: committedCancel.requestedAt,
-      ...(committedCancel.reason !== undefined ? { reason: committedCancel.reason } : {}),
+      ...(durableReason !== undefined ? { reason: durableReason } : {}),
       ...(committedCancel.requestedBy !== undefined ? { requestedBy: committedCancel.requestedBy } : {}),
     } as EmitInput);
 
@@ -1761,16 +1793,16 @@ export class Session {
         type: 'queue_item_cancelled',
         queuedItemId: dropped.queuedItemId,
         ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
-        ...(reason !== undefined ? { reason } : {}),
+        ...(durableReason !== undefined ? { reason: durableReason } : {}),
       } as EmitInput);
       const resolver = this._queueResolvers.get(dropped.queuedItemId);
       if (resolver) {
         this._queueResolvers.delete(dropped.queuedItemId);
-        resolver.reject(new HarnessSessionCancelledError(this.id, reason));
+        resolver.reject(new HarnessSessionCancelledError(this.id, durableReason));
       }
     }
-    this._currentQueuedItemId = undefined;
-    this._currentQueuedItemSource = undefined;
+    // Active head (if any) is left for the abort path to settle; only
+    // clear the dropped-queue bookkeeping here.
     this._notifyMaybeIdle();
 
     // Propagate cancellation through the live subagent tree. Children
@@ -1809,16 +1841,37 @@ export class Session {
       throw new HarnessValidationError('cancelQueuedItem', 'queuedItemId must be a non-empty string');
     }
     const reason = opts.reason;
+    const cancelErrorForReceipt = new HarnessSessionCancelledError(this.id, reason);
+    const now = Date.now();
     let removed: { queuedItemId: string; admissionId?: string } | undefined;
 
     await this._flushUpdate(prev => {
       const queue = prev.pendingQueue ?? [];
       const idx = queue.findIndex(item => item.id === targetId);
       if (idx < 0) return prev;
+      // Refuse to cancel the currently-running queued turn — that work
+      // settles through its own abort/failure flow. Mirrors the
+      // `Session.cancel()` active-head guard.
+      if (this._currentQueuedItemId === targetId) return prev;
       const item = queue[idx]!;
       removed = { queuedItemId: item.id, admissionId: item.admissionId };
       const nextQueue = queue.slice(0, idx).concat(queue.slice(idx + 1));
-      return { ...prev, pendingQueue: nextQueue };
+      const next: SessionRecord = { ...prev, pendingQueue: nextQueue };
+      const existingReceipts = prev.queueAdmissionReceipts ?? {};
+      const receipt = existingReceipts[item.id];
+      if (receipt && receipt.status !== 'completed' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+        next.queueAdmissionReceipts = {
+          ...existingReceipts,
+          [item.id]: {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(cancelErrorForReceipt),
+            failedAt: receipt.failedAt ?? now,
+            updatedAt: now,
+          },
+        };
+      }
+      return next;
     });
 
     if (!removed) return;

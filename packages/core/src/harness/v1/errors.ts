@@ -594,6 +594,7 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessSessionNotFoundError: 'harness.session_not_found',
   HarnessSessionClosedError: 'harness.session_closed',
   HarnessSessionClosingError: 'harness.session_closing',
+  HarnessSessionCancelledError: 'harness.session_cancelled',
   HarnessSessionDeleteBlockedError: 'harness.session_delete_blocked',
   HarnessSessionDeletedError: 'harness.session_deleted',
   HarnessSessionLockedError: 'harness.session_locked',
