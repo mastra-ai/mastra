@@ -6987,11 +6987,11 @@ export class Session {
     let pendingAlreadyResumedAfterAdmission = false;
     let cancelledBeforeResume: { reason?: string } | undefined;
     await this._flushUpdate(prev => {
-      // Cancellation precedence (PF-665): if a durable cancelRequest
-      // committed before this resume reached the CAS, refuse to
-      // mark resumedAt and let the outer code surface the cancel.
-      // Already-resumed paths are unaffected — the abort path
-      // handles in-flight cancellation separately.
+      // Cancellation precedence: if a durable cancelRequest committed
+      // before this resume reached the CAS, refuse to mark resumedAt
+      // and let the outer code surface the cancel. Already-resumed
+      // paths are unaffected — the abort path handles in-flight
+      // cancellation separately.
       if (prev.cancelRequest !== undefined && prev.pendingResume?.resumedAt === undefined) {
         cancelledBeforeResume = { reason: prev.cancelRequest.reason };
         return prev;
@@ -8162,6 +8162,103 @@ export class Session {
   }
 
   /**
+   * Scheduler step. Inside a single `_flushUpdate` CAS:
+   *   - drop any items whose `deadline` has passed; emit
+   *     `queue_item_expired` per drop, mark each item's receipt
+   *     `failed`, and reject the resolver after the commit;
+   *   - select the next item to run by `(priority desc, enqueuedAt
+   *     asc)` from those that have no `notBefore` block; rotate it
+   *     to position 0 so the existing drain + recovery logic can keep
+   *     its `pendingQueue[0]` invariant.
+   *
+   * No-op when the queue is empty or no item is currently eligible.
+   */
+  private async _scheduleNextQueueHead(): Promise<void> {
+    const now = Date.now();
+    const expired: { queuedItemId: string; admissionId?: string; deadline: number }[] = [];
+    const cancelErrorForReceipt = new HarnessSessionCancelledError(this.id, 'queue_item_expired');
+    let didCommit = false;
+
+    await this._flushUpdate(prev => {
+      const queue = prev.pendingQueue ?? [];
+      if (queue.length === 0) return prev;
+
+      const survivors: QueuedItem[] = [];
+      const existingReceipts = prev.queueAdmissionReceipts ?? {};
+      const nextReceipts: Record<string, QueueAdmissionReceipt> = { ...existingReceipts };
+      let receiptsChanged = false;
+
+      for (const item of queue) {
+        if (item.deadline !== undefined && item.deadline <= now) {
+          expired.push({ queuedItemId: item.id, admissionId: item.admissionId, deadline: item.deadline });
+          const receipt = existingReceipts[item.id];
+          if (receipt && receipt.status !== 'completed' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+            nextReceipts[item.id] = {
+              ...receipt,
+              status: 'failed',
+              error: projectHarnessPublicError(cancelErrorForReceipt),
+              failedAt: receipt.failedAt ?? now,
+              updatedAt: now,
+            };
+            receiptsChanged = true;
+          }
+          continue;
+        }
+        survivors.push(item);
+      }
+
+      // Pick the next runnable item: highest priority, FIFO tie-break.
+      // The currently-running item (if any) stays first — it's already
+      // executing and the drain only consults position 0 mid-loop when
+      // no turn is in flight.
+      let head: QueuedItem | undefined;
+      let headIdx = -1;
+      for (let i = 0; i < survivors.length; i++) {
+        const candidate = survivors[i]!;
+        const cp = candidate.priority ?? 0;
+        const hp = head?.priority ?? 0;
+        if (head === undefined || cp > hp || (cp === hp && candidate.enqueuedAt < head.enqueuedAt)) {
+          head = candidate;
+          headIdx = i;
+        }
+      }
+
+      let nextQueue = survivors;
+      if (head !== undefined && headIdx > 0) {
+        // Rotate selected item to position 0 — preserves the legacy
+        // `pendingQueue[0]` recovery contract while running the
+        // highest-priority work first.
+        nextQueue = [head, ...survivors.slice(0, headIdx), ...survivors.slice(headIdx + 1)];
+      }
+
+      if (expired.length === 0 && nextQueue === queue) return prev;
+
+      didCommit = true;
+      const next: SessionRecord = { ...prev, pendingQueue: nextQueue };
+      if (receiptsChanged) {
+        next.queueAdmissionReceipts = nextReceipts;
+      }
+      return next;
+    });
+
+    if (!didCommit) return;
+
+    for (const dropped of expired) {
+      this._emitter.emit({
+        type: 'queue_item_expired',
+        queuedItemId: dropped.queuedItemId,
+        ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
+        deadline: dropped.deadline,
+      } as EmitInput);
+      const resolver = this._queueResolvers.get(dropped.queuedItemId);
+      if (resolver) {
+        this._queueResolvers.delete(dropped.queuedItemId);
+        resolver.reject(new HarnessSessionCancelledError(this.id, 'queue_item_expired'));
+      }
+    }
+  }
+
+  /**
    * Drain pending queue items head-of-line. No-op while another drain is
    * running, the session is suspended (`pendingResume` set), or the queue
    * is empty. Each item runs as a fresh turn; if the turn suspends, drain
@@ -8187,8 +8284,13 @@ export class Session {
         // Bail if a previous iteration left the session suspended.
         if (this._record.pendingResume !== undefined) return;
 
+        // Scheduler step: expire any items past their deadline, then
+        // rotate the highest-priority item to the head. Done in a
+        // single CAS so the rest of the drain logic (recovery,
+        // post-run finalize) can keep its `pendingQueue[0]` assumption.
+        await this._scheduleNextQueueHead();
         const head = this._record.pendingQueue?.[0];
-        if (!head) return;
+        if (!head) continue;
         this._currentQueuedItemId = head.id;
         this._currentQueuedItemSource = head.source ?? 'user';
         const isLiveAdmission = this._queueResolvers.has(head.id) || this._liveAdmittedQueuedItemIds.delete(head.id);

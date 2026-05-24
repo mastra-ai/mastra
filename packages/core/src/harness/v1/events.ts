@@ -538,6 +538,22 @@ export interface QueueItemCancelledEvent extends HarnessEventBase {
   reason?: string;
 }
 
+/**
+ * A queued item was removed by the scheduler because its `deadline`
+ * passed before the drain could start it. The item never ran; its
+ * `queueAdmissionReceipts` entry is marked `failed` in the same CAS
+ * write that drops it from `pendingQueue`. Deadline expiry is a
+ * scheduler-side verdict, distinct from caller cancellation
+ * ({@link QueueItemCancelledEvent}).
+ */
+export interface QueueItemExpiredEvent extends HarnessEventBase {
+  type: 'queue_item_expired';
+  queuedItemId: string;
+  admissionId?: string;
+  /** Epoch ms — the deadline that was missed. */
+  deadline: number;
+}
+
 // ---------------------------------------------------------------------------
 // Queue events (§10.2). The queue's lifecycle is: `enqueued → started →
 // removed`. Outcome is observable through the turn's own `agent_end`
@@ -851,6 +867,7 @@ export type HarnessEvent =
   | SandboxAccessResolvedEvent
   | TaskCancellationRequestedEvent
   | QueueItemCancelledEvent
+  | QueueItemExpiredEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
   | ThreadCreatedEvent
@@ -1163,6 +1180,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'sandbox_access_resolved',
   'task_cancellation_requested',
   'queue_item_cancelled',
+  'queue_item_expired',
   'queue_item_started',
   'queue_item_replayed',
   'queue_item_failed',

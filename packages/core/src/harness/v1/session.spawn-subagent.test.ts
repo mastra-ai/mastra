@@ -613,8 +613,8 @@ describe('spawn_subagent tool — retention policy', () => {
 
 describe('spawn_subagent tool — profile binding', () => {
   it("applies the subagent type's profile to the child session before the first turn", async () => {
-    // Permission profile binding (PF-641 S3): a subagent type can
-    // declare `profile: 'readOnlyReview'`, and the spawn path applies
+    // Permission profile binding: a subagent type can declare
+    // `profile: 'readOnlyReview'`, and the spawn path applies
     // the profile to the child session BEFORE child.message() runs so
     // every tool the child can invoke is gated by the profile's
     // category/tool posture — not just workspace tools filtered by

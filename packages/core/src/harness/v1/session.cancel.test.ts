@@ -1,5 +1,5 @@
 /**
- * Harness v1 — session-level cancellation (PF-665 sub-slice A).
+ * Harness v1 — session-level cancellation.
  *
  * Covers `Session.cancel(...)` and `Session.cancelQueuedItem(...)`:
  *   - durable `cancelRequest` round-trip

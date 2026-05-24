@@ -2390,8 +2390,8 @@ export class Harness {
               const record = session.getRecord();
               // Skip renewal for cancelled sessions — the durable
               // `cancelRequest` marker takes precedence over lease
-              // extension (PF-665). Letting the lease expire releases
-              // the session back to the storage layer for cleanup.
+              // extension. Letting the lease expire releases the
+              // session back to the storage layer for cleanup.
               if (record.cancelRequest !== undefined) return;
               const effectiveTtl = session._getEffectiveLeaseTtlMs(this._leaseTtlMs);
               const lease = await storage.renewSessionLease({

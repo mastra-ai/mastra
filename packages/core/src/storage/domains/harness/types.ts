@@ -108,6 +108,19 @@ export interface QueuedItem {
   source?: 'user' | 'goal';
   /** Set when `source === 'goal'`. Identifies which goal produced the item. */
   goalId?: string;
+  /**
+   * Scheduling priority. Higher values drain first. Items with the same
+   * priority drain in FIFO order (lowest `enqueuedAt` wins). Defaults to
+   * 0 — equivalent to the legacy FIFO contract.
+   */
+  priority?: number;
+  /**
+   * Absolute deadline (epoch ms) past which the item must not start.
+   * The drain emits `queue_item_expired`, removes the item, and marks
+   * its `queueAdmissionReceipts` entry `failed` in the same CAS write.
+   * Omit to opt out of deadline checks.
+   */
+  deadline?: number;
 }
 
 /**
@@ -1109,9 +1122,9 @@ export interface AttachmentRecord {
 // against the same parent can never claim the same version.
 //
 // Foreign keys to `taskId` / `runId` are deliberately omitted from this
-// schema — the canonical Task / Run contracts are still pending (see
-// PF-631 / next-roadmap-issue). Consumers that need to associate
-// artifacts with a task or run today use the opaque `metadata` map.
+// schema — the canonical Task / Run contracts ship type-only first.
+// Consumers that need to associate artifacts with a task or run today
+// use the opaque `metadata` map.
 // ---------------------------------------------------------------------------
 
 export type HarnessArtifactType = 'plan' | 'diff' | 'report' | 'screenshot' | 'patch' | 'custom';
