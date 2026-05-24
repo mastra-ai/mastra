@@ -327,6 +327,52 @@ export function createSpawnSubagentTool(parent: Session) {
         }
       });
 
+      // Apply the subagent type's permission profile to the child
+      // session AFTER the parent's subagent-event bridge is installed,
+      // so the resulting `permission_profile_applied` event is
+      // observable via the harness emitter for audit. Profiles
+      // enforce category/tool gates on EVERY tool the child can
+      // invoke — `allowedWorkspaceTools` only filters the workspace
+      // tools visible to the model and does not prevent non-workspace
+      // tool invocations. Applying a profile here is the canonical
+      // way to give a subagent type a true read-only or approval-
+      // gated posture independent of the parent session's grants.
+      if (def.profile !== undefined) {
+        try {
+          await child.permissions.applyProfile({ profileName: def.profile });
+        } catch (err) {
+          // Tear down the child event bridge first — `unsub()` removes
+          // the listener on the child emitter so subsequent
+          // child._markClosed / _markDeleted teardowns do not leave
+          // the parent's bridge subscriber hanging.
+          try {
+            unsub();
+          } catch {
+            // ignore
+          }
+          try {
+            await child.close();
+          } catch {
+            // ignore
+          }
+          if (def.retain !== true) {
+            await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
+              // best-effort
+            });
+            await harness.threads.delete({ resourceId: child.resourceId, threadId: child.threadId }).catch(() => {
+              // best-effort thread cleanup
+            });
+          }
+          return {
+            isError: true,
+            errorName: err instanceof Error ? err.name : 'Error',
+            message: err instanceof Error ? err.message : String(err),
+            subagentSessionId: child.id,
+            result: undefined,
+          };
+        }
+      }
+
       // Track the active subagent so `getDisplayState()` renders it.
 
       parent._internalTrackActiveSubagent(toolCallId, {

@@ -87,6 +87,12 @@ function setup(opts?: {
   allowedWorkspaceTools?: string[];
   forkedDefault?: boolean;
   /**
+   * Permission profile applied to the subagent type's child session at
+   * spawn time. When set, the child runs with the profile's per-category
+   * baseline + session grants regardless of the parent's posture.
+   */
+  profile?: 'readOnlyReview' | 'approvalGatedPatch' | 'ciFixer' | 'trustedLocalYolo';
+  /**
    * Retention policy for the `explore` subagent type. Many existing tests
    * inspect `storage.loadSession({ sessionId: child.id })` AFTER the tool
    * returns to verify configuration (modeId, modelId, parentSessionId,
@@ -122,6 +128,7 @@ function setup(opts?: {
           allowedWorkspaceTools: opts?.allowedWorkspaceTools,
           workspace: 'inherit',
           retain: opts?.retain ?? true,
+          ...(opts?.profile !== undefined ? { profile: opts.profile } : {}),
         },
       },
     },
@@ -601,5 +608,58 @@ describe('spawn_subagent tool — retention policy', () => {
       includeClosed: true,
     });
     expect(childRecords).toEqual([]);
+  });
+});
+
+describe('spawn_subagent tool — profile binding', () => {
+  it("applies the subagent type's profile to the child session before the first turn", async () => {
+    // Permission profile binding (PF-641 S3): a subagent type can
+    // declare `profile: 'readOnlyReview'`, and the spawn path applies
+    // the profile to the child session BEFORE child.message() runs so
+    // every tool the child can invoke is gated by the profile's
+    // category/tool posture — not just workspace tools filtered by
+    // `allowedWorkspaceTools`.
+    //
+    // The applied profile is observable on the persisted child
+    // session row (rules + grants + appliedPermissionProfile). The
+    // resolver's per-category gating behavior is pinned by the
+    // permission-profiles + actor-grants slices; this test confirms
+    // the spawn path actually CALLS applyProfile and the resulting
+    // state survives to storage.
+    const { harness, storage } = setup({ profile: 'readOnlyReview' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read' }, execCtxWithWorkspace('tc-1'))) as any;
+    expect(result.isError).toBeFalsy();
+    const stored = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(stored?.appliedPermissionProfile).toBe('readOnlyReview');
+    expect(stored?.permissionRules.categories.read).toBe('allow');
+    expect(stored?.permissionRules.categories.edit).toBe('deny');
+    expect(stored?.permissionRules.categories.execute).toBe('deny');
+    expect(stored?.permissionRules.categories.mcp).toBe('deny');
+    // The reset cleared the session-level grants (profile reset is
+    // replace-not-merge — covered in permission-profiles tests).
+    expect(stored?.sessionGrants).toEqual({ categories: [], tools: [] });
+  });
+
+  it('emits permission_profile_applied on the harness emitter (audit-visible)', async () => {
+    const { harness } = setup({ profile: 'approvalGatedPatch' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const events: any[] = [];
+    harness.subscribe(e => events.push(e));
+    const tool = createSpawnSubagentTool(parent)!;
+    await tool.execute!({ agentType: 'explore', task: 'review' }, execCtxWithWorkspace('tc-2'));
+    const applied = events.find(e => e.type === 'permission_profile_applied');
+    expect(applied).toBeDefined();
+    expect((applied as any).profileName).toBe('approvalGatedPatch');
+  });
+
+  it("subagent type without profile leaves the child session's rules untouched (legacy behavior)", async () => {
+    const { harness, storage } = setup({}); // no profile
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+    const result = (await tool.execute!({ agentType: 'explore', task: 'do' }, execCtxWithWorkspace('tc-3'))) as any;
+    const stored = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(stored?.appliedPermissionProfile).toBeUndefined();
   });
 });

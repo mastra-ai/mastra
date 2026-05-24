@@ -14,6 +14,12 @@ import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { AgentSignalAttributes, CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import type { ChannelProvider } from '../../channels';
+// Profile name is the single source of truth at `permission-profiles.ts`.
+// TypeScript's `import type` is erased at runtime; no value-level
+// circular import results from this reference. Bringing the type here
+// keeps `SubagentDefinition.profile` automatically in sync with the
+// registry — if a new profile is added or removed there, the compiler
+// catches mismatches at the use sites instead of silently drifting.
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage/base';
@@ -40,6 +46,7 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
 import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
+import type { HarnessPermissionProfileName } from './permission-profiles';
 import type { WorkspacePolicy } from './workspace/policy';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
 
@@ -1203,6 +1210,27 @@ export interface SubagentDefinition {
    * remain available.
    */
   allowedWorkspaceTools?: string[];
+
+  /**
+   * Permission profile applied to the child session at spawn time.
+   *
+   * `allowedWorkspaceTools` only filters the WORKSPACE tools visible to
+   * the child's prompt — it does NOT prevent the child from calling
+   * any non-workspace tool (custom tools, MCP tools, channel actions,
+   * etc.). To enforce a true read-only or approval-gated posture on a
+   * subagent, set `profile` to one of the harness's permission
+   * presets: the child session's `permissionRules` and `sessionGrants`
+   * are replaced with the profile's posture before the first agent
+   * turn runs, so the child resolver gates EVERY tool call (not just
+   * workspace ones).
+   *
+   * The profile is applied AFTER the parent's subagent-event bridge
+   * is installed, so the resulting `permission_profile_applied` event
+   * is observable on the harness emitter for audit. Per-actor grants
+   * derived from the parent's channel context are NOT carried into
+   * the child — subagent execution is its own permission scope.
+   */
+  profile?: HarnessPermissionProfileName;
 
   /** Optional maximum number of steps for this subagent's execution loop. */
   maxSteps?: AgentExecutionOptionsBase<unknown>['maxSteps'];
