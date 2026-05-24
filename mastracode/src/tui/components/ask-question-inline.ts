@@ -575,8 +575,11 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         }
 
         if (data === '\r') {
-          this.onSubmit?.(Array.from(this.selectedValues));
-          this.answered = true;
+          const answers = Array.from(this.selectedValues);
+
+          this.answer(answers.join(', '));
+
+          this.onSubmit?.(answers);
           return;
         }
       }
