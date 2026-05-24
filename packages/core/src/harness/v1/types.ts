@@ -1761,6 +1761,24 @@ export interface QueueOptions extends QueueOverrides {
 
   /** Optional pre-uploaded attachments to include with the user message. */
   attachments?: AttachmentRef[];
+
+  /**
+   * Scheduling priority. Higher values drain first. Items with the same
+   * priority drain in FIFO order. Defaults to 0.
+   */
+  priority?: number;
+
+  /**
+   * Absolute epoch-ms deadline past which the item must not start. Expired
+   * queued items are removed before drain and their receipts are marked failed.
+   */
+  deadline?: number;
+
+  /**
+   * Absolute epoch-ms earliest start time. Items whose `notBefore` is in the
+   * future remain queued while eligible lower-priority work can drain.
+   */
+  notBefore?: number;
 }
 
 /**

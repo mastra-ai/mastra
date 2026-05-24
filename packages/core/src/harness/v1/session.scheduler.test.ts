@@ -11,7 +11,7 @@
  *   - FIFO tie-break: same-priority items stay in `enqueuedAt` order.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
@@ -125,6 +125,67 @@ describe('_scheduleNextQueueHead — priority rotation', () => {
     await (session as any)._scheduleNextQueueHead();
     const queue = session.getRecord().pendingQueue ?? [];
     expect(queue.map(i => i.id)).toEqual(['q-default', 'q-neg']);
+  });
+
+  it('skips future notBefore items while selecting the highest-priority runnable item', async () => {
+    const { session } = await setup();
+    const future = Date.now() + 60_000;
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        {
+          id: 'q-high-delayed',
+          admissionId: 'a1',
+          enqueuedAt: 1,
+          content: 'delayed',
+          attachments: [],
+          priority: 100,
+          notBefore: future,
+        },
+        { id: 'q-low-ready', admissionId: 'a2', enqueuedAt: 2, content: 'ready', attachments: [], priority: 1 },
+      ],
+    }));
+
+    const runnable = await (session as any)._scheduleNextQueueHead();
+
+    expect(runnable).toBe(true);
+    const queue = session.getRecord().pendingQueue ?? [];
+    expect(queue.map(i => i.id)).toEqual(['q-low-ready', 'q-high-delayed']);
+  });
+
+  it('returns false and keeps order when no queued item is runnable yet', async () => {
+    const { session } = await setup();
+    const future = Date.now() + 60_000;
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        { id: 'q-delayed-1', admissionId: 'a1', enqueuedAt: 1, content: 'a', attachments: [], notBefore: future },
+        { id: 'q-delayed-2', admissionId: 'a2', enqueuedAt: 2, content: 'b', attachments: [], notBefore: future },
+      ],
+    }));
+
+    const runnable = await (session as any)._scheduleNextQueueHead();
+
+    expect(runnable).toBe(false);
+    const queue = session.getRecord().pendingQueue ?? [];
+    expect(queue.map(i => i.id)).toEqual(['q-delayed-1', 'q-delayed-2']);
+  });
+
+  it('re-kicks drain immediately when a previously delayed item is already due', async () => {
+    const { session } = await setup();
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        { id: 'q-due', admissionId: 'a1', enqueuedAt: 1, content: 'a', attachments: [], notBefore: Date.now() - 1 },
+      ],
+    }));
+    const drain = vi.spyOn(session as any, '_maybeDrainQueue').mockResolvedValue(undefined);
+
+    (session as any)._scheduleQueueWakeupForPendingQueue();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(drain).toHaveBeenCalledTimes(1);
+    drain.mockRestore();
   });
 });
 

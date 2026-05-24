@@ -71,6 +71,122 @@ describe('Session.queue() — admission', () => {
     await session.close();
   });
 
+  it('persists scheduling options and keeps future notBefore items queued', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const notBefore = Date.now() + 60_000;
+    const deadline = notBefore + 60_000;
+
+    const admitted = await session.admitQueue({
+      content: 'delayed work',
+      admissionId: 'queue-scheduled',
+      priority: 7,
+      deadline,
+      notBefore,
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(agent.streamCalls).toHaveLength(0);
+    expect(session.getRecord().pendingQueue).toEqual([
+      expect.objectContaining({
+        id: admitted.queuedItemId,
+        admissionId: 'queue-scheduled',
+        priority: 7,
+        deadline,
+        notBefore,
+      }),
+    ]);
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('wakes a delayed notBefore item without another queue admission', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'delayed reply' });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const notBefore = Date.now() + 25;
+
+    const admitted = await session.admitQueue({
+      content: 'delayed work',
+      admissionId: 'queue-delayed-wakeup',
+      notBefore,
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(agent.streamCalls).toHaveLength(0);
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await session.waitForIdle({ timeoutMs: 1000 });
+
+    expect(agent.streamCalls).toHaveLength(1);
+    expect(session.getRecord().pendingQueue).toEqual([]);
+    expect(session.getRecord().queueAdmissionReceipts?.[admitted.queuedItemId]?.status).toBe('completed');
+    await session.close();
+  });
+
+  it('includes scheduling options in queue admission conflict detection', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const notBefore = Date.now() + 60_000;
+    const deadline = notBefore + 60_000;
+
+    const admitted = await session.admitQueue({
+      content: 'delayed work',
+      admissionId: 'queue-schedule-conflict',
+      priority: 1,
+      deadline,
+      notBefore,
+    });
+
+    await expect(
+      session.admitQueue({
+        content: 'delayed work',
+        admissionId: 'queue-schedule-conflict',
+        priority: 2,
+        deadline,
+        notBefore,
+      }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+    expect(session.getRecord().pendingQueue).toHaveLength(1);
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('treats omitted priority and priority 0 as the same admission payload', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const admitted = await session.admitQueue({
+      content: 'default priority',
+      admissionId: 'queue-default-priority',
+    });
+    const duplicate = await session.admitQueue({
+      content: 'default priority',
+      admissionId: 'queue-default-priority',
+      priority: 0,
+    });
+
+    expect(duplicate).toEqual({ accepted: true, queuedItemId: admitted.queuedItemId, duplicate: true });
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('rejects non-finite scheduling options at admission', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await expect(
+      session.admitQueue({ content: 'bad priority', admissionId: 'queue-bad-priority', priority: Number.NaN } as any),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(
+      session.admitQueue({
+        content: 'bad deadline',
+        admissionId: 'queue-bad-deadline',
+        deadline: Number.POSITIVE_INFINITY,
+      } as any),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
+    await session.close();
+  });
+
   it('throws HarnessQueueFullError once pendingQueue reaches sessions.maxQueueDepth', async () => {
     // Build a harness with a tiny cap so we can hit it.
     const agent = new MockAgent({ id: 'default' });

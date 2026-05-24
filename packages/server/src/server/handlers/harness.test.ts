@@ -1716,6 +1716,9 @@ describe('Harness server routes', () => {
           content: 'next',
           admissionId: 'admission-queue-1',
           yolo: true,
+          priority: 7,
+          deadline: 1_800_000_000_000,
+          notBefore: 1_700_000_000_000,
         },
       }),
     );
@@ -1726,6 +1729,9 @@ describe('Harness server routes', () => {
       content: 'next',
       admissionId: 'admission-queue-1',
       yolo: true,
+      priority: 7,
+      deadline: 1_800_000_000_000,
+      notBefore: 1_700_000_000_000,
     });
     expect(result).toEqual({ accepted: true, queuedItemId: 'queue-1', duplicate: true });
   });

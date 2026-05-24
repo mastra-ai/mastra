@@ -20912,6 +20912,9 @@ export type PostHarnessNameSessionsSessionIdQueue_Body = {
   mode?: string | undefined;
   model?: string | undefined;
   yolo?: boolean | undefined;
+  priority?: number | undefined;
+  deadline?: number | undefined;
+  notBefore?: number | undefined;
   attachments?:
     | (
         | {

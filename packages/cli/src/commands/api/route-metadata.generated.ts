@@ -3965,9 +3965,12 @@ export const API_ROUTE_METADATA = {
       "admissionId",
       "attachments",
       "content",
+      "deadline",
       "files",
       "mode",
       "model",
+      "notBefore",
+      "priority",
       "yolo"
     ],
     "hasQuery": false,

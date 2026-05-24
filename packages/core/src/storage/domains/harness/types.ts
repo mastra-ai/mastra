@@ -121,6 +121,12 @@ export interface QueuedItem {
    * Omit to opt out of deadline checks.
    */
   deadline?: number;
+  /**
+   * Absolute earliest-start timestamp (epoch ms). Items whose `notBefore` is
+   * in the future remain in `pendingQueue` and are skipped by the scheduler so
+   * eligible work behind them can still drain.
+   */
+  notBefore?: number;
 }
 
 /**
