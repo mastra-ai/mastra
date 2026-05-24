@@ -273,10 +273,11 @@ await subscription.processDataStream({
   onChunk: async chunk => {
     console.log(chunk)
   },
+  reconnect: true,
 })
 ```
 
-`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted.
+`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes, such as after a proxy idle timeout.
 
 <PropertiesTable
   content={[
@@ -290,6 +291,13 @@ await subscription.processDataStream({
     name: 'threadId',
     type: 'string',
     description: 'Thread ID to subscribe to.',
+  },
+  {
+    name: 'processDataStream().reconnect',
+    type: 'boolean | { maxRetries?: number; delayMs?: number }',
+    isOptional: true,
+    description:
+      'Reconnects the subscription stream after it closes. `true` retries indefinitely with a one second delay.',
   },
 ]}
 />

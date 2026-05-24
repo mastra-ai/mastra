@@ -42,6 +42,7 @@ import type {
   ListAgentVersionsResponse,
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
+  ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -414,39 +415,59 @@ export class Agent extends BaseResource {
    */
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
     }
   > {
-    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
-      method: 'POST',
-      body: params,
-      stream: true,
-    })) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
+    const requestSubscription = () =>
+      this.request(`/agents/${this.agentId}/threads/subscribe`, {
+        method: 'POST',
+        body: params,
+        stream: true,
+      }) as Promise<Response>;
+
+    const streamResponse = (await requestSubscription()) as Response & {
+      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
     };
 
     if (!streamResponse.body) {
       throw new Error('No response body');
     }
 
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-    }) => {
-      await processMastraStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-        signal: this.options.abortSignal,
-      });
+    streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+      const reconnectOptions =
+        reconnect === true
+          ? { maxRetries: Infinity, delayMs: 1000 }
+          : reconnect
+            ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
+            : null;
+      let response: Response = streamResponse;
+      let attempts = 0;
+
+      while (true) {
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        try {
+          await processMastraStream({
+            stream: response.body as ReadableStream<Uint8Array>,
+            onChunk,
+            signal: this.options.abortSignal,
+          });
+        } catch (error) {
+          if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+            throw error;
+          }
+        }
+
+        if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+          return;
+        }
+
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
+        response = await requestSubscription();
+      }
     };
 
     return streamResponse;

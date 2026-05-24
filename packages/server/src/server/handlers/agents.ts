@@ -1729,18 +1729,29 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
 
       return new ReadableStream({
         async start(controller) {
+          let heartbeat: ReturnType<typeof setTimeout> | undefined;
+          const scheduleHeartbeat = () => {
+            if (heartbeat) clearTimeout(heartbeat);
+            heartbeat = setTimeout(() => {
+              controller.enqueue(': heartbeat\n\n');
+              scheduleHeartbeat();
+            }, 25_000);
+          };
           const abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+          scheduleHeartbeat();
 
           try {
             for await (const part of subscription.stream) {
               controller.enqueue(part);
+              scheduleHeartbeat();
             }
             cleanup(controller);
           } catch (error) {
             cleanup();
             controller.error(error);
           } finally {
+            if (heartbeat) clearTimeout(heartbeat);
             abortSignal?.removeEventListener('abort', abortCleanup);
           }
         },

@@ -102,6 +102,50 @@ describe('Agent signal routes', () => {
       stream: true,
     });
   });
+
+  it('can reconnect when processing a thread subscription stream ends', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const firstChunk = { type: 'text-delta', runId: 'run-1', from: 'AGENT', payload: { id: 'text-1', text: 'first' } };
+    const secondChunk = {
+      type: 'text-delta',
+      runId: 'run-2',
+      from: 'AGENT',
+      payload: { id: 'text-2', text: 'second' },
+    };
+    const encode = (chunk: unknown) => new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`);
+    const mockRequest = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encode(firstChunk));
+              controller.close();
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encode(secondChunk));
+              controller.close();
+            },
+          }),
+        ),
+      );
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+    const onChunk = vi.fn().mockResolvedValue(undefined);
+
+    await response.processDataStream({ onChunk, reconnect: { maxRetries: 1, delayMs: 0 } });
+
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+    expect(onChunk).toHaveBeenNthCalledWith(1, firstChunk);
+    expect(onChunk).toHaveBeenNthCalledWith(2, secondChunk);
+  });
 });
 
 describe('Agent.stream', () => {

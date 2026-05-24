@@ -206,6 +206,26 @@ describe('processMastraStream', () => {
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
   });
 
+  it('should ignore SSE heartbeat comments', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'valid message' },
+    };
+
+    const sseData = `: keep-alive\n\ndata: ${JSON.stringify(testChunk)}\n\n: keep-alive\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
   it('should properly clean up stream reader resources', async () => {
     const testChunk: ChunkType = {
       type: 'message',
