@@ -29,7 +29,7 @@ import type { TaskItem } from './builtin-tools/shared';
 import { HarnessEventSerializationError, HarnessValidationError, getHarnessPublicErrorCode } from './errors';
 import type { EventSerializationReason } from './errors';
 import type { SessionLifecycleState } from './session';
-import type { PermissionPolicy, ToolCategory } from './types';
+import type { HarnessActorIdentity, PermissionPolicy, ToolCategory } from './types';
 
 // ---------------------------------------------------------------------------
 // Event base.
@@ -175,12 +175,21 @@ export interface PermissionGrantedEvent extends HarnessEventBase {
   type: 'permission_granted';
   category?: ToolCategory;
   toolName?: string;
+  /**
+   * Identity of the caller this grant applies to. Omitted for
+   * session-level grants. Subscribers and audit consumers need this
+   * to distinguish an actor overlay from a baseline session grant
+   * change — otherwise mirrored permission state can drift.
+   */
+  actor?: HarnessActorIdentity;
 }
 
 export interface PermissionRevokedEvent extends HarnessEventBase {
   type: 'permission_revoked';
   category?: ToolCategory;
   toolName?: string;
+  /** Identity of the caller this revoke applies to. Omitted for session-level revokes. */
+  actor?: HarnessActorIdentity;
 }
 
 export interface PermissionPolicyChangedEvent extends HarnessEventBase {

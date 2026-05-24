@@ -127,6 +127,62 @@ export interface HarnessMode {
 export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
 
 /**
+ * Identifies the caller that admitted a single tool invocation. A
+ * Harness session can be served by many EXTERNAL callers concurrently
+ * (multiple A2A agents on a shared task, multiple channel users on a
+ * Slack thread, the CLI plus a server route on the same workspace),
+ * and per-actor grants attach to one of those identities.
+ *
+ * Scope (anti-drift):
+ * - This identity covers EXTERNAL callers only. Internal subagent
+ *   topology is NOT a `HarnessActorIdentity` kind: a subagent runs in
+ *   its own child Session with its own profile, and subagent
+ *   attribution is already captured by the workspace action journal
+ *   payload via `actor.source: 'subagent'` + `actor.parentSessionId`.
+ *   Adding a `'subagent'` kind here would mix permission identity
+ *   with execution topology and would be unstable (subagent session
+ *   ids are mostly ephemeral). Use `permissions.applyProfile` on the
+ *   child Session to gate subagent tool calls.
+ *
+ * Identity composition (anti-collision rules):
+ * - Channel callers MUST include `provider`, `platform`,
+ *   `externalTenantId?`, `externalChannelId?`, `platformUserId` so the
+ *   same user id on two different Slack workspaces / providers does
+ *   not collide. The `id` is the stable composite key — callers do
+ *   not stringify; use {@link actorKey}.
+ * - A2A callers use `kind: 'a2a'`, `id: <agent registration key>`.
+ * - CLI / server callers use `kind: 'cli' | 'server'`, `id: <opaque
+ *   process / route id>`.
+ */
+export type HarnessActorIdentityKind = 'a2a' | 'channel' | 'cli' | 'server';
+
+export interface HarnessActorIdentity {
+  kind: HarnessActorIdentityKind;
+  /**
+   * Stable identifier within `kind`. For channel callers, this is the
+   * composite of (provider, platform, externalTenantId?,
+   * externalChannelId?, platformUserId). For A2A, the agent
+   * registration key. Caller-facing — never auto-parse the structure.
+   */
+  id: string;
+  /**
+   * Optional human-readable label for audit / UI. Never used for
+   * permission resolution.
+   */
+  displayName?: string;
+}
+
+/**
+ * Stringify an actor identity into the map key shape used in
+ * `SessionRecord.actorGrants`. Deterministic and stable across
+ * processes so two channel calls from the same Slack user resolve to
+ * the same key.
+ */
+export function actorKey(actor: HarnessActorIdentity): string {
+  return `${actor.kind}:${actor.id}`;
+}
+
+/**
  * Outcome of a permission rule (§4.2e). Per-tool rules win over category
  * rules; explicit `'deny'` is terminal. Session-scoped grants can suppress
  * an `'ask'` reason but never override `'deny'`.
@@ -1881,6 +1937,15 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Trusted channel metadata attached by Harness-owned integration paths. */
   channel?: Readonly<PersistedRequestContextInput['channel']>;
 
+  /**
+   * Identity of the caller that admitted the current turn. Populated
+   * by the harness from the request's channel/a2a/server metadata so
+   * permission resolution can route per-actor grants. Undefined
+   * means session-level resolution (legacy behavior — the resolver
+   * falls back to `sessionGrants`).
+   */
+  actor?: HarnessActorIdentity;
+
   /** Snapshot of session state at slot construction. Live reads use `getState`. */
   state: TState;
   /** Returns the live state object, reflecting writes from earlier in the same turn. */
@@ -1915,7 +1980,11 @@ export interface HarnessRequestContext<TState = unknown> {
    * session grants can allow, ask, or deny without degrading to a global
    * approval gate.
    */
-  resolveToolPermission?: (params: { toolName: string; args: Record<string, unknown> }) => PermissionPolicy;
+  resolveToolPermission?: (params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    actor?: HarnessActorIdentity;
+  }) => PermissionPolicy;
   /**
    * Internal audit hook used by the agent tool dispatcher to journal
    * workspace actions after the final permission decision is known.

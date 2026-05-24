@@ -329,6 +329,17 @@ export interface SessionRecord {
   permissionRules: PermissionRules;
   sessionGrants: SessionGrants;
   /**
+   * Per-actor grant overlays. Keys are stable actor identities
+   * (`${kind}:${id}` — see `HarnessActorIdentity` and `actorKey`).
+   * Values overlay the session-level `sessionGrants` for that specific
+   * caller. A grant on `'channel:slack:T1:C1:U1'` only applies when the
+   * request context resolves to that exact actor.
+   *
+   * Undefined on legacy records — the resolver falls back to
+   * `sessionGrants` for every caller, matching pre-actor behavior.
+   */
+  actorGrants?: Record<string, SessionGrants>;
+  /**
    * Name of the last permission profile applied to this session, if
    * any. Used by audit / replay consumers and by the
    * `permission_profile_applied` event payload (`previousProfileName`).

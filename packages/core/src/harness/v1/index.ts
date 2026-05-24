@@ -65,6 +65,8 @@ export type {
 } from './events';
 
 export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
+export { actorKey } from './types';
+export type { HarnessActorIdentity, HarnessActorIdentityKind } from './types';
 export { HARNESS_PERMISSION_PROFILES, grantsFromProfile, rulesFromProfile } from './permission-profiles';
 export type {
   HarnessPermissionProfile,

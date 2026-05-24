@@ -120,6 +120,7 @@ import type {
   AttachmentRef,
   GoalOptions,
   HarnessActionCatalogEntry,
+  HarnessActorIdentity,
   HarnessActionCatalogListOptions,
   HarnessActionCatalogSourceKind,
   HarnessMcpServerDescriptor,
@@ -150,6 +151,7 @@ import type {
   SetStateOptions,
   ToolCategory,
 } from './types';
+import { actorKey } from './types';
 import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace/actions';
 import { classifyHarnessWorkspaceToolAction } from './workspace/actions';
 import type { WorkspaceFileOperation, WorkspacePolicyAction } from './workspace/policy';
@@ -245,6 +247,111 @@ const RESERVED_MCP_SERVER_KEYS = new Set([...Object.getOwnPropertyNames(Object.p
  * `'complete'`, hiding failure from durable replay and remote stream
  * consumers (TUI dispatch, headless exit, A2A `tasks/resubscribe`).
  */
+/**
+ * Immutable update of the `SessionRecord.actorGrants` map. Returns a
+ * fresh map with the named actor's grants augmented to include
+ * `category`. Caller-supplied `prev` is never mutated.
+ */
+function actorGrantsWithCategoryGranted(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  category: string,
+): Record<string, SessionGrants> {
+  const existing = prev?.[key];
+  const categories = existing?.categories ?? [];
+  if (categories.includes(category)) return { ...(prev ?? {}) };
+  return {
+    ...(prev ?? {}),
+    [key]: {
+      categories: [...categories, category],
+      tools: [...(existing?.tools ?? [])],
+    },
+  };
+}
+
+function actorGrantsWithToolGranted(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  toolName: string,
+): Record<string, SessionGrants> {
+  const existing = prev?.[key];
+  const tools = existing?.tools ?? [];
+  if (tools.includes(toolName)) return { ...(prev ?? {}) };
+  return {
+    ...(prev ?? {}),
+    [key]: {
+      categories: [...(existing?.categories ?? [])],
+      tools: [...tools, toolName],
+    },
+  };
+}
+
+function actorGrantsWithCategoryRevoked(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  category: string,
+): Record<string, SessionGrants> | undefined {
+  const existing = prev?.[key];
+  if (existing === undefined) return prev;
+  const nextCategories = existing.categories.filter(c => c !== category);
+  const next = { ...(prev ?? {}) };
+  if (nextCategories.length === 0 && existing.tools.length === 0) {
+    delete next[key];
+    return Object.keys(next).length === 0 ? undefined : next;
+  }
+  next[key] = { categories: nextCategories, tools: [...existing.tools] };
+  return next;
+}
+
+function actorGrantsWithToolRevoked(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  toolName: string,
+): Record<string, SessionGrants> | undefined {
+  const existing = prev?.[key];
+  if (existing === undefined) return prev;
+  const nextTools = existing.tools.filter(t => t !== toolName);
+  const next = { ...(prev ?? {}) };
+  if (nextTools.length === 0 && existing.categories.length === 0) {
+    delete next[key];
+    return Object.keys(next).length === 0 ? undefined : next;
+  }
+  next[key] = { categories: [...existing.categories], tools: nextTools };
+  return next;
+}
+
+/**
+ * Build a `HarnessActorIdentity` from the persisted channel context
+ * recorded at session admission. The id composite is
+ * `${provider}:${tenant?}:${channel?}:${platformUserId}` so the same
+ * Slack user on two different workspaces / providers resolves to
+ * distinct actor keys. Returns `undefined` when the channel context
+ * lacks an actor or any required field — sessions without channel
+ * identity are session-level only.
+ */
+export function _deriveActorFromChannelForTest(
+  channel: HarnessRequestContext['channel'] | undefined,
+): HarnessActorIdentity | undefined {
+  return deriveActorFromChannel(channel);
+}
+
+function deriveActorFromChannel(
+  channel: HarnessRequestContext['channel'] | undefined,
+): HarnessActorIdentity | undefined {
+  if (!channel) return undefined;
+  const platformUserId = channel.actor?.platformUserId;
+  if (platformUserId === undefined || platformUserId.length === 0) return undefined;
+  const provider = channel.providerId;
+  if (provider === undefined || provider.length === 0) return undefined;
+  const tenant = channel.externalTenantId ?? '';
+  const channelId = channel.externalChannelId ?? '';
+  return {
+    kind: 'channel',
+    id: `${provider}:${tenant}:${channelId}:${platformUserId}`,
+    ...(channel.actor?.displayName ? { displayName: channel.actor.displayName } : {}),
+  };
+}
+
 function mapFinishToAgentEndReason(finishReason: string | undefined): 'complete' | 'suspended' | 'error' {
   if (finishReason === 'suspended') return 'suspended';
   if (finishReason === 'error') return 'error';
@@ -4462,13 +4569,27 @@ export class Session {
     );
   }
 
-  private _resolveToolPermissionPolicy(toolName: string): PermissionPolicy {
+  private _resolveToolPermissionPolicy(
+    toolName: string,
+    opts?: { args?: Record<string, unknown>; actor?: HarnessActorIdentity },
+  ): PermissionPolicy {
     const category = this._harness.getToolCategory({ toolName });
     const toolRule = this._record.permissionRules.tools[toolName];
     const categoryRule = category ? this._record.permissionRules.categories[category] : undefined;
     const policy = toolRule ?? categoryRule ?? this._harness._getDefaultPermissionPolicy();
 
     if (policy !== 'ask') return policy;
+    // Per-actor grants overlay the session-level grants. A grant on a
+    // specific actor (e.g. `channel:slack:T1:C1:U1`) only suppresses
+    // `ask` for THAT caller; session-level grants apply to any caller
+    // including those without an explicit actor.
+    if (opts?.actor !== undefined) {
+      const overlay = this._record.actorGrants?.[actorKey(opts.actor)];
+      if (overlay !== undefined) {
+        if (overlay.tools.includes(toolName)) return 'allow';
+        if (category && overlay.categories.includes(category)) return 'allow';
+      }
+    }
     if (this._record.sessionGrants.tools.includes(toolName)) return 'allow';
     if (category && this._record.sessionGrants.categories.includes(category)) return 'allow';
     return 'ask';
@@ -6090,11 +6211,13 @@ export class Session {
       profileName: HarnessPermissionProfileName;
       preserveCallerDenies?: boolean;
     }): Promise<void> => this._permApplyProfile(opts),
-    grantCategory: (opts: { category: ToolCategory }): Promise<void> => this._permGrantCategory(opts),
-    grantTool: (opts: { toolName: string }): Promise<void> => this._permGrantTool(opts),
-    revokeCategory: (opts: { category: ToolCategory }): Promise<void> => this._permRevokeCategory(opts),
-    revokeTool: (opts: { toolName: string }): Promise<void> => this._permRevokeTool(opts),
-    getGrants: (): Readonly<SessionGrants> => this._permGetGrants(),
+    grantCategory: (opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> =>
+      this._permGrantCategory(opts),
+    grantTool: (opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> => this._permGrantTool(opts),
+    revokeCategory: (opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> =>
+      this._permRevokeCategory(opts),
+    revokeTool: (opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> => this._permRevokeTool(opts),
+    getGrants: (opts?: { actor?: HarnessActorIdentity }): Readonly<SessionGrants> => this._permGetGrants(opts),
     getRules: (): Readonly<PermissionRules> => this._permGetRules(),
     setPolicy: (
       opts:
@@ -6108,81 +6231,177 @@ export class Session {
    * ("don't ask again for `read` tools"). No-op if already granted.
    * Emits `permission_granted` on a transition.
    */
-  private async _permGrantCategory(opts: { category: ToolCategory }): Promise<void> {
+  private async _permGrantCategory(opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.grantCategory()');
     assertToolCategory('permissions.grantCategory', opts.category);
-    if (this._record.sessionGrants.categories.includes(opts.category)) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        categories: [...prev.sessionGrants.categories, opts.category],
-      },
-    }));
-    this._emitter.emit({ type: 'permission_granted', category: opts.category });
+    // Outer pre-check is an optimization only; the source of truth is
+    // the inner check inside `_flushUpdate` so two concurrent
+    // identical grants don't both emit `permission_granted`.
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (prev.sessionGrants.categories.includes(opts.category)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            categories: [...prev.sessionGrants.categories, opts.category],
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_granted', category: opts.category });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      if (prev.actorGrants?.[key]?.categories.includes(opts.category)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithCategoryGranted(prev.actorGrants, key, opts.category),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_granted', category: opts.category, actor: opts.actor });
+    }
   }
 
   /**
    * Grant a specific tool for the lifetime of this session. No-op if
-   * already granted. Emits `permission_granted` on a transition.
+   * already granted. Emits `permission_granted` on a transition. When
+   * `actor` is supplied, the grant overlays only that caller's view.
    */
-  private async _permGrantTool(opts: { toolName: string }): Promise<void> {
+  private async _permGrantTool(opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.grantTool()');
     assertToolName('permissions.grantTool', opts.toolName);
-    if (this._record.sessionGrants.tools.includes(opts.toolName)) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        tools: [...prev.sessionGrants.tools, opts.toolName],
-      },
-    }));
-    this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName });
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (prev.sessionGrants.tools.includes(opts.toolName)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            tools: [...prev.sessionGrants.tools, opts.toolName],
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      if (prev.actorGrants?.[key]?.tools.includes(opts.toolName)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithToolGranted(prev.actorGrants, key, opts.toolName),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName, actor: opts.actor });
+    }
   }
 
   /**
    * Revoke a previously granted category. No-op if not granted. Emits
-   * `permission_revoked` on a transition.
+   * `permission_revoked` on a transition. When `actor` is supplied,
+   * only that actor's grant is revoked.
    */
-  private async _permRevokeCategory(opts: { category: ToolCategory }): Promise<void> {
+  private async _permRevokeCategory(opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.revokeCategory()');
     assertToolCategory('permissions.revokeCategory', opts.category);
-    const idx = this._record.sessionGrants.categories.indexOf(opts.category);
-    if (idx === -1) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        categories: prev.sessionGrants.categories.filter(c => c !== opts.category),
-      },
-    }));
-    this._emitter.emit({ type: 'permission_revoked', category: opts.category });
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (!prev.sessionGrants.categories.includes(opts.category)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            categories: prev.sessionGrants.categories.filter(c => c !== opts.category),
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_revoked', category: opts.category });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      const existing = prev.actorGrants?.[key];
+      if (existing === undefined || !existing.categories.includes(opts.category)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithCategoryRevoked(prev.actorGrants, key, opts.category),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_revoked', category: opts.category, actor: opts.actor });
+    }
   }
 
   /**
    * Revoke a previously granted tool. No-op if not granted. Emits
-   * `permission_revoked` on a transition.
+   * `permission_revoked` on a transition. When `actor` is supplied,
+   * only that actor's grant is revoked.
    */
-  private async _permRevokeTool(opts: { toolName: string }): Promise<void> {
+  private async _permRevokeTool(opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.revokeTool()');
     assertToolName('permissions.revokeTool', opts.toolName);
-    const idx = this._record.sessionGrants.tools.indexOf(opts.toolName);
-    if (idx === -1) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        tools: prev.sessionGrants.tools.filter(t => t !== opts.toolName),
-      },
-    }));
-    this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName });
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (!prev.sessionGrants.tools.includes(opts.toolName)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            tools: prev.sessionGrants.tools.filter(t => t !== opts.toolName),
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      const existing = prev.actorGrants?.[key];
+      if (existing === undefined || !existing.tools.includes(opts.toolName)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithToolRevoked(prev.actorGrants, key, opts.toolName),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName, actor: opts.actor });
+    }
   }
 
-  /** Read-only snapshot of the session's current grants. */
-  private _permGetGrants(): Readonly<SessionGrants> {
+  /**
+   * Read-only snapshot of the session's grants. With no `actor`, returns
+   * the session-level grants. With an actor, returns ONLY that actor's
+   * overlay (callers that need the merged view should compose with
+   * `getGrants()` themselves — overlay semantics differ from union).
+   */
+  private _permGetGrants(opts?: { actor?: HarnessActorIdentity }): Readonly<SessionGrants> {
     this._assertLive('permissions.getGrants()');
-    const { categories, tools } = this._record.sessionGrants;
-    return Object.freeze({ categories: [...categories], tools: [...tools] });
+    if (opts?.actor === undefined) {
+      const { categories, tools } = this._record.sessionGrants;
+      return Object.freeze({ categories: [...categories], tools: [...tools] });
+    }
+    const overlay = this._record.actorGrants?.[actorKey(opts.actor)];
+    if (overlay === undefined) return Object.freeze({ categories: [], tools: [] });
+    return Object.freeze({ categories: [...overlay.categories], tools: [...overlay.tools] });
   }
 
   /** Read-only snapshot of the session's current per-category / per-tool rules. */
@@ -6234,8 +6453,15 @@ export class Session {
         categories: { ...nextRules.categories } as Record<string, 'allow' | 'ask' | 'deny'>,
         preservedToolDenies,
       };
+      const { actorGrants: _stale, ...rest } = prev;
+      // Clear every per-actor grant alongside the session-level reset.
+      // A profile reset must drop stale per-caller privilege (e.g. a
+      // `channel:slack:...` grant from before a switch to
+      // `readOnlyReview`), otherwise a stronger prior posture could
+      // survive the reset for specific callers.
+      void _stale;
       return {
-        ...prev,
+        ...rest,
         permissionRules: nextRules,
         sessionGrants: nextGrants,
         appliedPermissionProfile: profile.name,
@@ -8679,6 +8905,15 @@ export class Session {
     } else {
       workspace = await this._getWorkspaceUnchecked();
     }
+    // Derive a `HarnessActorIdentity` from the persisted channel
+    // context when present. The composite includes provider, platform,
+    // tenant, channel, and platformUserId so the same user id on two
+    // different Slack workspaces / providers does not collide. Sessions
+    // without channel context (CLI / programmatic / A2A) leave
+    // `actor` undefined here — A2A and CLI ingress paths populate the
+    // request-context `actor` field at admission time in a follow-up
+    // wiring slice.
+    const derivedActor = deriveActorFromChannel(persistedRequestContext?.channel);
     const harnessSlot: HarnessRequestContext<unknown> = {
       harnessId: this._harness.ownerId,
       sessionId: this.id,
@@ -8688,6 +8923,7 @@ export class Session {
       ...(turn.modelId ? { modelId: turn.modelId } : {}),
       ...(persistedRequestContext?.metadata ? { app: persistedRequestContext.metadata } : {}),
       ...(persistedRequestContext?.channel ? { channel: persistedRequestContext.channel } : {}),
+      ...(derivedActor !== undefined ? { actor: derivedActor } : {}),
       state: stateSnapshot,
       getState: () => (session._record.state ?? {}) as unknown,
       setState: ((updatesOrUpdater: unknown) =>
@@ -8738,7 +8974,21 @@ export class Session {
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
-      resolveToolPermission: params => session._resolveToolPermissionPolicy(params.toolName),
+      resolveToolPermission: params =>
+        session._resolveToolPermissionPolicy(params.toolName, {
+          // Prefer caller-supplied actor (an upstream resolver may have
+          // overridden) and fall back to the channel-derived actor on
+          // the slot so per-actor grants resolve for every channel-
+          // originated tool call without the dispatcher needing to
+          // forward identity explicitly.
+          ...((params.actor ?? derivedActor) !== undefined
+            ? { actor: (params.actor ?? derivedActor) as HarnessActorIdentity }
+            : {}),
+          // `params.args` is intentionally dropped here in S2 — Slice 5
+          // wires the args plumbing through. Adding it now would
+          // change the resolver signature twice; instead the
+          // signature already accepts `args?` for the S5 wire-up.
+        }),
       recordWorkspaceAction: params => session._recordWorkspaceAction(params),
       registerBackgroundProcess: handle => session._registerBackgroundProcess(handle),
       extendLease: extendOpts => session.extendLease(extendOpts),
