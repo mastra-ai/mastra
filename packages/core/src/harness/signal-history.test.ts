@@ -130,4 +130,102 @@ describe('Harness signal history rendering', () => {
       },
     ]);
   });
+
+  it('renders legacy metadata-only system-reminder signal rows with text fallback', async () => {
+    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+
+    await memoryStorage.saveMessages({
+      messages: [
+        {
+          id: 'legacy-reminder-signal',
+          role: 'signal',
+          createdAt: new Date('2024-01-01T00:00:01.000Z'),
+          threadId: thread.id,
+          resourceId: 'test-harness',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'legacy reminder text' }],
+            metadata: {
+              signal: {
+                type: 'system-reminder',
+                attributes: { reminderType: 'legacy-reminder' },
+              },
+            },
+          },
+        } as any,
+      ],
+    });
+
+    expect(await harness.listMessages()).toEqual([
+      {
+        id: 'legacy-reminder-signal',
+        role: 'user',
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+        content: [
+          {
+            type: 'system_reminder',
+            message: 'legacy reminder text',
+            reminderType: 'legacy-reminder',
+            path: undefined,
+            precedesMessageId: undefined,
+            gapText: undefined,
+            gapMs: undefined,
+            timestamp: undefined,
+            goalMaxTurns: undefined,
+            judgeModelId: undefined,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('renders completed tool invocations without result payloads', async () => {
+    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+
+    await memoryStorage.saveMessages({
+      messages: [
+        {
+          id: 'assistant-tool-resultless',
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T00:00:02.000Z'),
+          threadId: thread.id,
+          resourceId: 'test-harness',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                providerMetadata: { provider: { traceId: 'trace-1' } },
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'lookup',
+                  args: { query: 'x' },
+                },
+              },
+            ],
+          },
+        } as any,
+      ],
+    });
+
+    expect(await harness.listMessages()).toEqual([
+      {
+        id: 'assistant-tool-resultless',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01T00:00:02.000Z'),
+        content: [
+          { type: 'tool_call', id: 'call-1', name: 'lookup', args: { query: 'x' } },
+          {
+            type: 'tool_result',
+            id: 'call-1',
+            name: 'lookup',
+            result: undefined,
+            isError: false,
+            providerMetadata: { provider: { traceId: 'trace-1' } },
+          },
+        ],
+      },
+    ]);
+  });
 });
