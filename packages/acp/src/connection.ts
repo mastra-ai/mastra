@@ -268,9 +268,7 @@ export class ACPConnection {
 
         if (available?.length && !available.some(m => m.modelId === this.options.model)) {
           const ids = available.map(m => m.modelId).join(', ');
-          throw new Error(
-            `Model "${this.options.model}" is not available. Available models: ${ids}`,
-          );
+          throw new Error(`Model "${this.options.model}" is not available. Available models: ${ids}`);
         }
 
         await this.connection.unstable_setSessionModel({
