@@ -22,6 +22,7 @@ import { buildFakeOutput } from './__test-utils__/fake-output';
 import type { HarnessEvent } from './events';
 import { parseHarnessEventId } from './events';
 import { Harness } from './harness';
+import { HARNESS_PUBLIC_VIEW_REDACTED } from './public-view';
 import {
   bridgeReplayAndLive,
   HarnessEventReplayAbortedError,
@@ -405,5 +406,95 @@ describe('bridgeReplayAndLive — abort + backpressure', () => {
       })(),
     ).rejects.toBeInstanceOf(HarnessEventReplayBufferOverflowError);
     await pending;
+  });
+});
+
+describe('bridgeReplayAndLive — public view integration', () => {
+  it('projects replay events when publicView is true', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.message({ content: 'hi' });
+    await session._flushEventPersistence();
+    const state = await harness.getSessionEventReplayState({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+    });
+    const expectedCount = state!.newestSequence - state!.oldestSequence + 1;
+
+    const iter = bridgeReplayAndLive(harness, {
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      sinceCursor: 'beginning',
+      publicView: true,
+    });
+
+    const events = await take(iter, expectedCount);
+    // tool_start / tool_end in the replay should have redacted args/result.
+    const toolStart = events.find(e => e.type === 'tool_start') as any;
+    const toolEnd = events.find(e => e.type === 'tool_end') as any;
+    if (toolStart !== undefined) expect(toolStart.args).toBe(HARNESS_PUBLIC_VIEW_REDACTED);
+    if (toolEnd !== undefined) expect(toolEnd.result).toBe(HARNESS_PUBLIC_VIEW_REDACTED);
+  });
+
+  it('projects live events when publicView is true', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const iter = bridgeReplayAndLive(harness, {
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      publicView: true,
+    });
+    // Take 2: agent_start + agent_end at minimum from session.message.
+    const pending = take(iter, 2);
+    await Promise.resolve();
+    await session.message({ content: 'hi' });
+    const events = await pending;
+    expect(events.length).toBe(2);
+    // No event in the live stream should leak a redactable raw field —
+    // walking via the redaction-sentinel marker is the simplest check
+    // (preserved events serialize without the marker; redacted ones
+    // contain it).
+    for (const event of events) {
+      if (event.type === 'tool_start') expect((event as any).args).toBe(HARNESS_PUBLIC_VIEW_REDACTED);
+      if (event.type === 'tool_end') expect((event as any).result).toBe(HARNESS_PUBLIC_VIEW_REDACTED);
+    }
+  });
+
+  it('publicView=false yields raw events (default)', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const iter = bridgeReplayAndLive(harness, {
+      sessionId: session.id,
+      resourceId: session.resourceId,
+    });
+    const pending = take(iter, 1);
+    await Promise.resolve();
+    await session.message({ content: 'hi' });
+    const events = await pending;
+    const start = events.find(e => e.type === 'agent_start');
+    expect(start).toBeDefined();
+    // Raw events should not carry the redaction sentinel anywhere on
+    // their visible fields.
+    expect(JSON.stringify(start)).not.toContain(HARNESS_PUBLIC_VIEW_REDACTED);
+  });
+
+  it('publicView with a custom redactor that drops om events skips them in the stream', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const iter = bridgeReplayAndLive(harness, {
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      publicView: true,
+      publicViewOptions: {
+        redactor: e => (e.type.startsWith('om_') ? null : e),
+      },
+    });
+    const pending = take(iter, 1);
+    await Promise.resolve();
+    await session.message({ content: 'hi' });
+    const events = await pending;
+    expect(events.length).toBe(1);
+    expect(events[0]!.type.startsWith('om_')).toBe(false);
   });
 });

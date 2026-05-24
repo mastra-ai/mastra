@@ -23,6 +23,8 @@
 import type { HarnessEvent } from './events';
 import { parseHarnessEventId } from './events';
 import type { Harness } from './harness';
+import { projectHarnessEventForPublicView } from './public-view';
+import type { PublicViewProjectionOptions } from './public-view';
 
 export interface BridgeReplayCursor {
   /** Stored event epoch. Use the value from `Harness.getSessionEventReplayState`. */
@@ -59,6 +61,18 @@ export interface BridgeReplayOptions {
   maxBufferedLive?: number;
   /** Replay page size. Default 256. */
   replayPageSize?: number;
+  /**
+   * Project every event through `projectHarnessEventForPublicView`
+   * before yielding. Use for SSE / A2A / channel-webhook consumers
+   * that should not see raw tool args/results, internal observational-
+   * memory text, thread titles, etc. In-process callers should leave
+   * this false (default) — they need full fidelity.
+   *
+   * `publicViewOptions` is forwarded to the projector so a transport
+   * adapter can tighten / loosen the redaction policy per call.
+   */
+  publicView?: boolean;
+  publicViewOptions?: PublicViewProjectionOptions;
 }
 
 /**
@@ -162,6 +176,8 @@ export async function* bridgeReplayAndLive(
   // Sentinel below -1 so a `lastDeliveredSequence < 0` comparison
   // against sequence 0 (the first event) cannot accidentally dedupe it.
   let lastDeliveredSequence = -2;
+  const project = (event: HarnessEvent): HarnessEvent | null =>
+    opts.publicView ? projectHarnessEventForPublicView(event, opts.publicViewOptions) : event;
 
   const liveBuffer: HarnessEvent[] = [];
   let bufferOverflow = false;
@@ -267,7 +283,12 @@ export async function* bridgeReplayAndLive(
             // snapshot from `snapshotHarnessEventForJson`). The shape
             // matches `HarnessEvent` because that's exactly what was
             // serialized; downstream consumers treat it as such.
-            yield row.event as unknown as HarnessEvent;
+            const projected = project(row.event as unknown as HarnessEvent);
+            // The projector can return null to drop an event from the
+            // public stream — we still advance `lastDeliveredSequence`
+            // so the live phase doesn't re-deliver it via the overlap
+            // dedupe.
+            if (projected !== null) yield projected;
             lastDeliveredSequence = row.sequence;
           }
           nextAfter = rows[rows.length - 1]!.sequence;
@@ -290,13 +311,15 @@ export async function* bridgeReplayAndLive(
           sequence = parseHarnessEventId(event.id).sequence;
         } catch {
           // Unparseable id should never happen for events that came
-          // from the same emitter, but if it does, deliver without
-          // dedupe so the consumer can react.
-          yield event;
+          // from the same emitter, but if it does, deliver (projected
+          // if publicView) without dedupe so the consumer can react.
+          const projected = project(event);
+          if (projected !== null) yield projected;
           continue;
         }
         if (sequence <= lastDeliveredSequence) continue; // overlap with replay tail
-        yield event;
+        const projected = project(event);
+        if (projected !== null) yield projected;
         lastDeliveredSequence = sequence;
         checkAbort();
         checkOverflow();

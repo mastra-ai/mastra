@@ -71,6 +71,8 @@ export {
   HarnessEventReplayStaleCursorError,
 } from './replay-bridge';
 export type { BridgeReplayCursor, BridgeReplayOptions } from './replay-bridge';
+export { HARNESS_PUBLIC_VIEW_REDACTED, projectHarnessEventForPublicView } from './public-view';
+export type { PublicViewProjectionOptions } from './public-view';
 export {
   classifyHarnessWorkspaceToolAction,
   getHarnessWorkspaceActionPathInput,

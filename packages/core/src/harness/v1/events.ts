@@ -1084,6 +1084,20 @@ const RESERVED_EVENT_PREFIXES: readonly string[] = [
  * event type or omits the required dotted prefix. Custom events must follow
  * `<namespace>.<rest>` per spec §10.3.
  */
+/**
+ * Predicate matching `assertCustomEventType` — true iff `type` is a
+ * valid custom event type (dotted, non-reserved). Used by helpers that
+ * need to branch on custom vs built-in events without relying on the
+ * brittle `type.includes('.')` heuristic.
+ */
+export function isCustomEventType(type: string): boolean {
+  if (RESERVED_EVENT_TYPES.has(type)) return false;
+  for (const prefix of RESERVED_EVENT_PREFIXES) {
+    if (type.startsWith(prefix)) return false;
+  }
+  return type.includes('.');
+}
+
 export function assertCustomEventType(type: string): void {
   if (RESERVED_EVENT_TYPES.has(type)) {
     throw new HarnessValidationError('event.type', `"${type}" is a reserved harness event type`);
