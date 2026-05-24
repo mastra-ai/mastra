@@ -52,6 +52,7 @@ class AskQuestionBorderedBox {
   private answered = false;
   private cancelled = false;
   private selectedValue?: string;
+  private selectedValues?: string[];
   private answerIsNegative = false;
   /** True when created during streaming, before activate() is called */
   private streaming = false;
@@ -88,6 +89,12 @@ class AskQuestionBorderedBox {
     this.answered = true;
     this.selectedValue = selectedValue;
     this.answerIsNegative = isNegative;
+  }
+
+  setMultiAnswered(selectedValues: string[]) {
+    this.streaming = false;
+    this.answered = true;
+    this.selectedValues = selectedValues;
   }
 
   setCancelled() {
@@ -165,7 +172,9 @@ class AskQuestionBorderedBox {
       } else {
         // ✓/✗ on selected, dimmed unselected
         for (const item of this.items) {
-          const isSelected = item.label === this.selectedValue;
+          const isSelected = this.selectedValues
+            ? this.selectedValues.includes(item.label)
+            : item.label === this.selectedValue;
           if (isSelected) {
             const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
             const label = theme.fg('text', item.label);
@@ -577,7 +586,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         if (data === '\r') {
           const answers = Array.from(this.selectedValues);
 
-          this.answer(answers.join(', '));
+          this.answered = true;
+          this.borderedBox.setMultiAnswered(answers);
 
           this.onSubmit?.(answers);
           return;
