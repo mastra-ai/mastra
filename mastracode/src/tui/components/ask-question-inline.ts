@@ -35,7 +35,7 @@ export interface AskQuestionInlineOptions {
    * Enable for prompts that legitimately want paragraph-length replies (e.g. ask_user).
    */
   multiline?: boolean;
-  onSubmit: (answer: string) => void;
+  onSubmit: (answer: string | string[]) => void;
   onCancel: () => void;
 }
 
@@ -226,7 +226,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private selectList?: SelectList;
   private input?: Input | MultilineInput;
   private tui?: TUI;
-  private onSubmit?: (answer: string) => void;
+  private onSubmit?: (answer: string | string[]) => void;
   private onCancel?: () => void;
   private isNegativeAnswer?: (answer: string) => boolean;
   private allowEmptyInput = false;
@@ -422,7 +422,10 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.selectionMode === 'multi_select') {
       const multiItems: SelectItem[] = items.map(item => ({
         ...item,
-        label: `[ ] ${item.value}`,
+        label:
+          item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE
+            ? `[ ] ${theme.fg('dim', '✎ Custom response...')}`
+            : `[ ] ${item.value}`,
       }));
 
       this.selectList = new SelectList(multiItems, Math.min(multiItems.length, 8), getSelectListTheme());
@@ -559,7 +562,12 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
           renderedItems.forEach(i => {
             const checked = this.selectedValues.has(i.value);
-            i.label = `${checked ? '[x]' : '[ ]'} ${i.value}`;
+            const prefix = checked ? '[x]' : '[ ]';
+
+            i.label =
+              i.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE
+                ? `${prefix} ${theme.fg('dim', '✎ Custom response...')}`
+                : `${prefix} ${i.value}`;
           });
 
           this.selectList.invalidate();
@@ -567,7 +575,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         }
 
         if (data === '\r') {
-          this.handleAnswer(Array.from(this.selectedValues).join(', '));
+          this.onSubmit?.(Array.from(this.selectedValues));
+          this.answered = true;
           return;
         }
       }
