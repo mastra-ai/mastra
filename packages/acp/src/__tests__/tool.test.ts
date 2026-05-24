@@ -9,12 +9,13 @@ const mocks = vi.hoisted(() => {
   const ndJsonStream = vi.fn(() => ({ readable: {}, writable: {} }));
   const connectionInstances: MockClientSideConnection[] = [];
   let onPrompt: ((connection: MockClientSideConnection) => Promise<void> | void) | undefined;
+  let sessionResponse: Record<string, unknown> = { sessionId: 'session-1' };
 
   class MockClientSideConnection {
     client: any;
     initialize = vi.fn().mockResolvedValue({});
     authenticate = vi.fn().mockResolvedValue({});
-    newSession = vi.fn().mockResolvedValue({ sessionId: 'session-1' });
+    newSession = vi.fn().mockImplementation(() => Promise.resolve(sessionResponse));
     cancel = vi.fn().mockResolvedValue({});
     unstable_setSessionModel = vi.fn().mockResolvedValue({});
     prompt = vi.fn(async () => {
@@ -38,6 +39,12 @@ const mocks = vi.hoisted(() => {
     },
     set onPrompt(value: ((connection: MockClientSideConnection) => Promise<void> | void) | undefined) {
       onPrompt = value;
+    },
+    get sessionResponse() {
+      return sessionResponse;
+    },
+    set sessionResponse(value: Record<string, unknown>) {
+      sessionResponse = value;
     },
   };
 });
@@ -78,6 +85,7 @@ describe('createACPTool', () => {
     vi.clearAllMocks();
     mocks.connectionInstances.length = 0;
     mocks.onPrompt = undefined;
+    mocks.sessionResponse = { sessionId: 'session-1' };
     mocks.spawn.mockImplementation(() => createProcess());
   });
 
@@ -131,6 +139,7 @@ describe('ACPConnection', () => {
     vi.clearAllMocks();
     mocks.connectionInstances.length = 0;
     mocks.onPrompt = undefined;
+    mocks.sessionResponse = { sessionId: 'session-1' };
     mocks.spawn.mockImplementation(() => createProcess());
   });
 
@@ -326,6 +335,43 @@ describe('ACPConnection', () => {
 
     expect(acpConnection?.unstable_setSessionModel).not.toHaveBeenCalled();
   });
+
+  it('returns available models from the session response', async () => {
+    const { ACPConnection } = await import('../connection');
+    const availableModels = [
+      { modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet' },
+      { modelId: 'claude-haiku-4-20250514', name: 'Claude Haiku' },
+    ];
+
+    mocks.sessionResponse = {
+      sessionId: 'session-1',
+      models: { availableModels, currentModelId: 'claude-sonnet-4-20250514' },
+    };
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    const models = await connection.getAvailableModels();
+    expect(models).toEqual(availableModels);
+  });
+
+  it('returns empty array when session has no models', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    const models = await connection.getAvailableModels();
+    expect(models).toEqual([]);
+  });
 });
 
 describe('AcpAgent', () => {
@@ -333,6 +379,7 @@ describe('AcpAgent', () => {
     vi.clearAllMocks();
     mocks.connectionInstances.length = 0;
     mocks.onPrompt = undefined;
+    mocks.sessionResponse = { sessionId: 'session-1' };
     mocks.spawn.mockImplementation(() => createProcess());
   });
 

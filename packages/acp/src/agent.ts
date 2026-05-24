@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
-import type { SessionUpdate } from '@agentclientprotocol/sdk';
+import type { ModelInfo, SessionUpdate } from '@agentclientprotocol/sdk';
 import type {
   AgentGenerateOptions,
   AgentInstructions,
@@ -86,6 +86,10 @@ export class AcpAgent<
 
   getInstructions(): string {
     return '';
+  }
+
+  async getAvailableModels(): Promise<ModelInfo[]> {
+    return this.connection.getAvailableModels();
   }
 
   async generate(messages: MessageListInput, options?: AgentGenerateOptions): Promise<SubAgentGenerateResult> {

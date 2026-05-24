@@ -6,6 +6,7 @@ import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from '@agentclie
 import type {
   Client,
   InitializeRequest,
+  ModelInfo,
   NewSessionRequest,
   NewSessionResponse,
   PermissionOption,
@@ -110,6 +111,11 @@ export class ACPConnection {
 
   get sessionId(): string | undefined {
     return this.session?.sessionId;
+  }
+
+  async getAvailableModels(): Promise<ModelInfo[]> {
+    await this.ensureConnected();
+    return this.session?.models?.availableModels ?? [];
   }
 
   async prompt(task: string, signal?: AbortSignal): Promise<string> {

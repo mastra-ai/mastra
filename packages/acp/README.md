@@ -169,3 +169,10 @@ const codeAgent = new AcpAgent({
 ```
 
 The model is set via the ACP `session/set_model` method after the session is created. The ACP agent must support model selection for this option to take effect.
+
+Call `getAvailableModels()` to discover which models the ACP agent supports:
+
+```typescript
+const models = await codeAgent.getAvailableModels();
+// [{ modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet' }, ...]
+```
