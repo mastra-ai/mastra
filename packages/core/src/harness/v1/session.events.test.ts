@@ -115,6 +115,75 @@ describe('Session.subscribe()', () => {
     off();
   });
 
+  it('agent_end via message() propagates finishReason "error" as reason: "error"', async () => {
+    // Acceptance criterion #5: failed-stream semantics must be
+    // observable. Previously the message() emit site mapped
+    // `finishReason === 'error'` to `agent_end.reason: 'complete'`,
+    // hiding the failure from durable replay and remote consumers.
+    const { harness, agent } = setup();
+    agent.fullOutput = { ...agent.fullOutput, finishReason: 'error' };
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+
+    await session.message({ content: 'hi' });
+    const end = events.find(e => e.type === 'agent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.reason).toBe('error');
+  });
+
+  it('agent_end via queue() propagates finishReason "error" as reason: "error"', async () => {
+    // Queued-turn emit site (session.ts:8027 region) must also surface
+    // failure. Earlier this path used the explicit 3-way ternary already,
+    // but the unified helper change must not regress it.
+    const { harness, agent } = setup();
+    agent.fullOutput = { ...agent.fullOutput, finishReason: 'error' };
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+
+    await session.queue({ content: 'hi' });
+    await session.waitForIdle();
+    const end = events.find(e => e.type === 'agent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.reason).toBe('error');
+  });
+
+  it('agent_end via resume() propagates finishReason "error" as reason: "error"', async () => {
+    // Resumed-turn emit site (session.ts:6665) — the path that runs after
+    // a suspension is resolved and the agent re-runs to terminal. The
+    // previous implementation here used a 2-way ternary that already
+    // propagated 'error', but the unified helper change must not regress
+    // it. Mirror the existing suspension round-trip test scaffolding.
+    const { harness, agent } = setup();
+    agent.fullOutput = {
+      ...agent.fullOutput,
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc1', toolName: 'do_thing', args: { x: 1 } },
+    };
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'do it' });
+    // Flip the agent so the resumed run finishes with 'error'.
+    agent.fullOutput = { ...agent.fullOutput, finishReason: 'error', suspendPayload: undefined };
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.respondToToolApproval({ approved: true });
+
+    const end = events.find(e => e.type === 'agent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.reason).toBe('error');
+  });
+
   it('stops delivering after unsubscribe()', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

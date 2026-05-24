@@ -227,6 +227,27 @@ const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
 ]);
 const RESERVED_MCP_SERVER_KEYS = new Set([...Object.getOwnPropertyNames(Object.prototype), '__proto__']);
 
+/**
+ * Map an agent-side `finishReason` to the canonical `agent_end.reason`
+ * shape consumed by subscribers (stream-failure semantics).
+ *
+ * Three-way only — `'suspended' | 'error' | 'complete'`. This is the
+ * deliberately lossy projection over the agent's `finishReason` (which
+ * has many granular values like `'stop' | 'tool-calls' | 'length' | ...`).
+ * Any future need for richer downstream taxonomy (timeout vs provider
+ * error vs aborted) belongs on a new `agent_end` payload field or a
+ * sibling event shape, NOT inside this helper. The helper centralizes
+ * the projection so every emit site reports `error` consistently —
+ * earlier paths silently collapsed `finishReason === 'error'` into
+ * `'complete'`, hiding failure from durable replay and remote stream
+ * consumers (TUI dispatch, headless exit, A2A `tasks/resubscribe`).
+ */
+function mapFinishToAgentEndReason(finishReason: string | undefined): 'complete' | 'suspended' | 'error' {
+  if (finishReason === 'suspended') return 'suspended';
+  if (finishReason === 'error') return 'error';
+  return 'complete';
+}
+
 function cloneMcpCatalogValue(value: unknown): unknown | undefined {
   if (value === undefined) return undefined;
   try {
@@ -3549,7 +3570,7 @@ export class Session {
         ]);
         this._emitTurnEvent({
           type: 'agent_end',
-          reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+          reason: mapFinishToAgentEndReason(full.finishReason),
           runId: full.runId,
         });
         await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -3848,7 +3869,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: mapFinishToAgentEndReason(full.finishReason),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -3924,7 +3945,7 @@ export class Session {
       ]);
       this._emitTurnEvent({
         type: 'agent_end',
-        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+        reason: mapFinishToAgentEndReason(full.finishReason),
         runId: full.runId,
       });
       await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -4828,7 +4849,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: mapFinishToAgentEndReason(full.finishReason),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -4984,7 +5005,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: mapFinishToAgentEndReason(full.finishReason),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -6650,7 +6671,7 @@ export class Session {
       if (full.finishReason !== 'suspended') {
         this._emitTurnEvent({
           type: 'agent_end',
-          reason: full.finishReason === 'error' ? 'error' : 'complete',
+          reason: mapFinishToAgentEndReason(full.finishReason),
           runId: full.runId,
         });
 
@@ -8011,7 +8032,7 @@ export class Session {
     );
     this._emitTurnEvent({
       type: 'agent_end',
-      reason: full.finishReason === 'suspended' ? 'suspended' : full.finishReason === 'error' ? 'error' : 'complete',
+      reason: mapFinishToAgentEndReason(full.finishReason),
       runId: full.runId,
     });
     await this._raceActiveTurnWaiter(this._runGoalJudge(full, (item.source ?? 'user') === 'goal'), activeTurnWaiter);
