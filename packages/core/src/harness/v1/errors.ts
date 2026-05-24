@@ -78,6 +78,21 @@ export class HarnessSessionClosingError extends Error {
   }
 }
 
+/**
+ * Raised when a queued turn promise is rejected because the session
+ * (or that specific queued item) was cancelled before the turn ran.
+ * Carries the durable cancellation `reason` when one was supplied.
+ */
+export class HarnessSessionCancelledError extends Error {
+  readonly name = 'HarnessSessionCancelledError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly reason?: string,
+  ) {
+    super(reason ? `Session "${sessionId}" cancelled: ${reason}` : `Session "${sessionId}" cancelled`);
+  }
+}
+
 export class HarnessSessionDeleteBlockedError extends Error {
   readonly name = 'HarnessSessionDeleteBlockedError';
   constructor(

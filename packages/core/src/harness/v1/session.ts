@@ -87,6 +87,7 @@ import {
   HarnessGoalJudgeFailedError,
   HarnessOverrideConflictError,
   HarnessQueueFullError,
+  HarnessSessionCancelledError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
   HarnessSessionDeletedError,
@@ -1676,6 +1677,144 @@ export class Session {
     const controller = this._currentTurnAbortController;
     if (!controller) return;
     controller.abort(opts?.reason ?? 'session_aborted');
+  }
+
+  /**
+   * Reads `_record.cancelRequest` through a non-narrowing helper so
+   * callers can re-read after a CAS commit without TypeScript's
+   * flow-narrowing folding the post-CAS branch into `never`.
+   */
+  private _currentCancelRequest(): SessionRecord['cancelRequest'] {
+    return this._record.cancelRequest;
+  }
+
+  /**
+   * Durable session cancel. Marks the session as cancelled in storage,
+   * aborts the in-flight turn (if any), and drops every pending queued
+   * item. Idempotent — the first cancel wins; later calls preserve the
+   * original `requestedAt` and `reason` and short-circuit before any
+   * CAS write.
+   *
+   * Heartbeat lease renewal short-circuits when `cancelRequest` is
+   * present, so a cancelled session is allowed to age out and release
+   * its lease instead of being renewed indefinitely.
+   *
+   * @param opts.reason       — free-form audit string surfaced on the
+   *   `task_cancellation_requested` / `queue_item_cancelled` events
+   *   and on `HarnessSessionCancelledError`.
+   * @param opts.requestedBy  — free-form actor label (e.g. the A2A
+   *   task id that issued the cancel) for the audit row.
+   */
+  async cancel(opts?: { reason?: string; requestedBy?: string }): Promise<void> {
+    if (this._currentCancelRequest() !== undefined) {
+      // First cancel won; subsequent calls are no-ops by contract.
+      return;
+    }
+    const reason = opts?.reason;
+    const requestedBy = opts?.requestedBy;
+    const requestedAt = Date.now();
+    const removedItems: { queuedItemId: string; admissionId?: string }[] = [];
+
+    await this._flushUpdate(prev => {
+      if (prev.cancelRequest !== undefined) {
+        // Lost the CAS race against a concurrent cancel; honor the winner.
+        return prev;
+      }
+      // Snapshot the queued items being dropped so we can both reject
+      // their resolvers and emit per-item events AFTER commit.
+      for (const item of prev.pendingQueue ?? []) {
+        removedItems.push({ queuedItemId: item.id, admissionId: item.admissionId });
+      }
+      return {
+        ...prev,
+        cancelRequest: {
+          requestedAt,
+          ...(reason !== undefined ? { reason } : {}),
+          ...(requestedBy !== undefined ? { requestedBy } : {}),
+        },
+        pendingQueue: [],
+      };
+    });
+
+    // The CAS may have committed somebody else's cancelRequest if we lost
+    // the race; in that case the loop body above returned `prev` and no
+    // queue was cleared. Either way, post-commit our local record now
+    // reflects the durable state, so honor it.
+    const committedCancel = this._currentCancelRequest();
+    if (committedCancel === undefined) return;
+
+    // Abort in-flight work after the marker is durable. This keeps the
+    // tool layer's abort callback observing a committed cancel state.
+    this.abort({ reason: reason ?? 'session_cancelled' });
+
+    // Emit the session-scope verdict event first, then per-item events
+    // in queue order.
+    this._emitter.emit({
+      type: 'task_cancellation_requested',
+      requestedAt: committedCancel.requestedAt,
+      ...(committedCancel.reason !== undefined ? { reason: committedCancel.reason } : {}),
+      ...(committedCancel.requestedBy !== undefined ? { requestedBy: committedCancel.requestedBy } : {}),
+    } as EmitInput);
+
+    for (const dropped of removedItems) {
+      this._emitter.emit({
+        type: 'queue_item_cancelled',
+        queuedItemId: dropped.queuedItemId,
+        ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
+        ...(reason !== undefined ? { reason } : {}),
+      } as EmitInput);
+      const resolver = this._queueResolvers.get(dropped.queuedItemId);
+      if (resolver) {
+        this._queueResolvers.delete(dropped.queuedItemId);
+        resolver.reject(new HarnessSessionCancelledError(this.id, reason));
+      }
+    }
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    this._notifyMaybeIdle();
+  }
+
+  /**
+   * Cancel a single queued turn before it starts. Removes the item
+   * from `pendingQueue`, rejects the original `session.queue(...)`
+   * promise with `HarnessSessionCancelledError`, and emits one
+   * `queue_item_cancelled` event. No-op if the queuedItemId is
+   * unknown or already gone. Does NOT mark the session-wide
+   * `cancelRequest`; for that, use `session.cancel(...)`.
+   */
+  async cancelQueuedItem(opts: { queuedItemId: string; reason?: string }): Promise<void> {
+    const targetId = opts.queuedItemId;
+    if (!targetId) {
+      throw new HarnessValidationError('cancelQueuedItem', 'queuedItemId must be a non-empty string');
+    }
+    const reason = opts.reason;
+    let removed: { queuedItemId: string; admissionId?: string } | undefined;
+
+    await this._flushUpdate(prev => {
+      const queue = prev.pendingQueue ?? [];
+      const idx = queue.findIndex(item => item.id === targetId);
+      if (idx < 0) return prev;
+      const item = queue[idx]!;
+      removed = { queuedItemId: item.id, admissionId: item.admissionId };
+      const nextQueue = queue.slice(0, idx).concat(queue.slice(idx + 1));
+      return { ...prev, pendingQueue: nextQueue };
+    });
+
+    if (!removed) return;
+
+    this._emitter.emit({
+      type: 'queue_item_cancelled',
+      queuedItemId: removed.queuedItemId,
+      ...(removed.admissionId !== undefined ? { admissionId: removed.admissionId } : {}),
+      ...(reason !== undefined ? { reason } : {}),
+    } as EmitInput);
+
+    const resolver = this._queueResolvers.get(removed.queuedItemId);
+    if (resolver) {
+      this._queueResolvers.delete(removed.queuedItemId);
+      resolver.reject(new HarnessSessionCancelledError(this.id, reason));
+    }
+    this._notifyMaybeIdle();
   }
 
   // -------------------------------------------------------------------------

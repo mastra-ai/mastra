@@ -505,6 +505,39 @@ export interface SandboxAccessResolvedEvent extends HarnessEventBase {
   approved: boolean;
 }
 
+/**
+ * The session-level cancellation primitive ran. Emitted exactly once
+ * per durable `cancelRequest` commit — concurrent retries that lose
+ * the CAS do not re-emit. Carries the durable `requestedAt` /
+ * `reason` / `requestedBy` triple so a downstream auditor can
+ * reconstruct who cancelled what without reading storage.
+ *
+ * Per-queued-item cancellations are reported via
+ * {@link QueueItemCancelledEvent}; this event covers the session-
+ * scope verdict.
+ */
+export interface TaskCancellationRequestedEvent extends HarnessEventBase {
+  type: 'task_cancellation_requested';
+  requestedAt: number;
+  reason?: string;
+  requestedBy?: string;
+}
+
+/**
+ * A queued turn was removed before it could start, either by a
+ * session-wide cancel or by `session.cancelQueuedItem(...)`. Emitted
+ * once per cleared item, in queue order. Outcome is also reflected
+ * by the queue-resolver rejecting the original `session.queue(...)`
+ * promise; subscribers who need the audit row should listen to this
+ * event rather than the rejection.
+ */
+export interface QueueItemCancelledEvent extends HarnessEventBase {
+  type: 'queue_item_cancelled';
+  queuedItemId: string;
+  admissionId?: string;
+  reason?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Queue events (§10.2). The queue's lifecycle is: `enqueued → started →
 // removed`. Outcome is observable through the turn's own `agent_end`
@@ -816,6 +849,8 @@ export type HarnessEvent =
   | SuspensionResolvedEvent
   | SandboxAccessRequestedEvent
   | SandboxAccessResolvedEvent
+  | TaskCancellationRequestedEvent
+  | QueueItemCancelledEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
   | ThreadCreatedEvent
@@ -1126,6 +1161,8 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'suspension_resolved',
   'sandbox_access_requested',
   'sandbox_access_resolved',
+  'task_cancellation_requested',
+  'queue_item_cancelled',
   'queue_item_started',
   'queue_item_replayed',
   'queue_item_failed',

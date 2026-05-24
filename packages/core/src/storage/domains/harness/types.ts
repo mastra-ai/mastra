@@ -407,6 +407,21 @@ export interface SessionRecord {
   ownerId?: string;
   /** Epoch ms — when the current lease TTLs out. */
   leaseExpiresAt?: number;
+  /**
+   * Durable marker set when `Session.cancel(...)` runs. Once present, the
+   * heartbeat skips lease renewal for this session and any in-flight resume
+   * refuses to mark `pendingResume.resumedAt`. The marker survives process
+   * restart so a crash mid-cancel does not silently resurrect the work.
+   *
+   * Idempotent — the first cancel wins; subsequent calls preserve the
+   * original `requestedAt` and `reason`.
+   */
+  cancelRequest?: {
+    requestedAt: number;
+    reason?: string;
+    /** Free-form actor label (e.g. an A2A task id, server route id). */
+    requestedBy?: string;
+  };
 }
 
 /**

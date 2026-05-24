@@ -186,6 +186,7 @@ export class HarnessLibSQL extends HarnessStorage {
         'inbox_response_receipts',
         'closing_at',
         'close_deadline_at',
+        'cancel_request',
       ],
     });
     await this.#db.alterTable({
@@ -4267,6 +4268,7 @@ const SESSION_COLUMN_NAMES = [
   'version',
   'owner_id',
   'lease_expires_at',
+  'cancel_request',
 ] as const;
 
 function sessionColumnValues(record: SessionRecord, version: number): { names: string[]; values: any[] } {
@@ -4301,6 +4303,7 @@ function sessionColumnValues(record: SessionRecord, version: number): { names: s
     version,
     record.ownerId ?? null,
     record.leaseExpiresAt ?? null,
+    record.cancelRequest ? JSON.stringify(record.cancelRequest) : null,
   ];
   return { names: [...SESSION_COLUMN_NAMES], values };
 }
@@ -4949,6 +4952,7 @@ function rowToSession(row: Record<string, unknown>): SessionRecord {
     version: Number(row.version),
     ownerId: row.owner_id != null ? String(row.owner_id) : undefined,
     leaseExpiresAt: row.lease_expires_at != null ? Number(row.lease_expires_at) : undefined,
+    cancelRequest: parseJson(row.cancel_request) ?? undefined,
   };
 }
 
