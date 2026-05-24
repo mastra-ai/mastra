@@ -46,6 +46,27 @@ for await (const chunk of subscription.stream) {
 
 When the thread has a running agent stream, the signal becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the signal as the first input.
 
+## Signal lifecycle
+
+A signal can start outside the agent loop. The producer can be a user interface, webhook, scheduler, or another runtime component. Pass the event to `sendSignal()` as an `AgentSignalInput`; Mastra then normalizes the signal, generates an id and timestamp when the caller did not provide them, accepts the signal for the targeted thread or run, and returns a `SendAgentSignalResult` that contains the `CreatedAgentSignal`.
+
+After acceptance, delivery depends on the target state and behavior options:
+
+- Same-agent active thread with `deliver`: Mastra queues the signal for the running agent loop.
+- Idle thread with `wake`: Mastra starts a new stream with the signal as the first input.
+- `persist`: Mastra writes the signal to memory and returns a `persisted` promise without starting or interrupting loop execution.
+- `discard`: Mastra ignores the signal for runtime execution.
+
+Processors can also call `sendSignal` from their processor context. Processor-created signals are added to the message list and are emitted as `data-*` stream parts when a stream writer is available.
+
+When persisted, signals are stored as `role: "signal"` messages in memory. A `user-message` signal is converted back to normal user input for the model. Custom signal types are rendered as XML-style user-role context for the model so they do not look like assistant output.
+
+## Producer and policy boundaries
+
+Use signal `contents`, `attributes`, and `metadata` for delivery context, rendering hints, and durable thread history. When custom signal types are rendered as XML-style model context, Mastra validates XML-safe signal and attribute names and escapes the rendered contents and attributes. Mastra does not interpret signal fields as trusted permission or routing decisions. When a signal informs tool availability, approval behavior, workflow branching, or structured output, validate the signal values and enforce the result through [processors](/docs/agents/processors), [workflows](/docs/workflows/control-flow), or dynamic agent configuration.
+
+Regex is appropriate for exact lexical identifiers such as URLs, file extensions, provider ids, tool ids, and UUIDs. Avoid using inline regex as the only mechanism for deciding user intent, required capabilities, grounding requirements, workflow branches, or tool policy.
+
 ## Control signal behavior
 
 By default, Mastra delivers signals to active runs and wakes idle threads. Use `ifActive.behavior` and `ifIdle.behavior` to change that behavior.
