@@ -68,6 +68,16 @@
         "default": "./dist/request-context/index.cjs"
       }
     },
+    "./routes": {
+      "import": {
+        "types": "./dist/routes/index.d.ts",
+        "default": "./dist/routes/index.js"
+      },
+      "require": {
+        "types": "./dist/routes/index.d.cts",
+        "default": "./dist/routes/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
