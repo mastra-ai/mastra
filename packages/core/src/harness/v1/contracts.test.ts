@@ -13,6 +13,7 @@ import type {
   HarnessOperationAdmissionEvidence,
   InboxResponseReceipt,
   OperationAdmissionEvidence,
+  PendingResume,
   WorkspaceActionJournalEntry,
 } from '../../storage/domains/harness';
 import type {
@@ -23,6 +24,7 @@ import type {
   HarnessTask,
   HarnessTaskOrigin,
   HarnessTaskStatus,
+  PendingInteraction,
   TaskIndexEntry,
 } from './contracts';
 
@@ -157,5 +159,20 @@ describe('Harness v1 canonical contracts', () => {
     const sample: HarnessOperationAdmissionEvidence = { runId: 'r', signalId: 's', duplicate: false };
     const aliased: OperationAdmissionEvidence = sample;
     expect(aliased).toBe(sample);
+  });
+
+  it('PendingInteraction is structurally identical to PendingResume', () => {
+    const sample: PendingResume = {
+      kind: 'tool-approval',
+      runId: 'run-1',
+      itemId: 'item-1',
+      toolCallId: 'tc-1',
+      source: 'parent',
+      requestedAt: 0,
+    };
+    const aliased: PendingInteraction = sample;
+    const reversed: PendingResume = aliased;
+    expect(aliased.kind).toBe('tool-approval');
+    expect(reversed.itemId).toBe('item-1');
   });
 });

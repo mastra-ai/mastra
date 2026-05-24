@@ -255,6 +255,7 @@ export type {
   TaskIdFieldMapping,
   HarnessEvidence,
   HarnessEvidenceKind,
+  PendingInteraction,
 } from './contracts';
 
 export type {

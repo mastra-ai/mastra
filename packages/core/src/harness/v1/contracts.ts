@@ -27,6 +27,7 @@ import type {
   HarnessOperationAdmissionEvidence,
   InboxResponseReceipt,
   JsonValue,
+  PendingResume,
   TokenUsage,
   WorkspaceActionJournalEntry,
 } from '../../storage/domains/harness';
@@ -164,12 +165,26 @@ export type HarnessEvidence =
   | { evidenceKind: 'workspace-action'; entry: WorkspaceActionJournalEntry }
   | { evidenceKind: 'inbox-receipt'; receipt: InboxResponseReceipt };
 
+// ---------------------------------------------------------------------------
+// PendingInteraction — durable wait point (public alias).
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical public alias for {@link PendingResume} — the durable
+ * wait point a Harness v1 session pauses on. `PendingResume.kind`
+ * carries the discriminator: `'tool-approval' | 'tool-suspension' |
+ * 'question' | 'plan-approval' | 'sandbox-access'`. No fields rename
+ * and no runtime change; this alias only surfaces the canonical name
+ * to public consumers.
+ *
+ * Internal/storage callsites continue to use `PendingResume`. The
+ * two names are structurally identical and freely interchangeable.
+ */
+export type PendingInteraction = PendingResume;
+
 /**
  * Documentation-only type. Maps every pre-existing identifier in the
- * harness to the canonical primitive it belongs to. Cells that
- * reference `PendingInteraction` point at a primitive introduced by
- * a later slice in this same ticket — it is a forward reference, not
- * a dangling link.
+ * harness to the canonical primitive it belongs to.
  *
  * | Existing identifier             | Canonical primitive                                              |
  * | ------------------------------- | ---------------------------------------------------------------- |
@@ -183,7 +198,7 @@ export type HarnessEvidence =
  * | `WorkspaceActionJournalEntry.id`| Identifies one row in the workspace journal — surfaced via {@link HarnessEvidence} (`evidenceKind: 'workspace-action'`) |
  * | `subagentSessionId`             | {@link HarnessTask}.sessionId on the child Task                  |
  * | `goalId`                        | `metadata.goalId` on {@link HarnessTask}                         |
- * | `PendingResume.itemId`          | The durable wait-point id. A later slice re-exports `PendingResume` as `PendingInteraction` — the field name does not change |
+ * | `PendingResume.itemId`          | Surfaced publicly as {@link PendingInteraction}.itemId — the field name does not change between the internal and public names |
  * | A2A `task.id`                   | {@link TaskIndexEntry}.a2aTaskId → resolves to {@link HarnessTask}.taskId |
  * | A2A `task.contextId`            | {@link HarnessTask}.threadId                                     |
  */
