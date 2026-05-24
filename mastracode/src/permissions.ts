@@ -6,7 +6,7 @@
  * Session-scoped grants let the user approve a category once per session.
  */
 
-import { MC_TOOLS } from './tool-names.js';
+import { MC_BUILTIN_TOOLS, MC_TOOLS } from './tool-names.js';
 
 // ---------------------------------------------------------------------------
 // Categories
@@ -51,7 +51,8 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   [MC_TOOLS.STRING_REPLACE_LSP]: 'edit',
   [MC_TOOLS.AST_SMART_EDIT]: 'edit',
   [MC_TOOLS.WRITE_FILE]: 'edit',
-  subagent: 'edit',
+  [MC_BUILTIN_TOOLS.LEGACY_SUBAGENT]: 'edit',
+  [MC_BUILTIN_TOOLS.SPAWN_SUBAGENT]: 'edit',
 
   // Execute tools — run arbitrary commands
   [MC_TOOLS.EXECUTE_COMMAND]: 'execute',

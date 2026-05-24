@@ -288,6 +288,27 @@ export interface SuspensionResolvedEvent extends HarnessEventBase {
   toolCallId: string;
 }
 
+export interface SandboxAccessRequestedEvent extends HarnessEventBase {
+  type: 'sandbox_access_requested';
+  requestId: string;
+  toolCallId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  reason?: string;
+  payload?: JsonValue;
+}
+
+/**
+ * Session-wide cancellation was durably requested. Per-item queue drops are
+ * emitted as `queue_item_cancelled` so consumers can audit both the session
+ * verdict and each resolver that was rejected.
+ */
+export interface TaskCancellationRequestedEvent extends HarnessEventBase {
+  type: 'task_cancellation_requested';
+  requestedAt: number;
+  reason?: string;
+  requestedBy?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Queue events (§10.2). The queue's lifecycle is: `enqueued → started →
 // removed`. Outcome is observable through the turn's own `agent_end`
@@ -312,6 +333,33 @@ export interface QueueItemStartedEvent extends HarnessEventBase {
 export interface QueueItemReplayedEvent extends HarnessEventBase {
   type: 'queue_item_replayed';
   queuedItemId: string;
+}
+
+export interface QueueItemCancelledEvent extends HarnessEventBase {
+  type: 'queue_item_cancelled';
+  queuedItemId: string;
+  admissionId?: string;
+  reason?: string;
+}
+
+export interface QueueItemExpiredEvent extends HarnessEventBase {
+  type: 'queue_item_expired';
+  queuedItemId: string;
+  admissionId?: string;
+  /** Epoch ms — the deadline that was missed. */
+  deadline: number;
+}
+
+export interface QueueFullDroppedEvent extends HarnessEventBase {
+  type: 'queue_full_dropped';
+  source: 'queue' | 'goal';
+  policy: 'reject' | 'drop-oldest';
+  maxQueueDepth: number;
+  queuedItemId?: string;
+  admissionId?: string;
+  replacementQueuedItemId?: string;
+  replacementAdmissionId?: string;
+  goalId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,6 +476,7 @@ export interface SubagentToolStartEvent extends HarnessEventBase {
   agentType: string;
   innerToolCallId: string;
   toolName: string;
+  args?: unknown;
   parentId?: string;
   depth: number;
 }
@@ -555,8 +604,13 @@ export type HarnessEvent =
   | AgentEndEvent
   | SuspensionRequiredEvent
   | SuspensionResolvedEvent
+  | SandboxAccessRequestedEvent
+  | TaskCancellationRequestedEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
+  | QueueItemCancelledEvent
+  | QueueItemExpiredEvent
+  | QueueFullDroppedEvent
   | ThreadCreatedEvent
   | ThreadRenamedEvent
   | ThreadDeletedEvent
@@ -831,8 +885,13 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_end',
   'suspension_required',
   'suspension_resolved',
+  'sandbox_access_requested',
+  'task_cancellation_requested',
   'queue_item_started',
   'queue_item_replayed',
+  'queue_item_cancelled',
+  'queue_item_expired',
+  'queue_full_dropped',
   'queue_item_failed',
   'queue_item_completed',
   'thread_created',

@@ -1,4 +1,5 @@
 export { Harness } from './harness';
+export { convertStoredMessageToHarnessMessage } from './_shared/message-conversion';
 export {
   askUserTool,
   assignTaskIds,
@@ -50,3 +51,4 @@ export type {
   BuiltinToolId,
   TokenUsage,
 } from './types';
+export type { StoredMessageRow } from './_shared/message-conversion';

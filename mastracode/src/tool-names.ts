@@ -36,6 +36,15 @@ export const MC_TOOLS = {
   LSP_INSPECT: 'lsp_inspect',
 } as const;
 
+export const MC_BUILTIN_TOOLS = {
+  LEGACY_SUBAGENT: 'subagent',
+  SPAWN_SUBAGENT: 'spawn_subagent',
+} as const;
+
+export function isSubagentToolName(toolName: string): boolean {
+  return toolName === MC_BUILTIN_TOOLS.LEGACY_SUBAGENT || toolName === MC_BUILTIN_TOOLS.SPAWN_SUBAGENT;
+}
+
 /**
  * Workspace tool name remapping config.
  * Maps core workspace tool constants to mastracode's tool names.

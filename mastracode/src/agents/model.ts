@@ -45,9 +45,12 @@ type ResolvedModel =
   | ReturnType<ReturnType<typeof createOpenAI>>;
 
 type ModelRequestHeaders = Record<string, string>;
+type ModelHarnessRequestContext<TState = unknown> = HarnessRequestContext<TState> & {
+  modelId?: string;
+};
 
 function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
-  const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
+  const harnessContext = requestContext?.get('harness') as ModelHarnessRequestContext<any> | undefined;
   const headers = {
     ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
     ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
@@ -308,9 +311,9 @@ export function resolveModel(
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
+  const harnessContext = requestContext.get('harness') as ModelHarnessRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId;
+  const modelId = harnessContext?.modelId ?? harnessContext?.state?.currentModelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }

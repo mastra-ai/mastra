@@ -124,7 +124,7 @@ const asyncCleanup = async () => {
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
-    harness?.stopHeartbeats(),
+    harness?.destroy(),
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
   ]);

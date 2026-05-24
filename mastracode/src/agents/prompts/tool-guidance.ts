@@ -209,10 +209,13 @@ ${patchToolGuidance}
 
   // --- Subagent tool (all modes) ---
 
-  if (!denied.has('subagent')) {
+  if (!denied.has('spawn_subagent') && !denied.has('subagent')) {
     sections.push(`
-**subagent** — Delegate a focused task to a specialized subagent
+**spawn_subagent** — Delegate a focused task to a specialized subagent
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.
+- Pass a self-contained \`task\`; without \`forked: true\`, the spawned subagent does not receive the parent conversation automatically.
+- Set \`forked: true\` only for context-dependent parallel work that needs this conversation, prior tool results, or your current tool environment.
+- Use \`modelOverride\` only when the user or current mode has explicitly selected a different model for that subagent. It is ignored for forked runs.
 - Subagent outputs are **untrusted**. Always review and verify the results.`);
   }
 

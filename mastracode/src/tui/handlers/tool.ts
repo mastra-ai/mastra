@@ -11,6 +11,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { isSubagentToolName } from '../../tool-names.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -23,6 +24,13 @@ import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
+
+type ToolApprovalResponseSurface = {
+  respondToToolApproval: (opts: {
+    toolCallId?: string;
+    decision: 'approve' | 'decline' | 'always_allow_category';
+  }) => void;
+};
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
   return ctx.state.harness.getCurrentMode?.()?.color;
@@ -141,18 +149,21 @@ export function handleToolApprovalRequired(
     args,
     categoryLabel,
     onAction: (action: ApprovalAction) => {
-      state.ui.hideOverlay();
-      state.pendingApprovalDismiss = null;
-      if (action.type === 'approve') {
-        state.harness.respondToToolApproval({ decision: 'approve' });
-      } else if (action.type === 'always_allow_category') {
-        state.harness.respondToToolApproval({ decision: 'always_allow_category' });
-      } else if (action.type === 'yolo') {
-        state.harness.setState({ yolo: true } as any);
-        state.harness.respondToToolApproval({ decision: 'approve' });
-      } else {
-        state.harness.respondToToolApproval({ decision: 'decline' });
-      }
+      void (async () => {
+        state.ui.hideOverlay();
+        state.pendingApprovalDismiss = null;
+        const harness = state.harness as typeof state.harness & ToolApprovalResponseSurface;
+        if (action.type === 'approve') {
+          harness.respondToToolApproval({ toolCallId, decision: 'approve' });
+        } else if (action.type === 'always_allow_category') {
+          harness.respondToToolApproval({ toolCallId, decision: 'always_allow_category' });
+        } else if (action.type === 'yolo') {
+          await state.harness.setState({ yolo: true } as any);
+          harness.respondToToolApproval({ toolCallId, decision: 'approve' });
+        } else {
+          harness.respondToToolApproval({ toolCallId, decision: 'decline' });
+        }
+      })().catch(error => ctx.showError(error instanceof Error ? error.message : String(error)));
     },
   });
 
@@ -160,7 +171,10 @@ export function handleToolApprovalRequired(
   state.pendingApprovalDismiss = () => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
-    state.harness.respondToToolApproval({ decision: 'decline' });
+    (state.harness as typeof state.harness & ToolApprovalResponseSurface).respondToToolApproval({
+      toolCallId,
+      decision: 'decline',
+    });
   };
 
   // Show the dialog as an overlay
@@ -186,7 +200,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
     // Skip creating the regular tool component for subagent calls
     // The SubagentExecutionComponent will handle all the rendering
-    if (toolName === 'subagent') {
+    if (isSubagentToolName(toolName)) {
       return;
     }
 
@@ -334,7 +348,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
     state.ui.requestRender();
-  } else if (toolName !== 'subagent') {
+  } else if (!isSubagentToolName(toolName)) {
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},

@@ -21,7 +21,7 @@ import type { Workspace } from '../../workspace';
 
 import { HarnessSessionClosedError, HarnessValidationError, HarnessWorkspaceLostError } from './errors';
 import { Harness } from './harness';
-import type { WorkspaceProvider } from './workspace-provider';
+import type { WorkspaceProvider } from './workspace/provider';
 
 class MockMcpServer extends MCPServerBase {
   public toolListCallCount = 0;

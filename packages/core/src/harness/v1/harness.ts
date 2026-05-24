@@ -96,6 +96,7 @@ import type {
   HarnessConfig,
   HarnessFileConfig,
   HarnessMode,
+  HarnessQueueBackpressurePolicy,
   HarnessSkill,
   HarnessSkillActionMetadata,
   HarnessSkillActionPermissionHints,
@@ -678,6 +679,7 @@ export class Harness {
   private readonly _liveSessions = new Map<string, Session>();
   private readonly _leaseTtlMs: number;
   private readonly _maxQueueDepth: number;
+  private readonly _queueBackpressure: HarnessQueueBackpressurePolicy;
   private readonly _closeTimeoutMs: number;
   private readonly _fileConfig: Readonly<HarnessFileConfig>;
   private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
@@ -721,6 +723,10 @@ export class Harness {
     this._maxQueueDepth = config.sessions?.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
     if (this._maxQueueDepth < 1) {
       throw new HarnessConfigError('sessions.maxQueueDepth', 'must be a positive integer');
+    }
+    this._queueBackpressure = config.sessions?.queueBackpressure ?? 'reject';
+    if (this._queueBackpressure !== 'reject' && this._queueBackpressure !== 'drop-oldest') {
+      throw new HarnessConfigError('sessions.queueBackpressure', 'must be "reject" or "drop-oldest"');
     }
     this._closeTimeoutMs = config.sessions?.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
     if (
@@ -3901,6 +3907,11 @@ export class Harness {
     return `thread-${randomUUID()}`;
   }
 
+  /** @internal — used by Session.cancel(...) to walk the live subagent tree. */
+  _internalGetLiveSession(sessionId: string): Session | undefined {
+    return this._liveSessions.get(sessionId);
+  }
+
   /** @internal — exposed for inspection in tests. */
   _internalLiveSessionCount(): number {
     return this._liveSessions.size;
@@ -3909,6 +3920,11 @@ export class Harness {
   /** @internal — accessor for `Session.queue()` admission caps. */
   get _internalMaxQueueDepth(): number {
     return this._maxQueueDepth;
+  }
+
+  /** @internal — accessor for `Session.queue()` full-queue behavior. */
+  get _internalQueueBackpressure(): HarnessQueueBackpressurePolicy {
+    return this._queueBackpressure;
   }
 
   /** @internal — goal-loop defaults, consumed by `Session.setGoal()` (§4.7). */

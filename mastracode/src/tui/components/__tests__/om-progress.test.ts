@@ -82,4 +82,10 @@ describe('om progress label styling', () => {
     expect(rendered).not.toContain('↓');
     expect(rendered).not.toContain('-0k');
   });
+
+  it('renders small nonzero token windows without rounding to zero', () => {
+    const rendered = formatObservationStatus({ ...baseState, pendingTokens: 41, thresholdPercent: 1 }, 'full');
+
+    expect(rendered).toContain('messages <0.1/30k');
+  });
 });

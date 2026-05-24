@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
-import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
+import { handleAskQuestion, handlePlanApproval, handleSandboxAccessRequest } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
@@ -35,6 +35,7 @@ function createCtx() {
     state,
     updateStatusLine: vi.fn(),
     notify: vi.fn(),
+    showError: vi.fn(),
     addChildBeforeFollowUps: vi.fn(),
   } as unknown as EventHandlerContext;
 
@@ -56,6 +57,21 @@ describe('handleAskQuestion goal mode', () => {
 
     state.activeInlineQuestion!.handleInput('\r');
     await promise;
+  });
+});
+
+describe('handleSandboxAccessRequest', () => {
+  it('reports legacy question response failures before advancing inline prompts', async () => {
+    const { ctx, state } = createCtx();
+    const error = new Error('session closed');
+    state.harness.respondToQuestion = vi.fn().mockRejectedValue(error);
+
+    const promise = handleSandboxAccessRequest(ctx, 'sandbox-1', '/tmp/project', 'Need file access', 'question');
+    state.activeInlineQuestion!.handleInput('\r');
+    await promise;
+
+    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({ questionId: 'sandbox-1', answer: 'Yes' });
+    expect(ctx.showError).toHaveBeenCalledWith('Sandbox access response failed: session closed');
   });
 });
 

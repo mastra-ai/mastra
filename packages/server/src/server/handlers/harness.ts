@@ -188,6 +188,9 @@ type HarnessLike = {
       mode?: string;
       model?: string;
       yolo?: boolean;
+      priority?: number;
+      deadline?: number;
+      notBefore?: number;
       attachments?: unknown[];
     }): Promise<{ accepted: true; queuedItemId: string; duplicate: boolean }>;
     switchMode(opts: { mode: string }): Promise<void>;

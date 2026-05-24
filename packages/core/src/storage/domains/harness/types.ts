@@ -108,6 +108,25 @@ export interface QueuedItem {
   source?: 'user' | 'goal';
   /** Set when `source === 'goal'`. Identifies which goal produced the item. */
   goalId?: string;
+  /**
+   * Scheduling priority. Higher values drain first. Items with the same
+   * priority drain in FIFO order (lowest `enqueuedAt` wins). Defaults to
+   * 0 — equivalent to the legacy FIFO contract.
+   */
+  priority?: number;
+  /**
+   * Absolute deadline (epoch ms) past which the item must not start.
+   * The drain emits `queue_item_expired`, removes the item, and marks
+   * its `queueAdmissionReceipts` entry `failed` in the same CAS write.
+   * Omit to opt out of deadline checks.
+   */
+  deadline?: number;
+  /**
+   * Absolute earliest-start timestamp (epoch ms). Items whose `notBefore` is
+   * in the future remain in `pendingQueue` and are skipped by the scheduler so
+   * eligible work behind them can still drain.
+   */
+  notBefore?: number;
 }
 
 /**
@@ -124,7 +143,7 @@ export interface QueuedItem {
  * See HARNESS_V1_SPEC.md §5.1 ("Persistence shapes — `pendingResume`").
  */
 export interface PendingResume {
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   /** Stable pending interaction id used by inbox/route callers. */
   itemId?: string;
   runId: string;
@@ -343,6 +362,18 @@ export interface SessionRecord {
   ownerId?: string;
   /** Epoch ms — when the current lease TTLs out. */
   leaseExpiresAt?: number;
+  /**
+   * Durable marker set when `Session.cancel(...)` runs. Once present, pending
+   * resume attempts fail closed instead of resurrecting cancelled work after a
+   * restart or race. First writer wins; later cancel attempts preserve the
+   * original requestedAt/reason/requestedBy tuple.
+   */
+  cancelRequest?: {
+    requestedAt: number;
+    reason?: string;
+    /** Free-form actor label, for example an A2A task id or route id. */
+    requestedBy?: string;
+  };
 }
 
 /**

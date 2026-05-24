@@ -19,8 +19,41 @@ function expandTilde(p: string): string {
 }
 
 type MastraCodeState = z.infer<typeof stateSchema>;
+type HarnessV1QuestionContext = {
+  registerQuestion: (params: {
+    questionId: string;
+    question: string;
+    options?: Array<{ label: string; description?: string }>;
+    selectionMode?: 'single_select' | 'multi_select';
+    runId?: string;
+    toolCallId?: string;
+  }) => Promise<void>;
+};
+type ToolExecutionContext = {
+  agent?: {
+    runId?: string;
+    toolCallId?: string;
+    resumeData?: unknown;
+    suspend?: (payload: unknown) => Promise<never>;
+  };
+  requestContext?: {
+    get: (key: string) => unknown;
+  };
+  workspace?: {
+    filesystem?: unknown;
+  };
+};
 
 let requestCounter = 0;
+
+function answerApproved(answer: HarnessQuestionAnswer | unknown): boolean {
+  const value =
+    typeof answer === 'object' && answer !== null && 'answer' in answer
+      ? (answer as { answer: HarnessQuestionAnswer }).answer
+      : answer;
+  const answerText = Array.isArray(value) ? value.join(', ') : String(value ?? '');
+  return answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
+}
 
 export const requestSandboxAccessTool = createTool({
   id: 'request_access',
@@ -30,8 +63,11 @@ export const requestSandboxAccessTool = createTool({
     reason: z.string().min(1).describe('Brief explanation of why you need access to this directory.'),
   }),
   execute: async ({ path: requestedPath, reason }, context) => {
+    let propagatingHarnessV1Suspension = false;
     try {
+      const toolContext = context as ToolExecutionContext | undefined;
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+      const resumeData = toolContext?.agent?.resumeData;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
       const expanded = expandTilde(requestedPath);
@@ -47,7 +83,7 @@ export const requestSandboxAccessTool = createTool({
         };
       }
 
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
+      if (!harnessCtx?.registerQuestion) {
         return {
           content: `Cannot request sandbox access: TUI context not available. The user should manually run /sandbox add ${absolutePath}`,
           isError: true,
@@ -55,28 +91,49 @@ export const requestSandboxAccessTool = createTool({
       }
 
       const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
+      let answer: HarnessQuestionAnswer | unknown = resumeData;
 
-      // Create a promise that resolves when the user answers in the TUI
-      const answer = await new Promise<HarnessQuestionAnswer>(resolve => {
-        // Register the resolver so respondToQuestion() can resolve it
-        harnessCtx.registerQuestion!({
+      if (answer === undefined && toolContext?.agent?.suspend && !harnessCtx.emitEvent) {
+        // Harness v1 path: park the tool through the durable question suspension surface.
+        const harnessV1Ctx = harnessCtx as unknown as HarnessV1QuestionContext;
+        await harnessV1Ctx.registerQuestion({
           questionId,
-          resolve: answer => {
-            resolve(Array.isArray(answer) ? answer.join(',') : answer);
-          },
+          question: `Allow Mastra Code to access ${absolutePath}?\n\n${reason}`,
+          options: [
+            { label: 'Yes', description: 'Grant access for this session.' },
+            { label: 'No', description: 'Deny this access request.' },
+          ],
+          selectionMode: 'single_select',
+          runId: toolContext.agent.runId,
+          toolCallId: toolContext.agent.toolCallId ?? questionId,
         });
+        propagatingHarnessV1Suspension = true;
+        await toolContext.agent.suspend({});
+        propagatingHarnessV1Suspension = false;
+        return {
+          content: 'Access request could not be processed: suspension did not complete.',
+          isError: true,
+        };
+      } else if (answer === undefined && harnessCtx.emitEvent) {
+        // Legacy Harness path: emit directly and resolve through the in-memory callback registry.
+        answer = await new Promise<HarnessQuestionAnswer>(resolve => {
+          harnessCtx.registerQuestion!({
+            questionId,
+            resolve: value => {
+              resolve(Array.isArray(value) ? value.join(',') : value);
+            },
+          });
 
-        // Emit event — TUI will show the dialog
-        harnessCtx.emitEvent!({
-          type: 'sandbox_access_request',
-          questionId,
-          path: absolutePath,
-          reason,
+          harnessCtx.emitEvent!({
+            type: 'sandbox_access_request',
+            questionId,
+            path: absolutePath,
+            reason,
+          });
         });
-      });
+      }
 
-      const answerText = Array.isArray(answer) ? answer.join(', ') : answer;
-      const approved = answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
+      const approved = answerApproved(answer);
       if (approved) {
         // Add to allowed paths in harness state (persists across turns)
         const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
@@ -104,6 +161,7 @@ export const requestSandboxAccessTool = createTool({
         };
       }
     } catch (error) {
+      if (propagatingHarnessV1Suspension) throw error;
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {
         content: `Failed to request sandbox access: ${msg}`,

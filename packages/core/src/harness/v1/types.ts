@@ -131,6 +131,8 @@ export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
  */
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
+export type HarnessQueueBackpressurePolicy = 'reject' | 'drop-oldest';
+
 /**
  * Catalog entry exposed through `harness.models.*` (§9). Purely a UX
  * surface — the harness does not interpret these fields, it only stores
@@ -920,6 +922,15 @@ export interface HarnessConfigCommon {
     maxQueueDepth?: number;
 
     /**
+     * Queue-full behavior. `reject` preserves the historical behavior and
+     * throws `HarnessQueueFullError` when the session queue is full.
+     * `drop-oldest` removes the oldest waiting queued item and records a
+     * `queue_full_dropped` event before admitting the replacement. The active
+     * queued head is never dropped by backpressure.
+     */
+    queueBackpressure?: HarnessQueueBackpressurePolicy;
+
+    /**
      * Milliseconds allowed after the durable `closingAt` marker commits for
      * live sessions to drain admitted work before terminal `closedAt`. The
      * runtime persists `closeDeadlineAt = closingAt + closeTimeoutMs` and
@@ -1524,7 +1535,7 @@ export interface InboxResponseOptions {
 
 export interface InboxResponseResult {
   itemId: string;
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   status: 'accepted' | 'applied';
   responseId: string;
   duplicate: boolean;
@@ -1571,6 +1582,24 @@ export interface QueueOptions extends QueueOverrides {
 
   /** Optional pre-uploaded attachments to include with the user message. */
   attachments?: AttachmentRef[];
+
+  /**
+   * Scheduling priority. Higher values drain first. Items with the same
+   * priority drain in FIFO order. Defaults to 0.
+   */
+  priority?: number;
+
+  /**
+   * Absolute epoch-ms deadline past which the item must not start. Expired
+   * queued items are removed before drain and their receipts are marked failed.
+   */
+  deadline?: number;
+
+  /**
+   * Absolute epoch-ms earliest start time. Items whose `notBefore` is in the
+   * future remain queued while eligible lower-priority work can drain.
+   */
+  notBefore?: number;
 }
 
 /**
@@ -1751,6 +1780,8 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Resolved mode id for this turn (with any per-turn overrides applied). */
   modeId: string;
+  /** Resolved model id for this turn (with any per-turn overrides applied). */
+  modelId: string;
 
   /** Caller-provided application metadata after durable JSON normalization. */
   app?: Readonly<Record<string, JsonValue>>;

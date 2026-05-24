@@ -24,9 +24,9 @@ function getHarnessSlot(streamCalls: any[]): HarnessRequestContext {
 }
 
 describe('HarnessRequestContext — identity fields', () => {
-  it('populates harnessId / sessionId / threadId / resourceId / modeId', async () => {
+  it('populates harnessId / sessionId / threadId / resourceId / modeId / modelId', async () => {
     const { harness, agent } = setupHarness();
-    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true }, modelId: 'model-default' });
     await session.message({ content: 'hi' });
 
     const slot = getHarnessSlot(agent.streamCalls);
@@ -35,6 +35,7 @@ describe('HarnessRequestContext — identity fields', () => {
     expect(slot.threadId).toBe(session.threadId);
     expect(slot.resourceId).toBe('u1');
     expect(slot.modeId).toBe('default');
+    expect(slot.modelId).toBe('model-default');
     expect(slot.source).toBe('parent');
     expect(slot.subagentDepth).toBe(0);
     expect(slot.parentSessionId).toBeUndefined();
@@ -51,6 +52,13 @@ describe('HarnessRequestContext — identity fields', () => {
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     await session.message({ content: 'hi', mode: 'modeB' });
     expect(getHarnessSlot(agent.streamCalls).modeId).toBe('modeB');
+  });
+
+  it('reflects per-turn model override on modelId', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true }, modelId: 'model-default' });
+    await session.message({ content: 'hi', model: 'model-turn' });
+    expect(getHarnessSlot(agent.streamCalls).modelId).toBe('model-turn');
   });
 });
 

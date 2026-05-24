@@ -487,6 +487,11 @@ export const harnessMessageAdmissionResponseSchema = z.object({
   duplicate: z.boolean(),
 });
 
+const queueSchedulingNumberSchema = z
+  .number()
+  .finite()
+  .refine(value => !Object.is(value, -0), 'must be a finite JSON number other than -0');
+
 export const harnessQueueAdmissionBodySchema = z
   .object({
     content: z.string().min(1),
@@ -494,6 +499,9 @@ export const harnessQueueAdmissionBodySchema = z
     mode: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     yolo: z.boolean().optional(),
+    priority: queueSchedulingNumberSchema.optional(),
+    deadline: queueSchedulingNumberSchema.optional(),
+    notBefore: queueSchedulingNumberSchema.optional(),
     attachments: admissionAttachmentsSchema.shape.attachments,
     files: admissionAttachmentsSchema.shape.files,
   })

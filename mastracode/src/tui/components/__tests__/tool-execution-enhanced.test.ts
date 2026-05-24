@@ -4,6 +4,8 @@ import { describe, it, expect } from 'vitest';
 import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
+chalk.level = 1;
+
 const ui = { requestRender() {} } as any;
 
 function stripAnsi(text: string): string {

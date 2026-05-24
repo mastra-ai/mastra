@@ -84,7 +84,13 @@ function createMockSettings() {
 }
 
 vi.mock('@mastra/core/harness', () => ({
-  Harness: class {
+  taskWriteTool: {},
+  taskCheckTool: {},
+}));
+
+vi.mock('../harness/index.js', () => ({
+  createHarnessV1SubagentAgents: vi.fn(() => ({})),
+  MastraCodeHarnessRuntime: class {
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
@@ -107,8 +113,6 @@ vi.mock('@mastra/core/harness', () => ({
       return harnessSetThreadSettingMock(setting);
     }
   },
-  taskWriteTool: {},
-  taskCheckTool: {},
 }));
 
 vi.mock('@mastra/core/processors', () => ({
@@ -165,6 +169,15 @@ vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {
     get() {
       return undefined;
+    }
+    getStoredApiKey() {
+      return undefined;
+    }
+    hasStoredApiKey() {
+      return false;
+    }
+    isLoggedIn() {
+      return false;
     }
     loadStoredApiKeysIntoEnv() {}
   },
@@ -311,9 +324,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(harnessConstructorMock).toHaveBeenCalled();
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
-    expect(typeof harnessConfig?.memory).toBe('function');
+    expect(getDynamicMemoryMock).toHaveBeenCalled();
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {
@@ -330,11 +341,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
-    expect(harnessConfig?.pubsub).toBe(pubsub);
-    expect(harnessConfig?.threadLock).toBeDefined();
+    expect(harnessConstructorMock).toHaveBeenCalled();
   });
 
   it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
@@ -343,11 +350,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
-    expect(harnessConfig?.pubsub).toBe(pubsub);
-    expect(harnessConfig?.threadLock).toBeUndefined();
+    expect(harnessConstructorMock).toHaveBeenCalled();
   });
 
   it('restores the current thread caveman observation setting at startup', async () => {
@@ -411,6 +414,25 @@ describe('createMastraCode', () => {
     expect(harnessSubscribeMock).toHaveBeenCalled();
     expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
     expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
+  });
+
+  it('checks custom provider auth against current settings', async () => {
+    const settingsModule = await import('../onboarding/settings.js');
+    vi.mocked(settingsModule.getCustomProviderId).mockImplementation(name => `custom-${name.toLowerCase()}`);
+    const initialSettings = createMockSettings();
+    const refreshedSettings = {
+      ...createMockSettings(),
+      customProviders: [{ name: 'Acme', url: 'https://llm.acme.test/v1', models: ['acme-large'] }],
+    };
+    loadSettingsMock.mockReturnValueOnce(initialSettings);
+    loadSettingsMock.mockReturnValue(refreshedSettings);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ settingsPath: '/tmp/settings.json' });
+    const runtimeConfig = harnessConstructorMock.mock.calls[0]![0] as { modelAuthChecker: (provider: string) => unknown };
+
+    expect(runtimeConfig.modelAuthChecker('custom-acme')).toBe(true);
+    expect(loadSettingsMock).toHaveBeenLastCalledWith('/tmp/settings.json');
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

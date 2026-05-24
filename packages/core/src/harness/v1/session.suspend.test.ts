@@ -340,6 +340,39 @@ describe('Session — suspend capture on message()', () => {
     });
   });
 
+  it('keeps a registered question when suspend capture reports a generic tool suspension', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await (session as any)._registerQuestion({
+      questionId: 'sandbox-registered',
+      question: 'Allow access?',
+      options: [{ label: 'yes' }],
+      selectionMode: 'single_select',
+      runId: 'run-sandbox',
+      toolCallId: 'tc-sandbox',
+    });
+    await (session as any)._maybeCaptureSuspend({
+      runId: 'run-sandbox',
+      finishReason: 'suspended',
+      suspendPayload: {
+        toolCallId: 'tc-sandbox',
+        toolName: 'request_access',
+        suspendPayload: {},
+      },
+    });
+
+    const pending = session.getRecord().pendingResume!;
+    expect(pending.kind).toBe('question');
+    expect(pending.itemId).toBe('sandbox-registered');
+    expect(pending.toolCallId).toBe('tc-sandbox');
+    expect(pending.payload).toEqual({
+      question: 'Allow access?',
+      options: [{ label: 'yes' }],
+      selectionMode: 'single_select',
+    });
+  });
+
   it('keeps a plan approval registered by the tool before suspend capture', async () => {
     const { harness } = setup([
       { id: 'planner', agentId: 'default', transitionsTo: 'builder' },

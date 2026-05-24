@@ -133,6 +133,7 @@ export class OMProgressComponent extends Container {
 /** Format token count without k suffix (e.g., 7234 -> "7.2", 200 -> "0.2", 0 -> "0") */
 function formatTokensValue(n: number): string {
   if (n === 0) return '0';
+  if (n < 100) return '<0.1';
   const k = n / 1000;
   const s = k.toFixed(1);
   return s.endsWith('.0') ? s.slice(0, -2) : s;

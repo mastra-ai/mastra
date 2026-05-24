@@ -124,7 +124,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             previousObserverTokens: observerPreviousObservationTokens,
             threadTitle: true,
             instruction: observerInstruction,
-            observeAttachments,
+            observeAttachments: observeAttachments as boolean | string[] | undefined,
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,

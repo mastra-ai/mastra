@@ -78,6 +78,22 @@ export class HarnessSessionClosingError extends Error {
   }
 }
 
+/**
+ * Raised when a queued turn or pending resume is rejected because the session
+ * or a specific queue item was cancelled before the work completed.
+ */
+export class HarnessSessionCancelledError extends Error {
+  readonly name = 'HarnessSessionCancelledError';
+  readonly code = 'harness.session_cancelled';
+
+  constructor(
+    public readonly sessionId: string,
+    public readonly reason?: string,
+  ) {
+    super(reason ? `Session "${sessionId}" cancelled: ${reason}` : `Session "${sessionId}" cancelled`);
+  }
+}
+
 export class HarnessSessionDeleteBlockedError extends Error {
   readonly name = 'HarnessSessionDeleteBlockedError';
   constructor(
@@ -141,6 +157,19 @@ export class HarnessQueueFullError extends Error {
     public readonly maxQueueDepth: number,
   ) {
     super(`Queue for session "${sessionId}" is full (max ${maxQueueDepth})`);
+  }
+}
+
+export class HarnessQueueItemExpiredError extends Error {
+  readonly name = 'HarnessQueueItemExpiredError';
+  readonly code = 'harness.queue_item_expired';
+
+  constructor(
+    public readonly sessionId: string,
+    public readonly queuedItemId: string,
+    public readonly deadline: number,
+  ) {
+    super(`Queued item "${queuedItemId}" for session "${sessionId}" expired at ${new Date(deadline).toISOString()}`);
   }
 }
 
@@ -435,5 +464,17 @@ export class HarnessWorkspaceInUseError extends Error {
     public readonly refCount: number,
   ) {
     super(`Workspace for resource "${resourceId}" is in use (refCount: ${refCount})`);
+  }
+}
+
+export class HarnessQueueFullDroppedError extends Error {
+  readonly name = 'HarnessQueueFullDroppedError';
+  readonly code = 'harness.queue_full_dropped';
+  constructor(public readonly queuedItemId?: string) {
+    super(
+      queuedItemId
+        ? `Queued item "${queuedItemId}" was dropped because the session queue was full`
+        : 'Queued work was dropped because the session queue was full',
+    );
   }
 }
