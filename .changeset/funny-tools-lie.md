@@ -2,9 +2,22 @@
 '@mastra/core': patch
 ---
 
-**Added durable queue scheduling.** `QueuedItem` now carries optional `priority` (higher drains first; defaults to 0) and `deadline` (epoch ms; drain refuses to start past this point). The drain step runs a per-iteration CAS that:
+**Priority + deadline on the durable queue.** Two optional scheduling hints on `Session.queue(...)` admissions:
 
-- drops every item past its deadline, emits `queue_item_expired`, and marks the queue admission receipt `failed` in the same write;
-- rotates the highest-priority survivor to the head of `pendingQueue` so the existing `pendingQueue[0]` recovery contract stays intact.
+- `priority` — higher values drain first. Defaults to 0; items without a priority behave exactly like before.
+- `deadline` — epoch ms past which the item must not start. Items past their deadline are removed before they ever run; the original `queue(...)` promise rejects with `HarnessSessionCancelledError`, a new `queue_item_expired` event fires for audit consumers, and the queue admission receipt is marked `failed`.
 
-Same-priority items keep FIFO order via `enqueuedAt` tie-break. Items without a priority or deadline behave exactly like before — pure FIFO. No storage migration: the new fields ride along inside the existing `pending_queue` JSONB column.
+Same-priority items keep FIFO order (oldest `enqueuedAt` wins).
+
+```ts
+// "Run this before everything else queued right now."
+await session.queue({ content: 'incident hotfix', priority: 10 });
+
+// "Don't bother starting this after 9am."
+await session.queue({
+  content: 'overnight CI repair',
+  deadline: Date.parse('2026-05-25T09:00:00Z'),
+});
+```
+
+No data migration — the new fields are optional and persist alongside the existing queue rows.

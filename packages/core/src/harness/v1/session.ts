@@ -8223,15 +8223,21 @@ export class Session {
         }
       }
 
-      let nextQueue = survivors;
-      if (head !== undefined && headIdx > 0) {
-        // Rotate selected item to position 0 — preserves the legacy
-        // `pendingQueue[0]` recovery contract while running the
-        // highest-priority work first.
-        nextQueue = [head, ...survivors.slice(0, headIdx), ...survivors.slice(headIdx + 1)];
-      }
+      const rotated = head !== undefined && headIdx > 0;
+      const didExpire = expired.length > 0;
+      // No-op short-circuit: nothing expired, no rotation needed, no
+      // receipts to update. `survivors` is always a fresh array, so an
+      // identity check vs `queue` would never short-circuit — we have
+      // to derive "nothing changed" from the flags instead.
+      if (!didExpire && !rotated && !receiptsChanged) return prev;
 
-      if (expired.length === 0 && nextQueue === queue) return prev;
+      const nextQueue = rotated
+        ? // Rotate selected item to position 0 so the existing
+          // recovery + drain code can keep its `pendingQueue[0]`
+          // assumption while still running the highest-priority
+          // work first.
+          [head!, ...survivors.slice(0, headIdx), ...survivors.slice(headIdx + 1)]
+        : survivors;
 
       didCommit = true;
       const next: SessionRecord = { ...prev, pendingQueue: nextQueue };
