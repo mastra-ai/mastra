@@ -10,6 +10,7 @@ import type {
   GoalOptions,
   GoalState,
   HarnessChannelDiagnostics,
+  HarnessActorIdentity,
   HarnessMessage,
   InboxResponseResult,
   PermissionRules,
@@ -59,6 +60,7 @@ import {
   harnessSessionPathParams,
   harnessSessionSnapshotSchema,
   harnessStatePatchSchema,
+  harnessStateResponseSchema,
   listHarnessSessionsQuerySchema,
   listHarnessSessionsResponseSchema,
 } from '../schemas/harness';
@@ -67,7 +69,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { enforceThreadAccess, getEffectiveResourceId } from './utils';
 
 type SessionLifecycleStatus = 'active' | 'closing' | 'closed';
-type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
 type PublicPendingResume = Omit<NonNullable<SessionRecord['pendingResume']>, 'runtimeDependencies'>;
 type UrlAttachmentInput = {
   kind: 'url';
@@ -94,6 +96,10 @@ type UrlIngestionTarget = {
   hostname: string;
   hostHeader: string;
   servername?: string;
+};
+type UrlAdmissionCacheEntry = {
+  rawHash: string;
+  normalized: Promise<AttachmentRef[] | undefined>;
 };
 
 type HarnessSessionListItem = {
@@ -136,6 +142,8 @@ type HarnessSessionListItem = {
     };
   };
 };
+
+const urlAdmissionCache = new Map<string, UrlAdmissionCacheEntry>();
 
 type HarnessSessionSnapshot = {
   summary: HarnessSessionListItem;
@@ -218,11 +226,11 @@ type HarnessLike = {
       switch(opts: { model: string }): Promise<void>;
     };
     permissions: {
-      grantCategory(opts: { category: string }): Promise<void>;
-      grantTool(opts: { toolName: string }): Promise<void>;
-      revokeCategory(opts: { category: string }): Promise<void>;
-      revokeTool(opts: { toolName: string }): Promise<void>;
-      getGrants(): Readonly<SessionGrants>;
+      grantCategory(opts: { category: string; actor?: HarnessActorIdentity }): Promise<void>;
+      grantTool(opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void>;
+      revokeCategory(opts: { category: string; actor?: HarnessActorIdentity }): Promise<void>;
+      revokeTool(opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void>;
+      getGrants(opts?: { actor?: HarnessActorIdentity }): Readonly<SessionGrants>;
       getRules(): Readonly<PermissionRules>;
       setPolicy(
         opts:
@@ -248,6 +256,12 @@ type HarnessLike = {
       approved: boolean;
       revision?: string;
       transitionToMode?: string;
+    }): Promise<InboxResponseResult>;
+    respondToSandboxAccess(opts: {
+      itemId: string;
+      responseId: string;
+      approved: boolean;
+      reason?: string;
     }): Promise<InboxResponseResult>;
     setGoal(opts: GoalOptions): Promise<GoalState>;
     getGoal(): GoalState | undefined;
@@ -426,6 +440,15 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
       ...Object.fromEntries(new Headers(init?.headers).entries()),
     },
   });
+}
+
+function withResponseHeaders<T extends object>(body: T, headers: Record<string, string>): T {
+  Object.defineProperty(body, '__refreshHeaders', {
+    value: headers,
+    enumerable: false,
+    configurable: true,
+  });
+  return body;
 }
 
 function preconditionFailedResponse(details: Record<string, unknown>): Response {
@@ -722,10 +745,16 @@ function assertSessionVersion(record: SessionRecord, expectedVersion: number): v
   }
 }
 
-function permissionsSnapshot(session: {
-  permissions: { getGrants(): Readonly<SessionGrants>; getRules(): Readonly<PermissionRules> };
-}) {
-  const grants = session.permissions.getGrants();
+function permissionsSnapshot(
+  session: {
+    permissions: {
+      getGrants(opts?: { actor?: HarnessActorIdentity }): Readonly<SessionGrants>;
+      getRules(): Readonly<PermissionRules>;
+    };
+  },
+  opts?: { actor?: HarnessActorIdentity },
+) {
+  const grants = session.permissions.getGrants(opts);
   const rules = session.permissions.getRules();
   return {
     grants: {
@@ -1416,6 +1445,45 @@ function deterministicUrlAttachmentId(
   return `attachment-url-${digest.slice(0, 40)}`;
 }
 
+function stableJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map(stableJsonStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map(key => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`)
+    .join(',')}}`;
+}
+
+function urlAdmissionCacheKey(
+  operationKind: 'message' | 'queue',
+  sessionId: string,
+  resourceId: string,
+  admissionId: string,
+): string {
+  return `${operationKind}\0${resourceId}\0${sessionId}\0${admissionId}`;
+}
+
+function urlAdmissionRawHash(body: MessageAdmissionBody | QueueAdmissionBody): string {
+  return createHash('sha256')
+    .update(
+      stableJsonStringify({
+        content: body.content,
+        mode: body.mode,
+        model: body.model,
+        yolo: 'yolo' in body && body.yolo === true,
+        files: body.files,
+        attachments: body.attachments,
+      }),
+    )
+    .digest('hex');
+}
+
+function hasUrlAdmissionAttachments(body: MessageAdmissionBody | QueueAdmissionBody): boolean {
+  const attachments = body.files ?? body.attachments;
+  return Array.isArray(attachments) && attachments.some(isUrlAttachmentInput);
+}
+
 async function normalizeAdmissionAttachments(
   harness: HarnessLike,
   operationKind: 'message' | 'queue',
@@ -1430,6 +1498,53 @@ async function normalizeAdmissionAttachments(
       reason: 'exclusive',
     });
   }
+  const attachments = body.files ?? body.attachments;
+  if (!attachments) return undefined;
+  if (hasUrlAdmissionAttachments(body)) {
+    const cacheKey = urlAdmissionCacheKey(operationKind, sessionId, resourceId, body.admissionId);
+    const rawHash = urlAdmissionRawHash(body);
+    const cached = urlAdmissionCache.get(cacheKey);
+    if (cached) {
+      if (cached.rawHash !== rawHash) {
+        throwHarnessHttpError(
+          409,
+          'harness.admission_conflict',
+          'Admission id conflicts with a prior URL attachment request',
+          {
+            sessionId,
+            admissionId: body.admissionId,
+            storedAdmissionHash: cached.rawHash,
+            attemptedAdmissionHash: rawHash,
+          },
+        );
+      }
+      return cached.normalized;
+    }
+    const normalized = normalizeAdmissionAttachmentsUncached(
+      harness,
+      operationKind,
+      sessionId,
+      resourceId,
+      body,
+      abortSignal,
+    ).catch(error => {
+      urlAdmissionCache.delete(cacheKey);
+      throw error;
+    });
+    urlAdmissionCache.set(cacheKey, { rawHash, normalized });
+    return normalized;
+  }
+  return normalizeAdmissionAttachmentsUncached(harness, operationKind, sessionId, resourceId, body, abortSignal);
+}
+
+async function normalizeAdmissionAttachmentsUncached(
+  harness: HarnessLike,
+  operationKind: 'message' | 'queue',
+  sessionId: string,
+  resourceId: string,
+  body: MessageAdmissionBody | QueueAdmissionBody,
+  abortSignal?: AbortSignal,
+): Promise<AttachmentRef[] | undefined> {
   const attachments = body.files ?? body.attachments;
   if (!attachments) return undefined;
   const policy = filePolicyForHarness(harness);
@@ -2165,7 +2280,7 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
 export const GET_HARNESS_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/harness/:name/sessions/:sessionId',
-  responseType: 'datastream-response',
+  responseType: 'json',
   pathParamSchema: harnessSessionPathParams,
   responseSchema: harnessSessionSnapshotSchema,
   requiresAuth: true,
@@ -2187,10 +2302,7 @@ export const GET_HARNESS_SESSION_ROUTE = createRoute({
       const displayState = displayStateFromRecord(stored);
       const state: unknown = stored.state ?? {};
       const snapshot = snapshotFromRecord(stored, displayState, state);
-      return jsonResponse(snapshot, {
-        status: 200,
-        headers: { etag: `"${stored.version}"` },
-      });
+      return withResponseHeaders(snapshot, { etag: `"${stored.version}"` });
     } catch (error) {
       return mapHarnessError(error);
     }
@@ -2264,7 +2376,7 @@ export const POST_HARNESS_ATTACHMENT_ROUTE = createRoute({
 export const DELETE_HARNESS_ATTACHMENT_ROUTE = createRoute({
   method: 'DELETE',
   path: '/harness/:name/sessions/:sessionId/attachments/:attachmentId',
-  responseType: 'datastream-response',
+  responseType: 'raw',
   pathParamSchema: harnessAttachmentPathParams,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },
@@ -2614,8 +2726,9 @@ export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
 export const GET_HARNESS_STATE_ROUTE = createRoute({
   method: 'GET',
   path: '/harness/:name/sessions/:sessionId/state',
-  responseType: 'datastream-response',
+  responseType: 'json',
   pathParamSchema: harnessSessionPathParams,
+  responseSchema: harnessStateResponseSchema,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },
   onValidationError: harnessValidationErrorHook,
@@ -2631,7 +2744,7 @@ export const GET_HARNESS_STATE_ROUTE = createRoute({
       if (!stored || stored.resourceId !== resourceId) {
         throwSessionNotFound(pathSessionId);
       }
-      return jsonResponse(stored.state ?? {}, { status: 200, headers: { etag: `"${stored.version}"` } });
+      return withResponseHeaders((stored.state ?? {}) as Record<string, unknown>, { etag: `"${stored.version}"` });
     } catch (error) {
       return mapHarnessError(error);
     }
@@ -2641,9 +2754,10 @@ export const GET_HARNESS_STATE_ROUTE = createRoute({
 export const PATCH_HARNESS_STATE_ROUTE = createRoute({
   method: 'PATCH',
   path: '/harness/:name/sessions/:sessionId/state',
-  responseType: 'datastream-response',
+  responseType: 'json',
   pathParamSchema: harnessSessionPathParams,
   bodySchema: harnessStatePatchSchema,
+  responseSchema: harnessStateResponseSchema,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },
   onValidationError: harnessValidationErrorHook,
@@ -2665,7 +2779,7 @@ export const PATCH_HARNESS_STATE_ROUTE = createRoute({
       assertSessionVersion(session.getRecord() as SessionRecord, expectedVersion);
       await session.setState(statePatchFromRequestBody(requestBody), { ifVersion: expectedVersion });
       const record = session.getRecord() as SessionRecord;
-      return jsonResponse((record.state ?? {}) as unknown, { status: 200, headers: { etag: `"${record.version}"` } });
+      return withResponseHeaders((record.state ?? {}) as Record<string, unknown>, { etag: `"${record.version}"` });
     } catch (error) {
       return mapHarnessError(error);
     }
@@ -2749,6 +2863,7 @@ export const PATCH_HARNESS_PERMISSIONS_ROUTE = createRoute({
         category?: string;
         toolName?: string;
         policy?: 'allow' | 'ask' | 'deny';
+        actor?: HarnessActorIdentity;
       };
       const resourceId = getAuthResourceId(requestContext);
       const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
@@ -2757,19 +2872,25 @@ export const PATCH_HARNESS_PERMISSIONS_ROUTE = createRoute({
         case 'grantCategory':
           await session.permissions.grantCategory({
             category: requiredStringField(body, 'category', 'Permissions patch'),
+            ...(body.actor ? { actor: body.actor } : {}),
           });
           break;
         case 'grantTool':
-          await session.permissions.grantTool({ toolName: requiredStringField(body, 'toolName', 'Permissions patch') });
+          await session.permissions.grantTool({
+            toolName: requiredStringField(body, 'toolName', 'Permissions patch'),
+            ...(body.actor ? { actor: body.actor } : {}),
+          });
           break;
         case 'revokeCategory':
           await session.permissions.revokeCategory({
             category: requiredStringField(body, 'category', 'Permissions patch'),
+            ...(body.actor ? { actor: body.actor } : {}),
           });
           break;
         case 'revokeTool':
           await session.permissions.revokeTool({
             toolName: requiredStringField(body, 'toolName', 'Permissions patch'),
+            ...(body.actor ? { actor: body.actor } : {}),
           });
           break;
         case 'setPolicy': {
@@ -2778,7 +2899,7 @@ export const PATCH_HARNESS_PERMISSIONS_ROUTE = createRoute({
           break;
         }
       }
-      return permissionsSnapshot(session);
+      return permissionsSnapshot(session, body.actor ? { actor: body.actor } : undefined);
     } catch (error) {
       return mapHarnessError(error);
     }
@@ -2803,7 +2924,7 @@ export const RESPOND_HARNESS_INBOX_ROUTE = createRoute({
       const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
       const pathItemId = stringPathParam(requestPathParams, itemId, 'itemId');
       const body = objectRequestBody(requestBody, 'Inbox response') as {
-        kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+        kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
         responseId: string;
         approved?: boolean;
         reason?: string;
@@ -2842,6 +2963,13 @@ export const RESPOND_HARNESS_INBOX_ROUTE = createRoute({
             approved: body.approved!,
             ...(body.revision !== undefined ? { revision: body.revision } : {}),
             ...(body.transitionToMode !== undefined ? { transitionToMode: body.transitionToMode } : {}),
+          });
+        case 'sandbox-access':
+          return await session.respondToSandboxAccess({
+            itemId: pathItemId,
+            responseId: body.responseId,
+            approved: body.approved!,
+            ...(body.reason !== undefined ? { reason: body.reason } : {}),
           });
         default: {
           const unsupportedKind: never = body.kind;
@@ -2968,7 +3096,7 @@ export const RESUME_HARNESS_GOAL_ROUTE = createRoute({
 export const DELETE_HARNESS_GOAL_ROUTE = createRoute({
   method: 'DELETE',
   path: '/harness/:name/sessions/:sessionId/goal',
-  responseType: 'datastream-response',
+  responseType: 'raw',
   pathParamSchema: harnessSessionPathParams,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },
@@ -2993,7 +3121,7 @@ export const DELETE_HARNESS_GOAL_ROUTE = createRoute({
 export const CLOSE_HARNESS_SESSION_ROUTE = createRoute({
   method: 'DELETE',
   path: '/harness/:name/sessions/:sessionId',
-  responseType: 'datastream-response',
+  responseType: 'raw',
   pathParamSchema: harnessSessionPathParams,
   requiresAuth: true,
   harnessAuth: { clientRoute: true },

@@ -234,7 +234,7 @@ export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
 // ---------------------------------------------------------------------------
 // Harness channel registry (§9.3 / §14.1).
 //
-// PF-369 wires static provider/binding registration and validation only.
+// Static provider/binding registration and validation only.
 // Ingress/action/outbox workers consume these descriptors in later slices.
 // ---------------------------------------------------------------------------
 
@@ -1090,8 +1090,8 @@ export interface HarnessConfigCommon {
    * When set, construct with a parent `mastra` or register the harness through
    * `new Mastra({ channels, harnesses })` so provider bindings exist.
    *
-   * PF-369 validates identity only. Later channel PRs consume these bindings
-   * to mount ingress/action routes and durable inbox/outbox workers.
+   * This validates identity only. Later channel work consumes these bindings to
+   * mount ingress/action routes and durable inbox/outbox workers.
    */
   channels?: Record<string, HarnessChannelConfig>;
 

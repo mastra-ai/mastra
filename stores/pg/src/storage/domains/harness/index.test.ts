@@ -99,6 +99,69 @@ describe('HarnessPG', () => {
     }
   });
 
+  it('reports the latest session event replay epoch when older rows remain', async () => {
+    const harness = store.stores.harness;
+    expect(harness).toBeDefined();
+
+    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h-1', ifVersion: 0 });
+    await harness!.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:old:0',
+      epoch: 'old',
+      sequence: 0,
+      event: { type: 'app.event', id: 'harness-v1:old:0', timestamp: 1000 },
+      emittedAt: 1000,
+      storedAt: 1000,
+    });
+    await harness!.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:new:0',
+      epoch: 'new',
+      sequence: 0,
+      event: { type: 'app.event', id: 'harness-v1:new:0', timestamp: 2000 },
+      emittedAt: 2000,
+      storedAt: 2000,
+    });
+    await harness!.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:new:1',
+      epoch: 'new',
+      sequence: 1,
+      event: { type: 'app.event', id: 'harness-v1:new:1', timestamp: 2001 },
+      emittedAt: 2001,
+      storedAt: 2001,
+    });
+
+    await expect(
+      harness!.getSessionEventReplayState({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      }),
+    ).resolves.toEqual({ epoch: 'new', oldestSequence: 0, newestSequence: 1 });
+    await expect(
+      harness!.listSessionEvents({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        epoch: 'new',
+        afterSequence: 0,
+        limit: 10,
+      }),
+    ).resolves.toMatchObject([{ eventId: 'harness-v1:new:1', sequence: 1 }]);
+  });
+
   it('initializes Harness indexes for long schema names', async () => {
     const schemaName = `harness_long_schema_${randomUUID().replaceAll('-', '_')}`;
     const longSchemaStore = new PostgresStore({

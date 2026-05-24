@@ -309,7 +309,7 @@ describe('InMemoryHarness admission storage contract', () => {
     });
   });
 
-  it('persists session events for replay by epoch and sequence and refuses ambiguous epochs', async () => {
+  it('persists session events for replay by epoch and sequence and reports the latest epoch', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
     await storage.saveSession(sampleSession({ harnessName: 'default' }), { ownerId: 'h-1', ifVersion: 0 });
 
@@ -377,7 +377,7 @@ describe('InMemoryHarness admission storage contract', () => {
         resourceId: 'resource-1',
         threadId: 'thread-1',
       }),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ epoch: 'other', oldestSequence: 0, newestSequence: 0 });
   });
 
   it('hard-deletes all session event replay rows for the session id', async () => {

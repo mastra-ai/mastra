@@ -622,6 +622,12 @@ function assertPolicy(method: string, value: unknown): asserts value is Permissi
   }
 }
 
+function strongestPermissionPolicy(policies: readonly PermissionPolicy[]): PermissionPolicy {
+  if (policies.includes('deny')) return 'deny';
+  if (policies.includes('ask')) return 'ask';
+  return 'allow';
+}
+
 function isStorageAttachmentUnavailableError(err: unknown): err is HarnessStorageAttachmentUnavailableError {
   return (
     typeof err === 'object' &&
@@ -2246,7 +2252,7 @@ export class Session {
   });
 
   // -------------------------------------------------------------------------
-  // MCP catalog — PF-562 / PF-552 desktop integration inventory.
+  // MCP catalog — desktop integration inventory.
   //
   // This is an inventory snapshot over MCP servers registered on the Harness
   // Mastra instance. Tool descriptors use MCPServerBase.getToolListInfo() so
@@ -2269,7 +2275,7 @@ export class Session {
   });
 
   // -------------------------------------------------------------------------
-  // Action catalog — PF-576 / PF-552 desktop palette inventory.
+  // Action catalog — desktop palette inventory.
   //
   // This is a read-only aggregate over skill action metadata and MCP tool
   // descriptors. It intentionally exposes no execution or lifecycle controls;
@@ -4790,7 +4796,11 @@ export class Session {
     const category = this._harness.getToolCategory({ toolName });
     const toolRule = this._record.permissionRules.tools[toolName];
     const categoryRule = category ? this._record.permissionRules.categories[category] : undefined;
-    const policy = toolRule ?? categoryRule ?? this._harness._getDefaultPermissionPolicy();
+    const policy = this._applyWorkspacePolicyDecision(
+      toolName,
+      opts?.args ?? {},
+      toolRule ?? categoryRule ?? this._harness._getDefaultPermissionPolicy(),
+    );
 
     if (policy !== 'ask') return policy;
     // Per-actor grants overlay the session-level grants. A grant on a
@@ -4807,6 +4817,24 @@ export class Session {
     if (this._record.sessionGrants.tools.includes(toolName)) return 'allow';
     if (category && this._record.sessionGrants.categories.includes(category)) return 'allow';
     return 'ask';
+  }
+
+  private _applyWorkspacePolicyDecision(
+    toolName: string,
+    args: Record<string, unknown>,
+    basePolicy: PermissionPolicy,
+  ): PermissionPolicy {
+    const policy = this._harness._internalGetWorkspacePolicy();
+    if (!policy) return basePolicy;
+
+    const mapped = this._mapWorkspaceToolAction(toolName, args);
+    if (!mapped) return basePolicy;
+
+    const policyAction = this._toPolicyAction(mapped);
+    if (!policyAction) return basePolicy;
+
+    const evaluation = evaluateWorkspacePolicy(policy, policyAction);
+    return strongestPermissionPolicy([basePolicy, evaluation.decision]);
   }
 
   private async _recordWorkspaceAction(params: {

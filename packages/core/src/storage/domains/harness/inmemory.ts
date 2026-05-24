@@ -1022,15 +1022,22 @@ export class InMemoryHarness extends HarnessStorage {
         event.resourceId === resourceId &&
         event.threadId === threadId,
     );
-    const epochs = new Set(rows.map(event => event.epoch));
-    if (epochs.size !== 1) return null;
-    const [epoch] = epochs;
+    if (rows.length === 0) return null;
+    const latest = [...rows].sort(
+      (left, right) =>
+        right.storedAt - left.storedAt ||
+        right.emittedAt - left.emittedAt ||
+        right.sequence - left.sequence ||
+        right.epoch.localeCompare(left.epoch),
+    )[0]!;
+    const epoch = latest.epoch;
+    const replayableRows = rows.filter(event => event.epoch === epoch);
     let state: HarnessSessionEventReplayState = {
-      epoch: epoch!,
+      epoch,
       oldestSequence: Number.POSITIVE_INFINITY,
       newestSequence: Number.NEGATIVE_INFINITY,
     };
-    for (const event of rows) {
+    for (const event of replayableRows) {
       state.oldestSequence = Math.min(state.oldestSequence, event.sequence);
       state.newestSequence = Math.max(state.newestSequence, event.sequence);
     }

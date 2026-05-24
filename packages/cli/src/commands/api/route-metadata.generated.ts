@@ -168,6 +168,100 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/stream": {
+    "method": "POST",
+    "path": "/agents/:agentId/stream",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeTools",
+      "clientTools",
+      "context",
+      "instructions",
+      "maxSteps",
+      "memory",
+      "messages",
+      "modelSettings",
+      "output",
+      "providerOptions",
+      "requestContext",
+      "requireToolApproval",
+      "returnScorerData",
+      "runId",
+      "savePerStep",
+      "scorers",
+      "stopWhen",
+      "structuredOutput",
+      "system",
+      "toolChoice",
+      "toolsets",
+      "tracingOptions",
+      "versions"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/stream-until-idle": {
+    "method": "POST",
+    "path": "/agents/:agentId/stream-until-idle",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeTools",
+      "clientTools",
+      "context",
+      "instructions",
+      "maxIdleMs",
+      "maxSteps",
+      "memory",
+      "messages",
+      "modelSettings",
+      "output",
+      "providerOptions",
+      "requestContext",
+      "requireToolApproval",
+      "returnScorerData",
+      "runId",
+      "savePerStep",
+      "scorers",
+      "stopWhen",
+      "structuredOutput",
+      "system",
+      "toolChoice",
+      "toolsets",
+      "tracingOptions",
+      "versions"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/observe": {
+    "method": "POST",
+    "path": "/agents/:agentId/observe",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "offset",
+      "runId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/signals": {
     "method": "POST",
     "path": "/agents/:agentId/signals",
@@ -175,7 +269,31 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "ifActive",
+      "ifIdle",
+      "resourceId",
+      "runId",
+      "signal",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/threads/subscribe": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/subscribe",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "threadId"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -193,6 +311,83 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "data",
       "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/approve-tool-call": {
+    "method": "POST",
+    "path": "/agents/:agentId/approve-tool-call",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "format",
+      "requestContext",
+      "runId",
+      "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/decline-tool-call": {
+    "method": "POST",
+    "path": "/agents/:agentId/decline-tool-call",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "format",
+      "requestContext",
+      "runId",
+      "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/resume-stream": {
+    "method": "POST",
+    "path": "/agents/:agentId/resume-stream",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeTools",
+      "clientTools",
+      "context",
+      "instructions",
+      "maxSteps",
+      "memory",
+      "modelSettings",
+      "output",
+      "providerOptions",
+      "requestContext",
+      "requireToolApproval",
+      "resumeData",
+      "returnScorerData",
+      "runId",
+      "savePerStep",
+      "scorers",
+      "stopWhen",
+      "structuredOutput",
+      "system",
+      "toolCallId",
+      "toolChoice",
+      "toolsets",
+      "tracingOptions",
+      "versions"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -231,6 +426,120 @@ export const API_ROUTE_METADATA = {
       "requestContext",
       "runId",
       "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/approve-network-tool-call": {
+    "method": "POST",
+    "path": "/agents/:agentId/approve-network-tool-call",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "format",
+      "requestContext",
+      "runId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/decline-network-tool-call": {
+    "method": "POST",
+    "path": "/agents/:agentId/decline-network-tool-call",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "format",
+      "requestContext",
+      "runId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/resume-stream-until-idle": {
+    "method": "POST",
+    "path": "/agents/:agentId/resume-stream-until-idle",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeTools",
+      "clientTools",
+      "context",
+      "instructions",
+      "maxIdleMs",
+      "maxSteps",
+      "memory",
+      "modelSettings",
+      "output",
+      "providerOptions",
+      "requestContext",
+      "requireToolApproval",
+      "resumeData",
+      "returnScorerData",
+      "runId",
+      "savePerStep",
+      "scorers",
+      "stopWhen",
+      "structuredOutput",
+      "system",
+      "toolCallId",
+      "toolChoice",
+      "toolsets",
+      "tracingOptions",
+      "versions"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/network": {
+    "method": "POST",
+    "path": "/agents/:agentId/network",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeTools",
+      "clientTools",
+      "context",
+      "instructions",
+      "maxSteps",
+      "memory",
+      "messages",
+      "modelSettings",
+      "output",
+      "providerOptions",
+      "requestContext",
+      "requireToolApproval",
+      "returnScorerData",
+      "runId",
+      "savePerStep",
+      "scorers",
+      "stopWhen",
+      "structuredOutput",
+      "system",
+      "toolChoice",
+      "toolsets",
+      "tracingOptions",
+      "versions"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -353,6 +662,40 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/voice/speak": {
+    "method": "POST",
+    "path": "/agents/:agentId/voice/speak",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "speakerId",
+      "text"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/speak": {
+    "method": "POST",
+    "path": "/agents/:agentId/speak",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "speakerId",
+      "text"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/voice/listen": {
     "method": "POST",
     "path": "/agents/:agentId/voice/listen",
@@ -423,6 +766,90 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /auth/sso/login": {
+    "method": "GET",
+    "path": "/auth/sso/login",
+    "pathParams": [],
+    "queryParams": [
+      "redirect_uri"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "GET /auth/sso/callback": {
+    "method": "GET",
+    "path": "/auth/sso/callback",
+    "pathParams": [],
+    "queryParams": [
+      "code",
+      "state"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "POST /auth/logout": {
+    "method": "POST",
+    "path": "/auth/logout",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "POST /auth/refresh": {
+    "method": "POST",
+    "path": "/auth/refresh",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /auth/credentials/sign-in": {
+    "method": "POST",
+    "path": "/auth/credentials/sign-in",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "email",
+      "password"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "POST /auth/credentials/sign-up": {
+    "method": "POST",
+    "path": "/auth/credentials/sign-up",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "email",
+      "name",
+      "password"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "unknown"
     }
   },
   "GET /auth/roles/:roleId/permissions": {
@@ -544,6 +971,53 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /workflows/:workflowId/stream": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/stream",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "closeOnSuspend",
+      "initialState",
+      "inputData",
+      "perStep",
+      "requestContext",
+      "resourceId",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "POST /workflows/:workflowId/resume-stream": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/resume-stream",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /workflows/:workflowId/start-async": {
     "method": "POST",
     "path": "/workflows/:workflowId/start-async",
@@ -586,6 +1060,23 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": true,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/observe": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/observe",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "offset",
+      "runId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -701,6 +1192,32 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/time-travel-stream": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/time-travel-stream",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "context",
+      "initialState",
+      "inputData",
+      "nestedStepsContext",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "unknown"
     }
   },
   "POST /workflows/:workflowId/restart": {
@@ -894,6 +1411,29 @@ export const API_ROUTE_METADATA = {
       "messages",
       "phase",
       "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /v1/responses": {
+    "method": "POST",
+    "path": "/v1/responses",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "agent_id",
+      "conversation_id",
+      "input",
+      "instructions",
+      "model",
+      "previous_response_id",
+      "providerOptions",
+      "store",
+      "stream",
+      "text"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -2616,6 +3156,25 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /a2a/:agentId": {
+    "method": "POST",
+    "path": "/a2a/:agentId",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "id",
+      "jsonrpc",
+      "method",
+      "params"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",
@@ -3019,6 +3578,87 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/stream-legacy": {
+    "method": "POST",
+    "path": "/agents/:agentId/stream-legacy",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeTools",
+      "clientTools",
+      "context",
+      "instructions",
+      "maxSteps",
+      "memory",
+      "messages",
+      "modelSettings",
+      "output",
+      "providerOptions",
+      "requestContext",
+      "requireToolApproval",
+      "resourceId",
+      "resourceid",
+      "returnScorerData",
+      "runId",
+      "savePerStep",
+      "scorers",
+      "stopWhen",
+      "structuredOutput",
+      "system",
+      "threadId",
+      "toolChoice",
+      "toolsets",
+      "tracingOptions",
+      "versions"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/stream-legacy": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/stream-legacy",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "closeOnSuspend",
+      "initialState",
+      "inputData",
+      "perStep",
+      "requestContext",
+      "resourceId",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/observe-stream-legacy": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/observe-stream-legacy",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /mcp/v0/servers": {
     "method": "GET",
     "path": "/mcp/v0/servers",
@@ -3131,6 +3771,48 @@ export const API_ROUTE_METADATA = {
       "listProperty": "contents"
     }
   },
+  "ALL /mcp/:serverId/mcp": {
+    "method": "ALL",
+    "path": "/mcp/:serverId/mcp",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "ALL /mcp/:serverId/sse": {
+    "method": "ALL",
+    "path": "/mcp/:serverId/sse",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "POST /mcp/:serverId/messages": {
+    "method": "POST",
+    "path": "/mcp/:serverId/messages",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
   "GET /harness/:name/sessions": {
     "method": "GET",
     "path": "/harness/:name/sessions",
@@ -3166,6 +3848,21 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -3216,6 +3913,22 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "DELETE /harness/:name/sessions/:sessionId/attachments/:attachmentId": {
+    "method": "DELETE",
+    "path": "/harness/:name/sessions/:sessionId/attachments/:attachmentId",
+    "pathParams": [
+      "name",
+      "sessionId",
+      "attachmentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
     }
   },
   "POST /harness/:name/sessions/:sessionId/messages": {
@@ -3271,7 +3984,17 @@ export const API_ROUTE_METADATA = {
       "sessionId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "attributes",
+      "content",
+      "contents",
+      "ifActive",
+      "ifIdle",
+      "metadata",
+      "mode",
+      "signalId",
+      "type"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -3326,6 +4049,51 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /harness/:name/sessions/:sessionId/events": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/events",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "GET /harness/:name/sessions/:sessionId/state": {
+    "method": "GET",
+    "path": "/harness/:name/sessions/:sessionId/state",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "PATCH /harness/:name/sessions/:sessionId/state": {
+    "method": "PATCH",
+    "path": "/harness/:name/sessions/:sessionId/state",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
   "PATCH /harness/:name/sessions/:sessionId/mode": {
     "method": "PATCH",
     "path": "/harness/:name/sessions/:sessionId/mode",
@@ -3368,7 +4136,13 @@ export const API_ROUTE_METADATA = {
       "sessionId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "action",
+      "actor",
+      "category",
+      "policy",
+      "toolName"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -3384,7 +4158,16 @@ export const API_ROUTE_METADATA = {
       "itemId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "answer",
+      "approved",
+      "kind",
+      "reason",
+      "responseId",
+      "resumeData",
+      "revision",
+      "transitionToMode"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -3454,6 +4237,36 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "DELETE /harness/:name/sessions/:sessionId/goal": {
+    "method": "DELETE",
+    "path": "/harness/:name/sessions/:sessionId/goal",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
+    }
+  },
+  "DELETE /harness/:name/sessions/:sessionId": {
+    "method": "DELETE",
+    "path": "/harness/:name/sessions/:sessionId",
+    "pathParams": [
+      "name",
+      "sessionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "unknown"
     }
   },
   "GET /stored/agents": {
@@ -5179,6 +5992,24 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "clusters"
+    }
+  },
+  "GET /background-tasks/stream": {
+    "method": "GET",
+    "path": "/background-tasks/stream",
+    "pathParams": [],
+    "queryParams": [
+      "agentId",
+      "resourceId",
+      "runId",
+      "taskId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /background-tasks": {

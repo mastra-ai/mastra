@@ -503,6 +503,66 @@ describe('HarnessLibSQL active session admission', () => {
     await expect(storage.loadSession({ sessionId: 'active' })).resolves.toMatchObject({ id: 'active' });
   });
 
+  it('reports the latest session event replay epoch when older rows remain', async () => {
+    await storage.saveSession(sampleSession({ harnessName: 'default' }), { ownerId: 'h-1', ifVersion: 0 });
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:old:0',
+      epoch: 'old',
+      sequence: 0,
+      event: { type: 'app.event', id: 'harness-v1:old:0', timestamp: 1000 },
+      emittedAt: 1000,
+      storedAt: 1000,
+    });
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:new:0',
+      epoch: 'new',
+      sequence: 0,
+      event: { type: 'app.event', id: 'harness-v1:new:0', timestamp: 2000 },
+      emittedAt: 2000,
+      storedAt: 2000,
+    });
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:new:1',
+      epoch: 'new',
+      sequence: 1,
+      event: { type: 'app.event', id: 'harness-v1:new:1', timestamp: 2001 },
+      emittedAt: 2001,
+      storedAt: 2001,
+    });
+
+    await expect(
+      storage.getSessionEventReplayState({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      }),
+    ).resolves.toEqual({ epoch: 'new', oldestSequence: 0, newestSequence: 1 });
+    await expect(
+      storage.listSessionEvents({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        epoch: 'new',
+        afterSequence: 0,
+        limit: 10,
+      }),
+    ).resolves.toMatchObject([{ eventId: 'harness-v1:new:1', sequence: 1 }]);
+  });
+
   it('hard-deletes all session event replay rows for the session id', async () => {
     await storage.saveSession(sampleSession({ harnessName: 'default' }), { ownerId: 'h-1', ifVersion: 0 });
     await storage.appendSessionEvent({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildApiSchemaManifest } from './api-schema-manifest';
+import { HARNESS_ROUTES } from './routes/harness';
 
 const apiSchemaManifest = buildApiSchemaManifest();
 const routeKeys = apiSchemaManifest.routes.map(route => `${route.method} ${route.path}`);
@@ -54,11 +55,22 @@ describe('apiSchemaManifest', () => {
     );
   });
 
-  it('derives the manifest from registered JSON route contracts', () => {
+  it('derives the manifest from registered route contracts', () => {
     expect(routeKeys).toContain('GET /agents/:agentId/voice/speakers');
     expect(routeKeys).toContain('GET /auth/me');
-    expect(apiSchemaManifest.routes.every(route => route.responseType === 'json')).toBe(true);
-    expect(routeKeys.some(key => key.includes('/stream'))).toBe(false);
+    expect(routeKeys).toContain('GET /auth/sso/login');
+    expect(routeKeys).toContain('POST /agents/:agentId/stream');
+    expect(
+      apiSchemaManifest.routes.every(route =>
+        ['json', 'stream', 'raw', 'datastream-response', 'mcp-http', 'mcp-sse'].includes(route.responseType),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps every registered Harness route discoverable in the manifest', () => {
+    const harnessRouteKeys = HARNESS_ROUTES.map(route => `${route.method} ${route.path}`);
+
+    expect(routeKeys).toEqual(expect.arrayContaining(harnessRouteKeys));
   });
 
   it('infers response shape metadata for deterministic CLI normalization', () => {

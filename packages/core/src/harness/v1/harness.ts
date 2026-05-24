@@ -4486,9 +4486,8 @@ export class Harness {
   }
 
   /** @internal — workspace policy for the runtime to evaluate against
-   * classified actions. Returns `undefined` when no policy is configured
-   * on `HarnessConfig.workspace.policy`; in that case the journal records
-   * the caller-driven `policyDecision` verbatim. */
+   * classified actions before execution and when journaling. Returns
+   * `undefined` when no policy is configured on `HarnessConfig.workspace.policy`. */
   _internalGetWorkspacePolicy(): WorkspacePolicy | undefined {
     return this._workspacePolicy;
   }

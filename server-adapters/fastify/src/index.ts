@@ -367,7 +367,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       await reply.send(result);
     } else if (route.responseType === 'stream') {
       await this.stream(route, reply, result as { fullStream: ReadableStream }, request);
-    } else if (route.responseType === 'datastream-response') {
+    } else if (route.responseType === 'datastream-response' || route.responseType === 'raw') {
       // Handle AI SDK Response objects - pipe Response.body to Fastify response
       const fetchResponse = result as globalThis.Response;
       fetchResponse.headers.forEach((value, key) => reply.header(key, value));

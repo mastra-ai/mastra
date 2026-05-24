@@ -190,13 +190,14 @@ describe('Harness server routes', () => {
     expect(CREATE_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(GET_HARNESS_SESSION_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(GET_HARNESS_SESSION_ROUTE.responseType).toBe('json');
     expect(GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.requiresAuth).toBe(true);
     expect(GET_HARNESS_CHANNEL_DIAGNOSTICS_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.requiresAuth).toBe(true);
     expect(DELETE_HARNESS_ATTACHMENT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
-    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.responseType).toBe('datastream-response');
+    expect(DELETE_HARNESS_ATTACHMENT_ROUTE.responseType).toBe('raw');
     expect(POST_HARNESS_MESSAGE_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_MESSAGE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_QUEUE_ROUTE.requiresAuth).toBe(true);
@@ -214,12 +215,17 @@ describe('Harness server routes', () => {
       clientRoute: true,
       allowSseSubscriptionToken: true,
     });
+    expect(GET_HARNESS_SESSION_EVENTS_ROUTE.responseType).toBe('datastream-response');
+    expect(GET_HARNESS_STATE_ROUTE.responseType).toBe('json');
+    expect(PATCH_HARNESS_STATE_ROUTE.responseType).toBe('json');
     expect(PATCH_HARNESS_STATE_ROUTE.requiresAuth).toBe(true);
     expect(PATCH_HARNESS_STATE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(RESPOND_HARNESS_INBOX_ROUTE.requiresAuth).toBe(true);
     expect(RESPOND_HARNESS_INBOX_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(DELETE_HARNESS_GOAL_ROUTE.responseType).toBe('raw');
     expect(CLOSE_HARNESS_SESSION_ROUTE.requiresAuth).toBe(true);
     expect(CLOSE_HARNESS_SESSION_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(CLOSE_HARNESS_SESSION_ROUTE.responseType).toBe('raw');
   });
 
   it('lists sessions for the authenticated resource with cursor pagination', async () => {
@@ -605,13 +611,11 @@ describe('Harness server routes', () => {
         requestPathParams: { name: 'code', sessionId: 'session-1' },
       }),
     );
-    const body = await response.json();
-
-    expect(response.headers.get('etag')).toBe('"7"');
+    expect((response as any).__refreshHeaders).toEqual({ etag: '"7"' });
     expect(mastra.getHarness).toHaveBeenCalledWith('code');
     expect(harness.loadSession).toHaveBeenCalledWith({ sessionId: 'session-1', includeClosed: true });
     expect(harness.session).not.toHaveBeenCalled();
-    expect(body).toMatchObject({
+    expect(response).toMatchObject({
       summary: { sessionId: 'session-1', lifecycle: 'active', version: 7 },
       displayState: { sessionId: 'session-1' },
       tokenUsage: { totalTokens: 3 },
@@ -830,10 +834,10 @@ describe('Harness server routes', () => {
       }),
     );
 
-    expect(response.headers.get('etag')).toBe('"11"');
+    expect((response as any).__refreshHeaders).toEqual({ etag: '"11"' });
     expect(mastra.getHarness).toHaveBeenCalledWith('code');
     expect(harness.loadSession).toHaveBeenCalledWith({ sessionId: 'session-1', includeClosed: true });
-    await expect(response.json()).resolves.toEqual({ view: 'open' });
+    expect(response).toEqual({ view: 'open' });
   });
 
   it('uploads file, primitive, and element attachments through the authenticated session scope', async () => {
@@ -1144,7 +1148,7 @@ describe('Harness server routes', () => {
               sessionId: 'session-1',
               requestBody: {
                 content: 'hello',
-                admissionId: 'admission-1',
+                admissionId: 'admission-url-ingest',
                 files: [
                   {
                     kind: 'url',
@@ -1180,12 +1184,75 @@ describe('Harness server routes', () => {
     expect(uploaded.attachmentId).toMatch(/^attachment-url-/);
     expect(session.admitMessage).toHaveBeenCalledWith({
       content: 'hello',
-      admissionId: 'admission-1',
+      admissionId: 'admission-url-ingest',
       attachments: [uploadedRef],
     });
   });
 
-  it('uses stable URL attachment ids for admission retries', async () => {
+  it('reuses normalized URL attachments for duplicate admission retries without refetching', async () => {
+    let requestCount = 0;
+    let admitMessageCalls = 0;
+    const session = {
+      admitMessage: vi.fn(async () => {
+        admitMessageCalls += 1;
+        return {
+          accepted: true as const,
+          signalId: 'signal-1',
+          duplicate: admitMessageCalls > 1,
+        };
+      }),
+    };
+    const harness = {
+      getFileConfig: vi.fn(() => ({ allowPrivateNetworkUrls: true })),
+      session: vi.fn(async () => session),
+      attachments: {
+        upload: vi.fn(async (opts: any) => ({
+          attachmentId: opts.attachmentId,
+          resourceId: 'resource-1',
+          ownerSessionId: 'session-1',
+          bytes: 9,
+          sha256: 'stored-sha',
+          source: 'url',
+          kind: 'file',
+          name: opts.filename,
+          mimeType: opts.contentType,
+        })),
+      },
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await withUrlServer(
+      (_request, response) => {
+        requestCount += 1;
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('url-bytes');
+      },
+      async baseUrl => {
+        const requestBody = {
+          content: 'hello',
+          admissionId: 'admission-url-retry',
+          files: [{ kind: 'url', url: `${baseUrl}/remote.txt`, name: 'remote.txt', mimeType: 'text/plain' }],
+        };
+        await POST_HARNESS_MESSAGE_ROUTE.handler(
+          makeParams({ mastra, name: 'code', sessionId: 'session-1', requestBody }),
+        );
+        await POST_HARNESS_MESSAGE_ROUTE.handler(
+          makeParams({ mastra, name: 'code', sessionId: 'session-1', requestBody }),
+        );
+      },
+    );
+
+    const firstId = harness.attachments.upload.mock.calls[0]?.[0].attachmentId;
+    expect(firstId).toMatch(/^attachment-url-/);
+    expect(requestCount).toBe(1);
+    expect(harness.attachments.upload).toHaveBeenCalledTimes(1);
+    expect(session.admitMessage).toHaveBeenCalledTimes(2);
+    expect(session.admitMessage.mock.calls[0]?.[0]).toEqual(session.admitMessage.mock.calls[1]?.[0]);
+    expect(await session.admitMessage.mock.results[1]?.value).toMatchObject({ duplicate: true });
+  });
+
+  it('rejects conflicting URL admission retries before contacting the changed URL', async () => {
+    let requestCount = 0;
     const session = {
       admitMessage: vi.fn(async () => ({
         accepted: true as const,
@@ -1214,28 +1281,46 @@ describe('Harness server routes', () => {
 
     await withUrlServer(
       (_request, response) => {
+        requestCount += 1;
         response.writeHead(200, { 'content-type': 'text/plain' });
         response.end('url-bytes');
       },
       async baseUrl => {
-        const requestBody = {
-          content: 'hello',
-          admissionId: 'admission-1',
-          files: [{ kind: 'url', url: `${baseUrl}/remote.txt`, name: 'remote.txt', mimeType: 'text/plain' }],
-        };
         await POST_HARNESS_MESSAGE_ROUTE.handler(
-          makeParams({ mastra, name: 'code', sessionId: 'session-1', requestBody }),
+          makeParams({
+            mastra,
+            name: 'code',
+            sessionId: 'session-1',
+            requestBody: {
+              content: 'hello',
+              admissionId: 'admission-url-conflict',
+              files: [{ kind: 'url', url: `${baseUrl}/remote-a.txt`, name: 'remote.txt', mimeType: 'text/plain' }],
+            },
+          }),
         );
-        await POST_HARNESS_MESSAGE_ROUTE.handler(
-          makeParams({ mastra, name: 'code', sessionId: 'session-1', requestBody }),
+
+        await expectHarnessHttpError(
+          POST_HARNESS_MESSAGE_ROUTE.handler(
+            makeParams({
+              mastra,
+              name: 'code',
+              sessionId: 'session-1',
+              requestBody: {
+                content: 'hello',
+                admissionId: 'admission-url-conflict',
+                files: [{ kind: 'url', url: `${baseUrl}/remote-b.txt`, name: 'remote.txt', mimeType: 'text/plain' }],
+              },
+            }),
+          ),
+          409,
+          'harness.admission_conflict',
         );
       },
     );
 
-    const firstId = harness.attachments.upload.mock.calls[0]?.[0].attachmentId;
-    const secondId = harness.attachments.upload.mock.calls[1]?.[0].attachmentId;
-    expect(firstId).toMatch(/^attachment-url-/);
-    expect(secondId).toBe(firstId);
+    expect(requestCount).toBe(1);
+    expect(harness.attachments.upload).toHaveBeenCalledTimes(1);
+    expect(session.admitMessage).toHaveBeenCalledTimes(1);
   });
 
   it('does not buffer redirect bodies before following URL attachment redirects', async () => {
@@ -1284,7 +1369,7 @@ describe('Harness server routes', () => {
               sessionId: 'session-1',
               requestBody: {
                 content: 'hello',
-                admissionId: 'admission-1',
+                admissionId: 'admission-url-redirect',
                 files: [{ kind: 'url', url: `${baseUrl}/redirect`, name: 'remote.txt', mimeType: 'text/plain' }],
               },
             }),
@@ -2360,8 +2445,8 @@ describe('Harness server routes', () => {
     );
 
     expect(session.setState).toHaveBeenCalledWith({ view: 'done' }, { ifVersion: 7 });
-    expect(response.headers.get('etag')).toBe('"8"');
-    await expect(response.json()).resolves.toEqual({ view: 'done' });
+    expect((response as any).__refreshHeaders).toEqual({ etag: '"8"' });
+    expect(response).toEqual({ view: 'done' });
   });
 
   it('patches state from the raw request body without dropping body keys that collide with handler context', async () => {
@@ -2413,7 +2498,7 @@ describe('Harness server routes', () => {
       },
       { ifVersion: 7 },
     );
-    expect(response.headers.get('etag')).toBe('"8"');
+    expect((response as any).__refreshHeaders).toEqual({ etag: '"8"' });
   });
 
   it('rejects stale state patches before resolving a live session', async () => {
@@ -2517,6 +2602,41 @@ describe('Harness server routes', () => {
     expect(result).toEqual({
       grants: { categories: ['read', 'write'], tools: [] },
       rules: { categories: {}, tools: { shell: 'ask' } },
+    });
+  });
+
+  it('forwards actor-scoped permission mutations and snapshots actor grants', async () => {
+    const actor = { kind: 'channel' as const, id: 'slack:T1:C1:U1', displayName: 'Ada' };
+    const actorGrants = { categories: [], tools: ['shell.run'] };
+    const rules = { categories: {}, tools: { 'shell.run': 'ask' as const } };
+    const session = {
+      permissions: {
+        grantCategory: vi.fn(),
+        grantTool: vi.fn(),
+        revokeCategory: vi.fn(),
+        revokeTool: vi.fn(),
+        setPolicy: vi.fn(),
+        getGrants: vi.fn(() => actorGrants),
+        getRules: vi.fn(() => rules),
+      },
+    };
+    const harness = { session: vi.fn(async () => session) };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const result = await PATCH_HARNESS_PERMISSIONS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        requestBody: { action: 'grantTool', toolName: 'shell.run', actor },
+      }),
+    );
+
+    expect(session.permissions.grantTool).toHaveBeenCalledWith({ toolName: 'shell.run', actor });
+    expect(session.permissions.getGrants).toHaveBeenCalledWith({ actor });
+    expect(result).toEqual({
+      grants: { categories: [], tools: ['shell.run'] },
+      rules: { categories: {}, tools: { 'shell.run': 'ask' } },
     });
   });
 

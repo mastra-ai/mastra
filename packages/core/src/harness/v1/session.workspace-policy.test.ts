@@ -1,17 +1,14 @@
 /**
- * Tests for workspace-policy enforcement on the `_recordWorkspaceAction`
- * journaling path.
+ * Tests for workspace-policy enforcement on the pre-execution permission
+ * resolver and `_recordWorkspaceAction` journaling path.
  *
  * Today the classifier emits all four `actionKind`s (`file` / `command` /
  * `network` / `mcp`). When `HarnessConfig.workspace.policy` is configured,
- * the runtime evaluates each classified action through
- * `evaluateWorkspacePolicy` and overlays the verdict + reasons + matched
- * rules onto the journal entry. The caller's own `policyDecision` is
- * preserved under `actor.callerDecision` for operator-side comparison.
- *
- * Out of scope here (per the same-day classifier commit): the runtime does
- * NOT gate tool execution based on the verdict. The journal records the
- * decision as evidence; permission profiles will land separately.
+ * the runtime evaluates each classified action before `tool.execute` through
+ * the Harness permission resolver. The journal also overlays the verdict,
+ * reasons, and matched rules onto the entry. The caller's own
+ * `policyDecision` is preserved under `actor.callerDecision` for
+ * operator-side comparison.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -70,8 +67,16 @@ describe('workspace policy enforcement — file/command journaling', () => {
     await session.message({ content: 'hi' });
 
     const slot = agent.streamCalls.at(-1)!.options.requestContext.get('harness') as {
+      resolveToolPermission: (params: { toolName: string; args: Record<string, unknown> }) => 'allow' | 'ask' | 'deny';
       recordWorkspaceAction: (params: Record<string, unknown>) => Promise<void>;
     };
+    expect(
+      slot.resolveToolPermission({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+        args: { path: '/ws/src/index.ts', content: 'export {};' },
+      }),
+    ).toBe('deny');
+
     await slot.recordWorkspaceAction({
       toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
       args: { path: '/ws/src/index.ts', content: 'export {};' },

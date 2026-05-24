@@ -25,16 +25,11 @@
  *   resolver, but the profile bundle itself remains purely
  *   declarative — it does not introspect args. Workspace-policy
  *   rules (with selectors for `command`, `network`, `mcp`)
- *   produce an args-aware verdict on every workspace-tool call
- *   today, recorded on the action journal as the
- *   `policyDecision` overlay alongside the caller's intent.
- *   That verdict is currently audit-side (the dispatcher
- *   records it post-execution); a future slice can move the
- *   workspace-policy evaluation pre-execution so a profile-set
- *   `ask`/`deny` on the workspace tool's category and the
- *   workspace-policy rule's args-aware verdict compose into a
- *   single pre-`tool.execute` decision. Until then, profile
- *   presets stay coarse-grained at category + tool-name level.
+ *   produce an args-aware verdict on every workspace-tool call.
+ *   The session permission resolver evaluates those rules before
+ *   `tool.execute` and composes them with the profile/category/tool
+ *   decision; the action journal records the same workspace-policy
+ *   verdict alongside the caller's coarse decision for diagnostics.
  * - Workspace-policy fragments are intentionally out of this module —
  *   the harness workspace policy is currently construction-only, and
  *   exposing a session-scoped overlay is a separate slice.
