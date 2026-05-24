@@ -702,6 +702,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     version: { type: 'integer', nullable: false },
     owner_id: { type: 'text', nullable: true },
     lease_expires_at: { type: 'bigint', nullable: true },
+    cancel_request: { type: 'jsonb', nullable: true },
   },
   // Harness attachments. Bytes are stored as base64 in `data_b64` because
   // the shared `StorageColumn['type']` union does not yet include `blob`.

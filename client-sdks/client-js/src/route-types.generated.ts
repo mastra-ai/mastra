@@ -20050,7 +20050,7 @@ export type GetHarnessNameSessions_Response = {
     queueDepth: number;
     pendingInbox: {
       count: number;
-      kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval')[];
+      kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access')[];
       sessionOwnedOnly: true;
     };
     durableWork: {
@@ -20171,7 +20171,7 @@ export type PostHarnessNameSessions_Response = {
       queueDepth: number;
       pendingInbox: {
         count: number;
-        kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval')[];
+        kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access')[];
         sessionOwnedOnly: true;
       };
       durableWork: {
@@ -20311,7 +20311,7 @@ export type GetHarnessNameSessionsSessionId_Response = {
     queueDepth: number;
     pendingInbox: {
       count: number;
-      kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval')[];
+      kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access')[];
       sessionOwnedOnly: true;
     };
     durableWork: {
@@ -20405,7 +20405,7 @@ export interface GetHarnessNameSessionsSessionId_RouteContract {
   body: never;
   request: GetHarnessNameSessionsSessionId_Request;
   response: GetHarnessNameSessionsSessionId_Response;
-  responseType: 'datastream-response';
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -20482,7 +20482,7 @@ export type GetHarnessNameSessionsSessionIdChannelDiagnostics_Response = {
     resourceId: string;
     owningSessionId: string;
     itemId: string;
-    kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+    kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
     runId: string;
     pendingRequestedAt: number;
     expiresAt?: number | undefined;
@@ -20503,7 +20503,7 @@ export type GetHarnessNameSessionsSessionIdChannelDiagnostics_Response = {
     resourceId: string;
     owningSessionId: string;
     itemId: string;
-    kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+    kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
     runId: string;
     pendingRequestedAt: number;
     conflictReason?: string | undefined;
@@ -20710,7 +20710,7 @@ export interface DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Route
   body: never;
   request: DeleteHarnessNameSessionsSessionIdAttachmentsAttachmentId_Request;
   response: unknown;
-  responseType: 'datastream-response';
+  responseType: 'raw';
 }
 
 // ============================================================================
@@ -21295,7 +21295,7 @@ export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Respon
       source: 'inbox-response';
       status: 'accepted';
       itemId: string;
-      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
       responseId: string;
       resumeAttemptId: string;
       runId: string;
@@ -21306,7 +21306,7 @@ export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Respon
       source: 'inbox-response';
       status: 'applied';
       itemId: string;
-      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
       responseId: string;
       resumeAttemptId: string;
       runId: string;
@@ -21317,7 +21317,7 @@ export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Respon
       source: 'inbox-response';
       status: 'failed';
       itemId: string;
-      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
       responseId: string;
       resumeAttemptId: string;
       runId: string;
@@ -21332,7 +21332,7 @@ export type GetHarnessNameSessionsSessionIdInboxResponsesResponseIdResult_Respon
       source: 'inbox-response';
       status: 'dead';
       itemId: string;
-      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+      kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
       responseId: string;
       resumeAttemptId: string;
       runId: string;
@@ -21398,6 +21398,20 @@ export type GetHarnessNameSessionsSessionIdState_PathParams = {
   sessionId: string;
 };
 
+type GetHarnessNameSessionsSessionIdState_Response_Auxiliary_0 =
+  | string
+  | number
+  | boolean
+  | null
+  | GetHarnessNameSessionsSessionIdState_Response_Auxiliary_0[]
+  | {
+      [key: string]: GetHarnessNameSessionsSessionIdState_Response_Auxiliary_0;
+    };
+
+export type GetHarnessNameSessionsSessionIdState_Response = {
+  [key: string]: GetHarnessNameSessionsSessionIdState_Response_Auxiliary_0;
+};
+
 export type GetHarnessNameSessionsSessionIdState_Request = Simplify<
   (GetHarnessNameSessionsSessionIdState_PathParams extends never
     ? {}
@@ -21411,8 +21425,8 @@ export interface GetHarnessNameSessionsSessionIdState_RouteContract {
   queryParams: never;
   body: never;
   request: GetHarnessNameSessionsSessionIdState_Request;
-  response: unknown;
-  responseType: 'datastream-response';
+  response: GetHarnessNameSessionsSessionIdState_Response;
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -21439,6 +21453,20 @@ export type PatchHarnessNameSessionsSessionIdState_Body = {
   [key: string]: PatchHarnessNameSessionsSessionIdState_Body_Auxiliary_0;
 };
 
+type PatchHarnessNameSessionsSessionIdState_Response_Auxiliary_0 =
+  | string
+  | number
+  | boolean
+  | null
+  | PatchHarnessNameSessionsSessionIdState_Response_Auxiliary_0[]
+  | {
+      [key: string]: PatchHarnessNameSessionsSessionIdState_Response_Auxiliary_0;
+    };
+
+export type PatchHarnessNameSessionsSessionIdState_Response = {
+  [key: string]: PatchHarnessNameSessionsSessionIdState_Response_Auxiliary_0;
+};
+
 export type PatchHarnessNameSessionsSessionIdState_Request = Simplify<
   (PatchHarnessNameSessionsSessionIdState_PathParams extends never
     ? {}
@@ -21456,8 +21484,8 @@ export interface PatchHarnessNameSessionsSessionIdState_RouteContract {
   queryParams: never;
   body: PatchHarnessNameSessionsSessionIdState_Body;
   request: PatchHarnessNameSessionsSessionIdState_Request;
-  response: unknown;
-  responseType: 'datastream-response';
+  response: PatchHarnessNameSessionsSessionIdState_Response;
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -21552,18 +21580,46 @@ export type PatchHarnessNameSessionsSessionIdPermissions_Body =
   | {
       action: 'grantCategory';
       category: string;
+      actor?:
+        | {
+            kind: 'a2a' | 'channel' | 'cli' | 'server';
+            id: string;
+            displayName?: string | undefined;
+          }
+        | undefined;
     }
   | {
       action: 'grantTool';
       toolName: string;
+      actor?:
+        | {
+            kind: 'a2a' | 'channel' | 'cli' | 'server';
+            id: string;
+            displayName?: string | undefined;
+          }
+        | undefined;
     }
   | {
       action: 'revokeCategory';
       category: string;
+      actor?:
+        | {
+            kind: 'a2a' | 'channel' | 'cli' | 'server';
+            id: string;
+            displayName?: string | undefined;
+          }
+        | undefined;
     }
   | {
       action: 'revokeTool';
       toolName: string;
+      actor?:
+        | {
+            kind: 'a2a' | 'channel' | 'cli' | 'server';
+            id: string;
+            displayName?: string | undefined;
+          }
+        | undefined;
     }
   | {
       action: 'setPolicy';
@@ -21653,11 +21709,17 @@ export type PostHarnessNameSessionsSessionIdInboxItemId_Body =
       revision?: string | undefined;
       responseId: string;
       transitionToMode?: string | undefined;
+    }
+  | {
+      kind: 'sandbox-access';
+      approved: boolean;
+      reason?: string | undefined;
+      responseId: string;
     };
 
 export type PostHarnessNameSessionsSessionIdInboxItemId_Response = {
   itemId: string;
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   status: 'accepted' | 'applied';
   responseId: string;
   duplicate: boolean;
@@ -21903,7 +21965,7 @@ export interface DeleteHarnessNameSessionsSessionIdGoal_RouteContract {
   body: never;
   request: DeleteHarnessNameSessionsSessionIdGoal_Request;
   response: unknown;
-  responseType: 'datastream-response';
+  responseType: 'raw';
 }
 
 // ============================================================================
@@ -21930,7 +21992,7 @@ export interface DeleteHarnessNameSessionsSessionId_RouteContract {
   body: never;
   request: DeleteHarnessNameSessionsSessionId_Request;
   response: unknown;
-  responseType: 'datastream-response';
+  responseType: 'raw';
 }
 
 // ============================================================================

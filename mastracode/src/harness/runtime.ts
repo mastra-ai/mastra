@@ -31,10 +31,10 @@ import type {
   SessionDisplayState,
   ThreadRecord,
 } from '@mastra/core/harness/v1';
-import type { WorkspaceActionJournalEntry } from '@mastra/core/storage';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import type { WorkspaceActionJournalEntry } from '@mastra/core/storage';
 
 import { isSubagentToolName } from '../tool-names.js';
 import {
@@ -1367,17 +1367,19 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     }
   }
 
-  respondToQuestion({ answer }: { questionId?: string; answer: unknown }): void {
+  respondToQuestion({ questionId, answer }: { questionId?: string; answer: unknown }): void {
     void this.requireSession()
-      .respondToQuestion({ answer })
+      .respondToQuestion({ ...(questionId !== undefined ? { itemId: questionId } : {}), answer })
       .catch(error => this.emitError(error));
   }
 
   respondToToolApproval({
+    toolCallId,
     decision,
     approved,
     reason,
   }: {
+    toolCallId?: string;
     decision?: 'approve' | 'decline' | 'deny' | 'always_allow_category';
     approved?: boolean;
     reason?: string;
@@ -1391,6 +1393,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     }
     void this.requireSession()
       .respondToToolApproval({
+        ...(toolCallId !== undefined ? { itemId: toolCallId } : {}),
         approved: approved ?? (decision === 'approve' || decision === 'always_allow_category'),
         reason,
       })
@@ -1398,15 +1401,39 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   async respondToToolSuspension({
+    toolCallId,
     resumeData,
   }: {
+    toolCallId?: string;
     resumeData: unknown;
     requestContext?: RequestContext;
   }): Promise<void> {
-    await this.requireSession().respondToToolSuspension({ resumeData });
+    await this.requireSession().respondToToolSuspension({
+      ...(toolCallId !== undefined ? { itemId: toolCallId } : {}),
+      resumeData,
+    });
+  }
+
+  async respondToSandboxAccess({
+    questionId,
+    requestId,
+    approved,
+    reason,
+  }: {
+    questionId?: string;
+    requestId?: string;
+    approved: boolean;
+    reason?: string;
+  }): Promise<void> {
+    await this.requireSession().respondToSandboxAccess({
+      ...((requestId ?? questionId) !== undefined ? { itemId: requestId ?? questionId } : {}),
+      approved,
+      reason,
+    });
   }
 
   async respondToPlanApproval({
+    planId,
     response,
     approved,
     revision,
@@ -1418,6 +1445,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }): Promise<void> {
     const accepted = approved ?? response?.action !== 'rejected';
     await this.requireSession().respondToPlanApproval({
+      ...(planId !== undefined ? { itemId: planId } : {}),
       approved: accepted,
       revision: revision ?? response?.feedback,
     });

@@ -14,16 +14,16 @@
  *   6. close the child + drop the entry once the tool returns.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { buildFakeOutput } from './__test-utils__/fake-output';
 
+import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './builtin-tools/spawn-subagent';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
-import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagent-tool';
 
 class FakeAgent extends Agent<any, any, any> {
   chunks: any[] = [];
@@ -86,6 +86,23 @@ function setup(opts?: {
   chunks?: any[];
   allowedWorkspaceTools?: string[];
   forkedDefault?: boolean;
+  /**
+   * Permission profile applied to the subagent type's child session at
+   * spawn time. When set, the child runs with the profile's per-category
+   * baseline + session grants regardless of the parent's posture.
+   */
+  profile?: 'readOnlyReview' | 'approvalGatedPatch' | 'ciFixer' | 'trustedLocalYolo';
+  /**
+   * Retention policy for the `explore` subagent type. Many existing tests
+   * inspect `storage.loadSession({ sessionId: child.id })` AFTER the tool
+   * returns to verify configuration (modeId, modelId, parentSessionId,
+   * etc.); under the production default `retain: false`, the row would be
+   * deleted before those assertions could run. We default this helper to
+   * `retain: true` so existing tests stay assertion-friendly. Tests that
+   * specifically exercise the ephemeral-cleanup contract pass
+   * `retain: false`.
+   */
+  retain?: boolean;
 }) {
   const parentAgent = new FakeAgent('parent-agent');
   const childAgent = new FakeAgent('child-agent');
@@ -110,6 +127,8 @@ function setup(opts?: {
           forked: opts?.forkedDefault,
           allowedWorkspaceTools: opts?.allowedWorkspaceTools,
           workspace: 'inherit',
+          retain: opts?.retain ?? true,
+          ...(opts?.profile !== undefined ? { profile: opts.profile } : {}),
         },
       },
     },
@@ -385,7 +404,7 @@ describe('spawn_subagent tool — execution', () => {
       source: 'subagent',
       parentSessionId: parent.id,
     });
-    expect(parentAgent.lastStreamOptions.requireToolApproval).toBeUndefined();
+    expect(parentAgent.lastStreamOptions.requireToolApproval).toBe(true);
     expect(childAgent.lastStreamOptions).toBeUndefined();
 
     const childRecord = await storage.loadSession({ sessionId: result.subagentSessionId });
@@ -435,5 +454,225 @@ describe('spawn_subagent tool — execution', () => {
     expect(childAgent.lastStreamOptions?.memory?.thread).toBeDefined();
     expect(childAgent.lastStreamOptions.memory.thread).not.toBe(parent.threadId);
     expect(parentAgent.lastStreamOptions).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Retention policy — default ephemeral + opt-in retain
+// ---------------------------------------------------------------------------
+
+describe('spawn_subagent tool — retention policy', () => {
+  it('deletes the child session row after subagent_end by default (retain unset)', async () => {
+    // setup({retain: false}) opts the test subagent type into the production
+    // default of ephemeral cleanup.
+    const { harness, storage } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-ephemeral'))) as any;
+
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(result.subagentSessionId).not.toBe('');
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).toBeNull();
+  });
+
+  it('preserves the child session row when retain: true', async () => {
+    const { harness, storage } = setup({ retain: true });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-retain'))) as any;
+
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).not.toBeNull();
+    expect(childRow?.closedAt).toBeDefined();
+  });
+
+  it('still emits subagent_end before the cleanup deletes the row', async () => {
+    // Regression: the cleanup MUST run AFTER `subagent_end` is emitted so
+    // subscribers can observe the event before the row vanishes.
+    const { harness } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const events: HarnessEvent[] = [];
+    parent.subscribe(e => {
+      events.push(e);
+    });
+
+    await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-event-order'));
+
+    const end = events.find(e => e.type === 'subagent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.subagentSessionId).toMatch(/^sess-/);
+    expect(end.toolCallId).toBe('tc-event-order');
+  });
+
+  it('also cleans the child row when workspace-tool construction fails on the early-return path', async () => {
+    // Regression: codex review surfaced that the workspace-tool-construction
+    // catch path closes the child and returns BEFORE the main `finally`
+    // retention block runs. Under default `retain: false`, that path must
+    // still delete the row or workspace/provider failures in fan-out
+    // workloads keep accumulating closed children.
+    const { harness, storage } = setup({ retain: false, allowedWorkspaceTools: ['view'] });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read only' }, {
+      ...execCtx('tc-ws-error-cleanup'),
+      workspace: {
+        getToolsConfig: () => {
+          throw new Error('workspace unavailable');
+        },
+        filesystem: { readOnly: false },
+      },
+    } as any)) as any;
+
+    expect(result).toMatchObject({ isError: true, message: 'workspace unavailable' });
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(result.subagentSessionId.length).toBeGreaterThan(0);
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).toBeNull();
+  });
+
+  it('also deletes the child thread row alongside the session row by default', async () => {
+    // Follow-up to the initial retention commit: cleaning the session
+    // row alone left the cloned/fresh thread and its messages behind.
+    // The cleanup now calls `harness.threads.delete` too.
+    const { harness, storage } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const threadsDelete = vi.spyOn(harness.threads, 'delete');
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-thread-cleanup'))) as any;
+
+    expect(typeof result.subagentSessionId).toBe('string');
+    expect(threadsDelete).toHaveBeenCalled();
+    // The child has a fresh thread (not the parent's); the delete must
+    // target that thread, not the parent's.
+    const callArg = threadsDelete.mock.calls[0]?.[0] as { resourceId: string; threadId: string };
+    expect(callArg.resourceId).toBe('u1');
+    expect(callArg.threadId).not.toBe(parent.threadId);
+    // The session row is gone too (covered by an earlier test); we
+    // additionally confirm here that storage no longer lists the child.
+    const childRow = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(childRow).toBeNull();
+  });
+
+  it('does not delete the thread row when retain: true', async () => {
+    const { harness } = setup({ retain: true });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const threadsDelete = vi.spyOn(harness.threads, 'delete');
+    const tool = createSpawnSubagentTool(parent)!;
+    await tool.execute!({ agentType: 'explore', task: 'run' }, execCtx('tc-retain-thread'));
+    expect(threadsDelete).not.toHaveBeenCalled();
+  });
+
+  it('also deletes the thread on the workspace-tool-construction early-return path', async () => {
+    const { harness } = setup({ retain: false, allowedWorkspaceTools: ['view'] });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const threadsDelete = vi.spyOn(harness.threads, 'delete');
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read only' }, {
+      ...execCtx('tc-ws-thread-cleanup'),
+      workspace: {
+        getToolsConfig: () => {
+          throw new Error('workspace unavailable');
+        },
+        filesystem: { readOnly: false },
+      },
+    } as any)) as any;
+
+    expect(result).toMatchObject({ isError: true });
+    expect(threadsDelete).toHaveBeenCalled();
+  });
+
+  it('leaves no orphan session rows after a bulk-spawn workload (default ephemeral)', async () => {
+    // The Linear acceptance criterion: a workflow that spawns many
+    // ephemeral subagents and runs to completion leaves zero closed
+    // subagent sessions in storage by default.
+    const { harness, storage } = setup({ retain: false });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    const N = 25;
+    for (let i = 0; i < N; i++) {
+      await tool.execute!({ agentType: 'explore', task: `task-${i}` }, execCtx(`tc-bulk-${i}`));
+    }
+
+    const childRecords = await storage.listSessions({
+      resourceId: 'u1',
+      parentSessionId: parent.id,
+      includeClosed: true,
+    });
+    expect(childRecords).toEqual([]);
+  });
+});
+
+describe('spawn_subagent tool — profile binding', () => {
+  it("applies the subagent type's profile to the child session before the first turn", async () => {
+    // Permission profile binding: a subagent type can declare
+    // `profile: 'readOnlyReview'`, and the spawn path applies the profile to
+    // the child session BEFORE child.message() runs so every tool the child can
+    // invoke is gated by the profile's category/tool posture — not just
+    // workspace tools filtered by `allowedWorkspaceTools`.
+    //
+    // The applied profile is observable on the persisted child
+    // session row (rules + grants + appliedPermissionProfile). The
+    // resolver's per-category gating behavior is pinned by the
+    // permission-profiles + actor-grants slices; this test confirms
+    // the spawn path actually CALLS applyProfile and the resulting
+    // state survives to storage.
+    const { harness, storage } = setup({ profile: 'readOnlyReview' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+    const result = (await tool.execute!({ agentType: 'explore', task: 'read' }, execCtxWithWorkspace('tc-1'))) as any;
+    expect(result.isError).toBeFalsy();
+    const stored = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(stored?.appliedPermissionProfile).toBe('readOnlyReview');
+    expect(stored?.permissionRules.categories.read).toBe('allow');
+    expect(stored?.permissionRules.categories.edit).toBe('deny');
+    expect(stored?.permissionRules.categories.execute).toBe('deny');
+    expect(stored?.permissionRules.categories.mcp).toBe('deny');
+    // The reset cleared the session-level grants (profile reset is
+    // replace-not-merge — covered in permission-profiles tests).
+    expect(stored?.sessionGrants).toEqual({ categories: [], tools: [] });
+  });
+
+  it('emits permission_profile_applied on the harness emitter (audit-visible)', async () => {
+    const { harness } = setup({ profile: 'approvalGatedPatch' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const events: any[] = [];
+    harness.subscribe(e => events.push(e));
+    const tool = createSpawnSubagentTool(parent)!;
+    await tool.execute!({ agentType: 'explore', task: 'review' }, execCtxWithWorkspace('tc-2'));
+    const applied = events.find(e => e.type === 'permission_profile_applied');
+    expect(applied).toBeDefined();
+    expect((applied as any).profileName).toBe('approvalGatedPatch');
+  });
+
+  it('does not bypass child permission profiles for forked subagents', async () => {
+    const { harness, parentAgent } = setup({ profile: 'approvalGatedPatch' });
+    const parentThread = await harness.threads.create({ resourceId: 'u1', title: 'parent' });
+    const parent = await harness.session({ resourceId: 'u1', threadId: parentThread.id });
+    const tool = createSpawnSubagentTool(parent)!;
+
+    await tool.execute!(
+      { agentType: 'explore', task: 'review edits', forked: true },
+      execCtxWithWorkspace('tc-profile-fork'),
+    );
+
+    expect(parentAgent.lastStreamOptions?.requireToolApproval).toBe(true);
+  });
+
+  it("subagent type without profile leaves the child session's rules untouched (legacy behavior)", async () => {
+    const { harness, storage } = setup({}); // no profile
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const tool = createSpawnSubagentTool(parent)!;
+    const result = (await tool.execute!({ agentType: 'explore', task: 'do' }, execCtxWithWorkspace('tc-3'))) as any;
+    const stored = await storage.loadSession({ sessionId: result.subagentSessionId });
+    expect(stored?.appliedPermissionProfile).toBeUndefined();
   });
 });

@@ -74,10 +74,17 @@ export const createHarnessSessionBodySchema = z
   .strict();
 
 const lifecycleSchema = z.enum(['active', 'closing', 'closed']);
+const pendingInboxKindSchema = z.enum([
+  'tool-approval',
+  'tool-suspension',
+  'question',
+  'plan-approval',
+  'sandbox-access',
+]);
 
 const pendingInboxSummarySchema = z.object({
   count: z.number(),
-  kinds: z.array(z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval'])),
+  kinds: z.array(pendingInboxKindSchema),
   sessionOwnedOnly: z.literal(true),
 });
 
@@ -251,7 +258,7 @@ const channelActionTokenDiagnosticSchema = z
     resourceId: z.string(),
     owningSessionId: z.string(),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: pendingInboxKindSchema,
     runId: z.string(),
     pendingRequestedAt: z.number(),
     expiresAt: z.number().optional(),
@@ -275,7 +282,7 @@ const channelActionReceiptDiagnosticSchema = z
     resourceId: z.string(),
     owningSessionId: z.string(),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: pendingInboxKindSchema,
     runId: z.string(),
     pendingRequestedAt: z.number(),
     conflictReason: z.string().optional(),
@@ -503,6 +510,7 @@ export const harnessOperationResultResponseSchema = z.discriminatedUnion('status
 ]);
 
 export const harnessStatePatchSchema = jsonRecordSchema;
+export const harnessStateResponseSchema = jsonRecordSchema;
 
 export const harnessModePatchSchema = z
   .object({
@@ -524,11 +532,43 @@ export const harnessModelResponseSchema = z.object({
   modelId: z.string(),
 });
 
+const harnessActorIdentitySchema = z
+  .object({
+    kind: z.enum(['a2a', 'channel', 'cli', 'server']),
+    id: z.string().min(1),
+    displayName: z.string().optional(),
+  })
+  .strict();
+
 export const harnessPermissionPatchSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('grantCategory'), category: z.string().min(1) }).strict(),
-  z.object({ action: z.literal('grantTool'), toolName: z.string().min(1) }).strict(),
-  z.object({ action: z.literal('revokeCategory'), category: z.string().min(1) }).strict(),
-  z.object({ action: z.literal('revokeTool'), toolName: z.string().min(1) }).strict(),
+  z
+    .object({
+      action: z.literal('grantCategory'),
+      category: z.string().min(1),
+      actor: harnessActorIdentitySchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('grantTool'),
+      toolName: z.string().min(1),
+      actor: harnessActorIdentitySchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('revokeCategory'),
+      category: z.string().min(1),
+      actor: harnessActorIdentitySchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('revokeTool'),
+      toolName: z.string().min(1),
+      actor: harnessActorIdentitySchema.optional(),
+    })
+    .strict(),
   z
     .object({
       action: z.literal('setPolicy'),
@@ -586,11 +626,19 @@ export const harnessInboxResponseBodySchema = z.discriminatedUnion('kind', [
       transitionToMode: z.string().min(1).optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('sandbox-access'),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+      responseId: z.string().min(1),
+    })
+    .strict(),
 ]);
 
 export const harnessInboxResponseResultSchema = z.object({
   itemId: z.string(),
-  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+  kind: pendingInboxKindSchema,
   status: z.enum(['accepted', 'applied']),
   responseId: z.string(),
   duplicate: z.boolean(),
@@ -605,7 +653,7 @@ export const harnessInboxResponseLookupResponseSchema = z.discriminatedUnion('st
   inboxResponseLookupBaseSchema.extend({
     status: z.literal('accepted'),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: pendingInboxKindSchema,
     responseId: z.string(),
     resumeAttemptId: z.string(),
     runId: z.string(),
@@ -615,7 +663,7 @@ export const harnessInboxResponseLookupResponseSchema = z.discriminatedUnion('st
   inboxResponseLookupBaseSchema.extend({
     status: z.literal('applied'),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: pendingInboxKindSchema,
     responseId: z.string(),
     resumeAttemptId: z.string(),
     runId: z.string(),
@@ -625,7 +673,7 @@ export const harnessInboxResponseLookupResponseSchema = z.discriminatedUnion('st
   inboxResponseLookupBaseSchema.extend({
     status: z.literal('failed'),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: pendingInboxKindSchema,
     responseId: z.string(),
     resumeAttemptId: z.string(),
     runId: z.string(),
@@ -636,7 +684,7 @@ export const harnessInboxResponseLookupResponseSchema = z.discriminatedUnion('st
   inboxResponseLookupBaseSchema.extend({
     status: z.literal('dead'),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: pendingInboxKindSchema,
     responseId: z.string(),
     resumeAttemptId: z.string(),
     runId: z.string(),

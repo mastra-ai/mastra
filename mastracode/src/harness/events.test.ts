@@ -101,6 +101,29 @@ describe('MastraCodeHarnessEventProjector', () => {
     });
   });
 
+  it('projects native sandbox access requests into sandbox access prompts', async () => {
+    const { events, projector } = createProjector();
+
+    await projector.project({
+      type: 'sandbox_access_requested',
+      requestId: 'sandbox-native-1',
+      toolCallId: 'sandbox-native-1',
+      semanticType: 'file',
+      reason: 'needs config',
+      payload: { path: '/outside/project/dir' },
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+
+    expect(events[0]).toMatchObject({
+      type: 'sandbox_access_request',
+      questionId: 'sandbox-native-1',
+      path: '/outside/project/dir',
+      reason: 'needs config',
+      responseKind: 'sandbox-access',
+    });
+  });
+
   it('keeps malformed sandbox-like questions on the generic ask_question path', async () => {
     const { events, projector } = createProjector({
       pending: {
@@ -151,6 +174,36 @@ describe('MastraCodeHarnessEventProjector', () => {
       planId: 'p1',
       title: 'Implementation plan',
       plan: '1. Build it',
+    });
+  });
+
+  it('projects tool suspensions into resumable legacy tool events', async () => {
+    const { events, projector } = createProjector({
+      pending: {
+        itemId: 'tool-1',
+        toolName: 'long_running_tool',
+        payload: {
+          input: { id: 1 },
+          suspendPayload: { step: 'confirm' },
+        },
+      },
+    });
+
+    await projector.project({
+      type: 'suspension_required',
+      kind: 'tool-suspension',
+      toolCallId: 'tool-1',
+      toolName: 'long_running_tool',
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+
+    expect(events[0]).toMatchObject({
+      type: 'tool_suspended',
+      toolCallId: 'tool-1',
+      toolName: 'long_running_tool',
+      args: { id: 1 },
+      suspendPayload: { step: 'confirm' },
     });
   });
 

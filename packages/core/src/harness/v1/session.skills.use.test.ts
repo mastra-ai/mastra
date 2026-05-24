@@ -23,7 +23,7 @@ import {
 } from './errors';
 import { Harness } from './harness';
 import type { HarnessConfig, HarnessRequestContext } from './types';
-import type { WorkspaceProvider } from './workspace-provider';
+import type { WorkspaceProvider } from './workspace/provider';
 
 // ---------------------------------------------------------------------------
 // Workspace skill source mock (mirrors session.skills.test.ts but exposes

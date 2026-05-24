@@ -204,7 +204,10 @@ describe('request_access', () => {
     };
 
     await expect(
-      (requestSandboxAccessTool as any).execute({ path: '/outside/project/dir', reason: 'need to read config' }, context),
+      (requestSandboxAccessTool as any).execute(
+        { path: '/outside/project/dir', reason: 'need to read config' },
+        context,
+      ),
     ).rejects.toThrow('suspended');
 
     expect(registerQuestion).toHaveBeenCalledWith(

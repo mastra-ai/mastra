@@ -4,6 +4,11 @@ import type { InMemoryDB } from '../inmemory-db';
 import {
   HarnessStorage,
   HarnessStorageAdmissionConflictError,
+  HarnessStorageArtifactAttachmentMissingError,
+  HarnessStorageArtifactDuplicateIdError,
+  HarnessStorageArtifactLineageMismatchError,
+  HarnessStorageArtifactNotFoundError,
+  HarnessStorageArtifactVersionConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageChannelActionClaimConflictError,
@@ -46,11 +51,14 @@ import type {
   CreateOrLoadHarnessWakeupItemResult,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
+  HarnessArtifactRecord,
   HarnessSessionEventRecord,
   HarnessSessionEventReplayState,
   HarnessWakeupClaimStatus,
   HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
+  ListArtifactsInput,
+  ListArtifactVersionsInput,
   ListChannelDiagnosticsInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -75,6 +83,7 @@ import type {
   ThreadDeleteFenceLease,
   WithThreadDeleteFenceInput,
   WorkspaceActionJournalEntry,
+  WriteArtifactInput,
 } from './types';
 
 /**
@@ -443,6 +452,14 @@ export class InMemoryHarness extends HarnessStorage {
     for (const [key, entry] of this.db.harnessWorkspaceActionJournal) {
       if (entry.harnessName === namespace && entry.sessionId === sessionId) {
         this.db.harnessWorkspaceActionJournal.delete(key);
+      }
+    }
+    // Drop artifact rows alongside the attachment bytes they reference —
+    // a hard-deleted session must not leave dangling artifact records
+    // pointing at attachments that no longer exist.
+    for (const [key, record] of this.db.harnessArtifacts) {
+      if (record.harnessName === namespace && record.sessionId === sessionId) {
+        this.db.harnessArtifacts.delete(key);
       }
     }
     const refPrefix = `${namespace}\u0000${sessionId}\u0000`;
@@ -1005,15 +1022,22 @@ export class InMemoryHarness extends HarnessStorage {
         event.resourceId === resourceId &&
         event.threadId === threadId,
     );
-    const epochs = new Set(rows.map(event => event.epoch));
-    if (epochs.size !== 1) return null;
-    const [epoch] = epochs;
+    if (rows.length === 0) return null;
+    const latest = [...rows].sort(
+      (left, right) =>
+        right.storedAt - left.storedAt ||
+        right.emittedAt - left.emittedAt ||
+        right.sequence - left.sequence ||
+        right.epoch.localeCompare(left.epoch),
+    )[0]!;
+    const epoch = latest.epoch;
+    const replayableRows = rows.filter(event => event.epoch === epoch);
     let state: HarnessSessionEventReplayState = {
-      epoch: epoch!,
+      epoch,
       oldestSequence: Number.POSITIVE_INFINITY,
       newestSequence: Number.NEGATIVE_INFINITY,
     };
-    for (const event of rows) {
+    for (const event of replayableRows) {
       state.oldestSequence = Math.min(state.oldestSequence, event.sequence);
       state.newestSequence = Math.max(state.newestSequence, event.sequence);
     }
@@ -1049,6 +1073,141 @@ export class InMemoryHarness extends HarnessStorage {
     );
     rows.sort((a, b) => a.sequence - b.sequence);
     return rows.slice(0, limit).map(row => cloneJson(row));
+  }
+
+  // -------------------------------------------------------------------------
+  // Artifacts
+  // -------------------------------------------------------------------------
+
+  async writeArtifact(input: WriteArtifactInput): Promise<HarnessArtifactRecord> {
+    const harnessName = resolveHarnessName(input.harnessName, this.harnessName);
+    const session = this.db.harnessSessions.get(sessionKey(harnessName, input.sessionId));
+    if (!session || session.resourceId !== input.resourceId || session.threadId !== input.threadId) {
+      // Same-session fence mismatch (session missing, wrong resource,
+      // or wrong thread). Throw fail-loud so a caller racing a
+      // hard-delete sees a typed error instead of a silent drop. The
+      // payload references the artifact id the caller tried to write
+      // — not the session id, which would be misleading downstream.
+      throw new HarnessStorageArtifactNotFoundError(input.artifactId);
+    }
+
+    // Attachment must exist on this session — copy hash/mime/bytes from
+    // it so the artifact row records canonical, immutable values.
+    const attachment = this.db.harnessAttachmentRecords.get(
+      attachmentKey(harnessName, input.sessionId, input.attachmentId),
+    );
+    if (!attachment || attachment.ownerSessionId !== input.sessionId) {
+      throw new HarnessStorageArtifactAttachmentMissingError(input.attachmentId);
+    }
+
+    const dupKey = artifactKey(harnessName, input.sessionId, input.artifactId);
+    if (this.db.harnessArtifacts.has(dupKey)) {
+      throw new HarnessStorageArtifactDuplicateIdError(input.artifactId);
+    }
+
+    let lineageRootId = input.artifactId;
+    let version = 1;
+    if (input.parentArtifactId !== undefined) {
+      const parent = this.db.harnessArtifacts.get(artifactKey(harnessName, input.sessionId, input.parentArtifactId));
+      if (!parent) {
+        throw new HarnessStorageArtifactLineageMismatchError(input.parentArtifactId, 'parent_missing');
+      }
+      if (parent.sessionId !== input.sessionId) {
+        throw new HarnessStorageArtifactLineageMismatchError(input.parentArtifactId, 'parent_wrong_session');
+      }
+      if (parent.resourceId !== input.resourceId) {
+        throw new HarnessStorageArtifactLineageMismatchError(input.parentArtifactId, 'parent_wrong_resource');
+      }
+      lineageRootId = parent.lineageRootId;
+      version = parent.version + 1;
+      // CAS: another writer may have already claimed this version for the
+      // lineage. Reject so the caller can retry with a fresh parent.
+      for (const existing of this.db.harnessArtifacts.values()) {
+        if (
+          existing.harnessName === harnessName &&
+          existing.sessionId === input.sessionId &&
+          existing.lineageRootId === lineageRootId &&
+          existing.version === version
+        ) {
+          throw new HarnessStorageArtifactVersionConflictError(lineageRootId, version);
+        }
+      }
+    }
+
+    const record: HarnessArtifactRecord = {
+      harnessName,
+      sessionId: input.sessionId,
+      resourceId: input.resourceId,
+      threadId: input.threadId,
+      artifactId: input.artifactId,
+      lineageRootId,
+      ...(input.parentArtifactId !== undefined ? { parentArtifactId: input.parentArtifactId } : {}),
+      version,
+      artifactType: input.artifactType,
+      attachmentId: input.attachmentId,
+      mimeType: attachment.mimeType,
+      bytes: attachment.bytes,
+      sha256: attachment.sha256,
+      ...(input.schemaUri !== undefined ? { schemaUri: input.schemaUri } : {}),
+      createdAt: Date.now(),
+      createdBy: { ...input.createdBy },
+      ...(input.metadata !== undefined ? { metadata: cloneJson(input.metadata) } : {}),
+    };
+
+    this.db.harnessArtifacts.set(dupKey, cloneJson(record));
+    return cloneJson(record);
+  }
+
+  async loadArtifact(opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    artifactId: string;
+  }): Promise<HarnessArtifactRecord | null> {
+    const harnessName = resolveHarnessName(opts.harnessName, this.harnessName);
+    const record = this.db.harnessArtifacts.get(artifactKey(harnessName, opts.sessionId, opts.artifactId));
+    if (!record) return null;
+    if (record.resourceId !== opts.resourceId) return null;
+    return cloneJson(record);
+  }
+
+  async listArtifacts(opts: ListArtifactsInput): Promise<HarnessArtifactRecord[]> {
+    if (opts.limit <= 0) return [];
+    const harnessName = resolveHarnessName(opts.harnessName, this.harnessName);
+    const rows = Array.from(this.db.harnessArtifacts.values()).filter(record => {
+      if (record.harnessName !== harnessName) return false;
+      if (record.sessionId !== opts.sessionId) return false;
+      if (record.resourceId !== opts.resourceId) return false;
+      if (opts.artifactType !== undefined && record.artifactType !== opts.artifactType) return false;
+      return true;
+    });
+    rows.sort((a, b) => a.createdAt - b.createdAt || a.artifactId.localeCompare(b.artifactId));
+    let start = 0;
+    if (opts.cursor !== undefined) {
+      const [cursorAtStr, cursorId] = opts.cursor.split(' ');
+      const cursorAt = Number(cursorAtStr);
+      const idx = rows.findIndex(
+        record =>
+          record.createdAt > cursorAt || (record.createdAt === cursorAt && record.artifactId > (cursorId ?? '')),
+      );
+      start = idx === -1 ? rows.length : idx;
+    }
+    return rows.slice(start, start + opts.limit).map(row => cloneJson(row));
+  }
+
+  async listArtifactVersions(opts: ListArtifactVersionsInput): Promise<HarnessArtifactRecord[]> {
+    const harnessName = resolveHarnessName(opts.harnessName, this.harnessName);
+    const anchor = this.db.harnessArtifacts.get(artifactKey(harnessName, opts.sessionId, opts.artifactId));
+    if (!anchor) return [];
+    if (anchor.resourceId !== opts.resourceId) return [];
+    const rows = Array.from(this.db.harnessArtifacts.values()).filter(
+      record =>
+        record.harnessName === harnessName &&
+        record.sessionId === opts.sessionId &&
+        record.lineageRootId === anchor.lineageRootId,
+    );
+    rows.sort((a, b) => a.version - b.version);
+    return rows.map(row => cloneJson(row));
   }
 
   async appendWorkspaceActionJournalEntry(
@@ -2414,6 +2573,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessOperationTombstones.clear();
     this.db.harnessSessionEvents.clear();
     this.db.harnessWorkspaceActionJournal.clear();
+    this.db.harnessArtifacts.clear();
     this.db.harnessChannelInbox.clear();
     this.db.harnessProviderCallbackBindings.clear();
     this.db.harnessChannelActionTokens.clear();
@@ -2467,6 +2627,10 @@ function sessionEventKey(
 
 function workspaceActionJournalKey(harnessName: string, sessionId: string, id: string): string {
   return `${harnessName}\u0000${sessionId}\u0000${id}`;
+}
+
+function artifactKey(harnessName: string, sessionId: string, artifactId: string): string {
+  return `${harnessName} ${sessionId} ${artifactId}`;
 }
 
 function channelInboxKey(_harnessName: string, inboxItemId: string): string {

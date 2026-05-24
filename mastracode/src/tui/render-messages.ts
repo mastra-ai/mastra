@@ -630,7 +630,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 ? (state.harness as { getFullModelId: () => string }).getFullModelId()
                 : undefined;
             const modelId =
-              meta?.modelId ?? subArgs?.modelOverride ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
+              meta?.modelId ??
+              subArgs?.modelOverride ??
+              subArgs?.modelId ??
+              (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
             const subComponent = new SubagentExecutionComponent(

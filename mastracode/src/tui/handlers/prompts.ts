@@ -12,6 +12,11 @@ import { theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
+type HarnessV1PromptResponseSurface = {
+  respondToSandboxAccess: (opts: { questionId?: string; approved: boolean; reason?: string }) => Promise<void>;
+  respondToToolSuspension: (opts: { toolCallId?: string; resumeData: unknown }) => Promise<void>;
+};
+
 /**
  * Process the next pending inline question from the queue.
  * Called when the current active question is resolved (submitted or cancelled).
@@ -20,6 +25,16 @@ function processNextInlineQuestion(state: TUIState): void {
   const next = state.pendingInlineQuestions.shift();
   if (next) {
     next();
+  }
+}
+
+function parseResumeData(answer: string): unknown {
+  const trimmed = answer.trim();
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return answer;
   }
 }
 
@@ -160,8 +175,20 @@ export async function handleSandboxAccessRequest(
   questionId: string,
   requestedPath: string,
   reason: string,
+  responseKind?: 'question' | 'sandbox-access',
 ): Promise<void> {
   const { state } = ctx;
+  const respond = (answer: string) => {
+    if (responseKind === 'sandbox-access') {
+      const approved = answer.toLowerCase().startsWith('y') || answer.toLowerCase() === 'approve';
+      void (state.harness as typeof state.harness & HarnessV1PromptResponseSurface).respondToSandboxAccess({
+        questionId,
+        approved,
+      });
+    } else {
+      state.harness.respondToQuestion({ questionId, answer });
+    }
+  };
   return new Promise(resolve => {
     const activate = () => {
       const questionComponent = new AskQuestionInlineComponent(
@@ -173,13 +200,13 @@ export async function handleSandboxAccessRequest(
           ],
           onSubmit: answer => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer });
+            respond(answer);
             resolve();
             processNextInlineQuestion(state);
           },
           onCancel: () => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer: 'No' });
+            respond('No');
             resolve();
             processNextInlineQuestion(state);
           },
@@ -210,6 +237,63 @@ export async function handleSandboxAccessRequest(
     }
 
     ctx.notify('sandbox_access', `Sandbox access requested: ${requestedPath}`);
+  });
+}
+
+export async function handleToolSuspension(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  toolName: string,
+  suspendPayload: unknown,
+): Promise<void> {
+  const { state } = ctx;
+  const detail =
+    suspendPayload === undefined
+      ? ''
+      : `\n${typeof suspendPayload === 'string' ? suspendPayload : JSON.stringify(suspendPayload, null, 2)}`;
+
+  return new Promise(resolve => {
+    const activate = () => {
+      const questionComponent = new AskQuestionInlineComponent(
+        {
+          question: `Tool "${toolName}" needs resume data.${detail}`,
+          multiline: true,
+          onSubmit: answer => {
+            state.activeInlineQuestion = undefined;
+            (state.harness as typeof state.harness & HarnessV1PromptResponseSurface).respondToToolSuspension({
+              toolCallId,
+              resumeData: parseResumeData(answer),
+            });
+            resolve();
+            processNextInlineQuestion(state);
+          },
+          onCancel: () => {
+            state.activeInlineQuestion = undefined;
+            (state.harness as typeof state.harness & HarnessV1PromptResponseSurface).respondToToolSuspension({
+              toolCallId,
+              resumeData: {},
+            });
+            resolve();
+            processNextInlineQuestion(state);
+          },
+        },
+        state.ui,
+      );
+
+      state.activeInlineQuestion = questionComponent;
+      state.chatContainer.addChild(questionComponent);
+      questionComponent.focused = true;
+      state.ui.requestRender();
+      state.chatContainer.invalidate();
+    };
+
+    if (state.activeInlineQuestion) {
+      state.pendingInlineQuestions.push(activate);
+    } else {
+      activate();
+    }
+
+    ctx.notify('ask_question', `Tool ${toolName} needs resume data`);
   });
 }
 

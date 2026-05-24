@@ -119,6 +119,8 @@ export class MastraCodeHarnessEventProjector {
         ];
       case 'subagent_end':
         return [{ ...event, result: stringifySubagentOutput(event.output) } as unknown as LegacyHarnessEvent];
+      case 'sandbox_access_requested':
+        return [projectSandboxAccessRequested(event) as unknown as LegacyHarnessEvent];
       case 'suspension_required':
         return this.projectSuspensionRequired(event);
       case 'suspension_resolved':
@@ -183,10 +185,65 @@ export class MastraCodeHarnessEventProjector {
           } as unknown as LegacyHarnessEvent,
         ];
       case 'tool-suspension':
-        return [event as unknown as LegacyHarnessEvent];
+        return [
+          {
+            ...event,
+            type: 'tool_suspended',
+            toolCallId: event.toolCallId,
+            toolName: event.toolName ?? pending?.toolName ?? 'unknown',
+            args: payload.input ?? payload.args,
+            suspendPayload: payload.suspendPayload ?? payload,
+          } as unknown as LegacyHarnessEvent,
+        ];
+      case 'sandbox-access':
+        return [];
       default:
         return [event as unknown as LegacyHarnessEvent];
     }
+  }
+}
+
+function projectSandboxAccessRequested(
+  event: Extract<HarnessV1Event, { type: 'sandbox_access_requested' }>,
+): Record<string, unknown> {
+  return {
+    ...event,
+    type: 'sandbox_access_request',
+    questionId: event.requestId,
+    path: describeSandboxAccessTarget(event),
+    reason: event.reason ?? describeSandboxAccessReason(event.semanticType),
+    responseKind: 'sandbox-access',
+  };
+}
+
+function describeSandboxAccessTarget(event: Extract<HarnessV1Event, { type: 'sandbox_access_requested' }>): string {
+  const payload = event.payload;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (typeof record.path === 'string') return record.path;
+    if (typeof record.command === 'string') return record.command;
+    if (typeof record.host === 'string') {
+      return typeof record.port === 'number' ? `${record.host}:${record.port}` : record.host;
+    }
+    if (typeof record.server === 'string') {
+      return typeof record.action === 'string' ? `${record.server}:${record.action}` : record.server;
+    }
+  }
+  return event.semanticType;
+}
+
+function describeSandboxAccessReason(semanticType: string): string {
+  switch (semanticType) {
+    case 'file':
+      return 'The agent requested filesystem access.';
+    case 'command':
+      return 'The agent requested command execution access.';
+    case 'network':
+      return 'The agent requested network access.';
+    case 'mcp':
+      return 'The agent requested MCP access.';
+    default:
+      return 'The agent requested sandbox access.';
   }
 }
 

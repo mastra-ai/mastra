@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { PermissionPolicy } from './types';
+import type { PermissionPolicy } from '../types';
 
 export type WorkspacePolicyActionKind = 'file' | 'command' | 'network' | 'mcp';
 export type WorkspaceFileOperation = 'read' | 'write' | 'delete' | 'rename' | 'patch';

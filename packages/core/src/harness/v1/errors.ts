@@ -78,6 +78,21 @@ export class HarnessSessionClosingError extends Error {
   }
 }
 
+/**
+ * Raised when a queued turn promise is rejected because the session
+ * (or that specific queued item) was cancelled before the turn ran.
+ * Carries the durable cancellation `reason` when one was supplied.
+ */
+export class HarnessSessionCancelledError extends Error {
+  readonly name = 'HarnessSessionCancelledError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly reason?: string,
+  ) {
+    super(reason ? `Session "${sessionId}" cancelled: ${reason}` : `Session "${sessionId}" cancelled`);
+  }
+}
+
 export class HarnessSessionDeleteBlockedError extends Error {
   readonly name = 'HarnessSessionDeleteBlockedError';
   constructor(
@@ -125,6 +140,29 @@ export class HarnessValidationError extends Error {
     public readonly reason: string,
   ) {
     super(`HarnessValidationError at ${field}: ${reason}`);
+  }
+}
+
+/**
+ * Internal error thrown by `Session._callJudge(...)` when a judge model
+ * invocation fails. The `kind` discriminator drives the goal-loop's
+ * recovery behavior — `'timeout'` is retried once with backoff,
+ * `'provider_error'` and `'invalid_verdict'` are terminal. Classified
+ * inside `_callJudge` so `_runGoalJudge` can map directly to a paused
+ * reason and stamp `GoalState.lastFailure`.
+ *
+ * Not part of the public Harness API surface — consumers observe failures
+ * via the `goal_paused` event and `GoalState.lastFailure`.
+ */
+export type HarnessGoalJudgeFailureKind = 'timeout' | 'provider_error' | 'invalid_verdict';
+
+export class HarnessGoalJudgeFailedError extends Error {
+  readonly name = 'HarnessGoalJudgeFailedError';
+  constructor(
+    public readonly kind: HarnessGoalJudgeFailureKind,
+    message?: string,
+  ) {
+    super(message ?? `Goal judge invocation failed (${kind})`);
   }
 }
 
@@ -438,12 +476,125 @@ export class HarnessWorkspaceInUseError extends Error {
   }
 }
 
+/**
+ * Replay/list/get/version artifact APIs were called against a storage
+ * adapter that does not implement the artifact substrate
+ * (`HarnessStorageCapabilities.harnessArtifacts === false`).
+ */
+export class HarnessArtifactsUnsupportedError extends Error {
+  readonly name = 'HarnessArtifactsUnsupportedError';
+  readonly code = 'harness.artifacts_unsupported';
+  constructor(public readonly api: string) {
+    super(`${api}: artifact substrate is not supported by this storage adapter`);
+  }
+}
+
+/**
+ * The named artifact does not exist on the target `(sessionId, resourceId)`.
+ */
+export class HarnessArtifactNotFoundError extends Error {
+  readonly name = 'HarnessArtifactNotFoundError';
+  readonly code = 'harness.artifact_not_found';
+  constructor(public readonly artifactId: string) {
+    super(`Artifact "${artifactId}" not found`);
+  }
+}
+
+/**
+ * `harness.artifacts.write({ parentArtifactId })` referenced a parent
+ * artifact that does not exist in the target scope, or that lives in a
+ * different `(sessionId, resourceId)`.
+ */
+export class HarnessArtifactLineageMismatchError extends Error {
+  readonly name = 'HarnessArtifactLineageMismatchError';
+  readonly code = 'harness.artifact_lineage_mismatch';
+  constructor(
+    public readonly parentArtifactId: string,
+    public readonly reason: 'parent_missing' | 'parent_wrong_session' | 'parent_wrong_resource',
+  ) {
+    super(`Artifact lineage mismatch on parent "${parentArtifactId}": ${reason}`);
+  }
+}
+
+/**
+ * Two concurrent `harness.artifacts.write({ parentArtifactId })` calls
+ * raced for the same next-version slot on a lineage. The losing caller
+ * should retry against the latest version of the lineage.
+ */
+export class HarnessArtifactVersionConflictError extends Error {
+  readonly name = 'HarnessArtifactVersionConflictError';
+  readonly code = 'harness.artifact_version_conflict';
+  constructor(
+    public readonly lineageRootId: string,
+    public readonly version: number,
+  ) {
+    super(`Artifact version ${version} for lineage "${lineageRootId}" already exists`);
+  }
+}
+
+/**
+ * `harness.artifacts.write({ artifactId })` collided with an existing
+ * artifact id. Artifact ids are caller-supplied and immutable.
+ */
+export class HarnessArtifactDuplicateIdError extends Error {
+  readonly name = 'HarnessArtifactDuplicateIdError';
+  readonly code = 'harness.artifact_duplicate_id';
+  constructor(public readonly artifactId: string) {
+    super(`Artifact "${artifactId}" already exists`);
+  }
+}
+
+/**
+ * `harness.artifacts.write({ attachmentId })` referenced an attachment
+ * that has not been uploaded on this session.
+ */
+export class HarnessArtifactAttachmentMissingError extends Error {
+  readonly name = 'HarnessArtifactAttachmentMissingError';
+  readonly code = 'harness.artifact_attachment_missing';
+  constructor(public readonly attachmentId: string) {
+    super(`Artifact references attachment "${attachmentId}" which does not exist on this session`);
+  }
+}
+
+/**
+ * `harness.permissions.applyProfile({ profileName })` was called with a
+ * profile name that is not registered in the harness preset map.
+ */
+export class HarnessPermissionProfileNotFoundError extends Error {
+  readonly name = 'HarnessPermissionProfileNotFoundError';
+  readonly code = 'harness.permission_profile_not_found';
+  constructor(public readonly profileName: string) {
+    super(`Permission profile "${profileName}" is not registered`);
+  }
+}
+
+/**
+ * Replay-aware Session/Harness APIs (`listEventsAfter`,
+ * `getEventReplayState`, `listSessionEventsAfter`,
+ * `getSessionEventReplayState`) were called against a storage adapter
+ * that does not implement the durable session-event ledger
+ * (`HarnessStorageCapabilities.sessionEventReplay === false`).
+ *
+ * This is a typed public error: callers (server routes, A2A
+ * `tasks/resubscribe`, headless workers) need to surface a clear
+ * "this adapter does not support replay" signal instead of leaking
+ * the storage-internal `HarnessStorageSessionEventReplayUnsupportedError`.
+ */
+export class HarnessEventReplayUnsupportedError extends Error {
+  readonly name = 'HarnessEventReplayUnsupportedError';
+  readonly code = 'harness.event_replay_unsupported';
+  constructor(public readonly api: string) {
+    super(`${api}: durable session event replay is not supported by this storage adapter`);
+  }
+}
+
 const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessConfigError: 'harness.validation',
   HarnessRuntimeDependencyDriftError: 'harness.runtime_dependency_drifted',
   HarnessSessionNotFoundError: 'harness.session_not_found',
   HarnessSessionClosedError: 'harness.session_closed',
   HarnessSessionClosingError: 'harness.session_closing',
+  HarnessSessionCancelledError: 'harness.session_cancelled',
   HarnessSessionDeleteBlockedError: 'harness.session_delete_blocked',
   HarnessSessionDeletedError: 'harness.session_deleted',
   HarnessSessionLockedError: 'harness.session_locked',
@@ -467,6 +618,19 @@ const HARNESS_PUBLIC_ERROR_CODES: Record<string, string> = {
   HarnessWorkspaceLostError: 'harness.workspace_lost',
   HarnessWorkspaceProvisioningError: 'harness.workspace_provisioning',
   HarnessWorkspaceInUseError: 'harness.workspace_in_use',
+  HarnessEventReplayUnsupportedError: 'harness.event_replay_unsupported',
+  HarnessEventReplayStaleCursorError: 'harness.event_replay_stale_cursor',
+  HarnessEventReplayEpochMismatchError: 'harness.event_replay_epoch_mismatch',
+  HarnessEventReplayFutureCursorError: 'harness.event_replay_future_cursor',
+  HarnessEventReplayBufferOverflowError: 'harness.event_replay_buffer_overflow',
+  HarnessEventReplayAbortedError: 'harness.event_replay_aborted',
+  HarnessArtifactsUnsupportedError: 'harness.artifacts_unsupported',
+  HarnessArtifactNotFoundError: 'harness.artifact_not_found',
+  HarnessArtifactLineageMismatchError: 'harness.artifact_lineage_mismatch',
+  HarnessArtifactVersionConflictError: 'harness.artifact_version_conflict',
+  HarnessArtifactDuplicateIdError: 'harness.artifact_duplicate_id',
+  HarnessArtifactAttachmentMissingError: 'harness.artifact_attachment_missing',
+  HarnessPermissionProfileNotFoundError: 'harness.permission_profile_not_found',
 };
 
 export function getHarnessPublicErrorCode(err: unknown): string | undefined {

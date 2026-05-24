@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { createTool } from '../../../tools/tool';
-import { TASK_METADATA_KEY, TASK_METADATA_NAMESPACE, TASK_WRITE_TOOL_ID, taskItemSchema } from './shared';
-import type { TaskItem } from './shared';
+import { TASK_METADATA_KEY, TASK_METADATA_NAMESPACE, TASK_WRITE_TOOL_ID, harnessTodoSchema } from './shared';
+import type { HarnessTodo } from './shared';
 
 const inputSchema = z.object({
-  tasks: z.array(taskItemSchema).describe('The complete updated task list (replaces previous list).'),
+  tasks: z.array(harnessTodoSchema).describe('The complete updated task list (replaces previous list).'),
 });
 
 const outputSchema = z.object({
@@ -15,7 +15,7 @@ const outputSchema = z.object({
   summary: z.string(),
 });
 
-function summarize(tasks: TaskItem[]) {
+function summarize(tasks: HarnessTodo[]) {
   let pending = 0;
   let inProgress = 0;
   let completed = 0;

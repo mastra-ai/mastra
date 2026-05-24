@@ -55,6 +55,7 @@ export class StreamingInterceptor implements NestInterceptor {
           case 'stream':
             return from(this.handleStreaming(context, handlerResult));
           case 'datastream-response':
+          case 'raw':
             return from(this.handleDatastream(context, handlerResult));
           case 'mcp-http':
             return from(this.handleMcpHttp(context, handlerResult));
@@ -64,6 +65,7 @@ export class StreamingInterceptor implements NestInterceptor {
             if (handlerResult.data === null) {
               return from(this.handleJsonNull(context));
             }
+            this.applyRefreshHeaders(context, handlerResult.data);
             return of(handlerResult.data);
           default:
             return of(result);
@@ -107,6 +109,17 @@ export class StreamingInterceptor implements NestInterceptor {
       response.type('application/json');
       response.send('null');
     }
+  }
+
+  private applyRefreshHeaders(context: ExecutionContext, data: unknown): void {
+    if (!data || typeof data !== 'object' || !('__refreshHeaders' in data)) return;
+
+    const response = context.switchToHttp().getResponse<Response>();
+    const refreshHeaders = (data as any).__refreshHeaders as Record<string, string>;
+    for (const [key, value] of Object.entries(refreshHeaders)) {
+      response.setHeader(key, value);
+    }
+    delete (data as any).__refreshHeaders;
   }
 
   /**

@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
+import { HarnessStorage, HarnessStorageSessionEventReplayUnsupportedError } from '../../storage/domains/harness/base';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { buildFakeOutput } from './__test-utils__/fake-output';
@@ -112,6 +113,75 @@ describe('Session.subscribe()', () => {
     expect(types).toContain('agent_end');
     expect(events.every(e => e.sessionId === session.id)).toBe(true);
     off();
+  });
+
+  it('agent_end via message() propagates finishReason "error" as reason: "error"', async () => {
+    // Acceptance criterion #5: failed-stream semantics must be
+    // observable. Previously the message() emit site mapped
+    // `finishReason === 'error'` to `agent_end.reason: 'complete'`,
+    // hiding the failure from durable replay and remote consumers.
+    const { harness, agent } = setup();
+    agent.fullOutput = { ...agent.fullOutput, finishReason: 'error' };
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+
+    await session.message({ content: 'hi' });
+    const end = events.find(e => e.type === 'agent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.reason).toBe('error');
+  });
+
+  it('agent_end via queue() propagates finishReason "error" as reason: "error"', async () => {
+    // Queued-turn emit site (session.ts:8027 region) must also surface
+    // failure. Earlier this path used the explicit 3-way ternary already,
+    // but the unified helper change must not regress it.
+    const { harness, agent } = setup();
+    agent.fullOutput = { ...agent.fullOutput, finishReason: 'error' };
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+
+    await session.queue({ content: 'hi' });
+    await session.waitForIdle();
+    const end = events.find(e => e.type === 'agent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.reason).toBe('error');
+  });
+
+  it('agent_end via resume() propagates finishReason "error" as reason: "error"', async () => {
+    // Resumed-turn emit site (session.ts:6665) — the path that runs after
+    // a suspension is resolved and the agent re-runs to terminal. The
+    // previous implementation here used a 2-way ternary that already
+    // propagated 'error', but the unified helper change must not regress
+    // it. Mirror the existing suspension round-trip test scaffolding.
+    const { harness, agent } = setup();
+    agent.fullOutput = {
+      ...agent.fullOutput,
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc1', toolName: 'do_thing', args: { x: 1 } },
+    };
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'do it' });
+    // Flip the agent so the resumed run finishes with 'error'.
+    agent.fullOutput = { ...agent.fullOutput, finishReason: 'error', suspendPayload: undefined };
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.respondToToolApproval({ approved: true });
+
+    const end = events.find(e => e.type === 'agent_end') as any;
+    expect(end).toBeDefined();
+    expect(end.reason).toBe('error');
   });
 
   it('stops delivering after unsubscribe()', async () => {
@@ -240,6 +310,186 @@ describe('Session.subscribe()', () => {
     } finally {
       await resumed.shutdown();
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Replay cursor — the public listEventsAfter() API must let a caller fetch
+  // sequence 0 (the very first event in an epoch). The storage layer uses
+  // `sequence > afterSequence` semantics, so "from the beginning" requires
+  // `afterSequence: -1`. Earlier versions rejected negative values, leaving
+  // sequence 0 unreachable through the public API.
+  // -------------------------------------------------------------------------
+
+  it('Session.listEventsAfter accepts afterSequence=-1 to replay from the first event', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.message({ content: 'hi' });
+    await session._flushEventPersistence();
+
+    const state = await session.getEventReplayState();
+    expect(state).not.toBeNull();
+
+    const rows = await session.listEventsAfter({
+      epoch: state!.epoch,
+      afterSequence: -1,
+      limit: 100,
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]!.sequence).toBe(0);
+
+    const fromZero = await session.listEventsAfter({
+      epoch: state!.epoch,
+      afterSequence: 0,
+      limit: 100,
+    });
+    // afterSequence=0 still means "strictly after sequence 0", which is the
+    // documented (exclusive) cursor contract — pin both halves.
+    expect(fromZero.find(row => row.sequence === 0)).toBeUndefined();
+    expect(fromZero.length).toBe(rows.length - 1);
+  });
+
+  it('Session.listEventsAfter rejects afterSequence < -1', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.listEventsAfter({ epoch: 'any', afterSequence: -2, limit: 1 })).rejects.toThrow(
+      /afterSequence/,
+    );
+  });
+
+  it('Harness.listSessionEventsAfter accepts afterSequence=-1 (no-validation pass-through)', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.message({ content: 'hi' });
+    await session._flushEventPersistence();
+
+    const state = await harness.getSessionEventReplayState({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+    });
+    expect(state).not.toBeNull();
+
+    const rows = await harness.listSessionEventsAfter({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      epoch: state!.epoch,
+      afterSequence: -1,
+      limit: 100,
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]!.sequence).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Replay-unsupported adapter: every replay-aware public API surface
+  // raises the typed HarnessEventReplayUnsupportedError when the storage
+  // adapter declares `sessionEventReplay: false`. The harness used to leak
+  // the storage-internal HarnessStorageSessionEventReplayUnsupportedError
+  // (and Session.listEventsAfter silently no-op'd persistence), which made
+  // it impossible for server routes / A2A `tasks/resubscribe` / headless
+  // workers to surface a clean "this backend can't replay" signal.
+  // -------------------------------------------------------------------------
+
+  function setupReplayUnsupported() {
+    const agent = new FakeAgent('default');
+    // Subclass that opts out of the durable event ledger. Overriding the
+    // method back to the base no-op flips the capability matrix's
+    // prototype-detection to false.
+    class NoReplayHarness extends InMemoryHarness {
+      override appendSessionEvent = HarnessStorage.prototype.appendSessionEvent;
+      override getSessionEventReplayState = HarnessStorage.prototype.getSessionEventReplayState;
+      override listSessionEvents = HarnessStorage.prototype.listSessionEvents;
+    }
+    const storage = new NoReplayHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    return { harness, agent, storage };
+  }
+
+  it('Session.getEventReplayState throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(session.getEventReplayState()).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  it('Session.listEventsAfter throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(session.listEventsAfter({ epoch: 'any', afterSequence: -1, limit: 10 })).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  it('Harness.getSessionEventReplayState throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(
+      harness.getSessionEventReplayState({ sessionId: session.id, resourceId: session.resourceId }),
+    ).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  it('Harness.listSessionEventsAfter throws HarnessEventReplayUnsupportedError when adapter declares no replay', async () => {
+    const { harness } = setupReplayUnsupported();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await expect(
+      harness.listSessionEventsAfter({
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        epoch: 'any',
+        afterSequence: -1,
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+      code: 'harness.event_replay_unsupported',
+    });
+  });
+
+  // Defense-in-depth: an adapter that DECLARES replay support but then
+  // throws the storage-internal unsupported error on a specific call shape
+  // must still translate to the typed public error on all four surfaces.
+  // This pins the misdeclared-adapter contract beyond the upfront
+  // capability check.
+  it('Session APIs translate misdeclared HarnessStorageSessionEventReplayUnsupportedError', async () => {
+    const { harness, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    // Adapter declares replay-supported (default InMemoryHarness does), but
+    // we stub the storage calls to throw the storage-internal error.
+    const throwUnsupported = () => {
+      throw new HarnessStorageSessionEventReplayUnsupportedError();
+    };
+    storage.getSessionEventReplayState = throwUnsupported as any;
+    storage.listSessionEvents = throwUnsupported as any;
+
+    await expect(session.getEventReplayState()).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+    });
+    await expect(session.listEventsAfter({ epoch: 'e', afterSequence: -1, limit: 10 })).rejects.toMatchObject({
+      name: 'HarnessEventReplayUnsupportedError',
+    });
+    await expect(
+      harness.getSessionEventReplayState({ sessionId: session.id, resourceId: session.resourceId }),
+    ).rejects.toMatchObject({ name: 'HarnessEventReplayUnsupportedError' });
+    await expect(
+      harness.listSessionEventsAfter({
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        epoch: 'e',
+        afterSequence: -1,
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessEventReplayUnsupportedError' });
   });
 });
 
@@ -810,5 +1060,71 @@ describe('Harness.subscribe()', () => {
       sessionId: session.id,
       reason: 'shutdown',
     });
+  });
+
+  // Stream-terminal semantics: deleteSession() must emit
+  // `session_deleted` as the LAST event subscribers see on the deleted
+  // session before the emitter is torn down. Close + evict already
+  // covered above; delete was the missing lifecycle slot.
+
+  it('emits session_deleted with reason "requested" when the caller deletes the session directly', async () => {
+    const { harness } = setup();
+    const events: HarnessEvent[] = [];
+    harness.subscribe(e => {
+      events.push(e);
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.close();
+    await harness.deleteSession({ sessionId: session.id, resourceId: session.resourceId });
+
+    const deleted = events.find(e => e.type === 'session_deleted' && e.sessionId === session.id) as any;
+    expect(deleted).toBeDefined();
+    expect(deleted.reason).toBe('requested');
+  });
+
+  it('emits session_deleted on harness subscribers even when force-delete tears the bridge down first', async () => {
+    // Force-delete path: _closeSessionRecord tears down the session's
+    // harness bridge before _deleteClosedTree → _markDeletedSession
+    // runs. The live Session is still reachable via the deletedLiveSessions
+    // map. If we emit only via live._emit at that point, the bridge is
+    // gone and harness-level subscribers miss the event. The fix in
+    // _markDeletedSession emits on the harness emitter directly when
+    // the bridge has already been torn down.
+    const { harness } = setup();
+    const harnessEvents: HarnessEvent[] = [];
+    harness.subscribe(e => {
+      harnessEvents.push(e);
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await harness.deleteSession({ sessionId: session.id, resourceId: 'u1', force: true });
+
+    const deleted = harnessEvents.find(e => e.type === 'session_deleted' && e.sessionId === session.id) as any;
+    expect(deleted).toBeDefined();
+    expect(deleted.reason).toBe('requested');
+  });
+
+  it('emits session_deleted with reason "cascade" for child sessions deleted alongside their parent', async () => {
+    const { harness } = setup();
+    const events: HarnessEvent[] = [];
+    harness.subscribe(e => {
+      events.push(e);
+    });
+    const parent = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const child = await harness.session({
+      resourceId: 'u1',
+      threadId: { fresh: true },
+      parentSessionId: parent.id,
+    });
+    await child.close();
+    await parent.close();
+    await harness.deleteSession({ sessionId: parent.id, resourceId: 'u1' });
+
+    const parentDeleted = events.find(e => e.type === 'session_deleted' && e.sessionId === parent.id) as any;
+    const childDeleted = events.find(e => e.type === 'session_deleted' && e.sessionId === child.id) as any;
+    expect(parentDeleted).toBeDefined();
+    expect(parentDeleted.reason).toBe('requested');
+    expect(childDeleted).toBeDefined();
+    expect(childDeleted.reason).toBe('cascade');
   });
 });

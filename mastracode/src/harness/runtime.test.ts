@@ -2,8 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MastraCodeHarnessRuntime } from './runtime.js';
 import { MASTRACODE_HARNESS_NAME } from './config.js';
+import { MastraCodeHarnessRuntime } from './runtime.js';
 
 function createRuntime(
   options: {
@@ -804,14 +804,39 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'display_state_changed' }));
   });
 
-  it('resumes v1 tool suspensions through the MastraCode compatibility surface', async () => {
+  it('forwards explicit pending ids through the MastraCode compatibility response surface', async () => {
     const runtime = createRuntime();
     const respondToToolSuspension = vi.fn(async () => undefined);
-    (runtime as any).session = { respondToToolSuspension };
+    const respondToQuestion = vi.fn(async () => undefined);
+    const respondToToolApproval = vi.fn(async () => undefined);
+    const respondToSandboxAccess = vi.fn(async () => undefined);
+    const respondToPlanApproval = vi.fn(async () => undefined);
+    const getDisplayState = vi.fn(() => ({ pending: { toolName: 'write_file' } }));
+    (runtime as any).session = {
+      respondToQuestion,
+      respondToToolApproval,
+      respondToToolSuspension,
+      respondToSandboxAccess,
+      respondToPlanApproval,
+      getDisplayState,
+    };
 
-    await runtime.respondToToolSuspension({ resumeData: { ok: true } });
+    runtime.respondToQuestion({ questionId: 'q-1', answer: 'yes' });
+    runtime.respondToToolApproval({ toolCallId: 'tool-1', decision: 'approve' });
+    await runtime.respondToToolSuspension({ toolCallId: 'tool-2', resumeData: { ok: true } });
+    await runtime.respondToSandboxAccess({ questionId: 'sandbox-1', approved: true });
+    await runtime.respondToPlanApproval({ planId: 'plan-1', response: { action: 'approved' } });
 
-    expect(respondToToolSuspension).toHaveBeenCalledWith({ resumeData: { ok: true } });
+    await Promise.resolve();
+    expect(respondToQuestion).toHaveBeenCalledWith({ itemId: 'q-1', answer: 'yes' });
+    expect(respondToToolApproval).toHaveBeenCalledWith({ itemId: 'tool-1', approved: true, reason: undefined });
+    expect(respondToToolSuspension).toHaveBeenCalledWith({ itemId: 'tool-2', resumeData: { ok: true } });
+    expect(respondToSandboxAccess).toHaveBeenCalledWith({ itemId: 'sandbox-1', approved: true, reason: undefined });
+    expect(respondToPlanApproval).toHaveBeenCalledWith({
+      itemId: 'plan-1',
+      approved: true,
+      revision: undefined,
+    });
   });
 
   it('applies startup and live browser instances to mode agents', () => {

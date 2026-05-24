@@ -6,7 +6,7 @@ import { InMemoryStore } from '../../../../storage/mock';
 import type { ToolExecutionContext } from '../../../../tools/types';
 import { isValidationError } from '../../../../tools/validation';
 import { TASK_METADATA_KEY, TASK_METADATA_NAMESPACE, taskWrite } from '../index';
-import type { TaskItem } from '../index';
+import type { HarnessTodo } from '../index';
 
 async function runTaskWrite(input: Parameters<NonNullable<typeof taskWrite.execute>>[0], ctx: TaskWriteCtx) {
   const result = await taskWrite.execute!(input, ctx);
@@ -49,7 +49,7 @@ async function seedThread(store: InMemoryStore, threadId: string, resourceId = '
   return memory;
 }
 
-const sampleTasks: TaskItem[] = [
+const sampleTasks: HarnessTodo[] = [
   { content: 'A', activeForm: 'Doing A', status: 'pending' },
   { content: 'B', activeForm: 'Doing B', status: 'in_progress' },
   { content: 'C', activeForm: 'Doing C', status: 'completed' },
@@ -87,7 +87,7 @@ describe('taskWrite tool (standalone)', () => {
     const memory = await seedThread(store, 'thread-1');
     await taskWrite.execute!({ tasks: sampleTasks }, makeCtx({ threadId: 'thread-1', storage: store }));
 
-    const next: TaskItem[] = [{ content: 'D', activeForm: 'Doing D', status: 'completed' }];
+    const next: HarnessTodo[] = [{ content: 'D', activeForm: 'Doing D', status: 'completed' }];
     await taskWrite.execute!({ tasks: next }, makeCtx({ threadId: 'thread-1', storage: store }));
 
     const thread = await memory.getThreadById({ threadId: 'thread-1' });

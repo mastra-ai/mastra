@@ -3,6 +3,7 @@ import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
+import type { ProcessHandle } from '../sandbox/process-manager';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -173,6 +174,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
         ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId })
         : undefined,
     });
+
+    // Register the handle with the Harness so the process is reaped when the
+    // session is closed, evicted, or deleted. Foreground commands do NOT
+    // register here — their lifetime is already bounded by the turn's
+    // `abortSignal` via the sandbox process manager's abort-to-kill wiring.
+    // Optional and best-effort: outside the Harness runtime the slot is
+    // absent and the registration is a no-op.
+    const harnessSlot = context?.requestContext?.get?.('harness') as
+      | { registerBackgroundProcess?: (h: ProcessHandle) => () => void }
+      | undefined;
+    harnessSlot?.registerBackgroundProcess?.(handle);
 
     // Wire exit callback (fire-and-forget)
     if (bgConfig?.onExit) {

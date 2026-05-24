@@ -186,6 +186,7 @@ export class HarnessLibSQL extends HarnessStorage {
         'inbox_response_receipts',
         'closing_at',
         'close_deadline_at',
+        'cancel_request',
       ],
     });
     await this.#db.alterTable({
@@ -1460,34 +1461,33 @@ export class HarnessLibSQL extends HarnessStorage {
     const namespace = this.#resolveHarnessName(harnessName);
     await this.#ensureSessionEventsTable();
     const bounds = await this.#client.execute({
-      sql: `SELECT
-              oldest.epoch AS oldest_epoch,
-              oldest.sequence AS oldest_sequence,
-              newest.epoch AS newest_epoch,
-              newest.sequence AS newest_sequence
-            FROM (
-              SELECT epoch, sequence
+      sql: `WITH latest AS (
+              SELECT epoch
               FROM ${TABLE_HARNESS_SESSION_EVENTS}
               WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?
-              ORDER BY epoch ASC, sequence ASC
+              ORDER BY stored_at DESC, emitted_at DESC, sequence DESC, epoch DESC
               LIMIT 1
-            ) AS oldest
-            CROSS JOIN (
-              SELECT epoch, sequence
-              FROM ${TABLE_HARNESS_SESSION_EVENTS}
-              WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?
-              ORDER BY epoch DESC, sequence DESC
-              LIMIT 1
-            ) AS newest`,
+            )
+            SELECT
+              latest.epoch AS epoch,
+              MIN(events.sequence) AS oldest_sequence,
+              MAX(events.sequence) AS newest_sequence
+            FROM latest
+            JOIN ${TABLE_HARNESS_SESSION_EVENTS} AS events
+              ON events.harness_name = ?
+              AND events.session_id = ?
+              AND events.resource_id = ?
+              AND events.thread_id = ?
+              AND events.epoch = latest.epoch
+            GROUP BY latest.epoch`,
       args: [namespace, sessionId, resourceId, threadId, namespace, sessionId, resourceId, threadId],
     });
     const row = bounds.rows[0];
-    if (!row || row.oldest_epoch == null || row.newest_epoch == null) return null;
+    if (!row || row.epoch == null) return null;
     if (row.oldest_sequence == null || row.newest_sequence == null) return null;
-    if (String(row.oldest_epoch) !== String(row.newest_epoch)) return null;
 
     return {
-      epoch: String(row.newest_epoch),
+      epoch: String(row.epoch),
       oldestSequence: Number(row.oldest_sequence),
       newestSequence: Number(row.newest_sequence),
     };
@@ -4267,6 +4267,7 @@ const SESSION_COLUMN_NAMES = [
   'version',
   'owner_id',
   'lease_expires_at',
+  'cancel_request',
 ] as const;
 
 function sessionColumnValues(record: SessionRecord, version: number): { names: string[]; values: any[] } {
@@ -4301,6 +4302,7 @@ function sessionColumnValues(record: SessionRecord, version: number): { names: s
     version,
     record.ownerId ?? null,
     record.leaseExpiresAt ?? null,
+    record.cancelRequest ? JSON.stringify(record.cancelRequest) : null,
   ];
   return { names: [...SESSION_COLUMN_NAMES], values };
 }
@@ -4949,6 +4951,7 @@ function rowToSession(row: Record<string, unknown>): SessionRecord {
     version: Number(row.version),
     ownerId: row.owner_id != null ? String(row.owner_id) : undefined,
     leaseExpiresAt: row.lease_expires_at != null ? Number(row.lease_expires_at) : undefined,
+    cancelRequest: parseJson(row.cancel_request) ?? undefined,
   };
 }
 

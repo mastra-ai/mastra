@@ -698,7 +698,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       ctx.body = result === null || result === undefined ? JSON.stringify(null) : result;
     } else if (route.responseType === 'stream') {
       await this.stream(route, ctx, result as { fullStream: ReadableStream });
-    } else if (route.responseType === 'datastream-response') {
+    } else if (route.responseType === 'datastream-response' || route.responseType === 'raw') {
       // Handle AI SDK Response objects - pipe Response.body to Koa response
       // Tell Koa we're handling the response ourselves
       ctx.respond = false;

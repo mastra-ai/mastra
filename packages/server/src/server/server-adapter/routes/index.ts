@@ -81,10 +81,11 @@ export type InferParams<
  * - 'json': Standard JSON response
  * - 'stream': Streaming response (SSE or raw stream)
  * - 'datastream-response': Pre-built Response object for data streams
+ * - 'raw': Pre-built Response object for non-stream raw responses such as 204
  * - 'mcp-http': MCP Streamable HTTP transport (handled by adapter)
  * - 'mcp-sse': MCP SSE transport (handled by adapter)
  */
-export type ResponseType = 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+export type ResponseType = 'stream' | 'json' | 'datastream-response' | 'raw' | 'mcp-http' | 'mcp-sse';
 
 export type ServerRouteHandler<
   TParams = Record<string, unknown>,
@@ -95,7 +96,7 @@ export type ServerRouteHandler<
 ) => Promise<
   TResponseType extends 'stream'
     ? MastraStreamReturn
-    : TResponseType extends 'datastream-response'
+    : TResponseType extends 'datastream-response' | 'raw'
       ? Response
       : TResponse
 >;

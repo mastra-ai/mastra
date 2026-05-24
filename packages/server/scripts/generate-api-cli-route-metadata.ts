@@ -36,7 +36,32 @@ function extractPathParams(path: string): string[] {
     .filter((value): value is string => Boolean(value));
 }
 
-function extractSchemaProperties(schema: { properties?: unknown } | undefined): string[] {
-  if (!schema?.properties || typeof schema.properties !== 'object' || Array.isArray(schema.properties)) return [];
-  return Object.keys(schema.properties).sort();
+function extractSchemaProperties(
+  schema: { properties?: unknown; anyOf?: unknown; oneOf?: unknown; allOf?: unknown } | undefined,
+): string[] {
+  if (!schema) return [];
+  const keys = new Set<string>();
+  collectSchemaProperties(schema, keys);
+  return [...keys].sort();
+}
+
+function collectSchemaProperties(
+  schema: { properties?: unknown; anyOf?: unknown; oneOf?: unknown; allOf?: unknown },
+  keys: Set<string>,
+): void {
+  if (schema.properties && typeof schema.properties === 'object' && !Array.isArray(schema.properties)) {
+    for (const key of Object.keys(schema.properties)) keys.add(key);
+  }
+  for (const field of ['anyOf', 'oneOf', 'allOf'] as const) {
+    const variants = schema[field];
+    if (!Array.isArray(variants)) continue;
+    for (const variant of variants) {
+      if (variant && typeof variant === 'object' && !Array.isArray(variant)) {
+        collectSchemaProperties(
+          variant as { properties?: unknown; anyOf?: unknown; oneOf?: unknown; allOf?: unknown },
+          keys,
+        );
+      }
+    }
+  }
 }

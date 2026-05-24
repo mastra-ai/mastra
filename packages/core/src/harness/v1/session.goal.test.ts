@@ -5,7 +5,8 @@
  *   - setGoal / getGoal / pauseGoal / resumeGoal / clearGoal lifecycle
  *   - judge verdict dispatch: done / continue / waiting
  *   - budget exhaustion (turnsUsed >= maxTurns) → paused('budget_exhausted')
- *   - judge failure → paused('judge_failed')
+ *   - judge failure → paused with taxonomy reason (judge_timeout /
+ *     judge_provider_error / judge_invalid_verdict)
  *   - stale-goal cancellation (verdict for an obsolete goal is discarded)
  *   - subagent sessions reject setGoal
  *   - goal-driven continuations are skipped by the judge (no infinite loop)
@@ -225,7 +226,10 @@ describe('Session goal — judge loop', () => {
     expect(session.getRecord().pendingQueue ?? []).toEqual([]);
   });
 
-  it('pauses with reason "judge_failed" when the judge throws', async () => {
+  it('pauses with reason "judge_provider_error" when a generic judge error is thrown', async () => {
+    // Generic Errors classify as `provider_error` (no retry); maps to the
+    // `judge_provider_error` paused-reason. Replaces the prior catch-all
+    // `judge_failed` reason — now only specific taxonomy values are emitted.
     const { harness, agent } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
     await session.setGoal({ objective: 'go', kickoff: false });
@@ -240,7 +244,8 @@ describe('Session goal — judge loop', () => {
 
     expect(session.getGoal()?.status).toBe('paused');
     const paused = events.find(e => e.type === 'goal_paused') as { reason: string } | undefined;
-    expect(paused?.reason).toBe('judge_failed');
+    expect(paused?.reason).toBe('judge_provider_error');
+    expect(session.getGoal()?.lastFailure?.kind).toBe('provider_error');
     // No verdict emitted when judge failed.
     expect(events.some(e => e.type === 'goal_judged')).toBe(false);
   });

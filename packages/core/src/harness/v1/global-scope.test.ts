@@ -87,4 +87,64 @@ describe('Harness v1 global scope', () => {
     ).not.toThrow();
     expect(events).toHaveLength(2);
   });
+
+  it('does not skip sibling listeners when one unsubscribes during dispatch', async () => {
+    const { EventEmitter } = await import('./events');
+
+    const emitter = new EventEmitter({ sessionId: 'session-1' });
+    const calls: string[] = [];
+
+    // Three listeners; the FIRST removes itself synchronously on its first
+    // event. Naïve `for (const l of this.listeners)` iteration would shift
+    // the array and skip listener "b" because it now occupies index 0
+    // while the for-of cursor advances to index 1.
+    const unsubA = emitter.subscribe(() => {
+      calls.push('a');
+      unsubA();
+    });
+    emitter.subscribe(() => {
+      calls.push('b');
+    });
+    emitter.subscribe(() => {
+      calls.push('c');
+    });
+
+    emitter.emit({ type: 'app.progress', payload: { tick: 1 } } as any);
+    expect(calls).toEqual(['a', 'b', 'c']);
+
+    calls.length = 0;
+    emitter.emit({ type: 'app.progress', payload: { tick: 2 } } as any);
+    expect(calls).toEqual(['b', 'c']);
+  });
+
+  it('uses snapshot semantics: listeners unsubscribed mid-dispatch still receive the current emit', async () => {
+    const { EventEmitter } = await import('./events');
+
+    // Contract: dispatch iterates a snapshot taken at emit-start, so a
+    // cross-listener unsubscribe during dispatch does NOT prevent the
+    // removed listener from receiving the in-flight event. The removal
+    // takes effect on subsequent emits. Pinning this here so future
+    // refactors do not silently shift to "live array" semantics.
+    const emitter = new EventEmitter({ sessionId: 'session-1' });
+    const calls: string[] = [];
+
+    let unsubB = () => {};
+    emitter.subscribe(() => {
+      calls.push('a');
+      unsubB();
+    });
+    unsubB = emitter.subscribe(() => {
+      calls.push('b');
+    });
+    emitter.subscribe(() => {
+      calls.push('c');
+    });
+
+    emitter.emit({ type: 'app.progress', payload: { tick: 1 } } as any);
+    expect(calls).toEqual(['a', 'b', 'c']);
+
+    calls.length = 0;
+    emitter.emit({ type: 'app.progress', payload: { tick: 2 } } as any);
+    expect(calls).toEqual(['a', 'c']);
+  });
 });

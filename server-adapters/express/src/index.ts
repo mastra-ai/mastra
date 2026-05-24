@@ -299,7 +299,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.json(result);
     } else if (route.responseType === 'stream') {
       await this.stream(route, response, result as { fullStream: ReadableStream });
-    } else if (route.responseType === 'datastream-response') {
+    } else if (route.responseType === 'datastream-response' || route.responseType === 'raw') {
       // Handle AI SDK Response objects - pipe Response.body to Express response
       const fetchResponse = result as globalThis.Response;
       fetchResponse.headers.forEach((value, key) => response.setHeader(key, value));

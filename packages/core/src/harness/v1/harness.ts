@@ -43,6 +43,7 @@ import type {
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
   AgentSignalResultStatus,
+  HarnessArtifactRecord,
   InboxResponseReceipt,
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
@@ -51,6 +52,12 @@ import type {
   HarnessSessionEventReplayState,
 } from '../../storage/domains/harness';
 import {
+  HarnessStorageArtifactAttachmentMissingError,
+  HarnessStorageArtifactDuplicateIdError,
+  HarnessStorageArtifactLineageMismatchError,
+  HarnessStorageArtifactNotFoundError,
+  HarnessStorageArtifactVersionConflictError,
+  HarnessStorageArtifactsUnsupportedError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageLeaseConflictError,
@@ -70,7 +77,14 @@ import { HarnessChannelRegistry } from './channel-registry';
 import {
   HarnessAttachmentInUseError,
   HarnessAttachmentUnavailableError,
+  HarnessArtifactAttachmentMissingError,
+  HarnessArtifactDuplicateIdError,
+  HarnessArtifactLineageMismatchError,
+  HarnessArtifactNotFoundError,
+  HarnessArtifactVersionConflictError,
+  HarnessArtifactsUnsupportedError,
   HarnessConfigError,
+  HarnessEventReplayUnsupportedError,
   HarnessModelNotFoundError,
   HarnessRuntimeDependencyDriftError,
   HarnessSessionClosedError,
@@ -85,6 +99,8 @@ import {
 } from './errors';
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
+import { HARNESS_PERMISSION_PROFILES } from './permission-profiles';
+import type { HarnessPermissionProfile, HarnessPermissionProfileName } from './permission-profiles';
 import { Session } from './session';
 import type {
   AttachmentDeleteOptions,
@@ -126,7 +142,8 @@ import type {
   ThreadSetSettingsOptions,
   ToolCategory,
 } from './types';
-import { WorkspaceRegistry } from './workspace-registry';
+import type { WorkspacePolicy } from './workspace/policy';
+import { WorkspaceRegistry } from './workspace/registry';
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
@@ -140,6 +157,39 @@ const DEFAULT_CHANNEL_OUTBOX_BATCH_SIZE = 10;
 const DEFAULT_CHANNEL_OUTBOX_MAX_ATTEMPTS = 3;
 const CHANNEL_DIAGNOSTICS_DEFAULT_LIMIT = 50;
 const CHANNEL_DIAGNOSTICS_MAX_DESCENDANT_DEPTH = 32;
+
+/**
+ * Top-level keys recognized on `HarnessConfig` (the union of
+ * `HarnessConfigCommon` fields plus the `mastra` / `agents` /
+ * `storage` discriminants). The constructor warns — not throws —
+ * on any key not in this set so typo'd or stale userland configs
+ * surface loudly without breaking existing callers. The catch-all
+ * `[key: string]: unknown` on `HarnessConfigCommon` is preserved
+ * for now; a future slice can lift the warn to a hard error once
+ * downstream consumers have a chance to migrate.
+ */
+const HARNESS_CONFIG_KNOWN_KEYS: ReadonlySet<string> = new Set([
+  // HarnessConfigCommon
+  'channels',
+  'defaultModeId',
+  'defaultPermissionPolicy',
+  'files',
+  'goals',
+  'modelAuthStatusResolver',
+  'models',
+  'modes',
+  'runtimeCompatibilityGeneration',
+  'sessions',
+  'skills',
+  'subagents',
+  'toolCategories',
+  'toolCategoryResolver',
+  'workspace',
+  // HarnessConfig discriminants (mastra-mode vs agents+storage-mode)
+  'mastra',
+  'agents',
+  'storage',
+]);
 const CHANNEL_DIAGNOSTICS_MAX_VISIBLE_SESSIONS = 256;
 
 type CloseTreeNode = {
@@ -706,12 +756,21 @@ export class Harness {
   /** Snapshot of the workspace kind for fast read paths. `undefined` when not configured. */
   readonly _workspaceKind?: 'shared' | 'per-resource' | 'per-session';
   private readonly _workspaceEager: boolean;
+  private readonly _workspacePolicy?: WorkspacePolicy;
 
   private _initialized = false;
   private _initPromise?: Promise<void>;
   private _shutdown = false;
 
   constructor(config: HarnessConfig) {
+    for (const key of Object.keys(config)) {
+      if (!HARNESS_CONFIG_KNOWN_KEYS.has(key)) {
+        console.warn(
+          `[mastra:harness] ignoring unknown HarnessConfig key ${JSON.stringify(key)}. ` +
+            `This will become a hard error in a future release.`,
+        );
+      }
+    }
     const runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration;
     if (
       runtimeCompatibilityGeneration !== undefined &&
@@ -913,6 +972,7 @@ export class Harness {
     // Cross-checks against the subagent registry happen below.
     this._workspaceKind = config.workspace?.kind;
     this._workspaceEager = Boolean(config.workspace?.eager);
+    this._workspacePolicy = config.workspace?.policy;
     this._workspaceRegistry = new WorkspaceRegistry({
       config: config.workspace,
       emitter: this._emitter,
@@ -1387,6 +1447,17 @@ export class Harness {
   _getMcpServer(key: string): MCPServerBase | undefined {
     const server = this.mastra.getMCPServer(key as never) as unknown;
     return server instanceof MCPServerBase ? server : undefined;
+  }
+
+  /**
+   * @internal — list registered MCP server keys for the workspace-action
+   * classifier. Used to detect `<serverKey>_<toolName>` namespaced tool
+   * names emitted by `MCPClient.listTools()` and journal them with
+   * `actionKind: 'mcp'`. Returns an empty array when no MCP servers are
+   * registered; callers must tolerate that.
+   */
+  _listMcpServerKeys(): string[] {
+    return this._listMcpServers().map(([key]) => key);
   }
 
   /** @internal — Session enforces the subagent depth cap inside the spawn tool. */
@@ -2308,14 +2379,29 @@ export class Harness {
         sessions.map(async session => {
           if (session.lifecycleState !== 'live' && session.lifecycleState !== 'closing') return;
           try {
-            const record = session.getRecord();
-            const lease = await storage.renewSessionLease({
-              harnessName: record.harnessName,
-              sessionId: session.id,
-              ownerId: this.ownerId,
-              ttlMs: this._leaseTtlMs,
+            // Route this session's renewal through its own lease-write chain
+            // so a concurrent `Session.extendLease(...)` cannot race with the
+            // heartbeat against `storage.renewSessionLease`. Compute the
+            // effective TTL inside the chained step so it reflects the
+            // latest extension deadline (a default-TTL heartbeat could
+            // otherwise overwrite a longer extension that landed between
+            // queueing and execution).
+            await session._enqueueLeaseRenewal(async () => {
+              const record = session.getRecord();
+              // Skip renewal for cancelled sessions — the durable
+              // `cancelRequest` marker takes precedence over lease
+              // extension. Letting the lease expire releases the
+              // session back to the storage layer for cleanup.
+              if (record.cancelRequest !== undefined) return;
+              const effectiveTtl = session._getEffectiveLeaseTtlMs(this._leaseTtlMs);
+              const lease = await storage.renewSessionLease({
+                harnessName: record.harnessName,
+                sessionId: session.id,
+                ownerId: this.ownerId,
+                ttlMs: effectiveTtl,
+              });
+              session._markLeaseRenewed(lease.expiresAt);
             });
-            session._markLeaseRenewed(lease.expiresAt);
           } catch (err) {
             if (err instanceof HarnessStorageLeaseConflictError || err instanceof HarnessStorageSessionNotFoundError) {
               await this._evictLiveSession(session, 'lease_lost');
@@ -2914,6 +3000,40 @@ export class Harness {
     deletedLiveSessions = new Map<string, Session>(),
   ): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
+    // `_collectDeleteTree` builds the tree with the requested root at
+    // `tree[0]` (depth 0) and descendants pushed afterwards. Capture the
+    // root id so `_markDeletedSession` can emit the correct
+    // `session_deleted.reason`: 'requested' for the explicitly-deleted
+    // session, 'cascade' for every descendant cleaned up alongside it.
+    const rootId = tree[0]?.record.id;
+    // Tear down per-session workspace state from the persisted record before
+    // the storage rows go away. `releaseDormant` resolves to a no-op for
+    // sessions that are still live in `_perSession` (the close path already
+    // released them) and for records that never persisted workspace state.
+    // Best-effort: registry errors surface as workspace_error events.
+    if (this._workspaceKind === 'per-session') {
+      for (const node of bottomUp) {
+        const wsState = node.record.workspace;
+        if (!wsState) continue;
+        // Let `HarnessWorkspaceProviderMismatchError` propagate so the delete
+        // aborts before the row removal — the stored state is the only
+        // breadcrumb the original provider has to clean its filesystem dir.
+        // Other failures are best-effort: the registry already emitted
+        // workspace_error.
+        try {
+          await this._workspaceRegistry.releaseDormant({
+            sessionId: node.record.id,
+            resourceId: node.record.resourceId,
+            ...(node.record.parentSessionId !== undefined ? { parentSessionId: node.record.parentSessionId } : {}),
+            storedProviderId: wsState.providerId,
+            storedState: wsState.state,
+          });
+        } catch (err) {
+          if (err instanceof HarnessWorkspaceProviderMismatchError) throw err;
+          // Registry emits a workspace_error event on best-effort failure.
+        }
+      }
+    }
     const sessions = bottomUp.map(node => ({
       harnessName: node.record.harnessName,
       sessionId: node.record.id,
@@ -2939,7 +3059,11 @@ export class Harness {
             continue;
           }
           if (stillExists) continue;
-          const live = this._markDeletedSession(node, deletedLiveSessions);
+          const live = this._markDeletedSession(
+            node,
+            deletedLiveSessions,
+            node.record.id === rootId ? 'requested' : 'cascade',
+          );
           // Preserve the original guarded-delete error; the caller already sees
           // this delete attempt as failed, and retry/reconciliation can clean up
           // any remaining operation evidence from this live session's active turn.
@@ -2948,15 +3072,24 @@ export class Harness {
         throw err;
       }
       for (const node of bottomUp) {
-        const live = this._markDeletedSession(node, deletedLiveSessions);
+        const live = this._markDeletedSession(
+          node,
+          deletedLiveSessions,
+          node.record.id === rootId ? 'requested' : 'cascade',
+        );
         await this._cleanupDeletedOperationEvidence(storage, node.record, live).catch(() => {});
       }
       return;
     }
     for (let index = 0; index < bottomUp.length; index++) {
       await storage.deleteSession(sessions[index]!);
-      const live = this._markDeletedSession(bottomUp[index]!, deletedLiveSessions);
-      await this._cleanupDeletedOperationEvidence(storage, bottomUp[index]!.record, live).catch(() => {});
+      const node = bottomUp[index]!;
+      const live = this._markDeletedSession(
+        node,
+        deletedLiveSessions,
+        node.record.id === rootId ? 'requested' : 'cascade',
+      );
+      await this._cleanupDeletedOperationEvidence(storage, node.record, live).catch(() => {});
     }
   }
 
@@ -2976,10 +3109,40 @@ export class Harness {
     }
   }
 
-  private _markDeletedSession(node: CloseTreeNode, deletedLiveSessions: Map<string, Session>): Session | undefined {
+  private _markDeletedSession(
+    node: CloseTreeNode,
+    deletedLiveSessions: Map<string, Session>,
+    reason: 'requested' | 'cascade',
+  ): Session | undefined {
     const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
-    live?._markDeleted();
     const bridge = this._sessionEventBridges.get(node.record.id);
+    // Emit session_deleted as the LAST event for this session, after
+    // storage commits the delete so we never claim a delete that failed.
+    // Coverage rules:
+    //   - If a live Session is present, emit via its own emitter so
+    //     session-level subscribers see the event.
+    //   - If the bridge to the harness emitter has already been torn
+    //     down (force-delete cascades close-first, which tears the
+    //     bridge before we get here), emit directly on the harness
+    //     emitter too so harness-level subscribers do not silently miss
+    //     the terminal lifecycle.
+    //   - If no live Session exists at all, emit only on the harness
+    //     emitter (session-level subscribers were torn down with the
+    //     Session instance during close).
+    // Wrapped — best-effort terminal, never block the delete.
+    try {
+      if (live !== undefined) {
+        live._emit({ type: 'session_deleted', reason });
+        if (bridge === undefined) {
+          this._emitter.emit({ type: 'session_deleted', reason }, { sessionId: node.record.id });
+        }
+      } else {
+        this._emitter.emit({ type: 'session_deleted', reason }, { sessionId: node.record.id });
+      }
+    } catch {
+      // Swallow — terminal lifecycle must not abort the delete path.
+    }
+    live?._markDeleted();
     if (bridge) {
       bridge();
       this._sessionEventBridges.delete(node.record.id);
@@ -3021,6 +3184,9 @@ export class Harness {
     resourceId: string;
   }): Promise<HarnessSessionEventReplayState | null> {
     const storage = this._requireStorage('getSessionEventReplayState()');
+    if (!storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Harness.getSessionEventReplayState()');
+    }
     const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored || stored.resourceId !== opts.resourceId) return null;
     try {
@@ -3031,7 +3197,11 @@ export class Harness {
         threadId: stored.threadId,
       });
     } catch (err) {
-      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) throw err;
+      // Defense-in-depth: capability-true adapters that throw the storage
+      // unsupported error on a specific call shape get translated here too.
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Harness.getSessionEventReplayState()');
+      }
       throw new HarnessStorageError(stored.id, 'load', err);
     }
   }
@@ -3044,6 +3214,9 @@ export class Harness {
     limit: number;
   }): Promise<HarnessSessionEventRecord[]> {
     const storage = this._requireStorage('listSessionEventsAfter()');
+    if (!storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Harness.listSessionEventsAfter()');
+    }
     const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored || stored.resourceId !== opts.resourceId) return [];
     try {
@@ -3057,7 +3230,9 @@ export class Harness {
         limit: opts.limit,
       });
     } catch (err) {
-      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) throw err;
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Harness.listSessionEventsAfter()');
+      }
       throw new HarnessStorageError(stored.id, 'load', err);
     }
   }
@@ -3161,6 +3336,12 @@ export class Harness {
       } catch (err) {
         eventPersistenceError ??= { sessionId: session.id, error: err };
       }
+
+      // Drain any in-flight record writes (e.g. the trailing token-usage
+      // persist scheduled by `_recordTurnCompletion`) so a fresh harness
+      // resumes from the latest CAS-acknowledged state. Best-effort: lifecycle
+      // races are absorbed inside `_internalAwaitFlushChain`.
+      await session._internalAwaitFlushChain();
 
       try {
         await storage.releaseSessionLease({
@@ -3877,6 +4058,212 @@ export class Harness {
   };
 
   // -------------------------------------------------------------------------
+  // Artifacts.
+  //
+  // Immutable, versioned work products produced during a session — plans,
+  // diffs, test reports, screenshots, patches, review output. Content is
+  // referenced via an attachment (caller uploads via
+  // `harness.attachments.upload` first, then passes the resulting
+  // `attachmentId` to `artifacts.write`). Hash/MIME/bytes are copied from
+  // the attachment record so the artifact captures canonical, immutable
+  // values. Versioning is captured via `parentArtifactId` +
+  // `lineageRootId` + `version`, computed storage-side under CAS.
+  // -------------------------------------------------------------------------
+
+  artifacts = Object.freeze({
+    write: async (input: {
+      sessionId: string;
+      resourceId: string;
+      threadId: string;
+      artifactId: string;
+      artifactType: HarnessArtifactRecord['artifactType'];
+      attachmentId: string;
+      parentArtifactId?: string;
+      schemaUri?: string;
+      createdBy?: HarnessArtifactRecord['createdBy'];
+      metadata?: HarnessArtifactRecord['metadata'];
+    }): Promise<HarnessArtifactRecord> => {
+      const storage = this._requireStorage('artifacts.write()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.write()');
+      }
+      let record: HarnessArtifactRecord;
+      try {
+        record = await storage.writeArtifact({
+          harnessName: this._harnessName,
+          sessionId: input.sessionId,
+          resourceId: input.resourceId,
+          threadId: input.threadId,
+          artifactId: input.artifactId,
+          artifactType: input.artifactType,
+          attachmentId: input.attachmentId,
+          ...(input.parentArtifactId !== undefined ? { parentArtifactId: input.parentArtifactId } : {}),
+          ...(input.schemaUri !== undefined ? { schemaUri: input.schemaUri } : {}),
+          createdBy: input.createdBy ?? {},
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.write()');
+        }
+        if (err instanceof HarnessStorageArtifactNotFoundError) {
+          throw new HarnessArtifactNotFoundError(err.artifactId);
+        }
+        if (err instanceof HarnessStorageArtifactDuplicateIdError) {
+          throw new HarnessArtifactDuplicateIdError(err.artifactId);
+        }
+        if (err instanceof HarnessStorageArtifactAttachmentMissingError) {
+          throw new HarnessArtifactAttachmentMissingError(err.attachmentId);
+        }
+        if (err instanceof HarnessStorageArtifactLineageMismatchError) {
+          throw new HarnessArtifactLineageMismatchError(err.parentArtifactId, err.reason);
+        }
+        if (err instanceof HarnessStorageArtifactVersionConflictError) {
+          throw new HarnessArtifactVersionConflictError(err.lineageRootId, err.version);
+        }
+        throw err;
+      }
+      // Emit on the live session's emitter (so session-level subscribers
+      // see it and the harness bridge forwards to harness-level
+      // subscribers). When the writer holds no live Session handle —
+      // e.g. a server-route caller without a live session in this
+      // process — fall back to the harness emitter so harness-level
+      // subscribers still observe the lifecycle.
+      const live = this._liveSessions.get(input.sessionId);
+      const event = {
+        type: 'artifact_created' as const,
+        artifactId: record.artifactId,
+        artifactType: record.artifactType,
+        lineageRootId: record.lineageRootId,
+        ...(record.parentArtifactId !== undefined ? { parentArtifactId: record.parentArtifactId } : {}),
+        version: record.version,
+        mimeType: record.mimeType,
+        sha256: record.sha256,
+        bytes: record.bytes,
+      };
+      try {
+        if (live !== undefined) {
+          live._emit(event);
+        } else {
+          this._emitter.emit(event, { sessionId: input.sessionId });
+        }
+      } catch {
+        // Emitter failure must never block the artifact write.
+      }
+      return record;
+    },
+
+    get: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      artifactId: string;
+    }): Promise<HarnessArtifactRecord | null> => {
+      const storage = this._requireStorage('artifacts.get()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.get()');
+      }
+      try {
+        return await storage.loadArtifact({
+          harnessName: this._harnessName,
+          sessionId: opts.sessionId,
+          resourceId: opts.resourceId,
+          artifactId: opts.artifactId,
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.get()');
+        }
+        throw err;
+      }
+    },
+
+    list: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      artifactType?: HarnessArtifactRecord['artifactType'];
+      limit?: number;
+      cursor?: string;
+    }): Promise<HarnessArtifactRecord[]> => {
+      const storage = this._requireStorage('artifacts.list()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.list()');
+      }
+      try {
+        return await storage.listArtifacts({
+          harnessName: this._harnessName,
+          sessionId: opts.sessionId,
+          resourceId: opts.resourceId,
+          ...(opts.artifactType !== undefined ? { artifactType: opts.artifactType } : {}),
+          limit: opts.limit ?? 100,
+          ...(opts.cursor !== undefined ? { cursor: opts.cursor } : {}),
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.list()');
+        }
+        throw err;
+      }
+    },
+
+    versions: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      artifactId: string;
+    }): Promise<HarnessArtifactRecord[]> => {
+      const storage = this._requireStorage('artifacts.versions()');
+      if (!storage.capabilities().harnessArtifacts) {
+        throw new HarnessArtifactsUnsupportedError('Harness.artifacts.versions()');
+      }
+      try {
+        return await storage.listArtifactVersions({
+          harnessName: this._harnessName,
+          sessionId: opts.sessionId,
+          resourceId: opts.resourceId,
+          artifactId: opts.artifactId,
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageArtifactsUnsupportedError) {
+          throw new HarnessArtifactsUnsupportedError('Harness.artifacts.versions()');
+        }
+        throw err;
+      }
+    },
+  });
+
+  // -------------------------------------------------------------------------
+  // Permissions — profile registry + apply convenience.
+  //
+  // Profiles are declarative permission baselines (read-only review,
+  // approval-gated patch, ci-fixer, trusted local YOLO) intended for
+  // server / A2A / channel routes that need a non-YOLO posture the
+  // local CLI's lenient defaults cannot bypass. `applyProfile`
+  // resolves the named session and delegates to the session-level
+  // `permissions.applyProfile()` so audit + emission stay in one
+  // place.
+  // -------------------------------------------------------------------------
+
+  permissions = Object.freeze({
+    profiles: Object.freeze({
+      get: (name: HarnessPermissionProfileName): HarnessPermissionProfile | undefined =>
+        HARNESS_PERMISSION_PROFILES[name],
+      list: (): readonly HarnessPermissionProfile[] =>
+        Object.values(HARNESS_PERMISSION_PROFILES) as readonly HarnessPermissionProfile[],
+    }),
+    applyProfile: async (opts: {
+      sessionId: string;
+      resourceId: string;
+      profileName: HarnessPermissionProfileName;
+      preserveCallerDenies?: boolean;
+    }): Promise<void> => {
+      const session = await this.session({ sessionId: opts.sessionId, resourceId: opts.resourceId });
+      await session.permissions.applyProfile({
+        profileName: opts.profileName,
+        ...(opts.preserveCallerDenies !== undefined ? { preserveCallerDenies: opts.preserveCallerDenies } : {}),
+      });
+    },
+  });
+
+  // -------------------------------------------------------------------------
   // Internals.
   // -------------------------------------------------------------------------
 
@@ -4072,6 +4459,15 @@ export class Harness {
     return `thread-${randomUUID()}`;
   }
 
+  /**
+   * @internal — used by `Session.cancel(...)` to walk the subagent
+   * tree at cancellation time. Returns undefined when the session is
+   * not currently live in this Harness instance.
+   */
+  _internalGetLiveSession(sessionId: string): Session | undefined {
+    return this._liveSessions.get(sessionId);
+  }
+
   /** @internal — exposed for inspection in tests. */
   _internalLiveSessionCount(): number {
     return this._liveSessions.size;
@@ -4080,6 +4476,20 @@ export class Harness {
   /** @internal — accessor for `Session.queue()` admission caps. */
   get _internalMaxQueueDepth(): number {
     return this._maxQueueDepth;
+  }
+
+  /** @internal — default lease TTL the heartbeat uses. Read by
+   * `Session.extendLease(...)` to clamp `ttlMs` upward so an extension
+   * cannot shrink an already-default-TTL lease. */
+  get _internalLeaseTtlMs(): number {
+    return this._leaseTtlMs;
+  }
+
+  /** @internal — workspace policy for the runtime to evaluate against
+   * classified actions before execution and when journaling. Returns
+   * `undefined` when no policy is configured on `HarnessConfig.workspace.policy`. */
+  _internalGetWorkspacePolicy(): WorkspacePolicy | undefined {
+    return this._workspacePolicy;
   }
 
   /** @internal — goal-loop defaults, consumed by `Session.setGoal()` (§4.7). */

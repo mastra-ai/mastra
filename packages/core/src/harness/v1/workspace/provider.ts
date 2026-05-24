@@ -23,7 +23,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { Workspace } from '../../workspace';
+import type { Workspace } from '../../../workspace';
 
 /** Workspace ownership models (§2.7). */
 export type WorkspaceOwnershipKind = 'shared' | 'per-resource' | 'per-session';

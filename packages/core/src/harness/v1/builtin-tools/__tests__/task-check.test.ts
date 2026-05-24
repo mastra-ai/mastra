@@ -6,7 +6,7 @@ import { InMemoryStore } from '../../../../storage/mock';
 import type { ToolExecutionContext } from '../../../../tools/types';
 import { isValidationError } from '../../../../tools/validation';
 import { taskCheck, taskWrite } from '../index';
-import type { TaskItem } from '../index';
+import type { HarnessTodo } from '../index';
 
 async function runTaskCheck(ctx: TaskCtx) {
   const result = await taskCheck.execute!({}, ctx);
@@ -70,7 +70,7 @@ describe('taskCheck tool (standalone)', () => {
 
   it('reads tasks previously written by taskWrite (round-trip)', async () => {
     await seedThread(store, 'thread-1');
-    const tasks: TaskItem[] = [
+    const tasks: HarnessTodo[] = [
       { content: 'A', activeForm: 'Doing A', status: 'in_progress' },
       { content: 'B', activeForm: 'Doing B', status: 'pending' },
     ];
@@ -86,7 +86,7 @@ describe('taskCheck tool (standalone)', () => {
 
   it('reports allComplete only when every task is completed', async () => {
     await seedThread(store, 'thread-1');
-    const tasks: TaskItem[] = [
+    const tasks: HarnessTodo[] = [
       { content: 'A', activeForm: 'Doing A', status: 'completed' },
       { content: 'B', activeForm: 'Doing B', status: 'completed' },
     ];

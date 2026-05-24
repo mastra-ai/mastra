@@ -42,9 +42,12 @@ export type {
   PermissionGrantedEvent,
   PermissionPolicyChangedEvent,
   PermissionRevokedEvent,
+  ArtifactCreatedEvent,
+  PermissionProfileAppliedEvent,
   SessionClosedEvent,
   SessionClosingEvent,
   SessionCreatedEvent,
+  SessionDeletedEvent,
   SessionEvictedEvent,
   StateChangedEvent,
   SuspensionRequiredEvent,
@@ -62,14 +65,39 @@ export type {
 } from './events';
 
 export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
+export { actorKey } from './types';
+export type { HarnessActorIdentity, HarnessActorIdentityKind } from './types';
+export { HARNESS_PERMISSION_PROFILES, grantsFromProfile, rulesFromProfile } from './permission-profiles';
+export type {
+  HarnessPermissionProfile,
+  HarnessPermissionProfileName,
+  HarnessPermissionProfileTag,
+} from './permission-profiles';
+export {
+  bridgeReplayAndLive,
+  HarnessEventReplayAbortedError,
+  HarnessEventReplayBufferOverflowError,
+  HarnessEventReplayEpochMismatchError,
+  HarnessEventReplayFutureCursorError,
+  HarnessEventReplayStaleCursorError,
+} from './replay-bridge';
+export type { BridgeReplayCursor, BridgeReplayOptions } from './replay-bridge';
+export { HARNESS_PUBLIC_VIEW_REDACTED, projectHarnessEventForPublicView } from './public-view';
+export type { PublicViewProjectionOptions } from './public-view';
 export {
   classifyHarnessWorkspaceToolAction,
   getHarnessWorkspaceActionPathInput,
   isHarnessWorkspaceFileMutationTool,
-} from './workspace-actions';
-export type { HarnessWorkspaceActionKind, HarnessWorkspaceToolAction } from './workspace-actions';
+} from './workspace/actions';
+export type { HarnessWorkspaceActionKind, HarnessWorkspaceToolAction } from './workspace/actions';
 
 export {
+  HarnessArtifactAttachmentMissingError,
+  HarnessArtifactDuplicateIdError,
+  HarnessArtifactLineageMismatchError,
+  HarnessArtifactNotFoundError,
+  HarnessArtifactVersionConflictError,
+  HarnessArtifactsUnsupportedError,
   HarnessAttachmentInUseError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
@@ -79,6 +107,7 @@ export {
   HarnessEventSerializationError,
   HarnessModelNotFoundError,
   HarnessOverrideConflictError,
+  HarnessPermissionProfileNotFoundError,
   HarnessQueueFullError,
   HarnessRuntimeDependencyDriftError,
   HarnessSessionClosedError,
@@ -101,9 +130,9 @@ export {
   getHarnessPublicErrorCode,
 } from './errors';
 
-export { nonDurableProvider } from './workspace-provider';
-export type { WorkspaceOwnershipKind, WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
-export { evaluateWorkspacePolicy, resolveWorkspacePath } from './workspace-policy';
+export { nonDurableProvider } from './workspace/provider';
+export type { WorkspaceOwnershipKind, WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
+export { evaluateWorkspacePolicy, resolveWorkspacePath } from './workspace/policy';
 export type {
   WorkspaceCommandPolicyAction,
   WorkspaceFileOperation,
@@ -118,7 +147,7 @@ export type {
   WorkspacePolicyRule,
   WorkspaceResolvedPath,
   WorkspaceRootDescriptor,
-} from './workspace-policy';
+} from './workspace/policy';
 
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version
@@ -134,6 +163,14 @@ export type { HarnessMessage, HarnessMessageContent } from '../types';
  * captures one judge verdict.
  */
 export type { GoalJudgeDecision, GoalState } from '../../storage/domains/harness';
+export type {
+  HarnessArtifactCreator,
+  HarnessArtifactRecord,
+  HarnessArtifactType,
+  ListArtifactsInput,
+  ListArtifactVersionsInput,
+  WriteArtifactInput,
+} from '../../storage/domains/harness';
 
 export type {
   AttachmentDeleteOptions,
@@ -207,6 +244,19 @@ export type {
   ThreadSelectOrCreateOptions,
   ToolCategory,
 } from './types';
+
+export type {
+  HarnessTask,
+  HarnessTaskOrigin,
+  HarnessTaskStatus,
+  HarnessRun,
+  HarnessRunFinishReason,
+  TaskIndexEntry,
+  TaskIdFieldMapping,
+  HarnessEvidence,
+  HarnessEvidenceKind,
+  PendingInteraction,
+} from './contracts';
 
 export type {
   AttachmentObjectPointer,

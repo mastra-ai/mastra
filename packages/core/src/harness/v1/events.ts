@@ -24,12 +24,12 @@ import type {
   PendingResume,
   SessionRecord,
 } from '../../storage/domains/harness';
-import type { TaskItem } from './builtin-tools/shared';
+import type { HarnessTodo } from './builtin-tools/shared';
 
 import { HarnessEventSerializationError, HarnessValidationError, getHarnessPublicErrorCode } from './errors';
 import type { EventSerializationReason } from './errors';
 import type { SessionLifecycleState } from './session';
-import type { PermissionPolicy, ToolCategory } from './types';
+import type { HarnessActorIdentity, PermissionPolicy, ToolCategory } from './types';
 
 // ---------------------------------------------------------------------------
 // Event base.
@@ -86,6 +86,58 @@ export interface SessionEvictedEvent extends HarnessEventBase {
   reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown' | 'lease_lost';
 }
 
+/**
+ * The session row has been hard-deleted from storage. Emitted as the
+ * LAST event a subscriber will receive on this session before the
+ * emitter is torn down. Mirrors `session_closed` / `session_evicted`
+ * lifecycle parity for the stream-terminal contract.
+ *
+ * - `requested` — caller invoked `harness.deleteSession()` directly.
+ * - `cascade`   — parent or ancestor was deleted; this session was
+ *                 removed as part of the subtree cascade.
+ */
+export interface SessionDeletedEvent extends HarnessEventBase {
+  type: 'session_deleted';
+  reason: 'requested' | 'cascade';
+}
+
+/**
+ * A new artifact (or a new version of an existing artifact) was written.
+ * The event carries only safe metadata — no payload bytes. Consumers
+ * fetch full content via `harness.artifacts.get()`.
+ */
+export interface ArtifactCreatedEvent extends HarnessEventBase {
+  type: 'artifact_created';
+  artifactId: string;
+  artifactType: 'plan' | 'diff' | 'report' | 'screenshot' | 'patch' | 'custom';
+  lineageRootId: string;
+  parentArtifactId?: string;
+  version: number;
+  mimeType: string;
+  sha256: string;
+  bytes: number;
+}
+
+/**
+ * A permission profile was applied to the session. The event carries
+ * the profile identity, the resulting per-category posture, and the
+ * apply mode so subscribers and the durable event ledger record an
+ * auditable snapshot of every policy reset. The full per-tool rule
+ * map and the session grants are NOT included — consumers that need
+ * them call `session.permissions.getRules()` /
+ * `session.permissions.getGrants()` directly.
+ */
+export interface PermissionProfileAppliedEvent extends HarnessEventBase {
+  type: 'permission_profile_applied';
+  profileName: string;
+  previousProfileName?: string;
+  mode: 'replace' | 'replace-preserve-denies';
+  /** Snapshot of `permissionRules.categories` after the apply. */
+  categories: Record<string, 'allow' | 'ask' | 'deny'>;
+  /** Number of caller-set per-tool entries preserved (when applicable). */
+  preservedToolDenies: number;
+}
+
 export interface ModeChangedEvent extends HarnessEventBase {
   type: 'mode_changed';
   modeId: string;
@@ -123,12 +175,21 @@ export interface PermissionGrantedEvent extends HarnessEventBase {
   type: 'permission_granted';
   category?: ToolCategory;
   toolName?: string;
+  /**
+   * Identity of the caller this grant applies to. Omitted for
+   * session-level grants. Subscribers and audit consumers need this
+   * to distinguish an actor overlay from a baseline session grant
+   * change — otherwise mirrored permission state can drift.
+   */
+  actor?: HarnessActorIdentity;
 }
 
 export interface PermissionRevokedEvent extends HarnessEventBase {
   type: 'permission_revoked';
   category?: ToolCategory;
   toolName?: string;
+  /** Identity of the caller this revoke applies to. Omitted for session-level revokes. */
+  actor?: HarnessActorIdentity;
 }
 
 export interface PermissionPolicyChangedEvent extends HarnessEventBase {
@@ -254,7 +315,7 @@ export interface ShellOutputEvent extends HarnessEventBase {
  */
 export interface TaskUpdatedEvent extends HarnessEventBase {
   type: 'task_updated';
-  tasks: TaskItem[];
+  tasks: HarnessTodo[];
 }
 
 export type OMBufferedStatus = 'idle' | 'running' | 'complete';
@@ -410,6 +471,87 @@ export interface SuspensionResolvedEvent extends HarnessEventBase {
   type: 'suspension_resolved';
   kind: PendingResume['kind'];
   toolCallId: string;
+}
+
+/**
+ * A sandbox-access request was registered via
+ * `ctx.registerSandboxAccess(...)`. Mirrors `suspension_required`
+ * but carries the structured sandbox-access payload (semantic type,
+ * reason, opaque payload) so the approval UI / route can route on
+ * shape without inspecting pendingResume state.
+ */
+export interface SandboxAccessRequestedEvent extends HarnessEventBase {
+  type: 'sandbox_access_requested';
+  requestId: string;
+  toolCallId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  reason?: string;
+  payload?: JsonValue;
+}
+
+/**
+ * The pending sandbox-access request was resolved via
+ * `session.respondToSandboxAccess({approved, reason?})`. Fires after
+ * the resume CAS commits but before the requesting tool's resume
+ * runs — invalid responses, duplicate receipts, and concurrent
+ * losers do not emit a resolved event, so subscribers can treat
+ * this as an authoritative verdict for audit.
+ */
+export interface SandboxAccessResolvedEvent extends HarnessEventBase {
+  type: 'sandbox_access_resolved';
+  requestId: string;
+  toolCallId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  approved: boolean;
+}
+
+/**
+ * The session-level cancellation primitive ran. Emitted exactly once
+ * per durable `cancelRequest` commit — concurrent retries that lose
+ * the CAS do not re-emit. Carries the durable `requestedAt` /
+ * `reason` / `requestedBy` triple so a downstream auditor can
+ * reconstruct who cancelled what without reading storage.
+ *
+ * Per-queued-item cancellations are reported via
+ * {@link QueueItemCancelledEvent}; this event covers the session-
+ * scope verdict.
+ */
+export interface TaskCancellationRequestedEvent extends HarnessEventBase {
+  type: 'task_cancellation_requested';
+  requestedAt: number;
+  reason?: string;
+  requestedBy?: string;
+}
+
+/**
+ * A queued turn was removed before it could start, either by a
+ * session-wide cancel or by `session.cancelQueuedItem(...)`. Emitted
+ * once per cleared item, in queue order. Outcome is also reflected
+ * by the queue-resolver rejecting the original `session.queue(...)`
+ * promise; subscribers who need the audit row should listen to this
+ * event rather than the rejection.
+ */
+export interface QueueItemCancelledEvent extends HarnessEventBase {
+  type: 'queue_item_cancelled';
+  queuedItemId: string;
+  admissionId?: string;
+  reason?: string;
+}
+
+/**
+ * A queued item was removed by the scheduler because its `deadline`
+ * passed before the drain could start it. The item never ran; its
+ * `queueAdmissionReceipts` entry is marked `failed` in the same CAS
+ * write that drops it from `pendingQueue`. Deadline expiry is a
+ * scheduler-side verdict, distinct from caller cancellation
+ * ({@link QueueItemCancelledEvent}).
+ */
+export interface QueueItemExpiredEvent extends HarnessEventBase {
+  type: 'queue_item_expired';
+  queuedItemId: string;
+  admissionId?: string;
+  /** Epoch ms — the deadline that was missed. */
+  deadline: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -612,10 +754,23 @@ export interface GoalDoneEvent extends HarnessEventBase {
   turnsUsed: number;
 }
 
+/**
+ * Reason discriminator for `goal_paused`. The three `judge_*` variants
+ * replace the legacy catch-all `'judge_failed'`; emitters classify the
+ * failure mode so subscribers can distinguish a recoverable transient
+ * timeout from a malformed-verdict bug or a non-transient provider error.
+ */
+export type GoalPausedReason =
+  | 'requested'
+  | 'budget_exhausted'
+  | 'judge_timeout'
+  | 'judge_provider_error'
+  | 'judge_invalid_verdict';
+
 export interface GoalPausedEvent extends HarnessEventBase {
   type: 'goal_paused';
   goalId: string;
-  reason: 'requested' | 'budget_exhausted' | 'judge_failed';
+  reason: GoalPausedReason;
 }
 
 export interface GoalResumedEvent extends HarnessEventBase {
@@ -659,7 +814,10 @@ export interface WorkspaceActionJournalUnsupportedEvent extends HarnessEventBase
   resourceId: string;
   threadId: string;
   toolName: string;
-  actionKind: 'file' | 'command';
+  /** Mirrors `HarnessWorkspaceActionKind` — kept as a union here to avoid a
+   * cross-module import cycle. Includes the new `'network'` and `'mcp'`
+   * kinds that the classifier now recognizes. */
+  actionKind: 'file' | 'command' | 'network' | 'mcp';
   operation: string;
 }
 
@@ -668,6 +826,9 @@ export type HarnessEvent =
   | SessionClosingEvent
   | SessionClosedEvent
   | SessionEvictedEvent
+  | SessionDeletedEvent
+  | ArtifactCreatedEvent
+  | PermissionProfileAppliedEvent
   | ModeChangedEvent
   | ModelChangedEvent
   | ModelOverrideSetEvent
@@ -702,6 +863,11 @@ export type HarnessEvent =
   | AgentEndEvent
   | SuspensionRequiredEvent
   | SuspensionResolvedEvent
+  | SandboxAccessRequestedEvent
+  | SandboxAccessResolvedEvent
+  | TaskCancellationRequestedEvent
+  | QueueItemCancelledEvent
+  | QueueItemExpiredEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
   | ThreadCreatedEvent
@@ -907,7 +1073,11 @@ export class EventEmitter {
         console.error('[harness/v1] event persistence threw:', err);
       }
     }
-    for (const listener of this.listeners) {
+    // Snapshot before iteration: a listener may call its own `unsubscribe()`
+    // (or another listener's) synchronously, and `unsubscribe()` mutates
+    // `this.listeners` via `splice()`. Iterating the live array would skip
+    // the sibling that occupied the index of the removed listener.
+    for (const listener of [...this.listeners]) {
       try {
         const result = listener(event);
         if (result && typeof (result as Promise<void>).catch === 'function') {
@@ -971,6 +1141,9 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_closing',
   'session_closed',
   'session_evicted',
+  'session_deleted',
+  'artifact_created',
+  'permission_profile_applied',
   'session_pin_overflow',
   'mode_changed',
   'model_changed',
@@ -1003,6 +1176,11 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_end',
   'suspension_required',
   'suspension_resolved',
+  'sandbox_access_requested',
+  'sandbox_access_resolved',
+  'task_cancellation_requested',
+  'queue_item_cancelled',
+  'queue_item_expired',
   'queue_item_started',
   'queue_item_replayed',
   'queue_item_failed',
@@ -1047,6 +1225,20 @@ const RESERVED_EVENT_PREFIXES: readonly string[] = [
  * event type or omits the required dotted prefix. Custom events must follow
  * `<namespace>.<rest>` per spec §10.3.
  */
+/**
+ * Predicate matching `assertCustomEventType` — true iff `type` is a
+ * valid custom event type (dotted, non-reserved). Used by helpers that
+ * need to branch on custom vs built-in events without relying on the
+ * brittle `type.includes('.')` heuristic.
+ */
+export function isCustomEventType(type: string): boolean {
+  if (RESERVED_EVENT_TYPES.has(type)) return false;
+  for (const prefix of RESERVED_EVENT_PREFIXES) {
+    if (type.startsWith(prefix)) return false;
+  }
+  return type.includes('.');
+}
+
 export function assertCustomEventType(type: string): void {
   if (RESERVED_EVENT_TYPES.has(type)) {
     throw new HarnessValidationError('event.type', `"${type}" is a reserved harness event type`);

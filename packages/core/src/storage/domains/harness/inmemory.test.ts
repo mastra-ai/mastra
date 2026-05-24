@@ -309,7 +309,7 @@ describe('InMemoryHarness admission storage contract', () => {
     });
   });
 
-  it('persists session events for replay by epoch and sequence and refuses ambiguous epochs', async () => {
+  it('persists session events for replay by epoch and sequence and reports the latest epoch', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
     await storage.saveSession(sampleSession({ harnessName: 'default' }), { ownerId: 'h-1', ifVersion: 0 });
 
@@ -377,7 +377,7 @@ describe('InMemoryHarness admission storage contract', () => {
         resourceId: 'resource-1',
         threadId: 'thread-1',
       }),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ epoch: 'other', oldestSequence: 0, newestSequence: 0 });
   });
 
   it('hard-deletes all session event replay rows for the session id', async () => {
@@ -2531,6 +2531,248 @@ describe('InMemoryHarness channel diagnostics', () => {
         limit: 0,
       }),
     ).resolves.toEqual({ inbox: [], actionTokens: [], actionReceipts: [], outbox: [] });
+  });
+});
+
+describe('InMemoryHarness artifact ledger', () => {
+  async function setup() {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'session-1' }), { ownerId: 'h-1', ifVersion: 0 });
+    const attachment = await storage.saveAttachment({
+      sessionId: 'session-1',
+      attachmentId: 'att-1',
+      name: 'diff.patch',
+      mimeType: 'text/x-diff',
+      source: 'inline',
+      data: new TextEncoder().encode('--- a/x\n+++ b/x\n'),
+    });
+    return { storage, attachment };
+  }
+
+  it('declares harnessArtifacts capability when adapter overrides the four methods', () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    expect(storage.capabilities().harnessArtifacts).toBe(true);
+  });
+
+  it('writeArtifact creates a v1 record with the attachment hash + mime + bytes', async () => {
+    const { storage, attachment } = await setup();
+    const record = await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'artifact-1',
+      artifactType: 'diff',
+      attachmentId: attachment.attachmentId,
+      createdBy: { agentId: 'parent-agent' },
+    });
+    expect(record).toMatchObject({
+      artifactId: 'artifact-1',
+      lineageRootId: 'artifact-1',
+      version: 1,
+      mimeType: 'text/x-diff',
+      sha256: attachment.sha256,
+      bytes: attachment.bytes,
+      artifactType: 'diff',
+    });
+    expect(record.parentArtifactId).toBeUndefined();
+  });
+
+  it('writeArtifact with parentArtifactId increments version and carries lineageRootId', async () => {
+    const { storage, attachment } = await setup();
+    const v1 = await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'artifact-1',
+      artifactType: 'plan',
+      attachmentId: attachment.attachmentId,
+      createdBy: {},
+    });
+    const v2 = await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'artifact-2',
+      artifactType: 'plan',
+      attachmentId: attachment.attachmentId,
+      parentArtifactId: v1.artifactId,
+      createdBy: {},
+    });
+    expect(v2).toMatchObject({
+      artifactId: 'artifact-2',
+      lineageRootId: 'artifact-1',
+      parentArtifactId: 'artifact-1',
+      version: 2,
+    });
+  });
+
+  it('writeArtifact rejects a duplicate artifactId', async () => {
+    const { storage, attachment } = await setup();
+    await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'artifact-1',
+      artifactType: 'diff',
+      attachmentId: attachment.attachmentId,
+      createdBy: {},
+    });
+    await expect(
+      storage.writeArtifact({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        artifactId: 'artifact-1',
+        artifactType: 'diff',
+        attachmentId: attachment.attachmentId,
+        createdBy: {},
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessStorageArtifactDuplicateIdError' });
+  });
+
+  it('writeArtifact rejects when the attachment is missing on the session', async () => {
+    const { storage } = await setup();
+    await expect(
+      storage.writeArtifact({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        artifactId: 'artifact-1',
+        artifactType: 'diff',
+        attachmentId: 'never-uploaded',
+        createdBy: {},
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessStorageArtifactAttachmentMissingError' });
+  });
+
+  it('writeArtifact rejects when the parent does not exist', async () => {
+    const { storage, attachment } = await setup();
+    await expect(
+      storage.writeArtifact({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        artifactId: 'artifact-2',
+        artifactType: 'diff',
+        attachmentId: attachment.attachmentId,
+        parentArtifactId: 'never-written',
+        createdBy: {},
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessStorageArtifactLineageMismatchError', reason: 'parent_missing' });
+  });
+
+  it('listArtifacts filters by artifactType', async () => {
+    const { storage, attachment } = await setup();
+    await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'a',
+      artifactType: 'plan',
+      attachmentId: attachment.attachmentId,
+      createdBy: {},
+    });
+    await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'b',
+      artifactType: 'diff',
+      attachmentId: attachment.attachmentId,
+      createdBy: {},
+    });
+    const plans = await storage.listArtifacts({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      artifactType: 'plan',
+      limit: 10,
+    });
+    expect(plans).toHaveLength(1);
+    expect(plans[0]!.artifactId).toBe('a');
+  });
+
+  it('listArtifactVersions walks the lineage in version order', async () => {
+    const { storage, attachment } = await setup();
+    const v1 = await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'r1',
+      artifactType: 'plan',
+      attachmentId: attachment.attachmentId,
+      createdBy: {},
+    });
+    const v2 = await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'r2',
+      artifactType: 'plan',
+      attachmentId: attachment.attachmentId,
+      parentArtifactId: v1.artifactId,
+      createdBy: {},
+    });
+    const v3 = await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'r3',
+      artifactType: 'plan',
+      attachmentId: attachment.attachmentId,
+      parentArtifactId: v2.artifactId,
+      createdBy: {},
+    });
+    // Resolves through ANY id in the lineage.
+    const versions = await storage.listArtifactVersions({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      artifactId: v2.artifactId,
+    });
+    expect(versions.map(v => v.artifactId)).toEqual([v1.artifactId, v2.artifactId, v3.artifactId]);
+    expect(versions.map(v => v.version)).toEqual([1, 2, 3]);
+  });
+
+  it('loadArtifact returns null when the resource fence does not match', async () => {
+    const { storage, attachment } = await setup();
+    await storage.writeArtifact({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      artifactId: 'a',
+      artifactType: 'diff',
+      attachmentId: attachment.attachmentId,
+      createdBy: {},
+    });
+    await expect(
+      storage.loadArtifact({
+        sessionId: 'session-1',
+        resourceId: 'other-resource',
+        artifactId: 'a',
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('capability-false adapter (base no-op overrides) throws HarnessStorageArtifactsUnsupportedError', async () => {
+    const { HarnessStorage } = await import('./base');
+    class NoArtifactsHarness extends InMemoryHarness {
+      override writeArtifact = HarnessStorage.prototype.writeArtifact;
+      override loadArtifact = HarnessStorage.prototype.loadArtifact;
+      override listArtifacts = HarnessStorage.prototype.listArtifacts;
+      override listArtifactVersions = HarnessStorage.prototype.listArtifactVersions;
+    }
+    const storage = new NoArtifactsHarness({ db: new InMemoryDB() });
+    expect(storage.capabilities().harnessArtifacts).toBe(false);
+    await expect(
+      storage.writeArtifact({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        artifactId: 'a',
+        artifactType: 'diff',
+        attachmentId: 'x',
+        createdBy: {},
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessStorageArtifactsUnsupportedError' });
   });
 });
 

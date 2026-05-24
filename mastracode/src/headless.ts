@@ -12,6 +12,11 @@ import { createMastraCode } from './index.js';
 
 const VALID_MODES = ['build', 'plan', 'fast'] as const;
 const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh'] as const;
+type HarnessV1ResponseSurface<TState extends Record<string, unknown>> = Harness<TState> & {
+  respondToSandboxAccess: (opts: { questionId?: string; approved: boolean }) => Promise<void>;
+  respondToToolApproval: (opts: { toolCallId?: string; decision: 'approve' }) => void;
+  respondToToolSuspension: (opts: { toolCallId?: string; resumeData: unknown }) => Promise<void>;
+};
 
 export interface HeadlessArgs {
   prompt?: string;
@@ -206,12 +211,29 @@ function autoResolve<TState extends Record<string, unknown>>(
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
     case 'sandbox_access_request': {
-      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
+      if ((event as { responseKind?: string }).responseKind === 'sandbox-access') {
+        void (harness as HarnessV1ResponseSurface<TState>).respondToSandboxAccess({
+          questionId: event.questionId,
+          approved: true,
+        });
+      } else {
+        harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
+      }
       return { resolved: true, label: `[auto-approved sandbox] ${event.path}`, json: { ...event, autoApproved: true } };
     }
     case 'tool_approval_required': {
-      harness.respondToToolApproval({ decision: 'approve' });
+      (harness as HarnessV1ResponseSurface<TState>).respondToToolApproval({
+        toolCallId: event.toolCallId,
+        decision: 'approve',
+      });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
+    }
+    case 'tool_suspended': {
+      void (harness as HarnessV1ResponseSurface<TState>).respondToToolSuspension({
+        toolCallId: event.toolCallId,
+        resumeData: {},
+      });
+      return { resolved: true, label: `[auto-resumed] ${event.toolName}`, json: { ...event, autoResumed: true } };
     }
     case 'ask_question': {
       harness.respondToQuestion({

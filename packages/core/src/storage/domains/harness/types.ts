@@ -108,6 +108,19 @@ export interface QueuedItem {
   source?: 'user' | 'goal';
   /** Set when `source === 'goal'`. Identifies which goal produced the item. */
   goalId?: string;
+  /**
+   * Scheduling priority. Higher values drain first. Items with the same
+   * priority drain in FIFO order (lowest `enqueuedAt` wins). Defaults to
+   * 0 — equivalent to the legacy FIFO contract.
+   */
+  priority?: number;
+  /**
+   * Absolute deadline (epoch ms) past which the item must not start.
+   * The drain emits `queue_item_expired`, removes the item, and marks
+   * its `queueAdmissionReceipts` entry `failed` in the same CAS write.
+   * Omit to opt out of deadline checks.
+   */
+  deadline?: number;
 }
 
 /**
@@ -124,7 +137,7 @@ export interface QueuedItem {
  * See HARNESS_V1_SPEC.md §5.1 ("Persistence shapes — `pendingResume`").
  */
 export interface PendingResume {
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   /** Stable pending interaction id used by inbox/route callers. */
   itemId?: string;
   runId: string;
@@ -167,6 +180,26 @@ export interface PendingResume {
     // plan-approval
     title?: string;
     plan?: string;
+    // sandbox-access
+    sandboxAccess?: {
+      /**
+       * Semantic shape of the requested access. Aligned with
+       * `WorkspacePolicyActionKind` so transport adapters that
+       * already render workspace policy verdicts can reuse the
+       * same kind taxonomy. `'custom'` covers caller-defined
+       * sandbox surfaces (e.g. a specialized provider request).
+       */
+      semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+      /** Operator-facing rationale shown in the approval UI. */
+      reason?: string;
+      /**
+       * Opaque payload — caller-defined shape. The harness does not
+       * interpret these fields; the UI / approver routes on
+       * `semanticType` and renders `payload` according to its own
+       * conventions.
+       */
+      payload?: JsonValue;
+    };
   };
   /**
    * Plan-approval only. Frozen at registration from the submitting mode's
@@ -193,6 +226,27 @@ export interface GoalJudgeDecision {
 }
 
 /**
+ * Discriminated failure modes for goal-judge invocations. Persisted on
+ * `GoalState.lastFailure` so a recovered or replayed session can introspect
+ * what went wrong without re-running the judge.
+ *
+ * - `timeout` — the judge model invocation timed out (AbortError or
+ *   network-class timeout message). Retried with backoff before pausing.
+ * - `provider_error` — non-transient provider/API error. Not retried.
+ * - `invalid_verdict` — judge returned output that failed schema
+ *   validation. Never falls through as `'continue'`.
+ * - `max_turns` — the goal's `maxTurns` budget was exhausted while still
+ *   `decision === 'continue'`. The judge itself succeeded.
+ */
+export type GoalJudgeFailureKind = 'timeout' | 'provider_error' | 'invalid_verdict' | 'max_turns';
+
+export interface GoalJudgeFailure {
+  kind: GoalJudgeFailureKind;
+  message?: string;
+  failedAt: number;
+}
+
+/**
  * Active goal state. Set via `session.setGoal(...)`, evaluated by the judge
  * model after each assistant turn. See HARNESS_V1_SPEC.md §4.7.
  */
@@ -206,6 +260,10 @@ export interface GoalState {
   createdAt: number;
   /** Most recent judge verdict, persisted so subscribers can read it. */
   lastDecision?: GoalJudgeDecision;
+  /** Most recent judge-loop failure, persisted so recovered sessions can
+   * introspect what went wrong. Cleared by `setGoal` and on a successful
+   * judge verdict. */
+  lastFailure?: GoalJudgeFailure;
 }
 
 /**
@@ -303,6 +361,25 @@ export interface SessionRecord {
   // Permissions
   permissionRules: PermissionRules;
   sessionGrants: SessionGrants;
+  /**
+   * Per-actor grant overlays. Keys are stable actor identities
+   * (`${kind}:${id}` — see `HarnessActorIdentity` and `actorKey`).
+   * Values overlay the session-level `sessionGrants` for that specific
+   * caller. A grant on `'channel:slack:T1:C1:U1'` only applies when the
+   * request context resolves to that exact actor.
+   *
+   * Undefined on legacy records — the resolver falls back to
+   * `sessionGrants` for every caller, matching pre-actor behavior.
+   */
+  actorGrants?: Record<string, SessionGrants>;
+  /**
+   * Name of the last permission profile applied to this session, if
+   * any. Used by audit / replay consumers and by the
+   * `permission_profile_applied` event payload (`previousProfileName`).
+   * Stored as an opaque string so legacy records (no profile applied)
+   * load as `undefined`.
+   */
+  appliedPermissionProfile?: string;
 
   // Counters
   tokenUsage: TokenUsage;
@@ -343,6 +420,21 @@ export interface SessionRecord {
   ownerId?: string;
   /** Epoch ms — when the current lease TTLs out. */
   leaseExpiresAt?: number;
+  /**
+   * Durable marker set when `Session.cancel(...)` runs. Once present, the
+   * heartbeat skips lease renewal for this session and any in-flight resume
+   * refuses to mark `pendingResume.resumedAt`. The marker survives process
+   * restart so a crash mid-cancel does not silently resurrect the work.
+   *
+   * Idempotent — the first cancel wins; subsequent calls preserve the
+   * original `requestedAt` and `reason`.
+   */
+  cancelRequest?: {
+    requestedAt: number;
+    reason?: string;
+    /** Free-form actor label (e.g. an A2A task id, server route id). */
+    requestedBy?: string;
+  };
 }
 
 /**
@@ -958,12 +1050,28 @@ export interface OperationAdmissionTombstone {
   expiresAt: number;
 }
 
-export type OperationAdmissionEvidence =
+/**
+ * Narrow union of the five admission/result/tombstone shapes the
+ * storage layer hands back from `resolveOperationAdmissionEvidence`.
+ * Scoped intentionally — this type does NOT cover the broader work
+ * proof a Harness v1 session accumulates (workspace journal entries,
+ * inbox response receipts, …). Use `HarnessEvidence` from
+ * `@mastra/core/harness/v1` when you need the wide canonical union.
+ */
+export type HarnessOperationAdmissionEvidence =
   | AgentSignalAccepted
   | AgentSignalResultEvidence
   | AgentSignalResultStatus
   | QueueAdmissionReceipt
   | OperationAdmissionTombstone;
+
+/**
+ * @deprecated Renamed to {@link HarnessOperationAdmissionEvidence} for
+ * scope clarity. The new alias `HarnessEvidence` (in
+ * `@mastra/core/harness/v1`) covers the broader work-evidence union;
+ * this name is admission-only and is preserved for back-compat.
+ */
+export type OperationAdmissionEvidence = HarnessOperationAdmissionEvidence;
 
 // ---------------------------------------------------------------------------
 // Attachment metadata
@@ -999,6 +1107,102 @@ export interface AttachmentRecord {
   object?: AttachmentObjectPointer;
   /** Epoch ms. */
   createdAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Artifacts.
+//
+// Artifacts are immutable, versioned work products produced during a
+// Harness v1 session — plans, diffs, test reports, screenshots, patches,
+// review output. Each record is a metadata row whose `attachmentId`
+// references the actual bytes in the existing attachment / blob store
+// (re-using its sha256 + mimeType + bytes invariants). Lineage is
+// captured via `lineageRootId` + `parentArtifactId` + `version`, where
+// `version` is computed storage-side under CAS so concurrent writers
+// against the same parent can never claim the same version.
+//
+// Foreign keys to `taskId` / `runId` are deliberately omitted from this
+// schema — the canonical Task / Run contracts ship type-only first.
+// Consumers that need to associate artifacts with a task or run today
+// use the opaque `metadata` map.
+// ---------------------------------------------------------------------------
+
+export type HarnessArtifactType = 'plan' | 'diff' | 'report' | 'screenshot' | 'patch' | 'custom';
+
+export interface HarnessArtifactCreator {
+  /** Agent id that produced the artifact, if known. */
+  agentId?: string;
+  /** Subagent session id when the artifact came from a child run. */
+  subagentSessionId?: string;
+  /** Tool-call handle the artifact was emitted from (e.g. `spawn_subagent`). */
+  toolCallId?: string;
+}
+
+export interface HarnessArtifactRecord {
+  harnessName: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  /** Stable id for this specific version. */
+  artifactId: string;
+  /** Id of the root artifact in the lineage (`=== artifactId` for v1). */
+  lineageRootId: string;
+  /** Id of the immediate parent version (undefined for v1). */
+  parentArtifactId?: string;
+  /** 1-indexed, monotonic within a `lineageRootId`. */
+  version: number;
+  artifactType: HarnessArtifactType;
+  /** Reference to the attachment that holds the bytes. */
+  attachmentId: string;
+  /** Copied from the referenced attachment record. */
+  mimeType: string;
+  bytes: number;
+  sha256: string;
+  /** Optional JSON-schema URI describing structured artifacts. */
+  schemaUri?: string;
+  createdAt: number;
+  createdBy: HarnessArtifactCreator;
+  /** Opaque caller-supplied metadata. Use for taskId / runId / etc. */
+  metadata?: { [key: string]: JsonValue };
+}
+
+export interface WriteArtifactInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  artifactId: string;
+  artifactType: HarnessArtifactType;
+  /** Must reference an attachment already saved on `sessionId`. */
+  attachmentId: string;
+  /**
+   * When set, this write produces a new version off the named parent.
+   * The parent must live in the same `(sessionId, resourceId)` scope.
+   * Storage computes `version = parent.version + 1` under CAS and
+   * inherits `lineageRootId`.
+   */
+  parentArtifactId?: string;
+  schemaUri?: string;
+  createdBy: HarnessArtifactCreator;
+  metadata?: HarnessArtifactRecord['metadata'];
+}
+
+export interface ListArtifactsInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  artifactType?: HarnessArtifactType;
+  limit: number;
+  /** Stable `(createdAt, artifactId)` cursor from a prior page. */
+  cursor?: string;
+}
+
+export interface ListArtifactVersionsInput {
+  harnessName?: string;
+  sessionId: string;
+  resourceId: string;
+  /** May be any artifact id in the lineage; storage resolves to root. */
+  artifactId: string;
 }
 
 // ---------------------------------------------------------------------------

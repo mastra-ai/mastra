@@ -45,6 +45,8 @@ import {
 } from '../../storage/domains/harness';
 import type {
   GoalJudgeDecision,
+  GoalJudgeFailure,
+  GoalJudgeFailureKind,
   GoalState,
   AgentSignalResultEvidence,
   AgentSignalResultStatus,
@@ -66,20 +68,26 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
 import type { Workspace } from '../../workspace';
+import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '../tools';
 import type { HarnessMessage } from '../types';
 
 import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID, askUser, submitPlan } from './builtin-tools';
+import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './builtin-tools/spawn-subagent';
 import {
   HarnessAdmissionConflictError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
+  HarnessEventReplayUnsupportedError,
   HarnessInboxItemNotFoundError,
+  HarnessPermissionProfileNotFoundError,
   HarnessInboxResponseConflictError,
+  HarnessGoalJudgeFailedError,
   HarnessOverrideConflictError,
   HarnessQueueFullError,
+  HarnessSessionCancelledError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
   HarnessSessionDeletedError,
@@ -92,6 +100,7 @@ import {
 import { EventEmitter, parseHarnessEventId, projectHarnessPublicError, snapshotHarnessEventForJson } from './events';
 import type {
   EmitInput,
+  GoalPausedReason,
   HarnessEvent,
   HarnessEventListener,
   HarnessEventUnsubscribe,
@@ -104,13 +113,15 @@ import type {
   TaskUpdatedEvent,
 } from './events';
 import type { Harness } from './harness';
-import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagent-tool';
+import { HARNESS_PERMISSION_PROFILES, grantsFromProfile, rulesFromProfile } from './permission-profiles';
+import type { HarnessPermissionProfileName } from './permission-profiles';
 import type {
   AgentResult,
   AgentStream,
   AttachmentRef,
   GoalOptions,
   HarnessActionCatalogEntry,
+  HarnessActorIdentity,
   HarnessActionCatalogListOptions,
   HarnessActionCatalogSourceKind,
   HarnessMcpServerDescriptor,
@@ -134,6 +145,7 @@ import type {
   QueueOptions,
   RegisterPlanApprovalParams,
   RegisterQuestionParams,
+  RegisterSandboxAccessParams,
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionSignalOptions,
@@ -141,8 +153,11 @@ import type {
   SetStateOptions,
   ToolCategory,
 } from './types';
-import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace-actions';
-import { classifyHarnessWorkspaceToolAction } from './workspace-actions';
+import { actorKey } from './types';
+import type { HarnessWorkspaceToolAction, HarnessWorkspaceToolNameConfig } from './workspace/actions';
+import { classifyHarnessWorkspaceToolAction } from './workspace/actions';
+import type { WorkspaceFileOperation, WorkspacePolicyAction } from './workspace/policy';
+import { evaluateWorkspacePolicy } from './workspace/policy';
 
 type MessageAdmissionIdentity = {
   signalId: string;
@@ -199,6 +214,10 @@ const QUEUE_POST_RUN_FINALIZATION_RETRY_MS = 1_000;
 const ACTION_CATALOG_DEFAULT_LIMIT = 100;
 const ACTION_CATALOG_MAX_LIMIT = 500;
 const ACTION_CATALOG_MCP_LIST_TIMEOUT_MS = 2_000;
+/** Upper bound for `session.extendLease({ ttlMs })`. 24h, large enough for
+ * legitimate long-running tools while preventing accidental "extend forever"
+ * misuse that would defeat takeover safety. */
+const MAX_LEASE_EXTENSION_MS = 24 * 60 * 60 * 1_000;
 const ACTION_CATALOG_MCP_FAILURE_CACHE_MS = 5_000;
 const ACTION_CATALOG_SOURCE_KINDS: readonly HarnessActionCatalogSourceKind[] = ['skill', 'mcp-tool'];
 const ACTION_CATALOG_SOURCE_ORDER: Record<HarnessActionCatalogSourceKind, number> = {
@@ -214,6 +233,132 @@ const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'additionalProperties',
 ]);
 const RESERVED_MCP_SERVER_KEYS = new Set([...Object.getOwnPropertyNames(Object.prototype), '__proto__']);
+
+/**
+ * Map an agent-side `finishReason` to the canonical `agent_end.reason`
+ * shape consumed by subscribers (stream-failure semantics).
+ *
+ * Three-way only — `'suspended' | 'error' | 'complete'`. This is the
+ * deliberately lossy projection over the agent's `finishReason` (which
+ * has many granular values like `'stop' | 'tool-calls' | 'length' | ...`).
+ * Any future need for richer downstream taxonomy (timeout vs provider
+ * error vs aborted) belongs on a new `agent_end` payload field or a
+ * sibling event shape, NOT inside this helper. The helper centralizes
+ * the projection so every emit site reports `error` consistently —
+ * earlier paths silently collapsed `finishReason === 'error'` into
+ * `'complete'`, hiding failure from durable replay and remote stream
+ * consumers (TUI dispatch, headless exit, A2A `tasks/resubscribe`).
+ */
+/**
+ * Immutable update of the `SessionRecord.actorGrants` map. Returns a
+ * fresh map with the named actor's grants augmented to include
+ * `category`. Caller-supplied `prev` is never mutated.
+ */
+function actorGrantsWithCategoryGranted(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  category: string,
+): Record<string, SessionGrants> {
+  const existing = prev?.[key];
+  const categories = existing?.categories ?? [];
+  if (categories.includes(category)) return { ...(prev ?? {}) };
+  return {
+    ...(prev ?? {}),
+    [key]: {
+      categories: [...categories, category],
+      tools: [...(existing?.tools ?? [])],
+    },
+  };
+}
+
+function actorGrantsWithToolGranted(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  toolName: string,
+): Record<string, SessionGrants> {
+  const existing = prev?.[key];
+  const tools = existing?.tools ?? [];
+  if (tools.includes(toolName)) return { ...(prev ?? {}) };
+  return {
+    ...(prev ?? {}),
+    [key]: {
+      categories: [...(existing?.categories ?? [])],
+      tools: [...tools, toolName],
+    },
+  };
+}
+
+function actorGrantsWithCategoryRevoked(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  category: string,
+): Record<string, SessionGrants> | undefined {
+  const existing = prev?.[key];
+  if (existing === undefined) return prev;
+  const nextCategories = existing.categories.filter(c => c !== category);
+  const next = { ...(prev ?? {}) };
+  if (nextCategories.length === 0 && existing.tools.length === 0) {
+    delete next[key];
+    return Object.keys(next).length === 0 ? undefined : next;
+  }
+  next[key] = { categories: nextCategories, tools: [...existing.tools] };
+  return next;
+}
+
+function actorGrantsWithToolRevoked(
+  prev: Record<string, SessionGrants> | undefined,
+  key: string,
+  toolName: string,
+): Record<string, SessionGrants> | undefined {
+  const existing = prev?.[key];
+  if (existing === undefined) return prev;
+  const nextTools = existing.tools.filter(t => t !== toolName);
+  const next = { ...(prev ?? {}) };
+  if (nextTools.length === 0 && existing.categories.length === 0) {
+    delete next[key];
+    return Object.keys(next).length === 0 ? undefined : next;
+  }
+  next[key] = { categories: [...existing.categories], tools: nextTools };
+  return next;
+}
+
+/**
+ * Build a `HarnessActorIdentity` from the persisted channel context
+ * recorded at session admission. The id composite is
+ * `${provider}:${tenant?}:${channel?}:${platformUserId}` so the same
+ * Slack user on two different workspaces / providers resolves to
+ * distinct actor keys. Returns `undefined` when the channel context
+ * lacks an actor or any required field — sessions without channel
+ * identity are session-level only.
+ */
+export function _deriveActorFromChannelForTest(
+  channel: HarnessRequestContext['channel'] | undefined,
+): HarnessActorIdentity | undefined {
+  return deriveActorFromChannel(channel);
+}
+
+function deriveActorFromChannel(
+  channel: HarnessRequestContext['channel'] | undefined,
+): HarnessActorIdentity | undefined {
+  if (!channel) return undefined;
+  const platformUserId = channel.actor?.platformUserId;
+  if (platformUserId === undefined || platformUserId.length === 0) return undefined;
+  const provider = channel.providerId;
+  if (provider === undefined || provider.length === 0) return undefined;
+  const tenant = channel.externalTenantId ?? '';
+  const channelId = channel.externalChannelId ?? '';
+  return {
+    kind: 'channel',
+    id: `${provider}:${tenant}:${channelId}:${platformUserId}`,
+    ...(channel.actor?.displayName ? { displayName: channel.actor.displayName } : {}),
+  };
+}
+
+function mapFinishToAgentEndReason(finishReason: string | undefined): 'complete' | 'suspended' | 'error' {
+  if (finishReason === 'suspended') return 'suspended';
+  if (finishReason === 'error') return 'error';
+  return 'complete';
+}
 
 function cloneMcpCatalogValue(value: unknown): unknown | undefined {
   if (value === undefined) return undefined;
@@ -415,6 +560,30 @@ const GoalJudgeSchema = z.object({
 /** Per-message cap on judge-context strings to keep judge latency bounded. */
 const JUDGE_TRUNCATE_LIMIT = 4000;
 
+/** Total judge-call attempts (1 initial + 1 retry on timeout-class errors). */
+const GOAL_JUDGE_MAX_ATTEMPTS = 2;
+/** Linear backoff between judge-call attempts. Small on purpose — the goal
+ * loop already runs per assistant turn; an aggressive retry just delays
+ * the operator-visible `goal_paused` signal without changing the outcome. */
+const GOAL_JUDGE_RETRY_BACKOFF_MS = 1_000;
+
+/**
+ * Map a judge-failure {@link GoalJudgeFailureKind} to the `goal_paused`
+ * event reason emitted when the loop gives up. The taxonomy lets
+ * subscribers distinguish recoverable transient timeouts from non-
+ * transient provider errors and malformed-verdict bugs.
+ */
+const JUDGE_FAILURE_TO_PAUSED_REASON: Record<GoalJudgeFailureKind, GoalPausedReason> = {
+  timeout: 'judge_timeout',
+  provider_error: 'judge_provider_error',
+  invalid_verdict: 'judge_invalid_verdict',
+  // `max_turns` reaches the budget-exhausted branch directly, not the
+  // failure-classification path. Mapped here for completeness so future
+  // call sites that want to re-emit a paused event for budget exhaustion
+  // pick up the existing `budget_exhausted` reason.
+  max_turns: 'budget_exhausted',
+};
+
 // ---------------------------------------------------------------------------
 // Permission helpers (§4.2e). Tiny shape validators kept module-scoped so the
 // session methods stay focused on persistence + event emission.
@@ -451,6 +620,12 @@ function assertPolicy(method: string, value: unknown): asserts value is Permissi
   if (typeof value !== 'string' || !PERMISSION_POLICIES.includes(value as PermissionPolicy)) {
     throw new HarnessValidationError(method, `policy must be one of ${PERMISSION_POLICIES.join(' | ')}`);
   }
+}
+
+function strongestPermissionPolicy(policies: readonly PermissionPolicy[]): PermissionPolicy {
+  if (policies.includes('deny')) return 'deny';
+  if (policies.includes('ask')) return 'ask';
+  return 'allow';
 }
 
 function isStorageAttachmentUnavailableError(err: unknown): err is HarnessStorageAttachmentUnavailableError {
@@ -681,8 +856,46 @@ export class Session {
   private readonly _activeTools = new Map<string, ActiveToolState>();
   private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
-  /** Cumulative usage for the session's thread. Updated on `agent_end`. */
+  /**
+   * Cumulative usage for the session's thread. Live counter, single source of
+   * truth in-process. Seeded from `internals.record.tokenUsage` in the
+   * constructor so reopens carry the persisted aggregate; flushed back into
+   * `_record.tokenUsage` on every `_flushUpdate` so the next reopen sees the
+   * latest value.
+   */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  /**
+   * In-memory registry of background sandbox processes spawned during this
+   * session that can outlive their owning turn (e.g. `background: true`
+   * shell commands or `detached: true` sandbox processes). Populated by
+   * tools via the `registerBackgroundProcess` slot method (§6.1) and reaped
+   * when the session is closed, evicted, or deleted. Foreground processes
+   * are NOT tracked here — their lifetime is already bounded by the turn's
+   * `abortSignal` via the sandbox process manager.
+   *
+   * Keyed by a per-registration `Symbol` rather than `handle.pid`: OS PIDs
+   * are reused after process exit, so a pid-keyed table could let a stale
+   * `unregister` callback delete a newer registration that happens to
+   * reuse the same pid, leaving the new process unreaped on lifecycle.
+   */
+  private readonly _backgroundProcesses = new Map<symbol, { handle: ProcessHandle; unregister: () => void }>();
+
+  /**
+   * Deadline for a pending lease extension, in `Date.now()` ms. Set by
+   * `extendLease(...)` and consulted by `_getEffectiveLeaseTtlMs` so the
+   * periodic heartbeat does NOT renew with a shorter default TTL while an
+   * extension is still active. Cleared on terminal lifecycle transitions.
+   */
+  private _leaseExtensionDeadline?: number;
+
+  /**
+   * In-process serialization for lease writes (`storage.renewSessionLease`).
+   * Both `extendLease()` and the harness's per-session heartbeat arm queue
+   * their renew on this chain so two concurrent renewals cannot interleave
+   * and let a default-TTL heartbeat overwrite a longer extension. Mirrors
+   * the `_flushChain` idiom used elsewhere in this class.
+   */
+  private _leaseRenewalChain: Promise<void> = Promise.resolve();
   /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
    * rejected so callers don't hang on a dead session.
@@ -790,6 +1003,19 @@ export class Session {
     this.createdAt = internals.record.createdAt;
 
     this._record = internals.record;
+    // Seed the live token-usage counter from the persisted aggregate so reopens
+    // (after eviction / process restart) continue accumulating instead of
+    // restarting at zero. Coerce each field through `?? 0` because rows written
+    // before tokenUsage durability shipped may carry partially-populated objects;
+    // a missing component would otherwise poison `+=` into `NaN`.
+    {
+      const persisted = internals.record.tokenUsage as Partial<TokenUsage> | undefined;
+      this._tokenUsage = {
+        promptTokens: persisted?.promptTokens ?? 0,
+        completionTokens: persisted?.completionTokens ?? 0,
+        totalTokens: persisted?.totalTokens ?? 0,
+      };
+    }
     if (this._record.closedAt !== undefined) {
       this._state = 'closed';
     } else if (this._record.closingAt !== undefined) {
@@ -856,14 +1082,28 @@ export class Session {
 
   async getEventReplayState() {
     this._assertLive('getEventReplayState()');
+    if (!this._storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Session.getEventReplayState()');
+    }
     await this._flushEventPersistence();
     const record = this.getRecord();
-    return this._storage.getSessionEventReplayState({
-      harnessName: record.harnessName,
-      sessionId: record.id,
-      resourceId: record.resourceId,
-      threadId: record.threadId,
-    });
+    try {
+      return await this._storage.getSessionEventReplayState({
+        harnessName: record.harnessName,
+        sessionId: record.id,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+      });
+    } catch (err) {
+      // Defense-in-depth: a misdeclared adapter that claims
+      // `sessionEventReplay: true` but still throws the storage-internal
+      // unsupported error on a specific call shape must surface as the
+      // typed public error, not leak the storage internal.
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Session.getEventReplayState()');
+      }
+      throw err;
+    }
   }
 
   async listEventsAfter(opts: { epoch: string; afterSequence: number; limit: number }) {
@@ -871,26 +1111,41 @@ export class Session {
     if (opts.epoch.length === 0) {
       throw new HarnessValidationError('listEventsAfter().epoch', 'epoch must be a non-empty string');
     }
-    if (!Number.isSafeInteger(opts.afterSequence) || opts.afterSequence < 0) {
+    // afterSequence is exclusive (`sequence > afterSequence`), so the lower
+    // bound `-1` means "from the first event in the epoch" — sequences are
+    // minted starting at 0 (see `EventEmitter` constructor + `formatHarnessEventId`).
+    // Reject anything below -1 (no defined meaning) and non-safe-integers.
+    if (!Number.isSafeInteger(opts.afterSequence) || opts.afterSequence < -1) {
       throw new HarnessValidationError(
         'listEventsAfter().afterSequence',
-        'afterSequence must be a non-negative safe integer',
+        'afterSequence must be a safe integer >= -1 (use -1 to replay from the first event)',
       );
     }
     if (!Number.isSafeInteger(opts.limit) || opts.limit < 1) {
       throw new HarnessValidationError('listEventsAfter().limit', 'limit must be a positive safe integer');
     }
+    if (!this._storage.capabilities().sessionEventReplay) {
+      throw new HarnessEventReplayUnsupportedError('Session.listEventsAfter()');
+    }
     await this._flushEventPersistence();
     const record = this.getRecord();
-    return this._storage.listSessionEvents({
-      harnessName: record.harnessName,
-      sessionId: record.id,
-      resourceId: record.resourceId,
-      threadId: record.threadId,
-      epoch: opts.epoch,
-      afterSequence: opts.afterSequence,
-      limit: opts.limit,
-    });
+    try {
+      return await this._storage.listSessionEvents({
+        harnessName: record.harnessName,
+        sessionId: record.id,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+        epoch: opts.epoch,
+        afterSequence: opts.afterSequence,
+        limit: opts.limit,
+      });
+    } catch (err) {
+      // Defense-in-depth: see `getEventReplayState()` above.
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) {
+        throw new HarnessEventReplayUnsupportedError('Session.listEventsAfter()');
+      }
+      throw err;
+    }
   }
 
   /** @internal — used by the Harness to publish events on this session's emitter. */
@@ -908,6 +1163,11 @@ export class Session {
 
   private _enqueueSessionEventPersistence(event: HarnessEvent): void {
     if (this._eventPersistenceError !== undefined) return;
+    // Declarative short-circuit: when the adapter says it does not implement
+    // session event replay, skip the serialize/append round-trip up front.
+    // The legacy instanceof catch below still defends against adapters that
+    // declare support but throw on a specific call shape.
+    if (!this._storage.capabilities().sessionEventReplay) return;
     let parsed: ReturnType<typeof parseHarnessEventId>;
     let storedEvent: JsonValue;
     try {
@@ -1133,11 +1393,125 @@ export class Session {
       };
       const prompt = u.promptTokens ?? u.inputTokens;
       const completion = u.completionTokens ?? u.outputTokens;
+      const incremented =
+        typeof prompt === 'number' || typeof completion === 'number' || typeof u.totalTokens === 'number';
       if (typeof prompt === 'number') this._tokenUsage.promptTokens += prompt;
       if (typeof completion === 'number') this._tokenUsage.completionTokens += completion;
-      if (typeof u.totalTokens === 'number') this._tokenUsage.totalTokens += u.totalTokens;
+      if (typeof u.totalTokens === 'number') {
+        this._tokenUsage.totalTokens += u.totalTokens;
+      } else if (typeof prompt === 'number' || typeof completion === 'number') {
+        // Providers that only emit `inputTokens`/`outputTokens` leave `totalTokens`
+        // off; derive it so the aggregate stays consistent with its parts.
+        this._tokenUsage.totalTokens += (prompt ?? 0) + (completion ?? 0);
+      }
+      if (incremented) this._schedulePersistTokenUsage();
     }
   }
+
+  /**
+   * Trigger a no-op `_flushUpdate` so the latest `_tokenUsage` is overlaid into
+   * `SessionRecord.tokenUsage` on disk. Fire-and-forget — serialized via
+   * `_flushChain` so it never races concurrent setters, and skipped when the
+   * session is no longer in a state that accepts writes. Non-lifecycle storage
+   * failures are latched onto `_pendingTokenUsageFlushError` so
+   * `_internalAwaitFlushChain()` can surface them to shutdown/test callers.
+   */
+  private _schedulePersistTokenUsage(): void {
+    if (this._state !== 'live' && this._state !== 'closing') return;
+    void this._flushUpdate(prev => prev).catch(err => {
+      if (this._isExpectedFlushLifecycleError(err)) return;
+      this._pendingTokenUsageFlushError ??= err;
+    });
+  }
+
+  private _isExpectedFlushLifecycleError(err: unknown): boolean {
+    return (
+      err instanceof HarnessSessionClosedError ||
+      err instanceof HarnessSessionDeletedError ||
+      err instanceof HarnessStateConflictError
+    );
+  }
+
+  /**
+   * Register a background sandbox process for reap-on-lifecycle (§6.1).
+   * Tools that spawn long-lived processes via `sandbox.processes.spawn(...)`
+   * call this through the request-context slot.
+   *
+   * In `live` / `closing` states the handle is stored and a
+   * `handle.wait()` hook auto-unregisters on either normal or failed exit.
+   * In any terminal state (`closed` / `evicted` / `deleted`) the handle is
+   * killed immediately to prevent a race-window leak where a process is
+   * spawned after the close/evict/delete decision has been made.
+   *
+   * @internal — exposed via `HarnessRequestContext.registerBackgroundProcess`.
+   */
+  _registerBackgroundProcess(handle: ProcessHandle): () => void {
+    if (this._state !== 'live' && this._state !== 'closing') {
+      // Race: register arrived after a terminal transition. Don't track it —
+      // just reap the handle directly so it doesn't outlive the session.
+      handle.kill().catch(() => {});
+      return () => {};
+    }
+    // Symbol-keyed registration so a stale callback cannot delete a newer
+    // registration that happens to reuse the same OS pid. See the field
+    // doc-comment above for the pid-reuse race motivation.
+    const registrationId = Symbol(`background-process:${String(handle.pid)}`);
+    let unregistered = false;
+    const unregister = () => {
+      if (unregistered) return;
+      unregistered = true;
+      this._backgroundProcesses.delete(registrationId);
+    };
+    this._backgroundProcesses.set(registrationId, { handle, unregister });
+    // Auto-unregister on either successful exit or wait() rejection. The
+    // process-manager wait machinery already swallows kill-induced rejections;
+    // we cover both branches defensively so a wait() rejection cannot leave
+    // the table holding a stale entry.
+    handle.wait().then(unregister, unregister);
+    return unregister;
+  }
+
+  /**
+   * Reap every tracked background process. Snapshot-and-clear the table
+   * first so concurrent unregister/exit notifications cannot mutate during
+   * iteration. Each `handle.kill()` is fire-and-forget — the
+   * sandbox process manager already serializes kill semantics and exposes
+   * idempotent SIGTERM→SIGKILL escalation.
+   *
+   * @internal — called from `_markClosed`, `_markEvicted`, `_markDeleted`.
+   */
+  private _reapBackgroundProcesses(): void {
+    if (this._backgroundProcesses.size === 0) return;
+    const entries = Array.from(this._backgroundProcesses.values());
+    this._backgroundProcesses.clear();
+    for (const entry of entries) {
+      entry.handle.kill().catch(() => {
+        // Best-effort: kill failures (process already gone, OS error) are
+        // not actionable here.
+      });
+    }
+  }
+
+  /**
+   * Wait for any in-flight `_flushUpdate` writes (including the trailing
+   * persist scheduled by `_recordTurnCompletion`) to settle. Throws if a
+   * scheduled token-usage flush hit a non-lifecycle storage error so shutdown
+   * and tests surface durability gaps instead of silently dropping them.
+   *
+   * @internal
+   */
+  async _internalAwaitFlushChain(): Promise<void> {
+    await this._flushChain;
+    const latched = this._pendingTokenUsageFlushError;
+    if (latched !== undefined) {
+      this._pendingTokenUsageFlushError = undefined;
+      throw latched;
+    }
+  }
+
+  /** Latched storage error from a scheduled token-usage persist; surfaced by
+   * `_internalAwaitFlushChain()` so shutdown and tests can act on it. */
+  private _pendingTokenUsageFlushError: unknown;
 
   /**
    * True while a turn (message or queued) is in flight against the agent.
@@ -1184,10 +1558,10 @@ export class Session {
    * completed turn (manual or queued). Returns a fresh shallow copy so
    * callers can't mutate the running aggregate.
    *
-   * Note: this is **not** persisted across rehydration — token counts
-   * reset to zero when a closed/evicted session is hydrated from storage.
-   * Callers that need cross-process aggregates should sum from message
-   * history themselves.
+   * Durable across rehydration: counters are persisted into
+   * `SessionRecord.tokenUsage` on every save and seeded from there on
+   * construction, so reopens after eviction or process restart carry the
+   * accumulated value instead of resetting to zero.
    */
   getTokenUsage(): TokenUsage {
     return { ...this._tokenUsage };
@@ -1309,6 +1683,353 @@ export class Session {
     const controller = this._currentTurnAbortController;
     if (!controller) return;
     controller.abort(opts?.reason ?? 'session_aborted');
+  }
+
+  /**
+   * Reads `_record.cancelRequest` through a non-narrowing helper so
+   * callers can re-read after a CAS commit without TypeScript's
+   * flow-narrowing folding the post-CAS branch into `never`.
+   */
+  private _currentCancelRequest(): SessionRecord['cancelRequest'] {
+    return this._record.cancelRequest;
+  }
+
+  /**
+   * Durable session cancel. Marks the session as cancelled in storage,
+   * aborts the in-flight turn (if any), and drops every pending queued
+   * item. Idempotent — the first cancel wins; later calls preserve the
+   * original `requestedAt` and `reason` and short-circuit before any
+   * CAS write.
+   *
+   * Heartbeat lease renewal short-circuits when `cancelRequest` is
+   * present, so a cancelled session is allowed to age out and release
+   * its lease instead of being renewed indefinitely.
+   *
+   * @param opts.reason       — free-form audit string surfaced on the
+   *   `task_cancellation_requested` / `queue_item_cancelled` events
+   *   and on `HarnessSessionCancelledError`.
+   * @param opts.requestedBy  — free-form actor label (e.g. the A2A
+   *   task id that issued the cancel) for the audit row.
+   */
+  async cancel(opts?: { reason?: string; requestedBy?: string }): Promise<void> {
+    if (this._currentCancelRequest() !== undefined) {
+      // First cancel won; subsequent calls are no-ops by contract.
+      return;
+    }
+    const reason = opts?.reason;
+    const requestedBy = opts?.requestedBy;
+    const requestedAt = Date.now();
+    const removedItems: { queuedItemId: string; admissionId?: string }[] = [];
+    let wasWinner = false;
+    const cancelErrorForReceipt = new HarnessSessionCancelledError(this.id, reason);
+
+    await this._flushUpdate(prev => {
+      if (prev.cancelRequest !== undefined) {
+        // Lost the CAS race against a concurrent cancel; honor the winner.
+        // The winner already drained the queue, marked receipts failed, and
+        // will run the post-commit emit / abort path. Bail out cleanly.
+        return prev;
+      }
+      wasWinner = true;
+      // Snapshot the queued items being dropped so we can both reject
+      // their resolvers and emit per-item events AFTER commit. The active
+      // head (`_currentQueuedItemId`) stays in pendingQueue — the abort
+      // path settles it through its normal failure flow.
+      const activeId = this._currentQueuedItemId;
+      const keptHead: QueuedItem[] = [];
+      const existingReceipts = prev.queueAdmissionReceipts ?? {};
+      const nextReceipts: Record<string, QueueAdmissionReceipt> = { ...existingReceipts };
+      for (const item of prev.pendingQueue ?? []) {
+        if (activeId !== undefined && item.id === activeId) {
+          keptHead.push(item);
+          continue;
+        }
+        removedItems.push({ queuedItemId: item.id, admissionId: item.admissionId });
+        const receipt = existingReceipts[item.id];
+        if (receipt && receipt.status !== 'completed' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+          nextReceipts[item.id] = {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(cancelErrorForReceipt),
+            failedAt: receipt.failedAt ?? requestedAt,
+            updatedAt: requestedAt,
+          };
+        }
+      }
+      const next: SessionRecord = {
+        ...prev,
+        cancelRequest: {
+          requestedAt,
+          ...(reason !== undefined ? { reason } : {}),
+          ...(requestedBy !== undefined ? { requestedBy } : {}),
+        },
+        pendingQueue: keptHead,
+      };
+      if (Object.keys(nextReceipts).length > 0) {
+        next.queueAdmissionReceipts = nextReceipts;
+      }
+      return next;
+    });
+
+    // CAS-loser path — the durable cancelRequest committed by the winner is
+    // observable, but the winner already emitted events + ran the abort.
+    // The post-commit work below MUST run only on the winning invocation
+    // to avoid double-emit / double-abort.
+    if (!wasWinner) return;
+
+    const committedCancel = this._currentCancelRequest();
+    if (committedCancel === undefined) return;
+    const durableReason = committedCancel.reason;
+
+    // Abort in-flight work after the marker is durable. This keeps the
+    // tool layer's abort callback observing a committed cancel state.
+    this.abort({ reason: durableReason ?? 'session_cancelled' });
+
+    // Emit the session-scope verdict event first, then per-item events
+    // in queue order.
+    this._emitter.emit({
+      type: 'task_cancellation_requested',
+      requestedAt: committedCancel.requestedAt,
+      ...(durableReason !== undefined ? { reason: durableReason } : {}),
+      ...(committedCancel.requestedBy !== undefined ? { requestedBy: committedCancel.requestedBy } : {}),
+    } as EmitInput);
+
+    for (const dropped of removedItems) {
+      this._emitter.emit({
+        type: 'queue_item_cancelled',
+        queuedItemId: dropped.queuedItemId,
+        ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
+        ...(durableReason !== undefined ? { reason: durableReason } : {}),
+      } as EmitInput);
+      const resolver = this._queueResolvers.get(dropped.queuedItemId);
+      if (resolver) {
+        this._queueResolvers.delete(dropped.queuedItemId);
+        resolver.reject(new HarnessSessionCancelledError(this.id, durableReason));
+      }
+    }
+    // Active head (if any) is left for the abort path to settle; only
+    // clear the dropped-queue bookkeeping here.
+    this._notifyMaybeIdle();
+
+    // Propagate cancellation through the live subagent tree. Children
+    // recursively cancel their own children via the same path, so
+    // arbitrary-depth subagent fan-out collapses correctly. Subagent
+    // cancellation does NOT propagate upward — a child cancel cannot
+    // take down a parent.
+    if (this._activeSubagents.size > 0) {
+      const childIds = Array.from(this._activeSubagents.values()).map(s => s.subagentSessionId);
+      await Promise.all(
+        childIds.map(async childId => {
+          const child = this._harness._internalGetLiveSession(childId);
+          if (!child) return;
+          try {
+            await child.cancel({ reason: reason ?? 'parent_cancelled', requestedBy: this.id });
+          } catch {
+            // Best-effort propagation — never bubble a child cancel
+            // failure up through the parent's commit path.
+          }
+        }),
+      );
+    }
+  }
+
+  /**
+   * Cancel a single queued turn before it starts. Removes the item
+   * from `pendingQueue`, rejects the original `session.queue(...)`
+   * promise with `HarnessSessionCancelledError`, and emits one
+   * `queue_item_cancelled` event. No-op if the queuedItemId is
+   * unknown or already gone. Does NOT mark the session-wide
+   * `cancelRequest`; for that, use `session.cancel(...)`.
+   */
+  async cancelQueuedItem(opts: { queuedItemId: string; reason?: string }): Promise<void> {
+    const targetId = opts.queuedItemId;
+    if (!targetId) {
+      throw new HarnessValidationError('cancelQueuedItem', 'queuedItemId must be a non-empty string');
+    }
+    const reason = opts.reason;
+    const cancelErrorForReceipt = new HarnessSessionCancelledError(this.id, reason);
+    const now = Date.now();
+    let removed: { queuedItemId: string; admissionId?: string } | undefined;
+
+    await this._flushUpdate(prev => {
+      const queue = prev.pendingQueue ?? [];
+      const idx = queue.findIndex(item => item.id === targetId);
+      if (idx < 0) return prev;
+      // Refuse to cancel the currently-running queued turn — that work
+      // settles through its own abort/failure flow. Mirrors the
+      // `Session.cancel()` active-head guard.
+      if (this._currentQueuedItemId === targetId) return prev;
+      const item = queue[idx]!;
+      removed = { queuedItemId: item.id, admissionId: item.admissionId };
+      const nextQueue = queue.slice(0, idx).concat(queue.slice(idx + 1));
+      const next: SessionRecord = { ...prev, pendingQueue: nextQueue };
+      const existingReceipts = prev.queueAdmissionReceipts ?? {};
+      const receipt = existingReceipts[item.id];
+      if (receipt && receipt.status !== 'completed' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+        next.queueAdmissionReceipts = {
+          ...existingReceipts,
+          [item.id]: {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(cancelErrorForReceipt),
+            failedAt: receipt.failedAt ?? now,
+            updatedAt: now,
+          },
+        };
+      }
+      return next;
+    });
+
+    if (!removed) return;
+
+    this._emitter.emit({
+      type: 'queue_item_cancelled',
+      queuedItemId: removed.queuedItemId,
+      ...(removed.admissionId !== undefined ? { admissionId: removed.admissionId } : {}),
+      ...(reason !== undefined ? { reason } : {}),
+    } as EmitInput);
+
+    const resolver = this._queueResolvers.get(removed.queuedItemId);
+    if (resolver) {
+      this._queueResolvers.delete(removed.queuedItemId);
+      resolver.reject(new HarnessSessionCancelledError(this.id, reason));
+    }
+    this._notifyMaybeIdle();
+  }
+
+  // -------------------------------------------------------------------------
+  // Lease extension — §5.8.
+  //
+  // The Harness runs a periodic heartbeat that renews this session's storage
+  // lease at TTL/3 (min 1s). Under event-loop starvation (CPU-bound JS) or a
+  // tool that holds the session past the default TTL, the heartbeat can miss
+  // its deadline and another Harness instance can take over the session via
+  // `acquireSessionLease`. The CAS contract on `saveSession` then rejects
+  // late writes from the original owner (no two processes append to
+  // `pendingQueue`), but the window is observable.
+  //
+  // `extendLease` lets a tool that KNOWS it will exceed the default TTL push
+  // the storage expiry forward ahead of the blocking work. The heartbeat
+  // and any concurrent `extendLease` share the per-session lease-write
+  // chain so a default-TTL heartbeat in flight cannot overwrite a longer
+  // extension.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Extend this session's storage lease so it remains owned by the current
+   * Harness for at least `ttlMs` milliseconds from now. The value is clamped
+   * to at least the harness's default lease TTL — `extendLease` never
+   * shrinks an active lease. Excessively large values are rejected (capped
+   * at `MAX_LEASE_EXTENSION_MS`).
+   *
+   * Call this BEFORE a tool starts work that will block the event loop or
+   * exceed the default lease TTL. Subsequent heartbeat renewals respect the
+   * extension via `_getEffectiveLeaseTtlMs`. Once the extension deadline
+   * passes the heartbeat naturally falls back to the default TTL.
+   *
+   * Rejects with `HarnessValidationError` for non-finite, non-positive, or
+   * non-integer `ttlMs`, and for values above `MAX_LEASE_EXTENSION_MS`.
+   * Propagates storage errors from `renewSessionLease`.
+   */
+  async extendLease(opts: { ttlMs: number }): Promise<void> {
+    this._assertLive('extendLease()');
+    if (!Number.isFinite(opts.ttlMs) || !Number.isInteger(opts.ttlMs) || opts.ttlMs <= 0) {
+      throw new HarnessValidationError('extendLease().ttlMs', 'ttlMs must be a positive integer (milliseconds)');
+    }
+    if (opts.ttlMs > MAX_LEASE_EXTENSION_MS) {
+      throw new HarnessValidationError(
+        'extendLease().ttlMs',
+        `ttlMs must be at most ${MAX_LEASE_EXTENSION_MS}ms (24h)`,
+      );
+    }
+    const defaultTtl = this._harness._internalLeaseTtlMs;
+    const run = async (): Promise<void> => {
+      // Re-check lifecycle state at EXECUTION time, not just enqueue time —
+      // `extendLease` may have been queued behind another renewal that
+      // raced a concurrent `close/delete/evict`. Throwing here surfaces
+      // the lifecycle race to the caller; the chain itself is poison-proofed
+      // separately at the tail.
+      if (this._state !== 'live' && this._state !== 'closing') {
+        throw this._state === 'deleted'
+          ? new HarnessSessionDeletedError(this.id)
+          : new HarnessSessionClosedError(this.id);
+      }
+      // Compute the effective TTL INSIDE the chained step so the clamp sees
+      // the latest `_leaseExtensionDeadline`. A second `extendLease(shorter)`
+      // called while an earlier extension is still active must NOT shrink the
+      // lease — clamp against the remaining window in addition to the
+      // requested ttl and the harness default.
+      const remainingExtension =
+        this._leaseExtensionDeadline !== undefined && Number.isFinite(this._leaseExtensionDeadline)
+          ? this._leaseExtensionDeadline - Date.now()
+          : 0;
+      const effectiveTtl = Math.max(opts.ttlMs, defaultTtl, remainingExtension);
+      const lease = await this._storage.renewSessionLease({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        ownerId: this._ownerId,
+        ttlMs: effectiveTtl,
+      });
+      this._markLeaseRenewed(lease.expiresAt);
+      this._leaseExtensionDeadline = lease.expiresAt;
+    };
+    const next = this._leaseRenewalChain.then(run, run);
+    // Tail absorbs errors so a failed renewal does not poison the chain for
+    // subsequent renewals; the user-facing promise (`next`) still propagates
+    // the original error so callers can react.
+    this._leaseRenewalChain = next.catch(() => {});
+    return next;
+  }
+
+  /**
+   * Convenience wrapper that extends the lease and then invokes `fn`. If
+   * `fn` rejects, the lease is left as-extended — the heartbeat falls back
+   * naturally once the extension deadline passes.
+   */
+  async withExtendedLease<T>(fn: () => Promise<T>, opts: { ttlMs: number }): Promise<T> {
+    await this.extendLease(opts);
+    return fn();
+  }
+
+  /**
+   * Compute the effective TTL the heartbeat should use for this session's
+   * next renewal. Returns the larger of the harness default and the
+   * remaining extension window (`deadline - now`). Returns the default when
+   * no extension is active, when the extension has already expired, or when
+   * the deadline value is non-finite (defensive against external mutation).
+   *
+   * @internal — consumed by `Harness._renewLiveSessionLeases`.
+   */
+  _getEffectiveLeaseTtlMs(defaultTtlMs: number): number {
+    const deadline = this._leaseExtensionDeadline;
+    if (deadline === undefined || !Number.isFinite(deadline)) return defaultTtlMs;
+    const remaining = deadline - Date.now();
+    return remaining > defaultTtlMs ? remaining : defaultTtlMs;
+  }
+
+  /**
+   * Schedule a lease renewal on this session's serialized lease-write chain.
+   * Used by the harness heartbeat so a concurrent `extendLease` cannot race
+   * with the heartbeat against `storage.renewSessionLease`. Returns the
+   * user-facing promise so the heartbeat can await per-session completion
+   * and surface errors; the chain tail is poison-proofed separately.
+   *
+   * The runner is wrapped with a lifecycle guard so any work that was
+   * queued before `_markClosed/_markEvicted/_markDeleted` ran becomes a
+   * no-op once the session is terminal. This prevents the heartbeat
+   * (or a late chain entry) from re-extending a lease for a session
+   * the harness has already terminalized.
+   *
+   * @internal — invoked by `Harness._renewLiveSessionLeases`.
+   */
+  _enqueueLeaseRenewal(run: () => Promise<void>): Promise<void> {
+    const guardedRun = async () => {
+      if (this._state !== 'live' && this._state !== 'closing') return;
+      await run();
+    };
+    const next = this._leaseRenewalChain.then(guardedRun, guardedRun);
+    this._leaseRenewalChain = next.catch(() => {});
+    return next;
   }
 
   /** @internal — emitter epoch (for tests). */
@@ -1531,7 +2252,7 @@ export class Session {
   });
 
   // -------------------------------------------------------------------------
-  // MCP catalog — PF-562 / PF-552 desktop integration inventory.
+  // MCP catalog — desktop integration inventory.
   //
   // This is an inventory snapshot over MCP servers registered on the Harness
   // Mastra instance. Tool descriptors use MCPServerBase.getToolListInfo() so
@@ -1554,7 +2275,7 @@ export class Session {
   });
 
   // -------------------------------------------------------------------------
-  // Action catalog — PF-576 / PF-552 desktop palette inventory.
+  // Action catalog — desktop palette inventory.
   //
   // This is a read-only aggregate over skill action metadata and MCP tool
   // descriptors. It intentionally exposes no execution or lifecycle controls;
@@ -3179,7 +3900,7 @@ export class Session {
         ]);
         this._emitTurnEvent({
           type: 'agent_end',
-          reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+          reason: mapFinishToAgentEndReason(full.finishReason),
           runId: full.runId,
         });
         await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -3478,7 +4199,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: mapFinishToAgentEndReason(full.finishReason),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -3554,7 +4275,7 @@ export class Session {
       ]);
       this._emitTurnEvent({
         type: 'agent_end',
-        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+        reason: mapFinishToAgentEndReason(full.finishReason),
         runId: full.runId,
       });
       await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -4068,16 +4789,52 @@ export class Session {
     );
   }
 
-  private _resolveToolPermissionPolicy(toolName: string): PermissionPolicy {
+  private _resolveToolPermissionPolicy(
+    toolName: string,
+    opts?: { args?: Record<string, unknown>; actor?: HarnessActorIdentity },
+  ): PermissionPolicy {
     const category = this._harness.getToolCategory({ toolName });
     const toolRule = this._record.permissionRules.tools[toolName];
     const categoryRule = category ? this._record.permissionRules.categories[category] : undefined;
-    const policy = toolRule ?? categoryRule ?? this._harness._getDefaultPermissionPolicy();
+    const policy = this._applyWorkspacePolicyDecision(
+      toolName,
+      opts?.args ?? {},
+      toolRule ?? categoryRule ?? this._harness._getDefaultPermissionPolicy(),
+    );
 
     if (policy !== 'ask') return policy;
+    // Per-actor grants overlay the session-level grants. A grant on a
+    // specific actor (e.g. `channel:slack:T1:C1:U1`) only suppresses
+    // `ask` for THAT caller; session-level grants apply to any caller
+    // including those without an explicit actor.
+    if (opts?.actor !== undefined) {
+      const overlay = this._record.actorGrants?.[actorKey(opts.actor)];
+      if (overlay !== undefined) {
+        if (overlay.tools.includes(toolName)) return 'allow';
+        if (category && overlay.categories.includes(category)) return 'allow';
+      }
+    }
     if (this._record.sessionGrants.tools.includes(toolName)) return 'allow';
     if (category && this._record.sessionGrants.categories.includes(category)) return 'allow';
     return 'ask';
+  }
+
+  private _applyWorkspacePolicyDecision(
+    toolName: string,
+    args: Record<string, unknown>,
+    basePolicy: PermissionPolicy,
+  ): PermissionPolicy {
+    const policy = this._harness._internalGetWorkspacePolicy();
+    if (!policy) return basePolicy;
+
+    const mapped = this._mapWorkspaceToolAction(toolName, args);
+    if (!mapped) return basePolicy;
+
+    const policyAction = this._toPolicyAction(mapped);
+    if (!policyAction) return basePolicy;
+
+    const evaluation = evaluateWorkspacePolicy(policy, policyAction);
+    return strongestPermissionPolicy([basePolicy, evaluation.decision]);
   }
 
   private async _recordWorkspaceAction(params: {
@@ -4096,6 +4853,24 @@ export class Session {
   }): Promise<void> {
     const mapped = this._mapWorkspaceToolAction(params.toolName, params.args);
     if (!mapped) return;
+    // Declarative short-circuit when the adapter does not implement the
+    // workspace action journal. Emit the one-shot `unsupported` event so
+    // observability tooling sees the gap without depending on the legacy
+    // throw-then-catch path inside the append call.
+    if (!this._storage.capabilities().workspaceActionJournal) {
+      if (!this._workspaceActionJournalUnsupportedEmitted) {
+        this._workspaceActionJournalUnsupportedEmitted = true;
+        this._emit({
+          type: 'workspace_action_journal_unsupported',
+          resourceId: this.resourceId,
+          threadId: this.threadId,
+          toolName: params.toolName,
+          actionKind: mapped.actionKind,
+          operation: mapped.operation,
+        });
+      }
+      return;
+    }
     const now = Date.now();
     const action = snapshotHarnessEventForJson(
       {
@@ -4113,6 +4888,36 @@ export class Session {
       },
       'workspaceActionJournal.result',
     );
+    // If a workspace policy is configured AND the classified action maps
+    // cleanly into a `WorkspacePolicyAction`, evaluate it and overlay the
+    // verdict + reasons + matchedRules onto the journal entry. The caller's
+    // `params.policyDecision` is still preserved under `actor.callerDecision`
+    // for operator-side comparison (caller intent vs. policy verdict).
+    // When no policy is configured OR the action shape can't be mapped
+    // (e.g. command tools without a string command), fall back to the
+    // legacy caller-driven path.
+    const policy = this._harness._internalGetWorkspacePolicy();
+    const policyAction = policy ? this._toPolicyAction(mapped) : undefined;
+    let resolvedDecision: PermissionPolicy = params.policyDecision;
+    let resolvedReasons: string[] = [`harness.tool_permission_${params.policyDecision}`];
+    let resolvedMatched: JsonValue[] = [];
+    if (policy && policyAction) {
+      const evaluation = evaluateWorkspacePolicy(policy, policyAction);
+      resolvedDecision = evaluation.decision;
+      resolvedReasons = evaluation.reasons;
+      resolvedMatched = evaluation.matchedRules.map(rule => ({
+        ...(rule.id !== undefined ? { id: rule.id } : {}),
+        decision: rule.decision,
+        ...(rule.reason !== undefined ? { reason: rule.reason } : {}),
+      }));
+    } else if (policy && !policyAction) {
+      // Policy configured but the classifier output doesn't translate
+      // (e.g. a 'command' kind whose `mapped.action.command` is not a
+      // string — process_output / kill_process). Surface this with an
+      // extra reason so operators can see which surfaces still rely on
+      // the caller-driven decision.
+      resolvedReasons = [...resolvedReasons, `harness.policy_unmappable_${mapped.actionKind}_${mapped.operation}`];
+    }
     try {
       await this._storage.appendWorkspaceActionJournalEntry({
         id: `waj-${randomUUID()}`,
@@ -4123,9 +4928,9 @@ export class Session {
         actionKind: mapped.actionKind,
         operation: mapped.operation,
         action,
-        policyDecision: params.policyDecision,
-        policyReasons: [`harness.tool_permission_${params.policyDecision}`],
-        matchedRules: [],
+        policyDecision: resolvedDecision,
+        policyReasons: resolvedReasons,
+        matchedRules: resolvedMatched,
         ...(mapped.path ? { path: mapped.path } : {}),
         ...(mapped.toPath ? { toPath: mapped.toPath } : {}),
         ...(mapped.cwd ? { cwd: mapped.cwd } : {}),
@@ -4138,6 +4943,7 @@ export class Session {
             ...(params.observability ? { observability: params.observability } : {}),
             source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
             ...(this._record.parentSessionId ? { parentSessionId: this._record.parentSessionId } : {}),
+            ...(policy ? { callerDecision: params.policyDecision } : {}),
           },
           'workspaceActionJournal.actor',
         ),
@@ -4171,7 +4977,86 @@ export class Session {
     return classifyHarnessWorkspaceToolAction<WorkspaceJournalPath>(toolName, args, {
       pathFor: inputPath => this._workspaceJournalPath(inputPath),
       toolNameConfig: this._workspace?.getToolsConfig?.() as HarnessWorkspaceToolNameConfig | undefined,
+      mcpServerKeys: this._harness._listMcpServerKeys(),
     });
+  }
+
+  /**
+   * Translate a classifier output into a `WorkspacePolicyAction` the
+   * `evaluateWorkspacePolicy` evaluator can consume. Returns `undefined`
+   * for action shapes the evaluator does not model (e.g. command tools
+   * without a string `command`, or file operations outside the policy's
+   * `WorkspaceFileOperation` union such as `'index'` / `'search'`).
+   * When `undefined` is returned the runtime falls back to the
+   * caller-driven `policyDecision`.
+   */
+  private _toPolicyAction(mapped: HarnessWorkspaceToolAction<WorkspaceJournalPath>): WorkspacePolicyAction | undefined {
+    if (mapped.actionKind === 'file') {
+      const fileOps = new Set<WorkspaceFileOperation>(['read', 'write', 'delete', 'rename', 'patch']);
+      if (!fileOps.has(mapped.operation as WorkspaceFileOperation)) return undefined;
+      // Prefer the classifier's already-resolved absolute path so the
+      // policy evaluator does not reinterpret a relative input under
+      // every configured root. With nested roots (`/ws` + `/ws/readonly`)
+      // a relative `src/index.ts` could otherwise match the wrong root
+      // and produce an incorrect verdict. Fall back to `pathInput` only
+      // when the classifier did not compute an absolute path (e.g. no
+      // `pathFor` resolver wired).
+      const absolutePath = mapped.path?.path;
+      const path = typeof absolutePath === 'string' && absolutePath.length > 0 ? absolutePath : mapped.pathInput;
+      if (typeof path !== 'string' || path.length === 0) return undefined;
+      const absoluteToPath = mapped.toPath?.path;
+      const toPath =
+        typeof absoluteToPath === 'string' && absoluteToPath.length > 0 ? absoluteToPath : mapped.toPathInput;
+      // Intentionally do NOT pass `rootId` here. The Session's filesystem id
+      // (used as the journal's `path.rootId`) is unrelated to the operator-
+      // configured policy root ids; letting the policy resolver pick the
+      // root from the absolute path avoids identifier-namespace collisions.
+      return {
+        kind: 'file',
+        operation: mapped.operation as WorkspaceFileOperation,
+        path,
+        ...(typeof toPath === 'string' && toPath.length > 0 ? { toPath } : {}),
+      };
+    }
+    if (mapped.actionKind === 'command') {
+      const command = mapped.action.command;
+      if (typeof command !== 'string' || command.length === 0) return undefined;
+      const cwd = mapped.cwdInput;
+      const argsRaw = mapped.action.args;
+      const cmdArgs =
+        Array.isArray(argsRaw) && argsRaw.every((arg): arg is string => typeof arg === 'string')
+          ? (argsRaw as string[])
+          : undefined;
+      return {
+        kind: 'command',
+        command,
+        ...(typeof cwd === 'string' && cwd.length > 0 ? { cwd } : {}),
+        ...(cmdArgs ? { args: cmdArgs } : {}),
+      };
+    }
+    if (mapped.actionKind === 'network') {
+      const host = mapped.action.host;
+      if (typeof host !== 'string' || host.length === 0) return undefined;
+      const portRaw = mapped.action.port;
+      const protocol = mapped.action.protocol;
+      return {
+        kind: 'network',
+        host,
+        ...(typeof portRaw === 'number' && Number.isFinite(portRaw) ? { port: portRaw } : {}),
+        ...(typeof protocol === 'string' && protocol.length > 0 ? { protocol } : {}),
+      };
+    }
+    if (mapped.actionKind === 'mcp') {
+      const serverId = mapped.action.serverId;
+      if (typeof serverId !== 'string' || serverId.length === 0) return undefined;
+      const toolName = mapped.action.toolName;
+      return {
+        kind: 'mcp',
+        serverId,
+        ...(typeof toolName === 'string' && toolName.length > 0 ? { toolName } : {}),
+      };
+    }
+    return undefined;
   }
 
   private _workspaceJournalPath(inputPath: string): WorkspaceJournalPath {
@@ -4330,7 +5215,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: mapFinishToAgentEndReason(full.finishReason),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -4486,7 +5371,7 @@ export class Session {
           ]);
           this._emitTurnEvent({
             type: 'agent_end',
-            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            reason: mapFinishToAgentEndReason(full.finishReason),
             runId: full.runId,
           });
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
@@ -5129,16 +6014,18 @@ export class Session {
 
     let decision: GoalJudgeDecision;
     try {
-      decision = await this._callJudge(goal, turn);
-    } catch {
+      decision = await this._callJudgeWithRetry(goal, turn);
+    } catch (err) {
       // Gate 2a — goal might have changed during the judge call.
       if (this._record.goal?.id !== evaluatedGoalId) return;
+      const failure = this._classifyJudgeFailure(err);
+      const pausedReason = JUDGE_FAILURE_TO_PAUSED_REASON[failure.kind];
       await this._flushUpdate(prev =>
         prev.goal && prev.goal.id === evaluatedGoalId
-          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const, lastFailure: failure } }
           : prev,
       );
-      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'judge_failed' });
+      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: pausedReason });
       return;
     }
 
@@ -5146,7 +6033,14 @@ export class Session {
     if (this._record.goal?.id !== evaluatedGoalId) return;
 
     const turnsUsed = decision.decision === 'waiting' ? goal.turnsUsed : goal.turnsUsed + 1;
-    const updated: GoalState = { ...goal, turnsUsed, lastDecision: decision };
+    // Clear any prior `lastFailure` — the judge succeeded this turn, so the
+    // failure state from a previous pause-then-resume cycle is stale and
+    // would otherwise mislead recovered sessions that inspect it.
+    // Destructure to strip the field rather than setting it to `undefined`,
+    // so storage adapters that preserve undefined keys don't keep a tombstone.
+    const { lastFailure: _staleFailure, ...goalWithoutFailure } = goal;
+    void _staleFailure;
+    const updated: GoalState = { ...goalWithoutFailure, turnsUsed, lastDecision: decision };
 
     await this._flushUpdate(prev =>
       prev.goal && prev.goal.id === evaluatedGoalId ? { ...prev, goal: updated } : prev,
@@ -5174,9 +6068,14 @@ export class Session {
 
     // decision.decision === 'continue'
     if (turnsUsed >= updated.maxTurns) {
+      const failure: GoalJudgeFailure = {
+        kind: 'max_turns',
+        message: `goal exhausted ${updated.maxTurns}-turn budget`,
+        failedAt: Date.now(),
+      };
       await this._flushUpdate(prev =>
         prev.goal && prev.goal.id === evaluatedGoalId
-          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const, lastFailure: failure } }
           : prev,
       );
       this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'budget_exhausted' });
@@ -5194,6 +6093,53 @@ export class Session {
         judgeReason: decision.reason,
       }),
     );
+  }
+
+  /**
+   * Run the judge with one bounded retry on timeout-class errors. Non-
+   * timeout failures (provider error, invalid verdict) fail fast — retrying
+   * a deterministic schema or API misbehavior won't change the outcome and
+   * would delay the operator-visible `goal_paused` signal.
+   */
+  private async _callJudgeWithRetry(goal: GoalState, turn: FullOutput<unknown>): Promise<GoalJudgeDecision> {
+    for (let attempt = 0; attempt < GOAL_JUDGE_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await this._callJudge(goal, turn);
+      } catch (err) {
+        const kind = this._judgeFailureKind(err);
+        const isLastAttempt = attempt === GOAL_JUDGE_MAX_ATTEMPTS - 1;
+        if (kind !== 'timeout' || isLastAttempt) throw err;
+        await new Promise(resolve => setTimeout(resolve, GOAL_JUDGE_RETRY_BACKOFF_MS));
+      }
+    }
+    // Unreachable — the loop either returns a decision or throws on the
+    // final attempt. Cast satisfies TypeScript's reachability checker.
+    throw new HarnessGoalJudgeFailedError('provider_error', 'judge retry loop exited without a decision');
+  }
+
+  /**
+   * Classify a thrown value into a {@link GoalJudgeFailureKind}. The
+   * `HarnessGoalJudgeFailedError` thrown by `_callJudge` carries the kind
+   * directly; other thrown values are pattern-matched on `name` and
+   * message text. Network/socket-class messages (`ECONNRESET`,
+   * `ETIMEDOUT`) and `AbortError` map to `'timeout'`; everything else
+   * maps to `'provider_error'` so the loop fails fast.
+   */
+  private _judgeFailureKind(err: unknown): GoalJudgeFailureKind {
+    if (err instanceof HarnessGoalJudgeFailedError) return err.kind;
+    const name = err instanceof Error ? err.name : '';
+    const message = err instanceof Error ? err.message : '';
+    if (name === 'AbortError' || /timeout|timed[ -]out|ECONNRESET|ETIMEDOUT/i.test(message)) {
+      return 'timeout';
+    }
+    return 'provider_error';
+  }
+
+  /** Build a {@link GoalJudgeFailure} record for `GoalState.lastFailure`. */
+  private _classifyJudgeFailure(err: unknown): GoalJudgeFailure {
+    const kind = this._judgeFailureKind(err);
+    const message = err instanceof Error ? err.message : undefined;
+    return { kind, ...(message ? { message } : {}), failedAt: Date.now() };
   }
 
   /**
@@ -5256,11 +6202,22 @@ export class Session {
     const full = (await (stream as { getFullOutput: () => Promise<unknown> }).getFullOutput()) as {
       object?: unknown;
     };
-    const obj = full.object as { decision: 'done' | 'continue' | 'waiting'; reason: string } | undefined;
-    if (!obj || typeof obj !== 'object') {
-      throw new Error('judge returned no structured output');
+    // Validate the judge output against the verdict schema rather than
+    // casting blindly. A malformed object (missing `decision`, wrong enum
+    // value, non-string `reason`) MUST NOT fall through to the
+    // `continue` branch — surface it as `invalid_verdict` so the loop
+    // pauses with the right taxonomy.
+    if (full.object === undefined || full.object === null) {
+      throw new HarnessGoalJudgeFailedError('invalid_verdict', 'judge returned no structured output');
     }
-    return { decision: obj.decision, reason: obj.reason, judgedAt: Date.now() };
+    const parsed = GoalJudgeSchema.safeParse(full.object);
+    if (!parsed.success) {
+      throw new HarnessGoalJudgeFailedError(
+        'invalid_verdict',
+        `judge output failed schema validation: ${parsed.error.message}`,
+      );
+    }
+    return { decision: parsed.data.decision, reason: parsed.data.reason, judgedAt: Date.now() };
   }
 
   /** @internal — test-only hook used by `session.goal.test.ts`. */
@@ -5416,6 +6373,44 @@ export class Session {
   }
 
   /**
+   * Resume a pending sandbox-access request. The approver passes
+   * `approved: true` to grant or `approved: false` to deny. The
+   * resumed tool reads the response via its suspendPayload handler.
+   *
+   * `sandbox_access_resolved` is emitted from inside the resume
+   * machinery AFTER the CAS commit on `pendingResume.resumedAt` —
+   * see `_resume`. Invalid responses, duplicate receipts, and
+   * concurrent losers do NOT emit a resolved event, so audit
+   * consumers can trust the event as an authoritative verdict.
+   *
+   * The pending request is routed by the session's current
+   * `pendingResume.kind === 'sandbox-access'` slot (one outstanding
+   * sandbox request per session at a time, mirroring every other
+   * `respond*` API).
+   */
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & InboxReceiptResponseOptions,
+  ): Promise<InboxResponseResult>;
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & LegacyInboxResponseOptions,
+  ): Promise<AgentResult>;
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult>;
+  async respondToSandboxAccess(
+    opts: { approved: boolean; reason?: string } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult> {
+    return this._resume(
+      'sandbox-access',
+      compactJsonObject({
+        approved: opts.approved,
+        reason: opts.reason,
+      }),
+      opts,
+    );
+  }
+
+  /**
    * Resume a pending `submit_plan` approval.
    *
    * On `approved: true` the harness flips the active mode to:
@@ -5492,11 +6487,17 @@ export class Session {
    * reject before any event or display projection is emitted.
    */
   readonly permissions = Object.freeze({
-    grantCategory: (opts: { category: ToolCategory }): Promise<void> => this._permGrantCategory(opts),
-    grantTool: (opts: { toolName: string }): Promise<void> => this._permGrantTool(opts),
-    revokeCategory: (opts: { category: ToolCategory }): Promise<void> => this._permRevokeCategory(opts),
-    revokeTool: (opts: { toolName: string }): Promise<void> => this._permRevokeTool(opts),
-    getGrants: (): Readonly<SessionGrants> => this._permGetGrants(),
+    applyProfile: (opts: {
+      profileName: HarnessPermissionProfileName;
+      preserveCallerDenies?: boolean;
+    }): Promise<void> => this._permApplyProfile(opts),
+    grantCategory: (opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> =>
+      this._permGrantCategory(opts),
+    grantTool: (opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> => this._permGrantTool(opts),
+    revokeCategory: (opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> =>
+      this._permRevokeCategory(opts),
+    revokeTool: (opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> => this._permRevokeTool(opts),
+    getGrants: (opts?: { actor?: HarnessActorIdentity }): Readonly<SessionGrants> => this._permGetGrants(opts),
     getRules: (): Readonly<PermissionRules> => this._permGetRules(),
     setPolicy: (
       opts:
@@ -5510,81 +6511,177 @@ export class Session {
    * ("don't ask again for `read` tools"). No-op if already granted.
    * Emits `permission_granted` on a transition.
    */
-  private async _permGrantCategory(opts: { category: ToolCategory }): Promise<void> {
+  private async _permGrantCategory(opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.grantCategory()');
     assertToolCategory('permissions.grantCategory', opts.category);
-    if (this._record.sessionGrants.categories.includes(opts.category)) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        categories: [...prev.sessionGrants.categories, opts.category],
-      },
-    }));
-    this._emitter.emit({ type: 'permission_granted', category: opts.category });
+    // Outer pre-check is an optimization only; the source of truth is
+    // the inner check inside `_flushUpdate` so two concurrent
+    // identical grants don't both emit `permission_granted`.
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (prev.sessionGrants.categories.includes(opts.category)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            categories: [...prev.sessionGrants.categories, opts.category],
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_granted', category: opts.category });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      if (prev.actorGrants?.[key]?.categories.includes(opts.category)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithCategoryGranted(prev.actorGrants, key, opts.category),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_granted', category: opts.category, actor: opts.actor });
+    }
   }
 
   /**
    * Grant a specific tool for the lifetime of this session. No-op if
-   * already granted. Emits `permission_granted` on a transition.
+   * already granted. Emits `permission_granted` on a transition. When
+   * `actor` is supplied, the grant overlays only that caller's view.
    */
-  private async _permGrantTool(opts: { toolName: string }): Promise<void> {
+  private async _permGrantTool(opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.grantTool()');
     assertToolName('permissions.grantTool', opts.toolName);
-    if (this._record.sessionGrants.tools.includes(opts.toolName)) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        tools: [...prev.sessionGrants.tools, opts.toolName],
-      },
-    }));
-    this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName });
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (prev.sessionGrants.tools.includes(opts.toolName)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            tools: [...prev.sessionGrants.tools, opts.toolName],
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      if (prev.actorGrants?.[key]?.tools.includes(opts.toolName)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithToolGranted(prev.actorGrants, key, opts.toolName),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName, actor: opts.actor });
+    }
   }
 
   /**
    * Revoke a previously granted category. No-op if not granted. Emits
-   * `permission_revoked` on a transition.
+   * `permission_revoked` on a transition. When `actor` is supplied,
+   * only that actor's grant is revoked.
    */
-  private async _permRevokeCategory(opts: { category: ToolCategory }): Promise<void> {
+  private async _permRevokeCategory(opts: { category: ToolCategory; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.revokeCategory()');
     assertToolCategory('permissions.revokeCategory', opts.category);
-    const idx = this._record.sessionGrants.categories.indexOf(opts.category);
-    if (idx === -1) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        categories: prev.sessionGrants.categories.filter(c => c !== opts.category),
-      },
-    }));
-    this._emitter.emit({ type: 'permission_revoked', category: opts.category });
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (!prev.sessionGrants.categories.includes(opts.category)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            categories: prev.sessionGrants.categories.filter(c => c !== opts.category),
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_revoked', category: opts.category });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      const existing = prev.actorGrants?.[key];
+      if (existing === undefined || !existing.categories.includes(opts.category)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithCategoryRevoked(prev.actorGrants, key, opts.category),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_revoked', category: opts.category, actor: opts.actor });
+    }
   }
 
   /**
    * Revoke a previously granted tool. No-op if not granted. Emits
-   * `permission_revoked` on a transition.
+   * `permission_revoked` on a transition. When `actor` is supplied,
+   * only that actor's grant is revoked.
    */
-  private async _permRevokeTool(opts: { toolName: string }): Promise<void> {
+  private async _permRevokeTool(opts: { toolName: string; actor?: HarnessActorIdentity }): Promise<void> {
     this._assertLive('permissions.revokeTool()');
     assertToolName('permissions.revokeTool', opts.toolName);
-    const idx = this._record.sessionGrants.tools.indexOf(opts.toolName);
-    if (idx === -1) return;
-    await this._flushUpdate(prev => ({
-      ...prev,
-      sessionGrants: {
-        ...prev.sessionGrants,
-        tools: prev.sessionGrants.tools.filter(t => t !== opts.toolName),
-      },
-    }));
-    this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName });
+    if (opts.actor === undefined) {
+      let changed = false;
+      await this._flushUpdate(prev => {
+        if (!prev.sessionGrants.tools.includes(opts.toolName)) return prev;
+        changed = true;
+        return {
+          ...prev,
+          sessionGrants: {
+            ...prev.sessionGrants,
+            tools: prev.sessionGrants.tools.filter(t => t !== opts.toolName),
+          },
+        };
+      });
+      if (changed) this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName });
+      return;
+    }
+    const key = actorKey(opts.actor);
+    let changed = false;
+    await this._flushUpdate(prev => {
+      const existing = prev.actorGrants?.[key];
+      if (existing === undefined || !existing.tools.includes(opts.toolName)) return prev;
+      changed = true;
+      return {
+        ...prev,
+        actorGrants: actorGrantsWithToolRevoked(prev.actorGrants, key, opts.toolName),
+      };
+    });
+    if (changed) {
+      this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName, actor: opts.actor });
+    }
   }
 
-  /** Read-only snapshot of the session's current grants. */
-  private _permGetGrants(): Readonly<SessionGrants> {
+  /**
+   * Read-only snapshot of the session's grants. With no `actor`, returns
+   * the session-level grants. With an actor, returns ONLY that actor's
+   * overlay (callers that need the merged view should compose with
+   * `getGrants()` themselves — overlay semantics differ from union).
+   */
+  private _permGetGrants(opts?: { actor?: HarnessActorIdentity }): Readonly<SessionGrants> {
     this._assertLive('permissions.getGrants()');
-    const { categories, tools } = this._record.sessionGrants;
-    return Object.freeze({ categories: [...categories], tools: [...tools] });
+    if (opts?.actor === undefined) {
+      const { categories, tools } = this._record.sessionGrants;
+      return Object.freeze({ categories: [...categories], tools: [...tools] });
+    }
+    const overlay = this._record.actorGrants?.[actorKey(opts.actor)];
+    if (overlay === undefined) return Object.freeze({ categories: [], tools: [] });
+    return Object.freeze({ categories: [...overlay.categories], tools: [...overlay.tools] });
   }
 
   /** Read-only snapshot of the session's current per-category / per-tool rules. */
@@ -5600,6 +6697,68 @@ export class Session {
    * dimensions separate so subscribers can route without inspecting the
    * payload. Emits `permission_policy_changed` on a transition.
    */
+  private async _permApplyProfile(opts: {
+    profileName: HarnessPermissionProfileName;
+    preserveCallerDenies?: boolean;
+  }): Promise<void> {
+    this._assertLive('permissions.applyProfile()');
+    const profile = HARNESS_PERMISSION_PROFILES[opts.profileName];
+    if (profile === undefined) {
+      throw new HarnessPermissionProfileNotFoundError(opts.profileName);
+    }
+    // Compute every snapshot from `prev` inside `_flushUpdate` so a
+    // concurrent permission mutation (setPolicy, grantTool, etc) that
+    // lands between the read and the write cannot leave us with a
+    // stale `previousProfileName` or drop a newly-added caller deny
+    // from `preserveCallerDenies`. The `_flushUpdate` callback runs
+    // under the same serialized lane as every other record write.
+    let resolved:
+      | {
+          previousProfileName?: string;
+          categories: Record<string, 'allow' | 'ask' | 'deny'>;
+          preservedToolDenies: number;
+        }
+      | undefined;
+    await this._flushUpdate(prev => {
+      const preserve = opts.preserveCallerDenies === true ? prev.permissionRules : undefined;
+      const nextRules = rulesFromProfile(
+        profile,
+        preserve !== undefined ? { preserveCallerDenies: preserve } : undefined,
+      );
+      const nextGrants = grantsFromProfile(profile);
+      const preservedToolDenies =
+        preserve !== undefined ? Object.values(preserve.tools ?? {}).filter(policy => policy === 'deny').length : 0;
+      resolved = {
+        ...(prev.appliedPermissionProfile !== undefined ? { previousProfileName: prev.appliedPermissionProfile } : {}),
+        categories: { ...nextRules.categories } as Record<string, 'allow' | 'ask' | 'deny'>,
+        preservedToolDenies,
+      };
+      const { actorGrants: _stale, ...rest } = prev;
+      // Clear every per-actor grant alongside the session-level reset.
+      // A profile reset must drop stale per-caller privilege (e.g. a
+      // `channel:slack:...` grant from before a switch to
+      // `readOnlyReview`), otherwise a stronger prior posture could
+      // survive the reset for specific callers.
+      void _stale;
+      return {
+        ...rest,
+        permissionRules: nextRules,
+        sessionGrants: nextGrants,
+        appliedPermissionProfile: profile.name,
+      };
+    });
+    // `_flushUpdate` always runs the callback at least once, so
+    // `resolved` is guaranteed set here.
+    this._emitter.emit({
+      type: 'permission_profile_applied',
+      profileName: profile.name,
+      ...(resolved!.previousProfileName !== undefined ? { previousProfileName: resolved!.previousProfileName } : {}),
+      mode: opts.preserveCallerDenies === true ? 'replace-preserve-denies' : 'replace',
+      categories: resolved!.categories,
+      preservedToolDenies: resolved!.preservedToolDenies,
+    });
+  }
+
   private async _permSetPolicy(
     opts:
       | { category: ToolCategory; toolName?: never; policy: PermissionPolicy }
@@ -5854,7 +7013,18 @@ export class Session {
     const resumedAt = Date.now();
     let duplicateReceiptAfterAdmission: InboxResponseReceipt | undefined;
     let pendingAlreadyResumedAfterAdmission = false;
+    let cancelledBeforeResume: { reason?: string } | undefined;
     await this._flushUpdate(prev => {
+      // Cancellation precedence: if a durable cancelRequest committed
+      // before this resume reached the CAS, refuse to mark resumedAt
+      // and let the outer code surface the cancel. Already-resumed
+      // paths are unaffected — the abort path handles in-flight
+      // cancellation separately.
+      if (prev.cancelRequest !== undefined && prev.pendingResume?.resumedAt === undefined) {
+        cancelledBeforeResume = { reason: prev.cancelRequest.reason };
+        return prev;
+      }
+
       const currentReceipt =
         responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
       if (currentReceipt !== undefined) {
@@ -5907,6 +7077,9 @@ export class Session {
       };
       return next;
     });
+    if (cancelledBeforeResume !== undefined) {
+      throw new HarnessSessionCancelledError(this.id, cancelledBeforeResume.reason);
+    }
     if (duplicateReceiptAfterAdmission !== undefined) {
       this._throwStoredInboxResponseFailure(duplicateReceiptAfterAdmission);
       return this._inboxReceiptResult(duplicateReceiptAfterAdmission, true);
@@ -5933,6 +7106,28 @@ export class Session {
         `respond[${expectedKind}]`,
         'pending resume already responded; awaiting agent confirmation',
       );
+    }
+
+    // Sandbox-access verdict event fires AFTER the CAS commit so
+    // invalid responses, duplicate receipts, and concurrent losers
+    // never emit a false `sandbox_access_resolved`. The pending
+    // payload still has the original semanticType + reason; we read
+    // them from `pending` (captured pre-flush) which is value-equal
+    // to the committed record.
+    if (expectedKind === 'sandbox-access') {
+      const approved =
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData &&
+        (resumeData as { approved: unknown }).approved === true;
+      const sandboxAccess = pending.payload?.sandboxAccess;
+      this._emitTurnEvent({
+        type: 'sandbox_access_resolved',
+        requestId: pending.itemId ?? pending.toolCallId,
+        toolCallId: pending.toolCallId,
+        semanticType: sandboxAccess?.semanticType ?? 'custom',
+        approved,
+      });
     }
 
     // Resumed runs run under a session-owned AbortController too, so
@@ -6080,7 +7275,7 @@ export class Session {
       if (full.finishReason !== 'suspended') {
         this._emitTurnEvent({
           type: 'agent_end',
-          reason: full.finishReason === 'error' ? 'error' : 'complete',
+          reason: mapFinishToAgentEndReason(full.finishReason),
           runId: full.runId,
         });
 
@@ -6995,6 +8190,109 @@ export class Session {
   }
 
   /**
+   * Scheduler step. Inside a single `_flushUpdate` CAS:
+   *   - drop any items whose `deadline` has passed; emit
+   *     `queue_item_expired` per drop, mark each item's receipt
+   *     `failed`, and reject the resolver after the commit;
+   *   - select the next item to run by `(priority desc, enqueuedAt
+   *     asc)` from those that have no `notBefore` block; rotate it
+   *     to position 0 so the existing drain + recovery logic can keep
+   *     its `pendingQueue[0]` invariant.
+   *
+   * No-op when the queue is empty or no item is currently eligible.
+   */
+  private async _scheduleNextQueueHead(): Promise<void> {
+    const now = Date.now();
+    const expired: { queuedItemId: string; admissionId?: string; deadline: number }[] = [];
+    const cancelErrorForReceipt = new HarnessSessionCancelledError(this.id, 'queue_item_expired');
+    let didCommit = false;
+
+    await this._flushUpdate(prev => {
+      const queue = prev.pendingQueue ?? [];
+      if (queue.length === 0) return prev;
+
+      const survivors: QueuedItem[] = [];
+      const existingReceipts = prev.queueAdmissionReceipts ?? {};
+      const nextReceipts: Record<string, QueueAdmissionReceipt> = { ...existingReceipts };
+      let receiptsChanged = false;
+
+      for (const item of queue) {
+        if (item.deadline !== undefined && item.deadline <= now) {
+          expired.push({ queuedItemId: item.id, admissionId: item.admissionId, deadline: item.deadline });
+          const receipt = existingReceipts[item.id];
+          if (receipt && receipt.status !== 'completed' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+            nextReceipts[item.id] = {
+              ...receipt,
+              status: 'failed',
+              error: projectHarnessPublicError(cancelErrorForReceipt),
+              failedAt: receipt.failedAt ?? now,
+              updatedAt: now,
+            };
+            receiptsChanged = true;
+          }
+          continue;
+        }
+        survivors.push(item);
+      }
+
+      // Pick the next runnable item: highest priority, FIFO tie-break.
+      // The currently-running item (if any) stays first — it's already
+      // executing and the drain only consults position 0 mid-loop when
+      // no turn is in flight.
+      let head: QueuedItem | undefined;
+      let headIdx = -1;
+      for (let i = 0; i < survivors.length; i++) {
+        const candidate = survivors[i]!;
+        const cp = candidate.priority ?? 0;
+        const hp = head?.priority ?? 0;
+        if (head === undefined || cp > hp || (cp === hp && candidate.enqueuedAt < head.enqueuedAt)) {
+          head = candidate;
+          headIdx = i;
+        }
+      }
+
+      const rotated = head !== undefined && headIdx > 0;
+      const didExpire = expired.length > 0;
+      // No-op short-circuit: nothing expired, no rotation needed, no
+      // receipts to update. `survivors` is always a fresh array, so an
+      // identity check vs `queue` would never short-circuit — we have
+      // to derive "nothing changed" from the flags instead.
+      if (!didExpire && !rotated && !receiptsChanged) return prev;
+
+      const nextQueue = rotated
+        ? // Rotate selected item to position 0 so the existing
+          // recovery + drain code can keep its `pendingQueue[0]`
+          // assumption while still running the highest-priority
+          // work first.
+          [head!, ...survivors.slice(0, headIdx), ...survivors.slice(headIdx + 1)]
+        : survivors;
+
+      didCommit = true;
+      const next: SessionRecord = { ...prev, pendingQueue: nextQueue };
+      if (receiptsChanged) {
+        next.queueAdmissionReceipts = nextReceipts;
+      }
+      return next;
+    });
+
+    if (!didCommit) return;
+
+    for (const dropped of expired) {
+      this._emitter.emit({
+        type: 'queue_item_expired',
+        queuedItemId: dropped.queuedItemId,
+        ...(dropped.admissionId !== undefined ? { admissionId: dropped.admissionId } : {}),
+        deadline: dropped.deadline,
+      } as EmitInput);
+      const resolver = this._queueResolvers.get(dropped.queuedItemId);
+      if (resolver) {
+        this._queueResolvers.delete(dropped.queuedItemId);
+        resolver.reject(new HarnessSessionCancelledError(this.id, 'queue_item_expired'));
+      }
+    }
+  }
+
+  /**
    * Drain pending queue items head-of-line. No-op while another drain is
    * running, the session is suspended (`pendingResume` set), or the queue
    * is empty. Each item runs as a fresh turn; if the turn suspends, drain
@@ -7020,8 +8318,13 @@ export class Session {
         // Bail if a previous iteration left the session suspended.
         if (this._record.pendingResume !== undefined) return;
 
+        // Scheduler step: expire any items past their deadline, then
+        // rotate the highest-priority item to the head. Done in a
+        // single CAS so the rest of the drain logic (recovery,
+        // post-run finalize) can keep its `pendingQueue[0]` assumption.
+        await this._scheduleNextQueueHead();
         const head = this._record.pendingQueue?.[0];
-        if (!head) return;
+        if (!head) continue;
         this._currentQueuedItemId = head.id;
         this._currentQueuedItemSource = head.source ?? 'user';
         const isLiveAdmission = this._queueResolvers.has(head.id) || this._liveAdmittedQueuedItemIds.delete(head.id);
@@ -7369,10 +8672,15 @@ export class Session {
     modeId: string,
     activeTurnWaiter?: Promise<never>,
   ): Promise<void> {
+    let alreadyAccounted = false;
     if (this._record.queueAdmissionReceipts?.[item.id]?.postRunFinalizedAt === undefined) {
-      // Mark before running non-idempotent post-run side effects. Recovery may
-      // retry a failed marker write, but must not replay goal continuations,
-      // token accounting, or terminal turn events after the marker persists.
+      // Account for the turn's tokens BEFORE writing the no-replay marker so
+      // the marker's CAS save piggybacks the live `_tokenUsage` via the
+      // `_flushUpdate` overlay (see ~line 7944). Without this ordering, a
+      // crash between the marker save and a later scheduled token persist
+      // would resume with `postRunFinalizedAt` set and never re-account.
+      this._recordTurnCompletion(full);
+      alreadyAccounted = true;
       try {
         await this._raceActiveTurnWaiter(this._markQueuedPostRunFinalized(item.id), activeTurnWaiter);
       } catch (err) {
@@ -7380,7 +8688,9 @@ export class Session {
         throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
       }
     }
-    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter);
+    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter, {
+      skipTokenAccounting: alreadyAccounted,
+    });
   }
 
   private async _markQueuedTurnCompleted(
@@ -7425,15 +8735,16 @@ export class Session {
     full: FullOutput<unknown>,
     modeId?: string,
     activeTurnWaiter?: Promise<never>,
+    opts: { skipTokenAccounting?: boolean } = {},
   ): Promise<FullOutput<unknown>> {
-    this._recordTurnCompletion(full);
+    if (!opts.skipTokenAccounting) this._recordTurnCompletion(full);
     await this._raceActiveTurnWaiter(
       this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId),
       activeTurnWaiter,
     );
     this._emitTurnEvent({
       type: 'agent_end',
-      reason: full.finishReason === 'suspended' ? 'suspended' : full.finishReason === 'error' ? 'error' : 'complete',
+      reason: mapFinishToAgentEndReason(full.finishReason),
       runId: full.runId,
     });
     await this._raceActiveTurnWaiter(this._runGoalJudge(full, (item.source ?? 'user') === 'goal'), activeTurnWaiter);
@@ -7582,6 +8893,97 @@ export class Session {
       kind: 'question',
       toolCallId,
       toolName: ASK_USER_TOOL_NAME,
+      runId,
+    });
+  }
+
+  private async _registerSandboxAccess(
+    params: RegisterSandboxAccessParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
+  ): Promise<void> {
+    this._assertOpenForTurn('ctx.registerSandboxAccess');
+    if (typeof params.requestId !== 'string' || params.requestId.length === 0) {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.requestId', 'must be a non-empty string');
+    }
+    const validSemanticTypes = new Set(['file', 'command', 'network', 'mcp', 'custom']);
+    if (!validSemanticTypes.has(params.semanticType)) {
+      throw new HarnessValidationError(
+        'ctx.registerSandboxAccess.semanticType',
+        "must be one of 'file' | 'command' | 'network' | 'mcp' | 'custom'",
+      );
+    }
+    if (params.reason !== undefined && typeof params.reason !== 'string') {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.reason', 'must be a string when provided');
+    }
+    // Strictly validate the opaque payload before we persist it on
+    // `pendingResume.payload` or stamp it on the event. The harness's
+    // strict `assertJsonValue` rejects functions, class instances,
+    // NaN/Infinity, sparse arrays, Date objects, BigInt, and any
+    // other non-plain JSON value — preventing a malformed payload
+    // from poisoning the durable session row or the event ledger.
+    // Same validator used for `respond*` payload hashing and
+    // admission-id derivation, so the contract is consistent across
+    // every harness surface that accepts JSON from a tool.
+    const sanitizedPayload =
+      params.payload !== undefined ? assertJsonValue(params.payload, 'ctx.registerSandboxAccess.payload') : undefined;
+    const runId = params.runId ?? this._currentRunId;
+    const toolCallId = params.toolCallId ?? params.requestId;
+    if (!runId) {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.runId', 'active run id is required');
+    }
+    const modeId = params.modeId ?? this._record.modeId;
+    const pending: PendingResume = {
+      kind: 'sandbox-access',
+      itemId: params.requestId,
+      runId,
+      toolCallId,
+      source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      requestedAt: Date.now(),
+      modeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(
+        modeId,
+        params.modelId ?? this._modelIdForQueuedItem(this._currentQueuedItemId),
+      ),
+      payload: {
+        sandboxAccess: {
+          semanticType: params.semanticType,
+          ...(params.reason !== undefined ? { reason: params.reason } : {}),
+          ...(sanitizedPayload !== undefined ? { payload: sanitizedPayload } : {}),
+        },
+      },
+    };
+    let registered = false;
+    await this._flushUpdate(prev => {
+      const current = prev.pendingResume;
+      if (current) {
+        // Idempotency: same requestId (itemId) under same runId is a
+        // no-op even when caller used a custom toolCallId. Without
+        // this `itemId` check, a re-registration with the same
+        // requestId but a different default toolCallId would throw.
+        if (
+          current.kind === 'sandbox-access' &&
+          current.runId === runId &&
+          (current.toolCallId === toolCallId || current.itemId === params.requestId)
+        ) {
+          return prev;
+        }
+        throw new HarnessValidationError('ctx.registerSandboxAccess', `pending resume is already "${current.kind}"`);
+      }
+      registered = true;
+      return { ...prev, pendingResume: pending };
+    });
+    if (!registered) return;
+    this._emitTurnEvent({
+      type: 'sandbox_access_requested',
+      requestId: params.requestId,
+      toolCallId,
+      semanticType: params.semanticType,
+      ...(params.reason !== undefined ? { reason: params.reason } : {}),
+      ...(sanitizedPayload !== undefined ? { payload: sanitizedPayload } : {}),
+    });
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind: 'sandbox-access',
+      toolCallId,
       runId,
     });
   }
@@ -7922,6 +9324,12 @@ export class Session {
       const updated = await update(this._record);
       const next: SessionRecord = {
         ...updated,
+        // Overlay the live token-usage counter so every CAS write persists the
+        // latest aggregate. Updaters never need to thread `tokenUsage` through
+        // their closures, and `_recordTurnCompletion` mutations between save
+        // construction and post-save assignment are not lost — we re-overlay
+        // from the live counter below.
+        tokenUsage: { ...this._tokenUsage },
         lastActivityAt: Date.now(),
       };
       const saveOpts = {
@@ -7933,7 +9341,7 @@ export class Session {
         opts?.attachmentReferences && opts.attachmentReferences.length > 0
           ? await this._storage.saveSessionWithAttachmentReferences(next, saveOpts, opts.attachmentReferences)
           : await this._storage.saveSession(next, saveOpts);
-      this._record = { ...next, version: saved.version };
+      this._record = { ...next, tokenUsage: { ...this._tokenUsage }, version: saved.version };
     };
     // Chain so concurrent callers serialize against the latest in-memory
     // version. Swallow chain-link errors so one caller's failure doesn't
@@ -8012,6 +9420,15 @@ export class Session {
     } else {
       workspace = await this._getWorkspaceUnchecked();
     }
+    // Derive a `HarnessActorIdentity` from the persisted channel
+    // context when present. The composite includes provider, platform,
+    // tenant, channel, and platformUserId so the same user id on two
+    // different Slack workspaces / providers does not collide. Sessions
+    // without channel context (CLI / programmatic / A2A) leave
+    // `actor` undefined here — A2A and CLI ingress paths populate the
+    // request-context `actor` field at admission time in a follow-up
+    // wiring slice.
+    const derivedActor = deriveActorFromChannel(persistedRequestContext?.channel);
     const harnessSlot: HarnessRequestContext<unknown> = {
       harnessId: this._harness.ownerId,
       sessionId: this.id,
@@ -8021,6 +9438,7 @@ export class Session {
       ...(turn.modelId ? { modelId: turn.modelId } : {}),
       ...(persistedRequestContext?.metadata ? { app: persistedRequestContext.metadata } : {}),
       ...(persistedRequestContext?.channel ? { channel: persistedRequestContext.channel } : {}),
+      ...(derivedActor !== undefined ? { actor: derivedActor } : {}),
       state: stateSnapshot,
       getState: () => (session._record.state ?? {}) as unknown,
       setState: ((updatesOrUpdater: unknown) =>
@@ -8071,8 +9489,30 @@ export class Session {
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
-      resolveToolPermission: params => session._resolveToolPermissionPolicy(params.toolName),
+      registerSandboxAccess: params =>
+        session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      resolveToolPermission: params =>
+        session._resolveToolPermissionPolicy(params.toolName, {
+          // Prefer caller-supplied actor (an upstream resolver may have
+          // overridden) and fall back to the channel-derived actor on
+          // the slot so per-actor grants resolve for every channel-
+          // originated tool call without the dispatcher needing to
+          // forward identity explicitly.
+          ...((params.actor ?? derivedActor) !== undefined
+            ? { actor: (params.actor ?? derivedActor) as HarnessActorIdentity }
+            : {}),
+          // Forward per-call args. The session-level resolver does
+          // not introspect args itself yet — workspace-policy rules
+          // (file/command/network/mcp) produce the args-aware verdict
+          // recorded on the action journal post-execution today — but
+          // the signature is plumbed so a future profile-side resolver
+          // hook or operator override can read them without another
+          // wire-up commit.
+          ...(params.args ? { args: params.args } : {}),
+        }),
       recordWorkspaceAction: params => session._recordWorkspaceAction(params),
+      registerBackgroundProcess: handle => session._registerBackgroundProcess(handle),
+      extendLease: extendOpts => session.extendLease(extendOpts),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
@@ -8199,6 +9639,8 @@ export class Session {
    * harness's job. Idempotent.
    */
   _markClosed(updatedRecord: SessionRecord): void {
+    this._reapBackgroundProcesses();
+    this._leaseExtensionDeadline = undefined;
     this._record = updatedRecord;
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
@@ -8207,6 +9649,8 @@ export class Session {
 
   /** @internal — used by Harness hard-delete after storage has removed the row. */
   _markDeleted(): void {
+    this._reapBackgroundProcesses();
+    this._leaseExtensionDeadline = undefined;
     const err = new HarnessSessionDeletedError(this.id);
     this._state = 'deleted';
     this._rejectIdleWaiters(err);
@@ -8245,6 +9689,8 @@ export class Session {
    * the session can be re-hydrated. Currently unused; lands with eviction.
    */
   _markEvicted(updatedRecord: SessionRecord): void {
+    this._reapBackgroundProcesses();
+    this._leaseExtensionDeadline = undefined;
     const err = new HarnessValidationError('session.evict()', 'Session evicted');
     this._record = updatedRecord;
     this._state = 'evicted';

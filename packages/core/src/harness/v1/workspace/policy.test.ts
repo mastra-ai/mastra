@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { evaluateWorkspacePolicy, resolveWorkspacePath } from './workspace-policy';
-import type { WorkspacePolicy } from './workspace-policy';
+import { evaluateWorkspacePolicy, resolveWorkspacePath } from './policy';
+import type { WorkspacePolicy } from './policy';
 
 const roots = [
   { id: 'project', path: '/workspace/project', writable: true },

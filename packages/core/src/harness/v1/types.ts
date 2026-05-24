@@ -14,6 +14,12 @@ import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { AgentSignalAttributes, CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import type { ChannelProvider } from '../../channels';
+// Profile name is the single source of truth at `permission-profiles.ts`.
+// TypeScript's `import type` is erased at runtime; no value-level
+// circular import results from this reference. Bringing the type here
+// keeps `SubagentDefinition.profile` automatically in sync with the
+// registry — if a new profile is added or removed there, the compiler
+// catches mismatches at the use sites instead of silently drifting.
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage/base';
@@ -39,7 +45,10 @@ import type {
 } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
-import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
+import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
+import type { HarnessPermissionProfileName } from './permission-profiles';
+import type { WorkspacePolicy } from './workspace/policy';
+import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
 
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).
@@ -125,6 +134,62 @@ export interface HarnessMode {
 export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
 
 /**
+ * Identifies the caller that admitted a single tool invocation. A
+ * Harness session can be served by many EXTERNAL callers concurrently
+ * (multiple A2A agents on a shared task, multiple channel users on a
+ * Slack thread, the CLI plus a server route on the same workspace),
+ * and per-actor grants attach to one of those identities.
+ *
+ * Scope (anti-drift):
+ * - This identity covers EXTERNAL callers only. Internal subagent
+ *   topology is NOT a `HarnessActorIdentity` kind: a subagent runs in
+ *   its own child Session with its own profile, and subagent
+ *   attribution is already captured by the workspace action journal
+ *   payload via `actor.source: 'subagent'` + `actor.parentSessionId`.
+ *   Adding a `'subagent'` kind here would mix permission identity
+ *   with execution topology and would be unstable (subagent session
+ *   ids are mostly ephemeral). Use `permissions.applyProfile` on the
+ *   child Session to gate subagent tool calls.
+ *
+ * Identity composition (anti-collision rules):
+ * - Channel callers MUST include `provider`, `platform`,
+ *   `externalTenantId?`, `externalChannelId?`, `platformUserId` so the
+ *   same user id on two different Slack workspaces / providers does
+ *   not collide. The `id` is the stable composite key — callers do
+ *   not stringify; use {@link actorKey}.
+ * - A2A callers use `kind: 'a2a'`, `id: <agent registration key>`.
+ * - CLI / server callers use `kind: 'cli' | 'server'`, `id: <opaque
+ *   process / route id>`.
+ */
+export type HarnessActorIdentityKind = 'a2a' | 'channel' | 'cli' | 'server';
+
+export interface HarnessActorIdentity {
+  kind: HarnessActorIdentityKind;
+  /**
+   * Stable identifier within `kind`. For channel callers, this is the
+   * composite of (provider, platform, externalTenantId?,
+   * externalChannelId?, platformUserId). For A2A, the agent
+   * registration key. Caller-facing — never auto-parse the structure.
+   */
+  id: string;
+  /**
+   * Optional human-readable label for audit / UI. Never used for
+   * permission resolution.
+   */
+  displayName?: string;
+}
+
+/**
+ * Stringify an actor identity into the map key shape used in
+ * `SessionRecord.actorGrants`. Deterministic and stable across
+ * processes so two channel calls from the same Slack user resolve to
+ * the same key.
+ */
+export function actorKey(actor: HarnessActorIdentity): string {
+  return `${actor.kind}:${actor.id}`;
+}
+
+/**
  * Outcome of a permission rule (§4.2e). Per-tool rules win over category
  * rules; explicit `'deny'` is terminal. Session-scoped grants can suppress
  * an `'ask'` reason but never override `'deny'`.
@@ -169,7 +234,7 @@ export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
 // ---------------------------------------------------------------------------
 // Harness channel registry (§9.3 / §14.1).
 //
-// PF-369 wires static provider/binding registration and validation only.
+// Static provider/binding registration and validation only.
 // Ingress/action/outbox workers consume these descriptors in later slices.
 // ---------------------------------------------------------------------------
 
@@ -1025,8 +1090,8 @@ export interface HarnessConfigCommon {
    * When set, construct with a parent `mastra` or register the harness through
    * `new Mastra({ channels, harnesses })` so provider bindings exist.
    *
-   * PF-369 validates identity only. Later channel PRs consume these bindings
-   * to mount ingress/action routes and durable inbox/outbox workers.
+   * This validates identity only. Later channel work consumes these bindings to
+   * mount ingress/action routes and durable inbox/outbox workers.
    */
   channels?: Record<string, HarnessChannelConfig>;
 
@@ -1066,16 +1131,23 @@ export type HarnessWorkspaceConfig =
       kind: 'shared';
       workspace: Workspace | ((ctx: { requestContext: RequestContext }) => Workspace | Promise<Workspace>);
       eager?: boolean;
+      /** Optional workspace-action allow/ask/deny policy. When set, the
+       * runtime evaluates every classified workspace action against this
+       * policy and journals the decision + matched rules as evidence.
+       * Absent = legacy caller-driven `policyDecision`. */
+      policy?: WorkspacePolicy;
     }
   | {
       kind: 'per-resource';
       provider: WorkspaceProvider | ((ctx: WorkspaceProviderContext) => Workspace | Promise<Workspace>);
       eager?: boolean;
+      policy?: WorkspacePolicy;
     }
   | {
       kind: 'per-session';
       provider: WorkspaceProvider;
       eager?: boolean;
+      policy?: WorkspacePolicy;
     };
 
 /**
@@ -1139,11 +1211,50 @@ export interface SubagentDefinition {
    */
   allowedWorkspaceTools?: string[];
 
+  /**
+   * Permission profile applied to the child session at spawn time.
+   *
+   * `allowedWorkspaceTools` only filters the WORKSPACE tools visible to
+   * the child's prompt — it does NOT prevent the child from calling
+   * any non-workspace tool (custom tools, MCP tools, channel actions,
+   * etc.). To enforce a true read-only or approval-gated posture on a
+   * subagent, set `profile` to one of the harness's permission
+   * presets: the child session's `permissionRules` and `sessionGrants`
+   * are replaced with the profile's posture before the first agent
+   * turn runs, so the child resolver gates EVERY tool call (not just
+   * workspace ones).
+   *
+   * The profile is applied AFTER the parent's subagent-event bridge
+   * is installed, so the resulting `permission_profile_applied` event
+   * is observable on the harness emitter for audit. Per-actor grants
+   * derived from the parent's channel context are NOT carried into
+   * the child — subagent execution is its own permission scope.
+   */
+  profile?: HarnessPermissionProfileName;
+
   /** Optional maximum number of steps for this subagent's execution loop. */
   maxSteps?: AgentExecutionOptionsBase<unknown>['maxSteps'];
 
   /** Optional stop condition for this subagent's execution loop. */
   stopWhen?: AgentExecutionOptionsBase<unknown>['stopWhen'];
+
+  /**
+   * Retention policy for the spawned subagent's session record. Default
+   * `false` — the session is deleted from storage after `subagent_end`
+   * fires, so heavy `spawn_subagent` workloads (parallel explore
+   * subagents, large fan-out review/migration runs) do not accumulate
+   * closed-but-undeleted rows.
+   *
+   * Set `true` for long-running specialized subagents that may be
+   * re-attached after `subagent_end` — the row is preserved.
+   *
+   * Note: thread + message-row cleanup is NOT covered by this flag yet;
+   * `deleteSession` does not cascade to thread rows. Operators that
+   * need full thread/message cleanup should call
+   * `harness.threads.delete(...)` themselves until the follow-up
+   * commit lands cleanup wiring.
+   */
+  retain?: boolean;
 }
 
 /**
@@ -1181,6 +1292,13 @@ interface SessionResolveCommon {
   origin?: 'top-level' | 'subagent-tool';
   modeId?: string;
   modelId?: string;
+  /**
+   * @internal — used when the caller has already created a thread outside
+   * `session({ threadId: { fresh: true } })` but the new session should own
+   * that thread for cascade cleanup. Currently used by forked subagents after
+   * cloning the parent thread.
+   */
+  ownsThread?: boolean;
   /**
    * @internal — used by the built-in `spawn_subagent` tool to record the
    * child's depth in the subagent tree (parent + 1). Top-level callers
@@ -1596,7 +1714,7 @@ export interface InboxResponseOptions {
 
 export interface InboxResponseResult {
   itemId: string;
-  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
   status: 'accepted' | 'applied';
   responseId: string;
   duplicate: boolean;
@@ -1819,6 +1937,37 @@ export interface RegisterPlanApprovalParams {
 }
 
 /**
+ * Parameters accepted by `ctx.registerSandboxAccess(...)` from a tool
+ * that needs to request sandbox-level approval (filesystem mount,
+ * shell command, outbound network endpoint, MCP server access, or a
+ * caller-defined `custom` surface). The harness records a pending
+ * resume of kind `'sandbox-access'`, emits
+ * `sandbox_access_requested`, and suspends the turn until the
+ * approver calls `session.respondToSandboxAccess({approved, reason?})`.
+ * The respond API routes via the session's current
+ * `pendingResume.kind === 'sandbox-access'` slot — one outstanding
+ * sandbox request per session at a time — mirroring every other
+ * `respond*` API on `Session`.
+ *
+ * Semantic types include the four `WorkspacePolicyActionKind` values
+ * (`'file'`, `'command'`, `'network'`, `'mcp'`) so existing
+ * workspace-policy renderers can render the prompt without a
+ * translation layer, plus `'custom'` for caller-defined surfaces
+ * that don't fit any of the four.
+ */
+export interface RegisterSandboxAccessParams {
+  /** Stable id for this request; doubles as the inbox itemId. */
+  requestId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  /** Operator-facing rationale shown in the approval UI. */
+  reason?: string;
+  /** Opaque caller-defined payload (e.g. path, command, host). */
+  payload?: JsonValue;
+  runId?: string;
+  toolCallId?: string;
+}
+
+/**
  * Harness-specific context surfaced on the agent's `RequestContext` under
  * the `'harness'` key. See spec §6 for the full contract.
  *
@@ -1846,6 +1995,15 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Trusted channel metadata attached by Harness-owned integration paths. */
   channel?: Readonly<PersistedRequestContextInput['channel']>;
+
+  /**
+   * Identity of the caller that admitted the current turn. Populated
+   * by the harness from the request's channel/a2a/server metadata so
+   * permission resolution can route per-actor grants. Undefined
+   * means session-level resolution (legacy behavior — the resolver
+   * falls back to `sessionGrants`).
+   */
+  actor?: HarnessActorIdentity;
 
   /** Snapshot of session state at slot construction. Live reads use `getState`. */
   state: TState;
@@ -1876,12 +2034,25 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
   registerPlanApproval: (params: RegisterPlanApprovalParams) => Promise<void>;
   /**
+   * Register a pending sandbox-access request (filesystem, command,
+   * network, mcp, or custom). The harness records a pending resume
+   * of kind `'sandbox-access'`, emits `sandbox_access_requested`,
+   * and suspends the turn until `session.respondToSandboxAccess` is
+   * called. The harness does NOT itself enforce sandbox access at
+   * the OS / process layer; this is the APPROVAL workflow.
+   */
+  registerSandboxAccess?: (params: RegisterSandboxAccessParams) => Promise<void>;
+  /**
    * Resolve the Harness permission policy for one tool invocation. The agent
    * tool dispatcher calls this before execution so per-tool/category rules and
    * session grants can allow, ask, or deny without degrading to a global
    * approval gate.
    */
-  resolveToolPermission?: (params: { toolName: string; args: Record<string, unknown> }) => PermissionPolicy;
+  resolveToolPermission?: (params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    actor?: HarnessActorIdentity;
+  }) => PermissionPolicy;
   /**
    * Internal audit hook used by the agent tool dispatcher to journal
    * workspace actions after the final permission decision is known.
@@ -1917,6 +2088,34 @@ export interface HarnessRequestContext<TState = unknown> {
    * one. Tools should null-check before use.
    */
   workspace?: Workspace;
+
+  /**
+   * Register a background sandbox process so the Harness can reap it when
+   * the session is closed, evicted, or deleted. Tools that call
+   * `sandbox.processes.spawn(...)` for background mode (i.e. processes
+   * that outlive the spawning turn) should pass the resulting handle
+   * here. Returns an `unregister()` callback the tool MAY call explicitly,
+   * though the harness also auto-unregisters via `handle.wait()` on
+   * normal exit. Optional: tools must null-check before calling.
+   *
+   * Foreground commands need NOT register — they already terminate when
+   * the turn's `abortSignal` fires via the sandbox process manager's
+   * built-in abort-to-kill wiring.
+   */
+  registerBackgroundProcess?: (handle: ProcessHandle) => () => void;
+
+  /**
+   * Extend this session's storage lease so the current Harness retains
+   * ownership for at least `ttlMs` ms beyond `Date.now()`. Tools that
+   * KNOW they will block the event loop or exceed the default lease TTL
+   * should call this BEFORE the blocking work — the periodic heartbeat
+   * alone cannot guarantee renewal under starvation. The value is clamped
+   * upward to the default lease TTL so this call never shrinks an
+   * existing lease. Rejects on non-finite / non-positive / non-integer
+   * `ttlMs` and on values above the safety cap. Optional: tools must
+   * null-check before calling.
+   */
+  extendLease?: (opts: { ttlMs: number }) => Promise<void>;
 
   /**
    * Invoke a skill programmatically from inside a tool. Delegates to

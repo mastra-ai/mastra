@@ -13,7 +13,7 @@ export {
   handleOMActivation,
   handleOMThreadTitleUpdated,
 } from './om.js';
-export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts.js';
+export { handleAskQuestion, handleSandboxAccessRequest, handleToolSuspension, handlePlanApproval } from './prompts.js';
 export { handleSubagentStart, handleSubagentToolStart, handleSubagentToolEnd, handleSubagentEnd } from './subagent.js';
 export {
   formatToolResult,

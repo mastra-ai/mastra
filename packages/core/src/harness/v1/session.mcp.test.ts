@@ -1,9 +1,8 @@
 /**
  * Harness v1 — read-only MCP catalog surface.
  *
- * Covers PF-562's desktop inventory API. The surface snapshots registered
- * MCP server/tool descriptors and does not expose execution or lifecycle
- * controls.
+ * Covers the desktop inventory API. The surface snapshots registered MCP
+ * server/tool descriptors and does not expose execution or lifecycle controls.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -202,7 +201,7 @@ async function makeSession() {
   return { session, server };
 }
 
-describe('Session MCP catalog (PF-562)', () => {
+describe('Session MCP catalog', () => {
   it('lists registered MCP server descriptors by Mastra registration key', async () => {
     const { session } = await makeSession();
 

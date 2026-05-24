@@ -44,7 +44,7 @@ export interface RouteHandlerResult {
   /** The result data from the handler */
   data: unknown;
   /** Response type determines how to send the response */
-  responseType: 'json' | 'stream' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+  responseType: 'json' | 'stream' | 'datastream-response' | 'raw' | 'mcp-http' | 'mcp-sse';
   /** Stream format (only for 'stream' responseType) */
   streamFormat?: 'sse' | 'stream';
 }

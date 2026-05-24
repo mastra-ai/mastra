@@ -16,7 +16,7 @@ import { MockAgent, setupHarness } from './__test-utils__';
 import { HarnessConfigError, HarnessSessionClosedError, HarnessValidationError } from './errors';
 import { Harness } from './harness';
 import type { HarnessSkill } from './types';
-import type { WorkspaceProvider } from './workspace-provider';
+import type { WorkspaceProvider } from './workspace/provider';
 
 type FakeSkillMeta = {
   name: string;

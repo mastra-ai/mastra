@@ -24,6 +24,7 @@ import {
   handleOMThreadTitleUpdated,
   handleAskQuestion,
   handleSandboxAccessRequest,
+  handleToolSuspension,
   handlePlanApproval,
   handleSubagentStart,
   handleSubagentToolStart,
@@ -366,7 +367,17 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'sandbox_access_request':
-      await handleSandboxAccessRequest(ectx, event.questionId, event.path, event.reason);
+      await handleSandboxAccessRequest(
+        ectx,
+        event.questionId,
+        event.path,
+        event.reason,
+        (event as { responseKind?: 'question' | 'sandbox-access' }).responseKind,
+      );
+      break;
+
+    case 'tool_suspended':
+      await handleToolSuspension(ectx, event.toolCallId, event.toolName, event.suspendPayload);
       break;
 
     case 'plan_approval_required':

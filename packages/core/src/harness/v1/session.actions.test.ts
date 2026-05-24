@@ -1,9 +1,9 @@
 /**
  * Harness v1 — read-only desktop action catalog surface.
  *
- * Covers PF-576's local action inventory over skill action metadata and MCP
- * tool descriptors. The surface is catalog-only: it does not execute actions
- * or manage MCP lifecycle/auth.
+ * Covers the local action inventory over skill action metadata and MCP tool
+ * descriptors. The surface is catalog-only: it does not execute actions or
+ * manage MCP lifecycle/auth.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -21,7 +21,7 @@ import type { Workspace } from '../../workspace';
 
 import { HarnessSessionClosedError, HarnessValidationError } from './errors';
 import { Harness } from './harness';
-import type { WorkspaceProvider } from './workspace-provider';
+import type { WorkspaceProvider } from './workspace/provider';
 
 class MockMcpServer extends MCPServerBase {
   public toolListCallCount = 0;
@@ -375,7 +375,7 @@ function makeWorkspaceSkillsProvider(skills: FakeWorkspaceSkills): WorkspaceProv
   return provider;
 }
 
-describe('Session action catalog (PF-576)', () => {
+describe('Session action catalog', () => {
   it('lists skill action metadata and MCP tool descriptors as read-only catalog entries', async () => {
     const { session, server } = await makeSession();
 

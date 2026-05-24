@@ -304,7 +304,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
       return this.stream(route, response, result as { fullStream: ReadableStream });
-    } else if (route.responseType === 'datastream-response') {
+    } else if (route.responseType === 'datastream-response' || route.responseType === 'raw') {
       const fetchResponse = result as globalThis.Response;
       return fetchResponse;
     } else if (route.responseType === 'mcp-http') {

@@ -18,10 +18,10 @@
 
 import { z } from 'zod';
 
-import { createTool } from '../../tools/tool';
-import { createWorkspaceTools } from '../../workspace/tools';
-import { HarnessSubagentDepthExceededError, HarnessValidationError } from './errors';
-import type { Session } from './session';
+import { createTool } from '../../../tools/tool';
+import { createWorkspaceTools } from '../../../workspace/tools';
+import { HarnessSubagentDepthExceededError, HarnessValidationError } from '../errors';
+import type { Session } from '../session';
 
 export const SPAWN_SUBAGENT_TOOL_ID = 'spawn_subagent';
 
@@ -233,6 +233,18 @@ export function createSpawnSubagentTool(parent: Session) {
         } catch {
           // ignore
         }
+        // Mirror the main retention path: ephemeral subagents that fail
+        // workspace-tool construction must NOT leave a closed child row OR
+        // an orphan thread+message rows in storage. `retain: true` opts
+        // out, same as the success path.
+        if (def.retain !== true) {
+          await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
+            // Best-effort; the tool result already encodes the failure.
+          });
+          await harness.threads.delete({ resourceId: child.resourceId, threadId: child.threadId }).catch(() => {
+            // Best-effort thread+message cleanup.
+          });
+        }
         return {
           isError: true,
           errorName: err instanceof Error ? err.name : 'Error',
@@ -315,6 +327,52 @@ export function createSpawnSubagentTool(parent: Session) {
         }
       });
 
+      // Apply the subagent type's permission profile to the child
+      // session AFTER the parent's subagent-event bridge is installed,
+      // so the resulting `permission_profile_applied` event is
+      // observable via the harness emitter for audit. Profiles
+      // enforce category/tool gates on EVERY tool the child can
+      // invoke — `allowedWorkspaceTools` only filters the workspace
+      // tools visible to the model and does not prevent non-workspace
+      // tool invocations. Applying a profile here is the canonical
+      // way to give a subagent type a true read-only or approval-
+      // gated posture independent of the parent session's grants.
+      if (def.profile !== undefined) {
+        try {
+          await child.permissions.applyProfile({ profileName: def.profile });
+        } catch (err) {
+          // Tear down the child event bridge first — `unsub()` removes
+          // the listener on the child emitter so subsequent
+          // child._markClosed / _markDeleted teardowns do not leave
+          // the parent's bridge subscriber hanging.
+          try {
+            unsub();
+          } catch {
+            // ignore
+          }
+          try {
+            await child.close();
+          } catch {
+            // ignore
+          }
+          if (def.retain !== true) {
+            await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
+              // best-effort
+            });
+            await harness.threads.delete({ resourceId: child.resourceId, threadId: child.threadId }).catch(() => {
+              // best-effort thread cleanup
+            });
+          }
+          return {
+            isError: true,
+            errorName: err instanceof Error ? err.name : 'Error',
+            message: err instanceof Error ? err.message : String(err),
+            subagentSessionId: child.id,
+            result: undefined,
+          };
+        }
+      }
+
       // Track the active subagent so `getDisplayState()` renders it.
 
       parent._internalTrackActiveSubagent(toolCallId, {
@@ -336,7 +394,6 @@ export function createSpawnSubagentTool(parent: Session) {
         result = await child.message({
           content: childTask,
           abortSignal: ctx.abortSignal,
-          ...(runAsForked ? { yolo: true } : {}),
           ...(prepareStep ? { prepareStep } : {}),
           maxSteps: def.maxSteps ?? (def.stopWhen ? undefined : 50),
           ...(def.stopWhen ? { stopWhen: def.stopWhen } : {}),
@@ -367,6 +424,39 @@ export function createSpawnSubagentTool(parent: Session) {
         durationMs,
         depth: childDepth,
       });
+
+      // Retention policy: ephemeral subagents (the default) are deleted
+      // from storage after `subagent_end` so heavy fan-out workloads do not
+      // accumulate closed-but-undeleted rows. `retain: true` on the
+      // subagent type suppresses deletion for subagents that may be
+      // re-attached later.
+      //
+      // We clean BOTH the session row (via `deleteSession`) AND the thread
+      // row + its messages (via `threads.delete`). `deleteSession` does
+      // NOT cascade to thread rows, and both the fresh-path thread (minted
+      // by `harness.session({threadId: {fresh: true}, ...})`) and the
+      // forked-path thread (cloned by `harness.threads.clone(...)`)
+      // belong exclusively to this child session — so deleting them is
+      // safe and necessary to keep memory message history bounded under
+      // heavy fan-out.
+      //
+      // Each call is best-effort: under separate-session-storage configs
+      // `threads.delete` may refuse via the MemoryStorage attachment guard
+      // (harness.ts:3433). In that environment the session row is still
+      // cleaned; the worst case is a leftover thread+messages, strictly
+      // better than the pre-fix state.
+      if (def.retain !== true) {
+        await harness.deleteSession({ sessionId: child.id, resourceId: child.resourceId }).catch(() => {
+          // Best-effort: cleanup failures shouldn't mask the tool's
+          // result. The session row may simply already be gone (e.g. if
+          // a sibling delete cascade landed first) or storage may be
+          // mid-eviction.
+        });
+        await harness.threads.delete({ resourceId: child.resourceId, threadId: child.threadId }).catch(() => {
+          // Best-effort: thread+message cleanup may fail under custom
+          // session-storage overrides; the session row is already cleaned.
+        });
+      }
 
       return {
         subagentSessionId: child.id,
