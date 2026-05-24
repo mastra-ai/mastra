@@ -157,6 +157,39 @@ const DEFAULT_CHANNEL_OUTBOX_BATCH_SIZE = 10;
 const DEFAULT_CHANNEL_OUTBOX_MAX_ATTEMPTS = 3;
 const CHANNEL_DIAGNOSTICS_DEFAULT_LIMIT = 50;
 const CHANNEL_DIAGNOSTICS_MAX_DESCENDANT_DEPTH = 32;
+
+/**
+ * Top-level keys recognized on `HarnessConfig` (the union of
+ * `HarnessConfigCommon` fields plus the `mastra` / `agents` /
+ * `storage` discriminants). The constructor warns — not throws —
+ * on any key not in this set so typo'd or stale userland configs
+ * surface loudly without breaking existing callers. The catch-all
+ * `[key: string]: unknown` on `HarnessConfigCommon` is preserved
+ * for now; a future slice can lift the warn to a hard error once
+ * downstream consumers have a chance to migrate.
+ */
+const HARNESS_CONFIG_KNOWN_KEYS: ReadonlySet<string> = new Set([
+  // HarnessConfigCommon
+  'channels',
+  'defaultModeId',
+  'defaultPermissionPolicy',
+  'files',
+  'goals',
+  'modelAuthStatusResolver',
+  'models',
+  'modes',
+  'runtimeCompatibilityGeneration',
+  'sessions',
+  'skills',
+  'subagents',
+  'toolCategories',
+  'toolCategoryResolver',
+  'workspace',
+  // HarnessConfig discriminants (mastra-mode vs agents+storage-mode)
+  'mastra',
+  'agents',
+  'storage',
+]);
 const CHANNEL_DIAGNOSTICS_MAX_VISIBLE_SESSIONS = 256;
 
 type CloseTreeNode = {
@@ -730,6 +763,14 @@ export class Harness {
   private _shutdown = false;
 
   constructor(config: HarnessConfig) {
+    for (const key of Object.keys(config)) {
+      if (!HARNESS_CONFIG_KNOWN_KEYS.has(key)) {
+        console.warn(
+          `[mastra:harness] ignoring unknown HarnessConfig key ${JSON.stringify(key)}. ` +
+            `This will become a hard error in a future release.`,
+        );
+      }
+    }
     const runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration;
     if (
       runtimeCompatibilityGeneration !== undefined &&
