@@ -90,7 +90,23 @@ To verify the setup:
 The Agent Builder requires:
 
 - **Storage**: An `@mastra/core` storage adapter on the `Mastra` instance. Stored agents, memory, and workspace state all persist through `Mastra.storage`.
-- **The `builderAgent`**: Register the `builderAgent` export from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it.
+- **The `builderAgent`**: Register the `builderAgent` export from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent.
+
+Register the `builderAgent` on the `agents` map:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { builderAgent } from '@mastra/editor/ee'
+
+export const mastra = new Mastra({
+  agents: {
+    builderAgent,
+    // ...your other agents
+  },
+})
+```
+
+Without this registration, the Builder UI loads, but the chat-based editor returns 404 when you try to talk to it.
 
 ## Disabling the Builder
 

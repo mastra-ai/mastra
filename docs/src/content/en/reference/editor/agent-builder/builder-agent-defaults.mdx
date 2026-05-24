@@ -45,40 +45,48 @@ new MastraEditor({
     name: 'memory',
     type: 'SerializedMemoryConfig',
     description:
-      'Default memory configuration for new agents. Pass `{ observationalMemory: true }` to enable long-lived fact extraction. Requires `Mastra.storage`. See the Memory overview for the full schema.',
+      'Default memory configuration for new agents. Pass `{ observationalMemory: true }` to enable long-lived fact extraction. Requires `Mastra.storage`. See [SerializedMemoryConfig](/reference/memory/serialized-memory-config) for the full schema.',
     isOptional: true,
   },
   {
     name: 'workspace',
     type: 'StorageWorkspaceRef',
     description:
-      "Default workspace reference for new agents. Pass `{ type: 'id', workspaceId }` to point at a workspace registered on `Mastra.workspace`.",
+      "Default workspace reference for new agents. Pass `{ type: 'id', workspaceId }` to point at a workspace registered on `Mastra.workspace`. See [StorageWorkspaceRef](/reference/editor/storage-workspace-ref) for both variants.",
     isOptional: true,
   },
   {
     name: 'browser',
     type: 'StorageBrowserRef',
     description:
-      "Default browser configuration for new agents. Pass `{ type: 'inline', config: { provider } }` to attach a registered browser provider.",
+      "Default browser configuration for new agents. Pass `{ type: 'inline', config: { provider } }` to attach a registered browser provider. See [StorageBrowserRef](/reference/editor/storage-browser-ref) for the full schema.",
     isOptional: true,
   },
   {
     name: 'models',
-    type: 'BuilderModelPolicy',
-    description: 'Model allowlist and default model. See the BuilderModelPolicy reference for invariants.',
+    type: '{ allowed?: ProviderModelEntry[]; default?: DefaultModelEntry }',
+    description:
+      'Model allowlist and default applied to every Builder-created agent. See [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) for the full schema and validation rules.',
     isOptional: true,
     properties: [
       {
-        name: 'allowed',
-        type: 'ProviderModelEntry[]',
-        description: 'Allowlist of providers and models. Omit to allow every registered model.',
-        isOptional: true,
-      },
-      {
-        name: 'default',
-        type: 'DefaultModelEntry',
-        description: 'Pre-selected model on new-agent create. Required when the picker is locked.',
-        isOptional: true,
+        type: '{ allowed?: ProviderModelEntry[]; default?: DefaultModelEntry }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'ProviderModelEntry[]',
+            description:
+              'Allowlist of providers and models. Omit to allow every registered model. See [ProviderModelEntry](/reference/editor/agent-builder/builder-models#properties) for the discriminated union shape (known providers vs. custom).',
+            isOptional: true,
+          },
+          {
+            name: 'default',
+            type: 'DefaultModelEntry',
+            description:
+              'Pre-selected model on new-agent create. Required when the model picker is hidden. See [DefaultModelEntry](/reference/editor/agent-builder/builder-models#properties) for the schema (`provider`, `modelId`, optional `kind`).',
+            isOptional: true,
+          },
+        ],
       },
     ],
   },
@@ -86,22 +94,64 @@ new MastraEditor({
     name: 'tools',
     type: '{ allowed?: string[] }',
     description:
-      'Allowlist of tool IDs visible in the Builder tools picker. Omitted = unrestricted, `[]` = locked down, `[...ids]` = only the listed `tool.id` values. Unknown IDs are dropped and surfaced as warnings.',
+      'Allowlist of tool IDs visible in the Builder tools picker. Unknown IDs are dropped and surfaced as warnings.',
     isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `tool.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed tools.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'agents',
     type: '{ allowed?: string[] }',
     description:
-      'Allowlist of agent IDs visible in the Builder sub-agents picker. Same semantics as `tools.allowed`. Matches on `Agent.id`.',
+      'Allowlist of agent IDs visible in the Builder sub-agents picker. Unknown IDs are dropped and surfaced as warnings.',
     isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `Agent.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed agents.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'workflows',
     type: '{ allowed?: string[] }',
     description:
-      'Allowlist of workflow IDs visible in the Builder workflows picker. Same semantics as `tools.allowed`. Matches on `workflow.id`.',
+      'Allowlist of workflow IDs visible in the Builder workflows picker. Unknown IDs are dropped and surfaced as warnings.',
     isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `workflow.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed workflows.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -109,6 +159,9 @@ new MastraEditor({
 ## Related
 
 - [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — the parent options object.
-- [BuilderModelPolicy](/reference/editor/agent-builder/builder-model-policy) — model allowlist and default model.
+- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — admin-facing model allowlist and default.
+- [BuilderModelPolicy](/reference/editor/agent-builder/builder-model-policy) — resolved policy served to the admin UI.
+- [SerializedMemoryConfig](/reference/memory/serialized-memory-config) — memory shape for new agents.
+- [StorageWorkspaceRef](/reference/editor/storage-workspace-ref) — workspace reference shape.
+- [StorageBrowserRef](/reference/editor/storage-browser-ref) — browser reference shape.
 - [Configuration](/docs/agent-builder/configuration) — concept and worked examples.
-- [Memory](/docs/agent-builder/memory) — memory shape for new agents.

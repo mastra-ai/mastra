@@ -14,6 +14,10 @@ The Agent Builder is a Mastra Enterprise feature. It runs without a license in l
 
 The Agent Builder is configured through `MastraEditor.builder`. Two top-level keys control its behavior: `features` toggles UI visibility and `configuration` pins admin-controlled defaults onto every new agent.
 
+:::note
+The Builder also requires the `builderAgent` export from `@mastra/editor/ee` to be registered on `Mastra.agents`. See [Prerequisites](/docs/agent-builder/overview#prerequisites) in the overview.
+:::
+
 ## Quickstart
 
 ```typescript title="src/mastra/index.ts"

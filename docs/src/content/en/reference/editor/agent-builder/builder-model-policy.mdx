@@ -1,6 +1,6 @@
 ---
 title: "Reference: BuilderModelPolicy | Editor"
-description: "Reference for BuilderModelPolicy, the model allowlist and default-model policy applied to every Agent Builder agent."
+description: "Reference for the resolved Agent Builder ModelPolicy served to the admin UI."
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -8,31 +8,24 @@ packages:
 
 # BuilderModelPolicy
 
-`BuilderModelPolicy` describes the model allowlist and default-model policy for the Agent Builder. It's the type of `builder.configuration.agent.models`.
+`ModelPolicy` is the server-resolved, read-only shape served to the Agent Builder admin UI. The Builder produces it by combining the admin input on [`builder.configuration.agent.models`](/reference/editor/agent-builder/builder-models) with `features.agent.model`, then exposes it through `GET /editor/builder/settings.modelPolicy`.
+
+`BuilderModelPolicy` is a deprecated alias for `ModelPolicy`. New code should import `ModelPolicy` directly.
 
 See [Model policy](/docs/agent-builder/model-policy) for concepts and worked examples.
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts"
-import { MastraEditor } from '@mastra/editor'
+```typescript title="src/server/admin.ts"
+import type { ModelPolicy } from '@mastra/core/agent-builder/ee'
 
-new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        models: {
-          active: true,
-          pickerVisible: false,
-          allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
-          default: { provider: 'openai', modelId: 'gpt-5.4' },
-        },
-      },
-    },
-  },
-})
+async function fetchModelPolicy(): Promise<ModelPolicy> {
+  const res = await fetch('/editor/builder/settings.modelPolicy')
+  return res.json()
+}
 ```
+
+The admin UI uses the resolved `ModelPolicy` to render the allowlist editor, show whether the policy is currently active, and decide whether to expose the end-user model picker.
 
 ## Properties
 
@@ -42,43 +35,39 @@ new MastraEditor({
     name: 'active',
     type: 'boolean',
     description:
-      'Whether the policy is enforced. When false, all other fields are ignored and every registered model is available.',
+      'Derived flag indicating whether the policy restricts model selection (true when `allowed` is non-empty or `default` is set).',
   },
   {
     name: 'pickerVisible',
     type: 'boolean',
-    description:
-      'Whether the end-user model picker is visible. When false, the policy is locked and `default` is required.',
     isOptional: true,
-    defaultValue: 'true',
+    description:
+      'Derived from `features.agent.model`. When `false`, the end-user model picker is hidden in the Builder UI.',
   },
   {
     name: 'allowed',
     type: 'ProviderModelEntry[]',
-    description:
-      "Allowlist of providers and models. Each entry is either a `KnownProviderEntry` (typed against the generated provider registry) or a `CustomProviderEntry` with `kind: 'custom'` for gateways. Omitting `modelId` on a `KnownProviderEntry` allows every model under that provider.",
     isOptional: true,
+    description:
+      'Pass-through of the admin `allowed` list. See [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) for the full schema.',
   },
   {
     name: 'default',
     type: 'DefaultModelEntry',
-    description:
-      'Pre-selected model on new-agent create. `modelId` is required. Must satisfy the `allowed` list when set.',
     isOptional: true,
+    description:
+      'Pass-through of the admin `default` entry (after validation). See [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) for the full schema.',
   },
 ]}
 />
 
-## Invariants
+## Read-only
 
-Mastra enforces three invariants on every `BuilderModelPolicy`. Violations are surfaced as boot-time warnings through `getModelPolicyWarnings()`.
-
-- `active: false` — every other field is ignored.
-- `active: true` with `pickerVisible: false` (locked) — `default` is required.
-- When `allowed` is non-empty, `default` (if set) must satisfy `isModelAllowed(allowed, default)`.
+`ModelPolicy` is not directly writable. To change the resolved policy, update the admin input on `builder.configuration.agent.models` and restart the server. Construction-time validation warnings are surfaced via [`IAgentBuilder.getModelPolicyWarnings()`](/reference/editor/agent-builder/iagent-builder) and `GET /editor/builder/settings.modelPolicyWarnings`.
 
 ## Related
 
+- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — admin input that produces this resolved policy.
+- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — parent options object (set `features.agent.model: false` to hide the picker).
+- [IAgentBuilder](/reference/editor/agent-builder/iagent-builder) — runtime interface that exposes policy warnings.
 - [Model policy](/docs/agent-builder/model-policy) — concept and worked examples.
-- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — `models` lives under `configuration.agent`.
-- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — the parent options object.
