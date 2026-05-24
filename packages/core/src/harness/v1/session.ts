@@ -8984,10 +8984,14 @@ export class Session {
           ...((params.actor ?? derivedActor) !== undefined
             ? { actor: (params.actor ?? derivedActor) as HarnessActorIdentity }
             : {}),
-          // `params.args` is intentionally dropped here in S2 — Slice 5
-          // wires the args plumbing through. Adding it now would
-          // change the resolver signature twice; instead the
-          // signature already accepts `args?` for the S5 wire-up.
+          // Forward per-call args. The session-level resolver does
+          // not introspect args itself yet — workspace-policy rules
+          // (file/command/network/mcp) produce the args-aware verdict
+          // recorded on the action journal post-execution today — but
+          // the signature is plumbed so a future profile-side resolver
+          // hook or operator override can read them without another
+          // wire-up commit.
+          ...(params.args ? { args: params.args } : {}),
         }),
       recordWorkspaceAction: params => session._recordWorkspaceAction(params),
       registerBackgroundProcess: handle => session._registerBackgroundProcess(handle),

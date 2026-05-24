@@ -9,9 +9,9 @@
  *   - grants get tracked at session-level (default API) unchanged
  *   - applyProfile clears actorGrants inside the same flush
  *   - legacy sessions (no actorGrants) behave identically to pre-S2
- *   - resolver signature accepts args (S5 placeholder); for now S2
- *     drops args at the callsite — re-asserted by the wire-up test
- *     in Slice 5
+ *   - resolver signature accepts args (wired in Slice 5); the args
+ *     plumb-through assertion is in the args-plumb-through describe
+ *     block below
  */
 
 import { describe, expect, it } from 'vitest';
@@ -312,6 +312,31 @@ describe('deriveActorFromChannel (wire-up helper)', () => {
       actor: { platformUserId: 'U123' },
     } as any);
     expect(a?.id).not.toBe(b?.id);
+  });
+});
+
+describe('args plumb-through (S5)', () => {
+  it('_resolveToolPermissionPolicy accepts opts.args for future args-aware evaluation', async () => {
+    // S5 wires `params.args` from the harness slot through to the
+    // session resolver. The base resolver doesn't introspect args
+    // today (workspace policy produces the args-aware verdict on the
+    // action journal, audit-side, post-execution), but the signature
+    // must accept them so a future profile-side resolver hook or
+    // operator override can read them without another wire-up
+    // commit. Pin the contract here.
+    const { session } = await setup();
+    // Args are accepted (no TS / runtime error) and resolution still
+    // returns the expected declarative verdict.
+    expect(
+      (session as any)._resolveToolPermissionPolicy('shell.run', {
+        args: { command: 'pnpm test' },
+      }),
+    ).toBe('ask');
+    expect(
+      (session as any)._resolveToolPermissionPolicy('shell.run', {
+        args: { command: 'pnpm publish' },
+      }),
+    ).toBe('ask');
   });
 });
 

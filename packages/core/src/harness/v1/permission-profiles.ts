@@ -20,13 +20,21 @@
  *   `sessionGrants` — a profile-driven baseline must not carry stale
  *   rules forward when the posture changes. Callers that need to
  *   preserve their explicit denies pass `preserveCallerDenies: true`.
- * - Profiles gate on tool category and tool name only — per-call
- *   argument inspection is deferred. The session-level permission
- *   evaluation currently does not see invocation arguments, so a
- *   profile cannot distinguish `pnpm test` from `pnpm publish`.
- *   Operators who need finer-grained gating layer a custom
- *   workspace-policy rule for the specific commands their workflow
- *   uses.
+ * - Profiles gate on tool category and tool name only. Per-call
+ *   `args` are plumbed through the harness slot to the session
+ *   resolver, but the profile bundle itself remains purely
+ *   declarative — it does not introspect args. Workspace-policy
+ *   rules (with selectors for `command`, `network`, `mcp`)
+ *   produce an args-aware verdict on every workspace-tool call
+ *   today, recorded on the action journal as the
+ *   `policyDecision` overlay alongside the caller's intent.
+ *   That verdict is currently audit-side (the dispatcher
+ *   records it post-execution); a future slice can move the
+ *   workspace-policy evaluation pre-execution so a profile-set
+ *   `ask`/`deny` on the workspace tool's category and the
+ *   workspace-policy rule's args-aware verdict compose into a
+ *   single pre-`tool.execute` decision. Until then, profile
+ *   presets stay coarse-grained at category + tool-name level.
  * - Workspace-policy fragments are intentionally out of this module —
  *   the harness workspace policy is currently construction-only, and
  *   exposing a session-scoped overlay is a separate slice.
