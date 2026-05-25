@@ -52,6 +52,8 @@ export function loadAgentInstructions(projectPath: string, configDirName = DEFAU
   const projectLocations = PROJECT_LOCATIONS.map(loc => (loc === '.mastracode' ? configDirName : loc));
   const globalLocations = GLOBAL_LOCATIONS.map(loc => {
     if (loc === '.mastracode') return configDirName;
+    // XDG-style path (~/.config/<name>): strip the leading dot since the
+    // .config/ prefix already signals a hidden/config directory.
     if (loc === '.config/mastracode') return '.config/' + configDirName.replace(/^\./, '');
     return loc;
   });

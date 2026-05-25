@@ -103,9 +103,6 @@ export function buildSkillPaths(projectPath: string, configDir: string): string[
   ]);
 }
 
-export const skillPaths = buildSkillPaths(process.cwd(), DEFAULT_CONFIG_DIR);
-export const allowedSkillPaths = skillPaths;
-
 /**
  * Paths the agent is always allowed to access (in addition to the project root
  * and any per-thread sandboxAllowedPaths). The OS temp directory is included
