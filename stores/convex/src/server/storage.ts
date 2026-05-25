@@ -6,22 +6,48 @@ import {
   TABLE_SCORERS,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage/constants';
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 import type { GenericId } from 'convex/values';
 
-import type { StorageRequest, StorageResponse } from '../storage/types';
+import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
 
 // Vector-specific table names (not in @mastra/core)
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
 const VECTOR_TABLE_PREFIX = 'mastra_vector_';
 const CONVEX_TABLE_WORKFLOW_SNAPSHOTS = 'mastra_workflow_snapshots';
+const CONVEX_TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
+const CONVEX_TABLE_DOCUMENTS = 'mastra_documents';
 const STORAGE_MUTATION_BATCH_SIZE = 25;
 
 type ConvexDocWithId = { _id: GenericId<string> };
+type GenericDocumentDoc = ConvexDocWithId & { record: Record<string, unknown> };
 type StorageRecord = Record<string, unknown> & { id?: unknown };
+const BACKGROUND_TASK_FIELD_ALIASES: Record<string, string> = {
+  tool_call_id: 'toolCallId',
+  toolCallId: 'tool_call_id',
+  tool_name: 'toolName',
+  toolName: 'tool_name',
+  agent_id: 'agentId',
+  agentId: 'agent_id',
+  run_id: 'runId',
+  runId: 'run_id',
+  thread_id: 'threadId',
+  threadId: 'thread_id',
+  resource_id: 'resourceId',
+  resourceId: 'resource_id',
+  suspend_payload: 'suspendPayload',
+  suspendPayload: 'suspend_payload',
+  retry_count: 'retryCount',
+  retryCount: 'retry_count',
+  max_retries: 'maxRetries',
+  maxRetries: 'max_retries',
+  timeout_ms: 'timeoutMs',
+  timeoutMs: 'timeout_ms',
+};
 
 async function mapInBatches<TInput, TOutput>(
   inputs: TInput[],
@@ -45,6 +71,97 @@ async function findExistingDocsByIds(
 ): Promise<ConvexDocWithId[]> {
   const docs = await mapInBatches([...new Set(ids)], STORAGE_MUTATION_BATCH_SIZE, findDoc);
   return docs.filter((doc): doc is ConvexDocWithId => Boolean(doc));
+}
+
+function isBackgroundTasksTable(convexTable: string, request: StorageRequest): boolean {
+  return convexTable === CONVEX_TABLE_BACKGROUND_TASKS && request.tableName === TABLE_BACKGROUND_TASKS;
+}
+
+function matchesFilters(record: Record<string, unknown>, filters: EqualityFilter[]): boolean {
+  return filters.every(filter => {
+    if (record[filter.field] === filter.value) return true;
+    const alternateField = BACKGROUND_TASK_FIELD_ALIASES[filter.field];
+    return alternateField ? record[alternateField] === filter.value : false;
+  });
+}
+
+function mergeLegacyRecord(record: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+  const merged = { ...record };
+  for (const [field, value] of Object.entries(patch)) {
+    const alternateField = BACKGROUND_TASK_FIELD_ALIASES[field];
+    if (alternateField) delete merged[alternateField];
+    merged[field] = value;
+  }
+  return merged;
+}
+
+function stripPatchKeys(record: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  const stripped = { ...record };
+  for (const key of keys) delete stripped[key];
+  return stripped;
+}
+
+function dedupeByRecordId(records: any[]): any[] {
+  const seen = new Set<string>();
+  return records.filter(record => {
+    if (record?.id == null) return true;
+
+    const id = String(record.id);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function isMissingBackgroundTaskSchemaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes(CONVEX_TABLE_BACKGROUND_TASKS) &&
+    (message.includes('does not exist') ||
+      message.includes('not found') ||
+      message.includes('not defined') ||
+      message.includes('no such'))
+  );
+}
+
+async function findGenericDocumentById(
+  ctx: MutationCtx<any>,
+  tableName: string,
+  id: string,
+): Promise<GenericDocumentDoc | null> {
+  return await ctx.db
+    .query(CONVEX_TABLE_DOCUMENTS)
+    .withIndex('by_table_primary', (q: any) => q.eq('table', tableName).eq('primaryKey', String(id)))
+    .unique();
+}
+
+async function findGenericDocumentsByTable(
+  ctx: MutationCtx<any>,
+  tableName: string,
+  limit: number,
+): Promise<GenericDocumentDoc[]> {
+  return await ctx.db
+    .query(CONVEX_TABLE_DOCUMENTS)
+    .withIndex('by_table', (q: any) => q.eq('table', tableName))
+    .take(limit);
+}
+
+async function filterLegacyRecordsWithoutTypedCopy(
+  ctx: MutationCtx<any>,
+  convexTable: string,
+  legacyRecords: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const records = await mapInBatches(legacyRecords, STORAGE_MUTATION_BATCH_SIZE, async record => {
+    if (record.id == null) return record;
+
+    const typedDoc = await ctx.db
+      .query(convexTable)
+      .withIndex('by_record_id', (q: any) => q.eq('id', String(record.id)))
+      .unique();
+    return typedDoc ? null : record;
+  });
+
+  return records.filter((record): record is Record<string, unknown> => Boolean(record));
 }
 
 function coalesceTypedRecordsForBatchInsert(records: StorageRecord[]): StorageRecord[] {
@@ -89,6 +206,8 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
       return { convexTable: 'mastra_channel_installations', isTyped: true };
     case TABLE_CHANNEL_CONFIG:
       return { convexTable: 'mastra_channel_config', isTyped: true };
+    case TABLE_BACKGROUND_TASKS:
+      return { convexTable: CONVEX_TABLE_BACKGROUND_TASKS, isTyped: true };
     case TABLE_VECTOR_INDEXES:
       return { convexTable: 'mastra_vector_indexes', isTyped: true };
     default:
@@ -116,6 +235,14 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
 
     // Handle typed tables
     if (isTyped) {
+      if (isBackgroundTasksTable(convexTable, request)) {
+        try {
+          return await handleTypedOperation(ctx, convexTable, request);
+        } catch (error) {
+          if (!isMissingBackgroundTaskSchemaError(error)) throw error;
+          return handleGenericOperation(ctx, request);
+        }
+      }
       return handleTypedOperation(ctx, convexTable, request);
     }
 
@@ -184,6 +311,34 @@ export async function handleTypedOperation(
       return { ok: true };
     }
 
+    case 'patch': {
+      const patchRecord = stripPatchKeys(request.record, ['id']);
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+
+      if (!existing) {
+        if (isBackgroundTasksTable(convexTable, request)) {
+          const legacy = await findGenericDocumentById(ctx, request.tableName, request.id);
+          if (legacy) {
+            await ctx.db.patch(legacy._id, { record: mergeLegacyRecord(legacy.record, patchRecord) });
+            return { ok: true, result: true };
+          }
+        }
+        return { ok: true, result: false };
+      }
+
+      await ctx.db.patch(existing._id, patchRecord);
+      if (isBackgroundTasksTable(convexTable, request)) {
+        const legacy = await findGenericDocumentById(ctx, request.tableName, request.id);
+        if (legacy) {
+          await ctx.db.delete(legacy._id);
+        }
+      }
+      return { ok: true, result: true };
+    }
+
     case 'load': {
       const keys = request.keys;
       if (keys.id) {
@@ -192,6 +347,10 @@ export async function handleTypedOperation(
           .query(convexTable)
           .withIndex('by_record_id', (q: any) => q.eq('id', keys.id))
           .unique();
+        if (!doc && isBackgroundTasksTable(convexTable, request)) {
+          const legacy = await findGenericDocumentById(ctx, request.tableName, String(keys.id));
+          return { ok: true, result: legacy?.record ?? null };
+        }
         return { ok: true, result: doc || null };
       }
 
@@ -256,7 +415,18 @@ export async function handleTypedOperation(
 
       // Apply additional filters if provided
       if (request.filters && request.filters.length > 0) {
-        docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
+        docs = docs.filter((doc: any) => matchesFilters(doc, request.filters!));
+      }
+
+      if (isBackgroundTasksTable(convexTable, request)) {
+        const legacyDocs = await findGenericDocumentsByTable(ctx, request.tableName, maxDocs);
+        let legacyRecords = legacyDocs.map(doc => doc.record);
+        if (request.filters && request.filters.length > 0) {
+          legacyRecords = legacyRecords.filter(record => matchesFilters(record, request.filters!));
+        }
+        legacyRecords = await filterLegacyRecordsWithoutTypedCopy(ctx, convexTable, legacyRecords);
+        docs.push(...legacyRecords);
+        docs = dedupeByRecordId(docs);
       }
 
       // Apply limit if provided
@@ -273,10 +443,22 @@ export async function handleTypedOperation(
       // Client must call repeatedly until hasMore is false.
       const docs = await ctx.db.query(convexTable).take(STORAGE_MUTATION_BATCH_SIZE + 1);
       const hasMore = docs.length > STORAGE_MUTATION_BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
+      let docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
+      let legacyHasMore = false;
+
+      if (
+        !hasMore &&
+        docsToDelete.length < STORAGE_MUTATION_BATCH_SIZE &&
+        isBackgroundTasksTable(convexTable, request)
+      ) {
+        const remainingBatchSize = STORAGE_MUTATION_BATCH_SIZE - docsToDelete.length;
+        const legacyDocs = await findGenericDocumentsByTable(ctx, request.tableName, remainingBatchSize + 1);
+        legacyHasMore = legacyDocs.length > remainingBatchSize;
+        docsToDelete = docsToDelete.concat(legacyHasMore ? legacyDocs.slice(0, remainingBatchSize) : legacyDocs);
+      }
 
       await deleteDocs(ctx, docsToDelete);
-      return { ok: true, hasMore };
+      return { ok: true, hasMore: hasMore || legacyHasMore };
     }
 
     case 'deleteMany': {
@@ -286,6 +468,11 @@ export async function handleTypedOperation(
           .withIndex('by_record_id', (q: any) => q.eq('id', id))
           .unique(),
       );
+      if (isBackgroundTasksTable(convexTable, request)) {
+        docsToDelete.push(
+          ...(await findExistingDocsByIds(request.ids, id => findGenericDocumentById(ctx, request.tableName, id))),
+        );
+      }
       await deleteDocs(ctx, docsToDelete);
       return { ok: true };
     }
@@ -360,6 +547,21 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
         }
       });
       return { ok: true };
+    }
+
+    case 'patch': {
+      const patchRecord = stripPatchKeys(request.record, ['id', 'indexName']);
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', request.id))
+        .unique();
+
+      if (!existing) {
+        return { ok: true, result: false };
+      }
+
+      await ctx.db.patch(existing._id, patchRecord);
+      return { ok: true, result: true };
     }
 
     case 'load': {
@@ -484,6 +686,26 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
       return { ok: true };
     }
 
+    case 'patch': {
+      const patchRecord = stripPatchKeys(request.record, ['id']);
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_table_primary', (q: any) => q.eq('table', tableName).eq('primaryKey', String(request.id)))
+        .unique();
+
+      if (!existing) {
+        return { ok: true, result: false };
+      }
+
+      await ctx.db.patch(existing._id, {
+        record:
+          tableName === TABLE_BACKGROUND_TASKS
+            ? mergeLegacyRecord(existing.record, patchRecord)
+            : { ...existing.record, ...patchRecord },
+      });
+      return { ok: true, result: true };
+    }
+
     case 'load': {
       const keys = request.keys;
       if (keys.id) {
@@ -514,7 +736,9 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
 
       if (request.filters && request.filters.length > 0) {
         records = records.filter((record: any) =>
-          request.filters!.every(filter => record?.[filter.field] === filter.value),
+          tableName === TABLE_BACKGROUND_TASKS
+            ? matchesFilters(record, request.filters!)
+            : request.filters!.every(filter => record?.[filter.field] === filter.value),
         );
       }
 
