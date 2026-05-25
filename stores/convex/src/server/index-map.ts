@@ -54,6 +54,16 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_parent_trigger', fields: ['parent_trigger_id'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
+  mastra_channel_installations: [
+    { name: 'by_platform_agent', fields: ['platform', 'agentId'] },
+    { name: 'by_webhook', fields: ['webhookId'] },
+    { name: 'by_platform', fields: ['platform'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
+  mastra_channel_config: [
+    { name: 'by_platform', fields: ['platform'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
   mastra_vector_indexes: [
     { name: 'by_name', fields: ['indexName'] },
     { name: 'by_record_id', fields: ['id'] },

@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ConvexAdminClient } from './client';
 import { ConvexDB } from './db';
+import { ChannelsConvex } from './domains/channels';
 import { MemoryConvex } from './domains/memory';
 import { SchedulesConvex } from './domains/schedules';
 import { ScoresConvex } from './domains/scores';
@@ -231,6 +232,62 @@ describe('Convex Schema Sync', () => {
     expect(serverExports.TABLE_SCHEDULE_TRIGGERS).toBe('mastra_schedule_triggers');
   });
 
+  it('mastraChannelInstallationsTable should include channel installation fields and indexes', async () => {
+    const { mastraChannelInstallationsTable } = await import('../schema');
+
+    const convexValidator = (mastraChannelInstallationsTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'platform',
+        'agentId',
+        'status',
+        'webhookId',
+        'data',
+        'configHash',
+        'error',
+        'createdAt',
+        'updatedAt',
+      ]),
+    );
+
+    const indexes = ((mastraChannelInstallationsTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_webhook', ['webhookId']],
+        ['by_platform_agent', ['platform', 'agentId']],
+        ['by_platform', ['platform']],
+      ]),
+    );
+  });
+
+  it('mastraChannelConfigTable should include platform config fields and indexes', async () => {
+    const { mastraChannelConfigTable } = await import('../schema');
+
+    const convexValidator = (mastraChannelConfigTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(expect.arrayContaining(['id', 'platform', 'data', 'updatedAt']));
+
+    const indexes = ((mastraChannelConfigTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(expect.arrayContaining([['by_platform', ['platform']]]));
+  });
+
+  it('server entrypoint should re-export channel schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraChannelInstallationsTable).toBeDefined();
+    expect(serverExports.mastraChannelConfigTable).toBeDefined();
+    expect(serverExports.TABLE_CHANNEL_INSTALLATIONS).toBe('mastra_channel_installations');
+    expect(serverExports.TABLE_CHANNEL_CONFIG).toBe('mastra_channel_config');
+  });
+
   it('cache tables should include indexes used by ConvexServerCache', async () => {
     const { mastraCacheTable, mastraCacheListItemsTable } = await import('../schema');
     const normalizeIndexes = (indexes: any[]) =>
@@ -257,6 +314,16 @@ describe('Convex Schema Sync', () => {
 });
 
 describe('ConvexStore domains', () => {
+  it('exposes channels storage for channel provider support', async () => {
+    const store = new ConvexStore({
+      id: 'convex-domain-test',
+      deploymentUrl: 'https://test.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+
+    expect(store.stores.channels).toBeInstanceOf(ChannelsConvex);
+  });
+
   it('exposes schedules storage for workflow scheduler support', async () => {
     const store = new ConvexStore({
       id: 'convex-domain-test',

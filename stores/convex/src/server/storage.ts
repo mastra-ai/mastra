@@ -6,6 +6,8 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
 } from '@mastra/core/storage/constants';
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
@@ -109,6 +111,10 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
       return { convexTable: 'mastra_schedules', isTyped: true };
     case TABLE_SCHEDULE_TRIGGERS:
       return { convexTable: 'mastra_schedule_triggers', isTyped: true };
+    case TABLE_CHANNEL_INSTALLATIONS:
+      return { convexTable: 'mastra_channel_installations', isTyped: true };
+    case TABLE_CHANNEL_CONFIG:
+      return { convexTable: 'mastra_channel_config', isTyped: true };
     case TABLE_VECTOR_INDEXES:
       return { convexTable: 'mastra_vector_indexes', isTyped: true };
     default:

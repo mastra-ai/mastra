@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "name": "test-51a8b0ff",
+    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should throw error for empty user message",
+    "createdAt": "2026-05-18T10:50:50.877Z",
+    "updatedAt": "2026-05-20T14:04:36.852Z"
+  },
+  "recordings": [
+    {
+      "hash": "5805344ea68caca5",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an expert assistant. Always provide detailed explanations."
+              }
+            ]
+          }
+        },
+        "timestamp": 1779285876790
+      },
+      "response": {
+        "status": 400,
+        "statusText": "Bad Request",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Wed, 20 May 2026 14:04:36 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=31",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "* GenerateContentRequest.contents: contents is not specified\n",
+            "status": "INVALID_ARGUMENT"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

@@ -108,6 +108,12 @@ function getDurationMetricName(span: AnySpan): string | null {
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
       return 'mastra_tool_duration_ms';
+    case SpanType.CLIENT_TOOL_CALL:
+      // The CLIENT_TOOL_CALL server span measures only carrier emission
+      // and args capture. The actual client execution duration is
+      // emitted by the client observability proxy using the wall-clock
+      // duration measured in @mastra/client-js.
+      return null;
     case SpanType.WORKFLOW_RUN:
       return 'mastra_workflow_duration_ms';
     case SpanType.MODEL_GENERATION:

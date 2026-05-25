@@ -13,6 +13,8 @@ export {
   mastraScoresTable,
   mastraSchedulesTable,
   mastraScheduleTriggersTable,
+  mastraChannelInstallationsTable,
+  mastraChannelConfigTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   defineMastraNativeVectorTable,
@@ -28,4 +30,6 @@ export {
   TABLE_SCORERS,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
 } from '../schema';

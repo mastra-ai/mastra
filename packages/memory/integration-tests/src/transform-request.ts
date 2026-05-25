@@ -9,8 +9,54 @@ function replaceField(stringifiedBody: string, field: string, replacement: strin
   return str;
 }
 
+function normalizeNetworkFinalResultMessages(value: unknown): unknown {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      const normalized = normalizeNetworkFinalResultMessages(parsed);
+      return normalized === parsed ? value : JSON.stringify(normalized);
+    } catch {
+      return value;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeNetworkFinalResultMessages);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const object = value as Record<string, unknown>;
+  let changed = false;
+  const normalizedEntries = Object.entries(object).map(([key, entry]) => {
+    const normalized = normalizeNetworkFinalResultMessages(entry);
+    if (normalized !== entry) changed = true;
+    return [key, normalized] as const;
+  });
+
+  const normalizedObject = Object.fromEntries(normalizedEntries) as Record<string, unknown>;
+  const finalResult = normalizedObject.finalResult;
+  if (
+    finalResult &&
+    typeof finalResult === 'object' &&
+    Array.isArray((finalResult as { messages?: unknown }).messages)
+  ) {
+    const result = finalResult as { messages: Array<{ createdAt?: string }> };
+    result.messages = [...result.messages].sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return aTime - bTime;
+    });
+    changed = true;
+  }
+
+  return changed ? normalizedObject : value;
+}
+
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
-  let stringifiedBody = JSON.stringify(body);
+  let stringifiedBody = JSON.stringify(normalizeNetworkFinalResultMessages(body));
 
   // Normalize dynamic fields that change between test runs
   // These regexes match JSON property patterns like "id":"value" in stringified JSON
