@@ -246,7 +246,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.writer = writer;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {
-          await insertTemporalGapMarkers({ messageList, writer });
+          await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
         state.__omTurn = this.turn;
       }

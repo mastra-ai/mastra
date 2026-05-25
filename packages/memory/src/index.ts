@@ -1622,6 +1622,7 @@ ${workingMemory}`;
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
             extract: omConfig.observation.extract,
+            observeAttachments: omConfig.observation.observeAttachments,
           }
         : undefined,
       reflection: omConfig.reflection

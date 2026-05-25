@@ -356,6 +356,8 @@ export async function prepareMemoryStep({
     });
     messageList.add(messages, 'user');
     const messagesToSave = messageList.get.all.db();
+    // make sure network instruction is always last (temporary fix)
+    await new Promise(resolve => setTimeout(resolve, 10));
 
     if (memory) {
       promises.push(

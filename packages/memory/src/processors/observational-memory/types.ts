@@ -203,7 +203,11 @@ export interface ObservationConfig {
    * line (e.g. `[Image #1: photo.png]`) is always emitted so the Observer
    * still knows an attachment existed.
    *
-   * - `true` (default): forward all attachments.
+   * - `'auto'`: use the provider capabilities registry to decide.
+   *   If the observer model supports attachments (multimodal input), they
+   *   are forwarded; otherwise they are dropped. Falls back to `true` when
+   *   no capabilities data is available for the model.
+   * - `true`: forward all attachments.
    * - `false`: drop all attachments; placeholders remain visible.
    * - `string[]`: allowlist of mimeType patterns. Each entry is matched
    *   case-insensitively against the part's mimeType. Supports exact matches
@@ -216,7 +220,7 @@ export interface ObservationConfig {
    *
    * @default true
    */
-  observeAttachments?: boolean | string[];
+  observeAttachments?: 'auto' | boolean | string[];
 
   /**
    * Declarative list of extractors that drive what the Observer outputs.
@@ -1086,7 +1090,7 @@ export interface ResolvedObservationConfig {
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Filter for attachment parts forwarded to the Observer model */
-  observeAttachments: boolean | string[];
+  observeAttachments: 'auto' | boolean | string[];
 }
 
 export interface ResolvedReflectionConfig {

@@ -952,6 +952,7 @@ export interface HarnessMessage {
   role: 'user' | 'assistant' | 'system';
   content: HarnessMessageContent[];
   createdAt: Date;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
   stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
   errorMessage?: string;
 }

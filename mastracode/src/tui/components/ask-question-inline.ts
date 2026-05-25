@@ -34,6 +34,8 @@ export interface AskQuestionInlineOptions {
   isNegativeAnswer?: (answer: string) => boolean;
   /** Allow submitting an empty string in free-text mode. */
   allowEmptyInput?: boolean;
+  /** Show the "Custom response..." option in select mode. Defaults to true. */
+  allowCustomResponse?: boolean;
   /**
    * Use a multiline editor for free-text input (Shift+Enter / \+Enter for new lines).
    * Defaults to false — most prompts ask for short answers like names, paths, or yes/no.
@@ -148,37 +150,49 @@ class AskQuestionBorderedBox {
     // Empty separator
     addLine('', 0);
 
+    // Wrap a labelled option line so long labels don't overflow the bordered box.
+    // Mirrors the free-text answered branch below: first wrapped line keeps the
+    // styled prefix (icon/spaces), continuation lines indent 3 spaces.
+    const continuationPrefix = '   ';
+    const addWrappedOptionLine = (prefix: string, label: string, style: (s: string) => string) => {
+      const prefixVis = visibleWidth(prefix);
+      const wrapped = wrapTextWithAnsi(label, Math.max(1, innerWidth - prefixVis));
+      wrapped.forEach((line, index) => {
+        const linePrefix = index === 0 ? prefix : continuationPrefix;
+        const content = `${linePrefix}${style(line)}`;
+        addLine(content, visibleWidth(linePrefix) + visibleWidth(line));
+      });
+    };
+
     if (this.streaming) {
       // Streaming: show option labels as they arrive (dimmed, no interactivity)
+      const dim = (s: string) => theme.fg('dim', s);
       for (const item of this.items) {
-        const line = theme.fg('dim', `   ${item.label}`);
-        addLine(line, visibleWidth(line));
+        addWrappedOptionLine(continuationPrefix, item.label, dim);
       }
       // Waiting indicator
       const waiting = theme.fg('dim', '…');
       addLine(waiting, visibleWidth(waiting));
     } else if (this.answered && this.items.length > 0) {
       // Render frozen item list
+      const dim = (s: string) => theme.fg('dim', s);
       if (this.cancelled) {
         // All items dimmed, cancelled notice
         for (const item of this.items) {
-          const line = theme.fg('dim', `   ${item.label}`);
-          addLine(line, visibleWidth(line));
+          addWrappedOptionLine(continuationPrefix, item.label, dim);
         }
         const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
         addLine(cancelLine, visibleWidth(cancelLine));
       } else {
         // ✓/✗ on selected, dimmed unselected
+        const text = (s: string) => theme.fg('text', s);
         for (const item of this.items) {
           const isSelected = item.label === this.selectedValue;
           if (isSelected) {
             const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-            const label = theme.fg('text', item.label);
-            const line = `${icon}  ${label}`;
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(`${icon}  `, item.label, text);
           } else {
-            const line = theme.fg('dim', `   ${item.label}`);
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(continuationPrefix, item.label, dim);
           }
         }
       }
@@ -236,6 +250,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private isNegativeAnswer?: (answer: string) => boolean;
   private allowEmptyInput = false;
   private multiline = false;
+  private allowCustomResponse = true;
   private answered = false;
 
   /**
@@ -308,6 +323,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       this.isNegativeAnswer = options.isNegativeAnswer;
       this.allowEmptyInput = Boolean(options.allowEmptyInput);
       this.multiline = Boolean(options.multiline);
+      this.allowCustomResponse = options.allowCustomResponse ?? true;
 
       const questionLines = options.question.split('\n');
 
@@ -366,6 +382,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     options?: Array<{ label: string; description?: string }>;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
+    allowCustomResponse?: boolean;
     multiline?: boolean;
     tui?: TUI;
     onSubmit: (answer: string) => void;
@@ -377,6 +394,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.onCancel = options.onCancel;
     this.isNegativeAnswer = options.isNegativeAnswer;
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
+    this.allowCustomResponse = options.allowCustomResponse ?? true;
     this.multiline = Boolean(options.multiline);
 
     // Update question text and items to final values
@@ -408,10 +426,12 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     }));
 
     // Append a "Custom response..." option so the user can type a free-text answer
-    items.push({
-      value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
-      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
-    });
+    if (this.allowCustomResponse) {
+      items.push({
+        value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
+        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+      });
+    }
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
