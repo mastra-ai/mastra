@@ -179,6 +179,28 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         processorStates,
       });
 
+      // Persist thread metadata changes made by input processors (e.g., MemoryTokenLimiter boundary)
+      // This saves the updated metadata back to the database for existing threads
+      if (existingThread && threadObject) {
+        const updatedMemoryContext = requestContext.get('MastraMemory') as { thread?: StorageThreadType } | undefined;
+        const updatedThread = updatedMemoryContext?.thread;
+        const hasMemoryTokenLimiterBoundary =
+          (updatedThread as any)?.metadata?.mastra?.memoryTokenLimiter &&
+          !(existingThread as any)?.metadata?.mastra?.memoryTokenLimiter;
+        if (hasMemoryTokenLimiterBoundary) {
+          threadObject = await memory.saveThread({
+            thread: { ...threadObject, metadata: updatedThread!.metadata },
+            memoryConfig,
+          });
+          // Update the requestContext thread to reflect the saved state
+          requestContext.set('MastraMemory', {
+            thread: threadObject,
+            resourceId,
+            memoryConfig,
+          });
+        }
+      }
+
       return {
         thread: threadObject,
         messageList: messageList,

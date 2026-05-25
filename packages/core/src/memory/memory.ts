@@ -56,6 +56,54 @@ function extractModelIdString(model: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Normalized form of lastMessages configuration.
+ * Extracted from either the legacy number/false form or the new object form.
+ */
+export type NormalizedLastMessages = {
+  /** Number of messages to fetch, or undefined to use default */
+  maxMessages?: number | false;
+  /** Max token budget for remembered history, or undefined to disable token limiting */
+  maxTokens?: number;
+  /** Tokens to drop when maxTokens is exceeded, or undefined to use default fraction */
+  atMaxRemoveTokens?: number;
+};
+
+/**
+ * Normalize the lastMessages config into a consistent form.
+ * Handles legacy `number | false` and new `{ maxMessages?, maxTokens?, atMaxRemoveTokens? }` forms.
+ */
+export function normalizeLastMessages(
+  lastMessages:
+    | number
+    | false
+    | { maxMessages?: number | false; maxTokens?: number; atMaxRemoveTokens?: number }
+    | undefined,
+): NormalizedLastMessages | undefined {
+  if (lastMessages === undefined || lastMessages === false) {
+    return undefined;
+  }
+
+  if (typeof lastMessages === 'number') {
+    // Legacy form: just a message count
+    return { maxMessages: lastMessages };
+  }
+
+  // Object form
+  const result: NormalizedLastMessages = {};
+
+  if (lastMessages.maxMessages !== undefined) {
+    result.maxMessages = lastMessages.maxMessages;
+  }
+
+  if (lastMessages.maxTokens !== undefined) {
+    result.maxTokens = lastMessages.maxTokens;
+    result.atMaxRemoveTokens = lastMessages.atMaxRemoveTokens;
+  }
+
+  return result;
+}
+
 export type MemoryProcessorOpts = {
   systemMessage?: string;
   memorySystemMessage?: string;
@@ -659,7 +707,9 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     const lastMessages = effectiveConfig.lastMessages;
-    if (lastMessages) {
+    const normalizedLM = normalizeLastMessages(lastMessages);
+
+    if (normalizedLM) {
       if (!memoryStore)
         throw new MastraError({
           category: 'USER',
@@ -681,7 +731,12 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
-            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            lastMessages:
+              normalizedLM.maxMessages !== undefined
+                ? normalizedLM.maxMessages === false
+                  ? Number.MAX_SAFE_INTEGER
+                  : normalizedLM.maxMessages
+                : undefined,
           }),
         );
       }
@@ -738,7 +793,7 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     // Add memory token limiter AFTER semantic recall so it caps the final context
-    if (effectiveConfig.maxTokens !== undefined) {
+    if (normalizedLM?.maxTokens !== undefined) {
       const hasTokenLimiter = configuredProcessors.some(
         p => !isProcessorWorkflow(p) && p.id === 'memory-token-limiter',
       );
@@ -746,7 +801,8 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasTokenLimiter) {
         processors.push(
           new MemoryTokenLimiter({
-            maxTokens: effectiveConfig.maxTokens,
+            maxTokens: normalizedLM.maxTokens,
+            atMaxRemoveTokens: normalizedLM.atMaxRemoveTokens,
           }),
         );
       }

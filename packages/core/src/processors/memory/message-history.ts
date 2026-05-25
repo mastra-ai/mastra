@@ -1,6 +1,6 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
-import { parseMemoryRequestContext } from '../../memory';
+import { getMemoryTokenLimiterBoundary, parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -80,25 +80,69 @@ export class MessageHistory implements Processor {
 
     const { threadId, resourceId } = context;
 
+    // Check for memory token limiter boundary in thread metadata
+    // If a valid boundary exists, only fetch messages after that point
+    const memoryContext = parseMemoryRequestContext(requestContext);
+    const thread = memoryContext?.thread;
+    let boundaryFilter: { start: Date; startExclusive: boolean } | undefined;
+
+    if (thread?.metadata) {
+      const boundary = getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>);
+      if (boundary) {
+        boundaryFilter = {
+          start: new Date(boundary.createdAt),
+          startExclusive: true,
+        };
+      }
+    }
+
     // 1. Fetch historical messages from storage (as DB format)
-    const result = await this.storage.listMessages({
+    const listMessagesOptions: Parameters<MemoryStorage['listMessages']>[0] = {
       threadId,
       resourceId,
       page: 0,
       perPage: this.lastMessages,
       orderBy: { field: 'createdAt', direction: 'DESC' },
-    });
+    };
+
+    // Apply boundary filter if we have one
+    if (boundaryFilter) {
+      listMessagesOptions.filter = {
+        ...listMessagesOptions.filter,
+        dateRange: {
+          ...listMessagesOptions.filter?.dateRange,
+          start: boundaryFilter.start,
+          startExclusive: boundaryFilter.startExclusive,
+        },
+      };
+    }
+
+    const result = await this.storage.listMessages(listMessagesOptions);
 
     // 2. Filter out system messages (they should never be stored in DB)
     const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
       return msg.role !== 'system';
     });
 
-    // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
+    // 3. If boundary exists, defensively remove any messages at or before the boundary
+    //    (handles timestamp collision edge cases where startExclusive may not be supported)
+    const boundaryMessageId = thread?.metadata
+      ? getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>)?.messageId
+      : undefined;
+
+    const boundarySafeMessages = boundaryMessageId
+      ? filteredMessages.filter((msg: MastraDBMessage) => {
+          return msg.id !== boundaryMessageId;
+        })
+      : filteredMessages;
+
+    // 4. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
     // This includes messages added by previous processors like SemanticRecall
     const existingMessages = messageList.get.all.db();
     const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-    const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+    const uniqueHistoricalMessages = boundarySafeMessages.filter(
+      (m: MastraDBMessage) => !m.id || !messageIds.has(m.id),
+    );
 
     // Reverse to chronological order (oldest first) since we fetched DESC
     const chronologicalMessages = uniqueHistoricalMessages.reverse();

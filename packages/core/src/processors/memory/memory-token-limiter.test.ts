@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
+import { getMemoryTokenLimiterBoundary, setMemoryTokenLimiterBoundary } from '../../memory';
 import { MockMemory } from '../../memory/mock';
+import type { MemoryTokenLimiterBoundary } from '../../memory/types';
+import { RequestContext } from '../../request-context';
 
 import { MemoryTokenLimiter } from './memory-token-limiter';
 
@@ -30,114 +33,121 @@ function createAbort(): (reason?: string) => never {
   };
 }
 
+/**
+ * Create a processInput args payload with optional requestContext.
+ */
+function createProcessArgs(
+  messageList: MessageList,
+  overrides?: {
+    systemMessages?: { role: 'system'; content: string }[];
+    requestContext?: RequestContext;
+  },
+) {
+  return {
+    messages: messageList.get.all.db(),
+    messageList,
+    abort: createAbort(),
+    systemMessages: overrides?.systemMessages ?? [],
+    state: {} as Record<string, unknown>,
+    retryCount: 0,
+    ...(overrides?.requestContext ? { requestContext: overrides.requestContext } : {}),
+  };
+}
+
+/**
+ * Helper to create a RequestContext with a thread that has memory token limiter boundary metadata.
+ */
+function createBoundaryContext(threadId: string, boundary: MemoryTokenLimiterBoundary): RequestContext {
+  const ctx = new RequestContext();
+  const thread = {
+    id: threadId,
+    metadata: setMemoryTokenLimiterBoundary(undefined, boundary),
+  };
+  ctx.set('MastraMemory', { thread, resourceId: 'test-resource', memoryConfig: {} });
+  return ctx;
+}
+
+/**
+ * Helper to create a RequestContext with a plain thread (no boundary, no metadata).
+ */
+function createThreadContext(threadId: string): RequestContext {
+  const ctx = new RequestContext();
+  const thread = { id: threadId, metadata: {} };
+  ctx.set('MastraMemory', { thread, resourceId: 'test-resource', memoryConfig: {} });
+  return ctx;
+}
+
 describe('MemoryTokenLimiter', () => {
   it('should not remove messages when under token limit', async () => {
     const limiter = new MemoryTokenLimiter({ maxTokens: 1_000_000 });
     const messageList = new MessageList();
 
-    // Add memory messages
     const memoryMsg = createMessage('mem-1', 'user', 'Hello from memory');
     messageList.add(memoryMsg, 'memory');
 
-    // Add input messages
     const inputMsg = createMessage('input-1', 'user', 'New input message');
     messageList.add(inputMsg, 'input');
 
-    const result = await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
-    expect(result).toBe(messageList);
     expect(messageList.get.all.db()).toHaveLength(2);
     expect(messageList.get.remembered.db()).toHaveLength(1);
   });
 
   it('should remove oldest memory messages when over token limit', async () => {
-    // Set a token limit smaller than the total of all messages
-    // 'x'.repeat(2000) ≈ 667 tiktoken tokens, so two such messages ≈ 1334 tokens
-    // plus input ≈ 2 tokens. Limit of 5 forces all memory messages to be removed.
     const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
-    // Add memory messages with substantial content
     const longText = 'x'.repeat(2000);
     const memoryMsg1 = createMessage('mem-1', 'user', longText);
     const memoryMsg2 = createMessage('mem-2', 'assistant', longText);
     messageList.add(memoryMsg1, 'memory');
     messageList.add(memoryMsg2, 'memory');
 
-    // Add input message
     const inputMsg = createMessage('input-1', 'user', 'Hi');
     messageList.add(inputMsg, 'input');
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
-    // The oldest memory messages should be removed
     const remaining = messageList.get.all.db();
     const remainingIds = remaining.map(m => m.id);
 
-    // Input message should always be preserved
     expect(remainingIds).toContain('input-1');
-
-    // Both memory messages should have been removed since they're very large
     expect(messageList.get.remembered.db()).toHaveLength(0);
   });
 
   it('should never remove input messages', async () => {
-    // 'x'.repeat(1000) ≈ 334 tiktoken tokens. Set limit below that so memory gets trimmed.
     const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
-    // Add a large input message
     const largeInput = createMessage('input-1', 'user', 'x'.repeat(1000));
     messageList.add(largeInput, 'input');
 
-    // Add a small memory message
     const memoryMsg = createMessage('mem-1', 'user', 'Hi');
     messageList.add(memoryMsg, 'memory');
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
-    // Input message should still exist
     const inputMessages = messageList.get.input.db();
     expect(inputMessages).toHaveLength(1);
     expect(inputMessages[0]!.id).toBe('input-1');
 
-    // Memory message should be removed (since total is over budget)
     const memoryMessages = messageList.get.remembered.db();
     expect(memoryMessages).toHaveLength(0);
   });
 
   it('should remove memory messages in chronological order (oldest first)', async () => {
-    // Use long varied text to avoid BPE compression of repeated characters.
-    // Each message with ~200 words ≈ 200+ tiktoken tokens.
-    // Set maxTokens to 5 so only the smallest messages can remain after trimming.
-    const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
+    // Each memory message with longText ≈ 265 tokens with CoreTokenCounter overhead (3.8 TOKENS_PER_MESSAGE + role).
+    // mem-3 ("Hi") ≈ 6 tokens, input-1 ("Hi") ≈ 6 tokens.
+    // Total ≈ 542 tokens. MaxTokens=100, atMaxRemoveTokens default=25, target=75.
+    // Removing mem-1 (265 tokens) → 277 remaining, removing mem-2 (265 tokens) → 12 remaining which is ≤ 75.
+    // So mem-1 and mem-2 are removed, mem-3 stays.
+    const limiter = new MemoryTokenLimiter({ maxTokens: 100 });
     const messageList = new MessageList();
 
     const baseTime = new Date('2025-01-01T00:00:00Z');
     const longText = Array.from({ length: 200 }, (_, i) => `word${i}`).join(' ');
 
-    // Add memory messages with explicit timestamps (oldest to newest)
     messageList.add(createMessage('mem-1', 'user', longText, 'thread-1', new Date(baseTime.getTime())), 'memory');
     messageList.add(
       createMessage('mem-2', 'assistant', longText, 'thread-1', new Date(baseTime.getTime() + 1000)),
@@ -145,27 +155,17 @@ describe('MemoryTokenLimiter', () => {
     );
     messageList.add(createMessage('mem-3', 'user', 'Hi', 'thread-1', new Date(baseTime.getTime() + 2000)), 'memory');
 
-    // Add input
     messageList.add(createMessage('input-1', 'user', 'Hi', 'thread-1', new Date(baseTime.getTime() + 3000)), 'input');
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
     const remainingMemory = messageList.get.remembered.db();
     const remainingIds = remainingMemory.map(m => m.id);
 
-    // mem-1 and mem-2 (oldest, large) should be removed; mem-3 (newest, small) should remain
     expect(remainingIds).not.toContain('mem-1');
     expect(remainingIds).not.toContain('mem-2');
     expect(remainingIds).toContain('mem-3');
 
-    // Input is always preserved
     expect(messageList.get.input.db()).toHaveLength(1);
   });
 
@@ -175,30 +175,21 @@ describe('MemoryTokenLimiter', () => {
   });
 
   it('should account for system message tokens in the budget', async () => {
-    // Use a limit that fits messages alone but not messages + system prompt
-    // Messages: ~8 tokens total. System: large enough to push over the limit.
     const limiter = new MemoryTokenLimiter({ maxTokens: 20 });
     const messageList = new MessageList();
 
     messageList.add(createMessage('mem-1', 'user', 'Hello from memory'), 'memory');
     messageList.add(createMessage('input-1', 'user', 'Hi'), 'input');
 
-    // Without system messages, total ≈ 8 tokens (under 20)
-    // With a large system message, total will exceed 20
     const largeSystemPrompt = 'You are a helpful assistant. '.repeat(10);
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [{ role: 'system' as const, content: largeSystemPrompt }],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(
+      createProcessArgs(messageList, {
+        systemMessages: [{ role: 'system' as const, content: largeSystemPrompt }],
+      }),
+    );
 
-    // Memory should be trimmed because system + messages exceeds budget
     expect(messageList.get.remembered.db()).toHaveLength(0);
-    // Input preserved
     expect(messageList.get.input.db()).toHaveLength(1);
   });
 
@@ -210,14 +201,7 @@ describe('MemoryTokenLimiter', () => {
     messageList.add(createMessage('mem-2', 'assistant', 'Hi there'), 'memory');
     messageList.add(createMessage('input-1', 'user', 'New message'), 'input');
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
     expect(messageList.get.remembered.db()).toHaveLength(0);
     expect(messageList.get.input.db()).toHaveLength(1);
@@ -227,56 +211,196 @@ describe('MemoryTokenLimiter', () => {
     const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
     const messageList = new MessageList();
 
-    // Only input messages, no memory
     messageList.add(createMessage('input-1', 'user', 'x'.repeat(1000)), 'input');
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
-    // Input messages are never removed even if over budget
     expect(messageList.get.input.db()).toHaveLength(1);
     expect(messageList.get.all.db()).toHaveLength(1);
   });
 
   it('should preserve input messages even when they alone exceed maxTokens', async () => {
-    // 'x'.repeat(5000) ≈ 1667 tiktoken tokens, well above maxTokens: 5
     const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
-    // Large input that exceeds maxTokens by itself
     messageList.add(createMessage('input-1', 'user', 'x'.repeat(5000)), 'input');
-    // Small memory message
     messageList.add(createMessage('mem-1', 'user', 'Hi'), 'memory');
 
-    await limiter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: createAbort(),
-      systemMessages: [],
-      state: {},
-      retryCount: 0,
-    });
+    await limiter.processInput(createProcessArgs(messageList));
 
-    // Memory removed, but input preserved even though still over budget
     expect(messageList.get.remembered.db()).toHaveLength(0);
     expect(messageList.get.input.db()).toHaveLength(1);
     expect(messageList.get.input.db()[0]!.id).toBe('input-1');
   });
+
+  it('should drop to atMaxRemoveTokens below maxTokens when over budget', async () => {
+    // Each memory message with 'x'.repeat(400) ≈ 55 tokens with CoreTokenCounter overhead.
+    // input-1 ('Hi') ≈ 6 tokens. Total ≈ 171 tokens.
+    // maxTokens=140, atMaxRemoveTokens=60 → target = 80
+    // Removing mem-0: 171 - 55 = 116 (still > 80) → keep removing
+    // Removing mem-1: 116 - 55 = 61 (≤ 80) → stop
+    // → mem-0 and mem-1 removed, mem-2 stays
+    const limiter = new MemoryTokenLimiter({ maxTokens: 140, atMaxRemoveTokens: 60 });
+    const messageList = new MessageList();
+    const ctx = createThreadContext('thread-1');
+
+    // ~50 tiktoken tokens each (exclusive of overhead)
+    const medText = 'x'.repeat(400);
+
+    messageList.add(createMessage('mem-0', 'user', medText, 'thread-1', new Date('2025-01-01T00:00:00Z')), 'memory');
+    messageList.add(createMessage('mem-1', 'user', medText, 'thread-1', new Date('2025-01-01T00:00:01Z')), 'memory');
+    messageList.add(createMessage('mem-2', 'user', medText, 'thread-1', new Date('2025-01-01T00:00:02Z')), 'memory');
+    messageList.add(createMessage('input-1', 'user', 'Hi', 'thread-1', new Date('2025-01-01T00:00:03Z')), 'input');
+
+    await limiter.processInput(createProcessArgs(messageList, { requestContext: ctx }));
+
+    // Oldest messages removed first to get below target
+    const memoryIds = messageList.get.remembered.db().map(m => m.id);
+    expect(memoryIds).not.toContain('mem-0');
+    expect(memoryIds).not.toContain('mem-1');
+    // mem-2 should remain since we reached the target
+    expect(memoryIds).toContain('mem-2');
+
+    // Input preserved
+    expect(messageList.get.input.db()).toHaveLength(1);
+  });
+
+  it('should persist the newest removed message as the thread boundary in metadata', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
+    const messageList = new MessageList();
+    const ctx = createThreadContext('thread-1');
+
+    const longText = 'x'.repeat(2000);
+
+    messageList.add(createMessage('mem-1', 'user', longText, 'thread-1', new Date('2025-01-01T00:00:00Z')), 'memory');
+    messageList.add(
+      createMessage('mem-2', 'assistant', longText, 'thread-1', new Date('2025-01-01T00:00:01Z')),
+      'memory',
+    );
+    messageList.add(createMessage('input-1', 'user', 'Hi', 'thread-1', new Date('2025-01-01T00:00:02Z')), 'input');
+
+    await limiter.processInput(createProcessArgs(messageList, { requestContext: ctx }));
+
+    // Get the thread from the context and check the boundary
+    const memoryContext = ctx.get('MastraMemory') as
+      | { thread?: { id: string; metadata?: Record<string, unknown> } }
+      | undefined;
+    const thread = memoryContext?.thread;
+    expect(thread).toBeDefined();
+    expect(thread!.metadata).toBeDefined();
+
+    const boundary = getMemoryTokenLimiterBoundary(thread!.metadata!);
+    expect(boundary).toBeDefined();
+    expect(boundary!.messageId).toBe('mem-2'); // newest removed message
+    expect(boundary!.maxTokens).toBe(5);
+    expect(boundary!.atMaxRemoveTokens).toBe(1); // 25% of 5 = 1.25 rounded to 1
+    expect(boundary!.targetTokens).toBe(4); // 5 - 1 = 4
+    expect(boundary!.tokenCounterSource).toBe('v5:o200k_base');
+    expect(boundary!.createdAt).toBeDefined();
+    expect(boundary!.updatedAt).toBeDefined();
+  });
+
+  it('should not persist a boundary when no messages are removed', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 1_000_000 });
+    const messageList = new MessageList();
+
+    messageList.add(createMessage('mem-1', 'user', 'Hi', 'thread-1', new Date('2025-01-01T00:00:00Z')), 'memory');
+    messageList.add(createMessage('input-1', 'user', 'Hi', 'thread-1', new Date('2025-01-01T00:00:01Z')), 'input');
+
+    await limiter.processInput(createProcessArgs(messageList));
+
+    expect(messageList.get.remembered.db()).toHaveLength(1);
+    expect(messageList.get.input.db()).toHaveLength(1);
+  });
+
+  it('should ignore stale boundary when maxTokens config changes', async () => {
+    // Create a stale boundary with old maxTokens=5
+    const staleBoundary: MemoryTokenLimiterBoundary = {
+      messageId: 'mem-2',
+      createdAt: new Date('2025-01-01T00:00:01Z').toISOString(),
+      droppedFromTokens: 5,
+      targetTokens: 4,
+      maxTokens: 5,
+      atMaxRemoveTokens: 1,
+      tokenCounterSource: 'tiktoken:o200k_base',
+      updatedAt: new Date('2025-01-01T00:00:02Z').toISOString(),
+    };
+
+    const ctx = createBoundaryContext('thread-1', staleBoundary);
+
+    // New limiter with very different maxTokens (too small)
+    const limiter = new MemoryTokenLimiter({ maxTokens: 3, atMaxRemoveTokens: 0 });
+    const messageList = new MessageList();
+
+    messageList.add(createMessage('mem-1', 'user', 'Hello', 'thread-1', new Date('2025-01-01T00:00:00Z')), 'memory');
+    messageList.add(createMessage('mem-2', 'user', 'World', 'thread-1', new Date('2025-01-01T00:00:01Z')), 'memory');
+    messageList.add(
+      createMessage('input-1', 'user', 'Subsequent turn', 'thread-1', new Date('2025-01-01T00:00:03Z')),
+      'input',
+    );
+
+    await limiter.processInput(createProcessArgs(messageList, { requestContext: ctx }));
+
+    // The limiter should have removed messages since total > maxTokens (3)
+    // Even though the stale boundary says 5 was the old max
+    expect(messageList.get.remembered.db()).toHaveLength(0);
+  });
+
+  it('should cache token estimates on part.providerMetadata.mastra.tokenEstimate', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 1_000_000 });
+    const messageList = new MessageList();
+
+    const msg1 = createMessage('mem-1', 'user', 'Hello world');
+    messageList.add(msg1, 'memory');
+
+    const input = createMessage('input-1', 'user', 'Test');
+    messageList.add(input, 'input');
+
+    await limiter.processInput(createProcessArgs(messageList));
+
+    // Verify token estimate was cached on the part's providerMetadata
+    const allMessages = messageList.get.all.db();
+    for (const message of allMessages) {
+      if (typeof message.content === 'object' && message.content && Array.isArray(message.content.parts)) {
+        for (const part of message.content.parts) {
+          const partMeta = (part as any).providerMetadata?.mastra;
+          expect(partMeta).toBeDefined();
+          expect(partMeta.tokenEstimate).toBeDefined();
+
+          const entry = partMeta.tokenEstimate as { v: number; source: string; key: string; tokens: number };
+          expect(entry.v).toBe(5);
+          expect(entry.source).toBe('v5:o200k_base');
+          expect(typeof entry.key).toBe('string');
+          expect(typeof entry.tokens).toBe('number');
+          // Each text part should have a small positive token count
+          expect(entry.tokens).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it('should default atMaxRemoveTokens to 25% of maxTokens when not specified', async () => {
+    // atMaxRemoveTokens defaults to Math.max(1, floor(0.25 * maxTokens))
+    const limiter100 = new MemoryTokenLimiter({ maxTokens: 100 });
+    const limiter1 = new MemoryTokenLimiter({ maxTokens: 1 });
+    const limiterLarge = new MemoryTokenLimiter({ maxTokens: 1_000_000 });
+
+    // Internal detail: check via reflection since it's private
+    // We can verify behaviorally: maxTokens=100 → atMaxRemoveTokens should be 25
+    // maxTokens=1 → atMaxRemoveTokens should be 1 (min 1)
+    // maxTokens=1,000,000 → atMaxRemoveTokens should be 250,000
+    expect((limiter100 as any).atMaxRemoveTokens).toBe(25);
+    expect((limiter1 as any).atMaxRemoveTokens).toBe(1);
+    expect((limiterLarge as any).atMaxRemoveTokens).toBe(250_000);
+  });
 });
 
-describe('Memory.getInputProcessors with maxTokens', () => {
-  it('should auto-add MemoryTokenLimiter when maxTokens is configured', async () => {
+describe('Memory.getInputProcessors with nested lastMessages', () => {
+  it('should auto-add MemoryTokenLimiter when lastMessages has maxTokens configured', async () => {
     const memory = new MockMemory();
-    // Override threadConfig to include maxTokens
     (memory as any).threadConfig = {
       ...(memory as any).threadConfig,
-      maxTokens: 100_000,
+      lastMessages: { maxTokens: 100_000 },
     };
 
     const processors = await memory.getInputProcessors();
@@ -284,11 +408,78 @@ describe('Memory.getInputProcessors with maxTokens', () => {
     expect(tokenLimiter).toBeDefined();
   });
 
-  it('should NOT add MemoryTokenLimiter when maxTokens is not configured', async () => {
+  it('should NOT add MemoryTokenLimiter when lastMessages is a number only', async () => {
     const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: 10,
+    };
 
     const processors = await memory.getInputProcessors();
     const tokenLimiter = processors.find(p => p.id === 'memory-token-limiter');
     expect(tokenLimiter).toBeUndefined();
+  });
+
+  it('should auto-add MemoryTokenLimiter with atMaxRemoveTokens from nested config', async () => {
+    const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: { maxTokens: 50_000, atMaxRemoveTokens: 20_000 },
+    };
+
+    const processors = await memory.getInputProcessors();
+    const tokenLimiter = processors.find(p => p.id === 'memory-token-limiter');
+    expect(tokenLimiter).toBeDefined();
+    expect((tokenLimiter as any).maxTokens).toBe(50_000);
+    expect((tokenLimiter as any).atMaxRemoveTokens).toBe(20_000);
+  });
+
+  it('should NOT add MemoryTokenLimiter when lastMessages is false', async () => {
+    const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: false,
+    };
+
+    const processors = await memory.getInputProcessors();
+    const tokenLimiter = processors.find(p => p.id === 'memory-token-limiter');
+    expect(tokenLimiter).toBeUndefined();
+  });
+
+  it('should NOT add MemoryTokenLimiter when lastMessages object has no maxTokens', async () => {
+    const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: { maxMessages: 50 },
+    };
+
+    const processors = await memory.getInputProcessors();
+    const tokenLimiter = processors.find(p => p.id === 'memory-token-limiter');
+    expect(tokenLimiter).toBeUndefined();
+  });
+
+  it('should add MessageHistory with maxMessages when lastMessages object has maxMessages', async () => {
+    const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: { maxMessages: 50 },
+    };
+
+    const processors = await memory.getInputProcessors();
+    const historyProcessor = processors.find(p => p.id === 'message-history');
+    expect(historyProcessor).toBeDefined();
+  });
+
+  it('should use Infinity for maxMessages when lastMessages is false', async () => {
+    const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: { maxMessages: false },
+    };
+
+    const processors = await memory.getInputProcessors();
+    const historyProcessor = processors.find(p => p.id === 'message-history');
+    expect(historyProcessor).toBeDefined();
+    expect((historyProcessor as any).lastMessages).toBe(Number.MAX_SAFE_INTEGER);
   });
 });

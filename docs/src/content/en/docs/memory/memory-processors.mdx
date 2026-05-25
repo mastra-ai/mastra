@@ -179,7 +179,10 @@ Limits memory history messages by token count to prevent context window overflow
 ```typescript
 memory: new Memory({
   options: {
-    maxTokens: 800_000,
+    lastMessages: {
+      maxTokens: 800_000,
+      atMaxRemoveTokens: 200_000, // optional, defaults to 25% of maxTokens
+    },
   },
 })
 ```
@@ -187,11 +190,13 @@ memory: new Memory({
 **Mastra internally:**
 
 1. Creates a `MemoryTokenLimiter` processor with the configured token limit
-1. Adds it to the agent's input processors (runs after `MessageHistory`)
+1. Adds it to the agent's input processors (runs after `MessageHistory` and before `SemanticRecall`)
 
 **What it does:**
 
-- **Input**: Counts the total tokens of all messages (system messages + memory history + new input) using tiktoken (o200k\_base encoding). If the total exceeds `maxTokens`, removes the oldest memory history messages until the total is within budget. Input and system messages are never removed.
+- **Input**: Counts the total tokens of all messages (system messages + memory history + new input) using tiktoken (o200k\_base encoding). If the total exceeds `maxTokens`, removes the oldest memory history messages until the total is within budget (`maxTokens - atMaxRemoveTokens`). Input, context, and system messages are never removed.
+- **Boundary persistence**: When trimming, saves the newest removed message as a boundary cursor on `thread.metadata.mastra.memoryTokenLimiter`. Future turns start fetching messages after this boundary, avoiding recounting the full history.
+- **Token caching**: Estimates are cached on `message.content.metadata.mastra.tokenEstimate` for reuse across turns. Works with Observational Memory's cache format.
 
 **Example:**
 
@@ -211,8 +216,11 @@ const agent = new Agent({
       url: 'file:memory.db',
     }),
     options: {
-      lastMessages: Number.MAX_SAFE_INTEGER, // Load all messages
-      maxTokens: 800_000, // But trim to fit 800K tokens
+      lastMessages: {
+        maxMessages: Infinity, // Load all messages
+        maxTokens: 800_000, // But trim to fit 800K tokens
+        atMaxRemoveTokens: 200_000, // Drop by 200K when over budget
+      },
     },
   }),
 })
