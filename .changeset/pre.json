@@ -138,6 +138,7 @@
     "@mastra/daytona": "0.4.0",
     "@mastra/docker": "0.2.0",
     "@mastra/e2b": "0.3.1",
+    "@mastra/files-sdk": "0.1.0",
     "@mastra/gcs": "0.2.1",
     "@mastra/google-drive": "0.1.0",
     "@mastra/modal": "0.2.0",
