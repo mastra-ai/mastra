@@ -196,7 +196,6 @@ export interface TUIState {
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
   activeActivationData?: OMMarkerData;
-  activeActivationTTLMarker?: OMMarkerComponent;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
@@ -214,6 +213,11 @@ export interface TUIState {
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
+
+  // ── Dedup ────────────────────────────────────────────────────────────
+  /** Texts of queued messages that were locally rendered and fired — used to
+   *  suppress the subscription echo that would otherwise create a duplicate. */
+  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;

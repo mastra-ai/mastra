@@ -136,7 +136,11 @@ export function setupKeyboardShortcuts(
 
   // Shift+Tab - cycle harness modes
   state.editor.onAction('cycleMode', async () => {
-    // Block mode switching while plan approval is active
+    // Block mode switching while the agent is active or plan approval is pending
+    if (state.harness.isRunning()) {
+      showInfo(state, 'Wait for the agent to finish first');
+      return;
+    }
     if (state.activeInlinePlanApproval) {
       showInfo(state, 'Resolve the plan approval first');
       return;

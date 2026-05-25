@@ -159,42 +159,8 @@ function syncGlobalCacheToLocal(): void {
       }
     }
 
-    // Sync capabilities/ directory if global exists
-    const globalCapDir = GLOBAL_CAPABILITIES_DIR();
-    if (fs.existsSync(globalCapDir) && fs.statSync(globalCapDir).isDirectory()) {
-      const localCapDir = path.join(packageRoot, 'dist', 'capabilities');
-      fs.mkdirSync(localCapDir, { recursive: true });
-      const files = fs.readdirSync(globalCapDir).filter(f => f.endsWith('.json'));
-      const globalFiles = new Set(files);
-
-      for (const localFileName of fs.readdirSync(localCapDir).filter(f => f.endsWith('.json'))) {
-        if (!globalFiles.has(localFileName)) {
-          try {
-            fs.unlinkSync(path.join(localCapDir, localFileName));
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-      }
-
-      for (const file of files) {
-        const globalFile = path.join(globalCapDir, file);
-        const localFile = path.join(localCapDir, file);
-        try {
-          const globalContent = fs.readFileSync(globalFile, 'utf-8');
-          JSON.parse(globalContent); // validate
-          let shouldCopy = true;
-          if (fs.existsSync(localFile)) {
-            shouldCopy = fs.readFileSync(localFile, 'utf-8') !== globalContent;
-          }
-          if (shouldCopy) {
-            atomicWriteFileSync(localFile, globalContent, 'utf-8');
-          }
-        } catch {
-          // Skip corrupted files
-        }
-      }
-    }
+    // Capabilities are loaded lazily per-provider by loadProviderAttachmentModels().
+    // The global cache dir is included in findCapabilitiesDirs() so no bulk sync is needed.
 
     // Sync .d.ts file if global exists and differs from local
     if (globalDtsExists) {
@@ -480,13 +446,21 @@ function isDirectory(dir: string): boolean {
   }
 }
 
-function findCapabilitiesDirs(_useDynamicLoading: boolean): string[] {
+function findCapabilitiesDirs(useDynamicLoading: boolean): string[] {
   const packageRoot = getPackageRoot();
   const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
   const sourceCapabilitiesDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
   const workspaceSourceCapabilitiesDir = path.join(process.cwd(), 'packages/core/src/llm/model/capabilities');
 
-  const dirs = isDirectory(distCapabilitiesDir) ? [distCapabilitiesDir] : [];
+  const dirs: string[] = [];
+
+  // In dynamic mode, prefer the global cache so fresher gateway-synced data wins.
+  if (useDynamicLoading) {
+    const globalCapDir = GLOBAL_CAPABILITIES_DIR();
+    if (isDirectory(globalCapDir)) dirs.push(globalCapDir);
+  }
+
+  if (isDirectory(distCapabilitiesDir)) dirs.push(distCapabilitiesDir);
 
   // Published packages only include dist/. Source fallbacks are for local workspace/dev
   // runs where @mastra/core may resolve through a stale partial dist while checked-in

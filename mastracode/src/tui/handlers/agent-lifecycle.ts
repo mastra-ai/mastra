@@ -105,6 +105,10 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
       ],
       createdAt: new Date(),
     });
+    // Track the text so the subscription echo is suppressed in addUserMessage.
+    const key = nextMessage.content.trim();
+    const counts = (state.firedQueuedMessageTexts ??= new Map<string, number>());
+    counts.set(key, (counts.get(key) ?? 0) + 1);
     state.ui.requestRender();
     ctx.fireMessage(nextMessage.content, nextMessage.images);
     return true;
