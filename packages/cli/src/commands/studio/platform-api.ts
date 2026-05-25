@@ -1,3 +1,4 @@
+import { writeBarLine } from '../../utils/clack-bar.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
@@ -246,7 +247,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
           skipNextUrlMeta = false;
           if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
         }
-        process.stdout.write(`${data}\n`);
+        await writeBarLine(data);
       }
     }
   }

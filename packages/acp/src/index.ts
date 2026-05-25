@@ -1,3 +1,4 @@
+export type { ModelInfo } from '@agentclientprotocol/sdk';
 export { AcpAgent } from './agent';
 export { createACPTool } from './tool';
 export type { AcpAgentOptions } from './agent';

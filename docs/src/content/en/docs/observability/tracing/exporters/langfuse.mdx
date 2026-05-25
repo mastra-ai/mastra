@@ -202,7 +202,7 @@ const prompt = await exporter.client.prompt.get('customer-support', { type: 'tex
 export const supportAgent = new Agent({
   name: 'support-agent',
   instructions: prompt.compile(), // Use the prompt text from Langfuse
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(
       withLangfusePrompt({ name: prompt.name, version: prompt.version }),
