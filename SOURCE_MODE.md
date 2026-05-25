@@ -2,7 +2,7 @@
 
 Source mode is an additive dev/test path for Mastra workspace packages. It lets package imports resolve through `package.json` exports directly to checked-in `src/**/*.ts` files by enabling the custom `mastra-source` condition.
 
-Source mode does **not** replace package builds, release builds, CJS artifact validation, declaration generation, or package-output checks. It is only the fast feedback lane for local dev and CI tests.
+Source mode does **not** replace package builds, release builds, CJS artifact validation, declaration generation, or package-output checks. It is an opt-in fast feedback lane for local development and explicit source-mode tests.
 
 ## Local commands
 
@@ -103,22 +103,14 @@ This keeps package imports flowing through `exports` conditions instead of a bro
 
 ## CI topology
 
-CI tests use source mode by default. Test workflows set `MASTRA_SOURCE_MODE=1` and `NODE_OPTIONS="--conditions=mastra-source"` so package imports resolve to checked-in TypeScript source instead of requiring workspace `dist/` artifacts.
+CI tests use the normal built-package path by default. This keeps source mode additive while local users and maintainers opt in with `MASTRA_SOURCE_MODE=1`, `NODE_OPTIONS="--conditions=mastra-source"`, or `mastra dev --source-mode`.
 
-The PR topology has two parallelizable lanes after change detection:
+The PR topology keeps the artifact lane as the required package-output proof:
 
-1. **Source-mode test lane**
-   - `.github/workflows/test-suite.yml` unit and E2E shards
-   - secret-backed memory, combined-store, workspace, and E2E workflows
-   - no package build prerequisite
-   - runs `pnpm source-exports:check`
+- `.github/workflows/prebuild.yml` `prebuild` job (`Build artifact check`): Runs the full turbo build to validate package artifacts.
+- `e2e-tests/pkg-outputs`: Validates real `dist` output.
 
-2. **Single artifact build check**
-   - `.github/workflows/prebuild.yml` `prebuild` job (`Build artifact check`)
-   - runs the full turbo build exactly to validate package artifacts
-   - runs `e2e-tests/pkg-outputs` validation against real `dist` output
-
-`pnpm ci:source-mode:check` guards the test workflows and fails if a new build command is added outside the artifact build check.
+Source-mode checks remain available through explicit scripts such as `pnpm test:source-mode`, `pnpm test:integration:source-mode`, and `pnpm source-exports:check`.
 
 ## Generated/build-only exceptions
 

@@ -70,9 +70,6 @@ jobs:
       - name: Format
         run: pnpm prettier --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*'
 
-      - name: Validate CI source-mode contract
-        run: pnpm ci:source-mode:check
-
   validator:
     name: Validate examples packages.json
     needs: changes

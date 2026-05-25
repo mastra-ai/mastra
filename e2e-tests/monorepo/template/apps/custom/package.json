@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "mastra dev --source-mode",
+    "dev": "mastra dev",
+    "dev:source-mode": "mastra dev --source-mode",
     "build": "mastra build",
     "start": "mastra start"
   },

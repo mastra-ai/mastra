@@ -76,7 +76,6 @@
     "source-exports:sync": "node scripts/source-exports.mjs sync",
     "source-exports:check": "node scripts/source-exports.mjs check",
     "source-mode:smoke": "node scripts/source-mode-smoke.mjs",
-    "ci:source-mode:check": "node scripts/check-ci-source-mode.mjs",
     "test:source-mode": "node scripts/run-source-mode-tests.mjs",
     "test:integration:source-mode": "node scripts/run-source-mode-integration-tests.mjs",
     "test:durable": "pnpm test:durable:core && pnpm test:durable:inngest",
