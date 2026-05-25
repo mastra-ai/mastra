@@ -119,6 +119,22 @@ describe('findBestIndex', () => {
     });
   });
 
+  describe('mastra_schedules', () => {
+    it('should prefer workflow/status composite index when both filters are present', () => {
+      const result = findBestIndex('mastra_schedules', [
+        { field: 'status', value: 'active' },
+        { field: 'workflow_id', value: 'workflow-1' },
+      ]);
+
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_workflow_status');
+      expect(result!.indexedFilters).toEqual([
+        { field: 'workflow_id', value: 'workflow-1' },
+        { field: 'status', value: 'active' },
+      ]);
+    });
+  });
+
   describe('mastra_channel_installations', () => {
     it('should prefer by_platform_agent for platform + agentId filters', () => {
       const result = findBestIndex('mastra_channel_installations', [
@@ -208,6 +224,8 @@ describe('findBestIndex', () => {
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_resources');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_workflow_snapshots');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_scorers');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_schedules');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_schedule_triggers');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_installations');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_config');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_background_tasks');
@@ -231,6 +249,15 @@ describe('findBestIndex', () => {
 
       const entity = TABLE_INDEX_MAP['mastra_scorers']!.find(i => i.name === 'by_entity');
       expect(entity!.fields).toEqual(['entityId', 'entityType']);
+
+      const scheduleWorkflow = TABLE_INDEX_MAP['mastra_schedules']!.find(i => i.name === 'by_workflow_id');
+      expect(scheduleWorkflow!.fields).toEqual(['workflow_id']);
+
+      const scheduleWorkflowStatus = TABLE_INDEX_MAP['mastra_schedules']!.find(i => i.name === 'by_workflow_status');
+      expect(scheduleWorkflowStatus!.fields).toEqual(['workflow_id', 'status']);
+
+      const scheduleActual = TABLE_INDEX_MAP['mastra_schedule_triggers']!.find(i => i.name === 'by_schedule_actual');
+      expect(scheduleActual!.fields).toEqual(['schedule_id', 'actual_fire_at']);
 
       const channelAgent = TABLE_INDEX_MAP['mastra_channel_installations']!.find(i => i.name === 'by_platform_agent');
       expect(channelAgent!.fields).toEqual(['platform', 'agentId']);
