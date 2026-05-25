@@ -73,7 +73,7 @@ const lifecycleSchema = z.enum(['active', 'closing', 'closed']);
 
 const pendingInboxSummarySchema = z.object({
   count: z.number(),
-  kinds: z.array(z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval'])),
+  kinds: z.array(z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval', 'sandbox-access'])),
   sessionOwnedOnly: z.literal(true),
 });
 
@@ -117,7 +117,7 @@ const harnessDisplayActiveSubagentSnapshotV1Schema = z.object({
 });
 
 const harnessDisplayPendingSnapshotV1Schema = z.object({
-  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval', 'sandbox-access']),
   itemId: z.string().optional(),
   runId: z.string(),
   toolCallId: z.string(),
@@ -314,7 +314,7 @@ const channelActionTokenDiagnosticSchema = z
     resourceId: z.string(),
     owningSessionId: z.string(),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval', 'sandbox-access']),
     runId: z.string(),
     pendingRequestedAt: z.number(),
     expiresAt: z.number().optional(),
@@ -338,7 +338,7 @@ const channelActionReceiptDiagnosticSchema = z
     resourceId: z.string(),
     owningSessionId: z.string(),
     itemId: z.string(),
-    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+    kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval', 'sandbox-access']),
     runId: z.string(),
     pendingRequestedAt: z.number(),
     conflictReason: z.string().optional(),
@@ -626,11 +626,19 @@ export const harnessInboxResponseBodySchema = z.discriminatedUnion('kind', [
       transitionToMode: z.string().min(1).optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('sandbox-access'),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+      responseId: z.string().min(1),
+    })
+    .strict(),
 ]);
 
 export const harnessInboxResponseResultSchema = z.object({
   itemId: z.string(),
-  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval']),
+  kind: z.enum(['tool-approval', 'tool-suspension', 'question', 'plan-approval', 'sandbox-access']),
   status: z.enum(['accepted', 'applied']),
   responseId: z.string(),
   duplicate: z.boolean(),

@@ -65,7 +65,7 @@ import { toHarnessDisplayStateSnapshotV1 } from './harness-display-state';
 import { enforceThreadAccess, getEffectiveResourceId } from './utils';
 
 type SessionLifecycleStatus = 'active' | 'closing' | 'closed';
-type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+type PendingInboxKind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
 type PublicPendingResume = Omit<NonNullable<SessionRecord['pendingResume']>, 'runtimeDependencies'>;
 type ParsedHarnessEventId = { epoch: string; sequence: number };
 type UrlAttachmentInput = {
@@ -228,6 +228,12 @@ type HarnessLike = {
       approved: boolean;
       revision?: string;
       transitionToMode?: string;
+    }): Promise<InboxResponseResult>;
+    respondToSandboxAccess(opts: {
+      itemId: string;
+      responseId: string;
+      approved: boolean;
+      reason?: string;
     }): Promise<InboxResponseResult>;
     setGoal(opts: GoalOptions): Promise<GoalState>;
     getGoal(): GoalState | undefined;
@@ -2511,14 +2517,15 @@ export const RESPOND_HARNESS_INBOX_ROUTE = createRoute({
   harnessAuth: { clientRoute: true },
   onValidationError: harnessValidationErrorHook,
   summary: 'Respond to a Harness inbox item',
-  description: 'Applies a typed, idempotent response to a pending Harness approval, suspension, question, or plan.',
+  description:
+    'Applies a typed, idempotent response to a pending Harness approval, suspension, question, plan, or sandbox access request.',
   tags: ['Harness'],
   handler: async ({ mastra, requestContext, name, sessionId, itemId, requestBody, requestPathParams }) => {
     try {
       const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
       const pathItemId = stringPathParam(requestPathParams, itemId, 'itemId');
       const body = objectRequestBody(requestBody, 'Inbox response') as {
-        kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+        kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval' | 'sandbox-access';
         responseId: string;
         approved?: boolean;
         reason?: string;
@@ -2557,6 +2564,13 @@ export const RESPOND_HARNESS_INBOX_ROUTE = createRoute({
             approved: body.approved!,
             ...(body.revision !== undefined ? { revision: body.revision } : {}),
             ...(body.transitionToMode !== undefined ? { transitionToMode: body.transitionToMode } : {}),
+          });
+        case 'sandbox-access':
+          return await session.respondToSandboxAccess({
+            itemId: pathItemId,
+            responseId: body.responseId,
+            approved: body.approved!,
+            ...(body.reason !== undefined ? { reason: body.reason } : {}),
           });
         default: {
           const unsupportedKind: never = body.kind;

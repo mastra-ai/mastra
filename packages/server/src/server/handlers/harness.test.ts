@@ -2348,12 +2348,54 @@ describe('Harness server routes', () => {
     });
   });
 
+  it('responds to sandbox access requests with approval metadata', async () => {
+    const response = {
+      itemId: 'item-1',
+      kind: 'sandbox-access' as const,
+      status: 'accepted' as const,
+      responseId: 'response-1',
+      duplicate: false,
+    };
+    const session = {
+      respondToSandboxAccess: vi.fn(async () => response),
+    };
+    const harness = { session: vi.fn(async () => session) };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      RESPOND_HARNESS_INBOX_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'query-code',
+          sessionId: 'query-session',
+          itemId: 'query-item',
+          requestPathParams: { name: 'code', sessionId: 'session-1', itemId: 'item-1' },
+          requestBody: {
+            kind: 'sandbox-access',
+            approved: false,
+            reason: 'Needs a narrower write path',
+            responseId: 'response-1',
+          },
+        }),
+      ),
+    ).resolves.toEqual(response);
+    expect(mastra.getHarness).toHaveBeenCalledWith('code');
+    expect(harness.session).toHaveBeenCalledWith({ sessionId: 'session-1', resourceId: 'resource-1' });
+    expect(session.respondToSandboxAccess).toHaveBeenCalledWith({
+      itemId: 'item-1',
+      responseId: 'response-1',
+      approved: false,
+      reason: 'Needs a narrower write path',
+    });
+  });
+
   it('rejects unsupported inbox response kinds from direct handler calls', async () => {
     const session = {
       respondToToolApproval: vi.fn(),
       respondToToolSuspension: vi.fn(),
       respondToQuestion: vi.fn(),
       respondToPlanApproval: vi.fn(),
+      respondToSandboxAccess: vi.fn(),
     };
     const harness = { session: vi.fn(async () => session) };
     const mastra = { getHarness: vi.fn(() => harness) };
@@ -2379,6 +2421,7 @@ describe('Harness server routes', () => {
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     expect(session.respondToQuestion).not.toHaveBeenCalled();
     expect(session.respondToPlanApproval).not.toHaveBeenCalled();
+    expect(session.respondToSandboxAccess).not.toHaveBeenCalled();
   });
 
   it('maps inbox response conflicts to the wire error code', async () => {
