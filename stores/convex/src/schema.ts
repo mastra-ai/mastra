@@ -19,6 +19,7 @@ import {
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -225,6 +226,54 @@ export const mastraChannelConfigTable = defineTable({
   .index('by_record_id', ['id'])
   .index('by_platform', ['platform']);
 
+/**
+ * Background tasks table - stores durable background task state.
+ *
+ * JSON-like payloads are stored as encoded strings to match the existing
+ * Convex storage serialization used by this adapter.
+ *
+ * Optional fields are stored as null when cleared so partial Convex patches can
+ * preserve the existing task row while explicitly removing suspended state.
+ */
+export const mastraBackgroundTasksTable = defineTable({
+  id: v.string(),
+  tool_call_id: v.string(),
+  tool_name: v.string(),
+  agent_id: v.string(),
+  run_id: v.string(),
+  thread_id: v.union(v.string(), v.null()),
+  resource_id: v.union(v.string(), v.null()),
+  status: v.union(
+    v.literal('pending'),
+    v.literal('running'),
+    v.literal('suspended'),
+    v.literal('completed'),
+    v.literal('failed'),
+    v.literal('cancelled'),
+    v.literal('timed_out'),
+  ),
+  args: v.string(),
+  result: v.union(v.string(), v.null()),
+  error: v.union(v.string(), v.null()),
+  suspend_payload: v.union(v.string(), v.null()),
+  retry_count: v.number(),
+  max_retries: v.number(),
+  timeout_ms: v.number(),
+  createdAt: v.string(),
+  startedAt: v.union(v.string(), v.null()),
+  suspendedAt: v.union(v.string(), v.null()),
+  completedAt: v.union(v.string(), v.null()),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_created', ['status', 'createdAt'])
+  .index('by_agent_status', ['agent_id', 'status'])
+  .index('by_run', ['run_id'])
+  .index('by_tool_call', ['tool_call_id'])
+  .index('by_thread', ['thread_id'])
+  .index('by_resource', ['resource_id'])
+  .index('by_tool', ['tool_name'])
+  .index('by_created', ['createdAt']);
+
 // ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
 // ============================================================================
@@ -371,6 +420,7 @@ export {
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 };
 
 // Additional table name constants for vector tables (not in core)
