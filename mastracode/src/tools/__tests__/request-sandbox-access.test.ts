@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { LocalFilesystem } from '@mastra/core/workspace';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { requestSandboxAccessTool } from '../request-sandbox-access.js';
 
@@ -14,12 +14,28 @@ function createMockLocalFilesystem() {
 }
 
 describe('request_access', () => {
+  const tempDirs: string[] = [];
+
+  async function makeTempDir(prefix: string): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  afterEach(async () => {
+    while (tempDirs.length > 0) {
+      const dir = tempDirs.pop();
+      if (!dir) continue;
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('prompts for nested git trees inside the project root', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'request-access-nested-'));
+    const tempDir = await makeTempDir('request-access-nested-');
     const nestedRepo = path.join(tempDir, 'mastra');
     await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
 
-    const localFs = new LocalFilesystem({ basePath: tempDir, contained: true });
+    const localFs = new LocalFilesystem({ basePath: tempDir, contained: true, disallowedPaths: [nestedRepo] });
     const setAllowedPaths = vi.spyOn(localFs, 'setAllowedPaths');
     const mockHarnessCtx = {
       emitEvent: vi.fn(),
@@ -51,7 +67,7 @@ describe('request_access', () => {
   });
 
   it('prompts for filesystem disallowed paths inside the project root', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'request-access-disallowed-'));
+    const tempDir = await makeTempDir('request-access-disallowed-');
     const blockedDir = path.join(tempDir, 'blocked');
     await fs.mkdir(blockedDir, { recursive: true });
 
@@ -85,8 +101,47 @@ describe('request_access', () => {
     expect(setAllowedPaths).toHaveBeenCalledTimes(1);
   });
 
+  it('prompts when requesting a symlink alias into a disallowed path', async () => {
+    const tempDir = await makeTempDir('request-access-symlink-disallowed-');
+    const blockedDir = path.join(tempDir, 'blocked');
+    const blockedLink = path.join(tempDir, 'blocked-link');
+    const requestedPath = path.join(blockedLink, 'new-file.ts');
+    await fs.mkdir(blockedDir, { recursive: true });
+    await fs.symlink(blockedDir, blockedLink);
+
+    const localFs = new LocalFilesystem({ basePath: tempDir, contained: true, disallowedPaths: [blockedDir] });
+    const setAllowedPaths = vi.spyOn(localFs, 'setAllowedPaths');
+    const mockHarnessCtx = {
+      emitEvent: vi.fn(),
+      registerQuestion: vi.fn(({ resolve }: { questionId: string; resolve: (answer: string) => void }) => {
+        resolve('yes');
+      }),
+      getState: () => ({ sandboxAllowedPaths: [] }),
+      setState: vi.fn(),
+    };
+
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: requestedPath, reason: 'need to write through approved symlink' },
+      {
+        requestContext: {
+          get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
+        },
+        workspace: {
+          filesystem: localFs,
+        },
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('Access granted');
+    expect(result.content).not.toContain('already granted');
+    expect(mockHarnessCtx.emitEvent).toHaveBeenCalledWith(expect.objectContaining({ path: requestedPath }));
+    expect(mockHarnessCtx.setState).toHaveBeenCalledWith({ sandboxAllowedPaths: [requestedPath] });
+    expect(setAllowedPaths).toHaveBeenCalledTimes(1);
+  });
+
   it('does not prompt for normal project paths', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'request-access-project-'));
+    const tempDir = await makeTempDir('request-access-project-');
     const srcDir = path.join(tempDir, 'src');
     await fs.mkdir(srcDir, { recursive: true });
 

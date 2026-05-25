@@ -1291,6 +1291,59 @@ describe('LocalFilesystem', () => {
       expect(after).toBe('x');
     });
 
+    it('should classify configured disallowed roots and children', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(path.join(blocked, 'nested'), { recursive: true });
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      expect(fsWithBlock.isPathDisallowed('sub')).toBe(true);
+      expect(fsWithBlock.isPathDisallowed('sub/nested/file.ts')).toBe(true);
+      expect(fsWithBlock.isPathDisallowed(blocked)).toBe(true);
+      expect(fsWithBlock.isPathDisallowed(path.join(blocked, 'nested', 'file.ts'))).toBe(true);
+    });
+
+    it('should classify normal project paths as not disallowed', async () => {
+      await fs.mkdir(path.join(tempDir, 'sub'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: ['sub'],
+      });
+
+      expect(fsWithBlock.isPathDisallowed('src/main.ts')).toBe(false);
+      expect(fsWithBlock.isPathDisallowed(tempDir)).toBe(false);
+    });
+
+    it('should classify symlink aliases into disallowed paths, including missing child paths', async () => {
+      const blocked = path.join(tempDir, 'wt');
+      const linkPath = path.join(tempDir, 'wt-link');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.symlink(blocked, linkPath);
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      expect(fsWithBlock.isPathDisallowed('wt-link')).toBe(true);
+      expect(fsWithBlock.isPathDisallowed('wt-link/new-file.ts')).toBe(true);
+      expect(fsWithBlock.isPathDisallowed(path.join(linkPath, 'deep', 'new-file.ts'))).toBe(true);
+    });
+
+    it('should classify all paths as not disallowed when no disallowed paths are configured', async () => {
+      await fs.mkdir(path.join(tempDir, 'sub'), { recursive: true });
+
+      const fsWithoutBlock = new LocalFilesystem({ basePath: tempDir });
+
+      expect(fsWithoutBlock.isPathDisallowed('sub')).toBe(false);
+      expect(fsWithoutBlock.isPathDisallowed('sub/file.ts')).toBe(false);
+    });
+
     it('should not affect basePath itself or unrelated paths', async () => {
       // basePath ops must always work even if a sibling tree is blocked.
       await fs.writeFile(path.join(tempDir, 'top.ts'), 'top');

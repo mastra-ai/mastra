@@ -254,6 +254,16 @@ export class LocalFilesystem extends MastraFilesystem {
     this._disallowedPaths = newPaths.map(p => resolveToBasePath(this._basePath, p));
   }
 
+  /**
+   * Return true when the input path is equal to or inside a configured
+   * disallowed root. Relative paths resolve against `basePath`; absolute and
+   * tilde paths use the same resolution as filesystem operations.
+   */
+  isPathDisallowed(inputPath: string): boolean {
+    const absolutePath = resolveToBasePath(this._basePath, inputPath);
+    return this._isInDisallowedPath(absolutePath);
+  }
+
   constructor(options: LocalFilesystemOptions) {
     super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();

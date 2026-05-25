@@ -3,7 +3,6 @@
  * The user can approve or deny the request via TUI dialog.
  */
 
-import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { HarnessQuestionAnswer, HarnessRequestContext } from '@mastra/core/harness';
@@ -17,24 +16,6 @@ function expandTilde(p: string): string {
   if (p === '~') return os.homedir();
   if (p.startsWith('~/') || p.startsWith('~\\')) return path.join(os.homedir(), p.slice(2));
   return p;
-}
-
-function crossesNestedGitBoundary(absolutePath: string, projectRoot: string): boolean {
-  const resolvedPath = path.resolve(absolutePath);
-  const resolvedRoot = path.resolve(projectRoot);
-
-  if (resolvedPath === resolvedRoot || !isPathAllowed(resolvedPath, resolvedRoot)) return false;
-
-  let current = resolvedPath;
-  while (current !== resolvedRoot) {
-    if (existsSync(path.join(current, '.git'))) return true;
-
-    const parent = path.dirname(current);
-    if (parent === current) return false;
-    current = parent;
-  }
-
-  return false;
 }
 
 type MastraCodeState = z.infer<typeof stateSchema>;
@@ -64,9 +45,7 @@ export const requestSandboxAccessTool = createTool({
         ...getAllowedPathsFromContext(context),
         ...(fs instanceof LocalFilesystem ? [...fs.allowedPaths] : []),
       ];
-      const crossesBlockedBoundary =
-        (fs instanceof LocalFilesystem && isPathWithinRoots(absolutePath, [...fs.disallowedPaths])) ||
-        crossesNestedGitBoundary(absolutePath, projectRoot);
+      const crossesBlockedBoundary = fs instanceof LocalFilesystem && fs.isPathDisallowed(absolutePath);
       const alreadyGranted =
         isPathWithinRoots(absolutePath, allowedPaths) ||
         (isPathAllowed(absolutePath, projectRoot) && !crossesBlockedBoundary);
