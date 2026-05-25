@@ -345,12 +345,19 @@ export class LocalFilesystem extends MastraFilesystem {
 
   /**
    * Return true if `absolutePath` is equal to, or contained within, any of
-   * the configured `disallowedPaths` roots. Pure containment check — never
-   * touches the filesystem.
+   * the configured `disallowedPaths` roots. Checks both literal and resolved
+   * paths so symlinked parents cannot bypass a disallowed subtree.
    */
   private _isInDisallowedPath(absolutePath: string): boolean {
     if (this._disallowedPaths.length === 0) return false;
-    return this._disallowedPaths.some(root => this._isWithinRoot(absolutePath, root));
+
+    const resolvedPath = this._resolvePathForContainment(absolutePath);
+    return this._disallowedPaths.some(root => {
+      if (this._isWithinRoot(absolutePath, root)) return true;
+
+      const resolvedRoot = this._resolvePathForContainment(root);
+      return Boolean(resolvedPath && resolvedRoot && this._isWithinRoot(resolvedPath, resolvedRoot));
+    });
   }
 
   private _disallowedPathOperationHint(absolutePath: string): string {
@@ -454,21 +461,22 @@ export class LocalFilesystem extends MastraFilesystem {
       return;
     }
 
-    // Resolve symlinks for the target path. If it doesn't exist there are no
-    // symlinks to escape through, but we still apply the disallowed-paths
-    // check on the literal path so writes into a blocked subtree can't sneak
-    // in via a not-yet-created file.
+    // Resolve symlinks for the target path. If the final target does not exist,
+    // resolve the nearest existing ancestor so writes under a symlinked parent
+    // cannot escape basePath or bypass disallowedPaths.
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
     } catch (error: unknown) {
       if (isEnoentError(error)) {
-        if (this._isWithinRoot(absolutePath, this._basePath) && this._isInDisallowedPath(absolutePath)) {
-          throw new PermissionError(absolutePath, this._disallowedPathOperationHint(absolutePath));
+        const resolvedTarget = this._resolvePathForContainment(absolutePath);
+        if (!resolvedTarget) {
+          throw new PermissionError(absolutePath, 'access');
         }
-        return;
+        targetReal = resolvedTarget;
+      } else {
+        throw error;
       }
-      throw error;
     }
 
     // Re-check allowedPaths against the realpath-resolved target.

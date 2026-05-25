@@ -5,8 +5,8 @@ import * as path from 'node:path';
 import { LocalFilesystem, PermissionError } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { detectNestedGitTrees, setStartupNestedGitTrees } from '../../utils/project.js';
-import { NESTED_GIT_DISALLOWED_PATH_HINT, getNestedGitDisallowedPaths } from '../workspace.js';
+import { detectNestedGitTrees, setStartupNestedGitTrees } from '../utils/project.js';
+import { NESTED_GIT_DISALLOWED_PATH_HINT, getNestedGitDisallowedPaths } from './workspace.js';
 
 /**
  * Mastra Code wires `LocalFilesystem.disallowedPaths` from the nested-git

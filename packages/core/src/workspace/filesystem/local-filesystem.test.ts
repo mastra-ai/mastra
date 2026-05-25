@@ -781,6 +781,19 @@ describe('LocalFilesystem', () => {
         expect(content).toBe('external content');
       });
 
+      it('should block writes to missing files under symlinked parents that escape basePath', async () => {
+        const linkPath = path.join(tempDir, 'outside-link');
+        await fs.symlink(outsideDir, linkPath);
+
+        const restrictedFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+        });
+
+        await expect(restrictedFs.writeFile('outside-link/new.txt', 'escaped')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'new.txt'))).rejects.toThrow();
+      });
+
       it('should block path traversal that escapes all roots', async () => {
         const restrictedFs = new LocalFilesystem({
           basePath: tempDir,
@@ -1100,6 +1113,21 @@ describe('LocalFilesystem', () => {
 
       // The file doesn't exist — but the write would still land inside the blocked tree.
       await expect(fsWithBlock.writeFile('wt/new-file.ts', 'content')).rejects.toThrow(PermissionError);
+    });
+
+    it('should block missing files under symlinked parents that resolve into a disallowed tree', async () => {
+      const blocked = path.join(tempDir, 'wt');
+      const linkPath = path.join(tempDir, 'wt-link');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.symlink(blocked, linkPath);
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      await expect(fsWithBlock.writeFile('wt-link/new-file.ts', 'content')).rejects.toThrow(PermissionError);
+      await expect(fs.access(path.join(blocked, 'new-file.ts'))).rejects.toThrow();
     });
 
     it('should block access to the disallowed directory itself', async () => {

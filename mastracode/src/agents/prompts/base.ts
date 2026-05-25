@@ -193,14 +193,15 @@ function formatNestedGitTrees(trees: PromptContext['nestedGitTrees']): string {
   return `\nNested git trees inside the project (each is its own sandbox — call \`request_access\` before touching):\n${lines}`;
 }
 
-// Directory and branch names can technically contain control characters or
-// backticks. Strip them before splicing into the system prompt so a crafted
-// nested repo name can't inject extra prompt lines or break out of the inline
-// code formatting. Escape backslashes first so a literal `\` in the input
-// can't pair with a following backtick to round-trip through the formatting.
+// Directory and branch names can technically contain control characters,
+// Unicode line separators, or backticks. Strip them before splicing into the
+// system prompt so a crafted nested repo name can't inject extra prompt lines
+// or break out of the inline code formatting. Escape backslashes first so a
+// literal `\` in the input can't pair with a following backtick to round-trip
+// through the formatting.
 function escapePromptText(value: string): string {
   return value
     .replace(/\\/g, '\\\\')
-    .replace(/[\r\n\t\v\f\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\r\n\t\v\f\u0000-\u001f\u007f\u2028\u2029]/g, ' ')
     .replace(/`/g, '\\`');
 }
