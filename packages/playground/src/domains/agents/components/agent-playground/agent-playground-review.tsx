@@ -849,8 +849,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     ) : (
                       <DataList.Cell height="compact" className="justify-items-center px-4">
                         <div
-                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
+                          role="img"
+                          aria-label={item.error ? 'Error' : 'Success'}
                           title={item.error ? 'Error' : 'Success'}
+                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
                         />
                       </DataList.Cell>
                     )}
