@@ -266,6 +266,16 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     });
   }
 
+  /**
+   * Append content to a file.
+   *
+   * **Not atomic.** Object storage has no native append, so this is implemented
+   * as a read-modify-write: the existing object is downloaded, the new content
+   * is concatenated, and the result is uploaded as a new object. Concurrent
+   * appends to the same key may overwrite each other. This limitation is
+   * inherent to object storage, not specific to FilesSDK, and matches the
+   * behavior of the sibling S3, GCS, and Azure workspace providers.
+   */
   async appendFile(path: string, content: FileContent): Promise<void> {
     await this.ensureReady();
     this.assertWritable('appendFile');
