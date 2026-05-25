@@ -1140,6 +1140,31 @@ describe('DatadogExporter', () => {
       );
     });
 
+    it('drops empty user messages from MODEL_INFERENCE input annotations', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        type: SpanType.MODEL_INFERENCE,
+        input: [
+          { role: 'user', content: '' },
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: 'Hello' },
+          { role: 'user', content: '   ' },
+        ],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockAnnotate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          inputData: [
+            { role: 'system', content: 'You are helpful' },
+            { role: 'user', content: 'Hello' },
+          ],
+        }),
+      );
+    });
+
     it('inherits modelName/modelProvider from parent MODEL_GENERATION onto MODEL_INFERENCE descendants', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const generation = createMockSpan({

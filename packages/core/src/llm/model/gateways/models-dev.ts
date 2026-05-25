@@ -14,13 +14,22 @@ import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
-import type { GatewayLanguageModel, ProviderConfig } from './base.js';
+import type { AttachmentCapabilities, GatewayLanguageModel, ProviderConfig } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+
+interface ModelsDevModelInfo {
+  id: string;
+  name?: string;
+  status?: string;
+  modalities?: { input?: string[]; output?: string[] };
+  attachment?: boolean;
+  [key: string]: unknown;
+}
 
 interface ModelsDevProviderInfo {
   id: string;
   name: string;
-  models: Record<string, any>;
+  models: Record<string, ModelsDevModelInfo>;
   env?: string[]; // Array of env var names
   api?: string; // Base API URL
   npm?: string; // NPM package name
@@ -87,6 +96,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   readonly name = 'models.dev';
 
   private providerConfigs: Record<string, ProviderConfig> = {};
+  private attachmentCapabilities: AttachmentCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -127,8 +137,14 @@ export class ModelsDevGateway extends MastraModelGateway {
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
         // Filter out deprecated models before collecting model IDs
-        const modelIds = Object.entries(providerInfo.models)
-          .filter(([, modelInfo]) => modelInfo?.status !== 'deprecated')
+        const activeModels = Object.entries(providerInfo.models).filter(
+          ([, modelInfo]) => modelInfo?.status !== 'deprecated',
+        );
+        const modelIds = activeModels.map(([modelId]) => modelId).sort();
+
+        // Collect model IDs that support attachments
+        const attachmentModels = activeModels
+          .filter(([, modelInfo]) => modelInfo?.attachment === true)
           .map(([modelId]) => modelId)
           .sort();
 
@@ -171,6 +187,9 @@ export class ModelsDevGateway extends MastraModelGateway {
               ? providerInfo.npm
               : undefined),
         };
+        if (attachmentModels.length > 0) {
+          this.attachmentCapabilities[normalizedId] = attachmentModels;
+        }
       }
     }
 
@@ -178,6 +197,14 @@ export class ModelsDevGateway extends MastraModelGateway {
     this.providerConfigs = providerConfigs;
 
     return providerConfigs;
+  }
+
+  /**
+   * Return attachment capabilities collected during the last `fetchProviders()` call.
+   * Maps provider ID → list of model IDs that support attachments.
+   */
+  getAttachmentCapabilities(): AttachmentCapabilities {
+    return this.attachmentCapabilities;
   }
 
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {

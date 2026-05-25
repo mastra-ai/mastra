@@ -49,16 +49,16 @@ test.describe('agent panels', () => {
     });
 
     test('model trigger modes', async ({ page }) => {
-      const generateRadio = page.getByLabel('Generate');
+      const generateRadio = page.getByRole('radio', { name: 'Generate' });
       await page.click('text=Model settings');
 
       await expect(generateRadio).toBeVisible();
       await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
-      const streamRadio = page.getByLabel('Stream');
+      const streamRadio = page.getByRole('radio', { name: 'Stream' });
       await expect(streamRadio).toBeVisible();
       await expect(streamRadio).toHaveAttribute('aria-checked', 'true');
 
-      const networkRadio = page.getByLabel('Network');
+      const networkRadio = page.getByRole('radio', { name: 'Network' });
       await expect(networkRadio).toBeVisible();
     });
 

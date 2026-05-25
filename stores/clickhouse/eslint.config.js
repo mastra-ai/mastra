@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config.map(conf => ({
     ...conf,
-    ignores: [...(conf.ignores || []), '**/vitest.perf.config.ts', 'docker/keeper.test.xml'],
+    ignores: [...(conf.ignores || []), '**/vitest.perf.config.ts', 'docker/**/*.xml'],
   })),
 ];

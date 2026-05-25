@@ -84,7 +84,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
         onMessage(event, _ws) {
           const data = typeof event.data === 'string' ? event.data : null;
           if (data) {
-            handleInputMessage(data, config.getToolset, agentId, threadId);
+            void handleInputMessage(data, config.getToolset, agentId, threadId);
           }
         },
 
@@ -107,14 +107,14 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // Returns:
   //   - screencastAvailable: true (this route only exists if setupBrowserStream succeeded)
   //   - hasSession: whether the agent has an active browser session for the given thread
-  app.get(`${apiPrefix}/agents/:agentId/browser/session`, c => {
+  app.get(`${apiPrefix}/agents/:agentId/browser/session`, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);
     }
 
     const threadId = c.req.query('threadId');
-    const toolset = config.getToolset(agentId);
+    const toolset = await config.getToolset(agentId);
 
     if (!toolset) {
       return c.json({ hasSession: false, screencastAvailable: true });
@@ -131,7 +131,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
       return c.json({ error: 'Agent ID is required' }, 400);
     }
 
-    const toolset = config.getToolset(agentId);
+    const toolset = await config.getToolset(agentId);
     if (!toolset) {
       return c.json({ error: 'No browser session for this agent' }, 404);
     }

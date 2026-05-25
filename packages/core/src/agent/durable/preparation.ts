@@ -334,6 +334,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: (execOptions as any)?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
+      providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
     },

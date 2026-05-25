@@ -1,3 +1,4 @@
+import { DataListDateCell, DataListTimeCell } from '../DataList/data-list-cells';
 import { DataListNextPageLoading } from '../DataList/data-list-next-page-loading';
 import { DataListNoMatch } from '../DataList/data-list-no-match';
 import { DataListRoot } from '../DataList/data-list-root';
@@ -9,8 +10,6 @@ import { DataListTop } from '../DataList/data-list-top';
 import { DataListTopCell, DataListTopCellWithTooltip, DataListTopCellSmart } from '../DataList/data-list-top-cell';
 import {
   LogsDataListLevelCell,
-  LogsDataListDateCell,
-  LogsDataListTimeCell,
   LogsDataListEntityCell,
   LogsDataListMessageCell,
   LogsDataListDataCell,
@@ -26,8 +25,8 @@ export const LogsDataList = Object.assign(DataListRoot, {
   RowLink: DataListRowLink,
   Spacer: DataListSpacer,
   NoMatch: DataListNoMatch,
-  DateCell: LogsDataListDateCell,
-  TimeCell: LogsDataListTimeCell,
+  DateCell: DataListDateCell,
+  TimeCell: DataListTimeCell,
   LevelCell: LogsDataListLevelCell,
   EntityCell: LogsDataListEntityCell,
   MessageCell: LogsDataListMessageCell,

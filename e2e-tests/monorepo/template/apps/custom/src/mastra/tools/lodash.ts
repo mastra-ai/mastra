@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import get from 'lodash/fp/get';
 import { get as getFp } from 'lodash/fp';
-import { endOfDay } from 'date-fns/endOfDay';
+import endOfDay from 'date-fns/endOfDay';
 
 export const lodashTool = createTool({
   id: 'lodash',
