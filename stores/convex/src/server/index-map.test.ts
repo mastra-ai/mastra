@@ -119,6 +119,30 @@ describe('findBestIndex', () => {
     });
   });
 
+  describe('mastra_channel_installations', () => {
+    it('should prefer by_platform_agent for platform + agentId filters', () => {
+      const result = findBestIndex('mastra_channel_installations', [
+        { field: 'platform', value: 'slack' },
+        { field: 'agentId', value: 'agent-1' },
+      ]);
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_platform_agent');
+      expect(result!.indexedFilters).toHaveLength(2);
+    });
+
+    it('should match by_webhook for webhookId filter', () => {
+      const result = findBestIndex('mastra_channel_installations', [{ field: 'webhookId', value: 'webhook-1' }]);
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_webhook');
+    });
+
+    it('should match by_platform for platform filter', () => {
+      const result = findBestIndex('mastra_channel_installations', [{ field: 'platform', value: 'slack' }]);
+      expect(result).not.toBeNull();
+      expect(['by_platform', 'by_platform_agent']).toContain(result!.indexName);
+    });
+  });
+
   describe('mastra_background_tasks', () => {
     it('should prefer agent/status composite index when both filters are present', () => {
       const result = findBestIndex('mastra_background_tasks', [
@@ -184,6 +208,8 @@ describe('findBestIndex', () => {
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_resources');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_workflow_snapshots');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_scorers');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_installations');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_config');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_background_tasks');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_vector_indexes');
     });
@@ -205,6 +231,12 @@ describe('findBestIndex', () => {
 
       const entity = TABLE_INDEX_MAP['mastra_scorers']!.find(i => i.name === 'by_entity');
       expect(entity!.fields).toEqual(['entityId', 'entityType']);
+
+      const channelAgent = TABLE_INDEX_MAP['mastra_channel_installations']!.find(i => i.name === 'by_platform_agent');
+      expect(channelAgent!.fields).toEqual(['platform', 'agentId']);
+
+      const channelConfigPlatform = TABLE_INDEX_MAP['mastra_channel_config']!.find(i => i.name === 'by_platform');
+      expect(channelConfigPlatform!.fields).toEqual(['platform']);
 
       const backgroundAgentStatus = TABLE_INDEX_MAP['mastra_background_tasks']!.find(i => i.name === 'by_agent_status');
       expect(backgroundAgentStatus!.fields).toEqual(['agent_id', 'status']);

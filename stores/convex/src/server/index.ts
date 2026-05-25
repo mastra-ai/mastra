@@ -11,6 +11,8 @@ export {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraChannelInstallationsTable,
+  mastraChannelConfigTable,
   mastraBackgroundTasksTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
@@ -25,5 +27,7 @@ export {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
   TABLE_BACKGROUND_TASKS,
 } from '../schema';

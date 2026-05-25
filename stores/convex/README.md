@@ -2,7 +2,7 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, background tasks).
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, channels, background tasks).
 - `ConvexVector` stores embeddings inside Convex and performs development-scale cosine similarity search.
 - `ConvexNativeVector` uses Convex native vector search for production workloads.
 - `ConvexServerCache` stores Mastra server cache entries in Convex for durable stream replay and response caching.
@@ -28,6 +28,8 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraChannelInstallationsTable,
+  mastraChannelConfigTable,
   mastraBackgroundTasksTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
@@ -42,6 +44,8 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_channel_installations: mastraChannelInstallationsTable,
+  mastra_channel_config: mastraChannelConfigTable,
   mastra_background_tasks: mastraBackgroundTasksTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
@@ -162,19 +166,20 @@ Native vector search uses Convex's schema-defined vector indexes and action-only
 
 This adapter uses **typed Convex tables** for each Mastra domain:
 
-| Domain           | Convex Table                | Purpose               |
-| ---------------- | --------------------------- | --------------------- |
-| Threads          | `mastra_threads`            | Conversation threads  |
-| Messages         | `mastra_messages`           | Chat messages         |
-| Resources        | `mastra_resources`          | User working memory   |
-| Workflows        | `mastra_workflow_snapshots` | Workflow state        |
-| Scorers          | `mastra_scorers`            | Evaluation data       |
-| Background Tasks | `mastra_background_tasks`   | Background task state |
-| Vector Indexes   | `mastra_vector_indexes`     | Index metadata        |
-| Vectors          | `mastra_vectors`            | Embeddings            |
-| Cache            | `mastra_cache`              | Cache metadata        |
-| Cache Items      | `mastra_cache_list_items`   | Cache list entries    |
-| Fallback         | `mastra_documents`          | Unknown tables        |
+| Domain           | Convex Table                                            | Purpose                          |
+| ---------------- | ------------------------------------------------------- | -------------------------------- |
+| Threads          | `mastra_threads`                                        | Conversation threads             |
+| Messages         | `mastra_messages`                                       | Chat messages                    |
+| Resources        | `mastra_resources`                                      | User working memory              |
+| Workflows        | `mastra_workflow_snapshots`                             | Workflow state                   |
+| Scorers          | `mastra_scorers`                                        | Evaluation data                  |
+| Channels         | `mastra_channel_installations`, `mastra_channel_config` | Channel installations and config |
+| Background Tasks | `mastra_background_tasks`                               | Background task state            |
+| Vector Indexes   | `mastra_vector_indexes`                                 | Index metadata                   |
+| Vectors          | `mastra_vectors`                                        | Embeddings                       |
+| Cache            | `mastra_cache`                                          | Cache metadata                   |
+| Cache Items      | `mastra_cache_list_items`                               | Cache list entries               |
+| Fallback         | `mastra_documents`                                      | Unknown tables                   |
 
 All typed tables include:
 

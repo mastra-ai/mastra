@@ -40,6 +40,16 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_created', fields: ['createdAt'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
+  mastra_channel_installations: [
+    { name: 'by_platform_agent', fields: ['platform', 'agentId'] },
+    { name: 'by_webhook', fields: ['webhookId'] },
+    { name: 'by_platform', fields: ['platform'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
+  mastra_channel_config: [
+    { name: 'by_platform', fields: ['platform'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
   mastra_background_tasks: [
     { name: 'by_agent_status', fields: ['agent_id', 'status'] },
     { name: 'by_status_created', fields: ['status', 'createdAt'] },
