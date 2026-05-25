@@ -1,0 +1,8 @@
+overrides:
+  mastra: link:../../../../packages/cli
+  '@mastra/core': link:../../../../packages/core
+  '@mastra/loggers': link:../../../../packages/loggers
+  '@mastra/memory': link:../../../../packages/memory
+  '@mastra/libsql': link:../../../../stores/libsql
+  '@mastra/editor': link:../../../../packages/editor
+  '@mastra/mcp': link:../../../../packages/mcp

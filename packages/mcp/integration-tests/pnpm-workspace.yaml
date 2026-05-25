@@ -1,0 +1,5 @@
+overrides:
+  '@mastra/core': link:../../core
+  '@mastra/mcp': link:../
+  '@mastra/client-js': link:../../../client-sdks/client-js
+  mastra: link:../../cli

@@ -19,7 +19,7 @@ describe.for([['pnpm'] as const])(`%s bundler analysis`, ([pkgManager]) => {
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-bundler-analysis-test-${pkgManager}-`));
-      process.env.npm_config_registry = registry;
+      process.env.pnpm_config_registry = registry;
 
       // Create a basic project structure
       await mkdir(join(fixturePath, 'src', 'mastra'), { recursive: true });

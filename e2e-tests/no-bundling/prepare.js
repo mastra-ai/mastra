@@ -22,7 +22,7 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
   const env = {
     ...process.env,
-    npm_config_minimum_release_age: '0',
+    pnpm_config_minimum_release_age: '0',
   };
 
   console.log('Directory:', newPath);

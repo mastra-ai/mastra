@@ -24,15 +24,15 @@ function isNodeBuiltinModuleSpecifier(moduleSpecifier) {
 // pnpm-specific environment variables that npm doesn't recognize
 // These cause "Unknown env config" warnings when passed to npx/npm
 const pnpmSpecificEnvVars = new Set([
-  'npm_config_catalog',
-  'npm_config_verify-deps-before-run',
-  'npm_config_npm-globalconfig',
-  'npm_config__jsr-registry',
-  'npm_config_patched-dependencies',
+  'pnpm_config_catalog',
+  'pnpm_config_verify-deps-before-run',
+  'pnpm_config_npm-globalconfig',
+  'pnpm_config__jsr-registry',
+  'pnpm_config_patched-dependencies',
 ]);
 
 /**
- * Get a filtered copy of process.env without pnpm-specific npm_config_* variables
+ * Get a filtered copy of process.env without pnpm-specific pnpm_config_* variables
  * @returns {NodeJS.ProcessEnv}
  */
 function getFilteredEnv() {
