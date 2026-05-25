@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import type { Harness, HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 
 import { setupDebugLogging } from './utils/debug-log.js';
+import { isProfileEnabled, MemoryProfiler } from './utils/memory-profiler.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
 
@@ -615,6 +616,17 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   const result = await createMastraCode({ settingsPath: args.settings });
   const { harness, mcpManager, effectiveDefaults } = result;
 
+  // Memory profiler — auto-starts when MASTRACODE_PROFILE=1
+  const headlessProfiler = isProfileEnabled()
+    ? new MemoryProfiler({
+        getMode: () => harness.getCurrentModeId() ?? undefined,
+        getThreadId: () => harness.getCurrentThreadId() ?? undefined,
+        getResourceId: () => harness.getResourceId(),
+        getModelId: () => harness.getCurrentModelId() ?? undefined,
+      })
+    : undefined;
+  headlessProfiler?.start();
+
   if (mcpManager?.hasServers()) {
     mcpManager.initInBackground().catch(err => {
       process.stderr.write(`Warning: MCP server initialization failed: ${(err as Error).message ?? err}\n`);
@@ -627,6 +639,7 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
+  headlessProfiler?.stop();
   releaseAllThreadLocks();
   const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), closeSignalsPubSub?.()]);

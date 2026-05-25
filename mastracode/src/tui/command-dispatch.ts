@@ -42,6 +42,7 @@ import {
   handleObservabilityCommand,
   handleGoalCommand,
   handleJudgeCommand,
+  handleProfileCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -244,6 +245,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'observability':
       await handleObservabilityCommand(buildCtx(), args);
+      return true;
+    case 'profile':
+      await handleProfileCommand(buildCtx(), args);
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);

@@ -12,6 +12,7 @@ import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
+import { isProfileEnabled, MemoryProfiler } from './utils/memory-profiler.js';
 import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
@@ -23,6 +24,7 @@ let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
+let memoryProfiler: MemoryProfiler | undefined;
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
@@ -93,6 +95,17 @@ async function tuiMain(pipedInput?: string | null) {
     theme: themeMode,
   });
 
+  // Memory profiler — auto-starts when MASTRACODE_PROFILE=1
+  if (isProfileEnabled()) {
+    memoryProfiler = new MemoryProfiler({
+      getMode: () => harness.getCurrentModeId() ?? undefined,
+      getThreadId: () => harness.getCurrentThreadId() ?? undefined,
+      getResourceId: () => harness.getResourceId(),
+      getModelId: () => harness.getCurrentModelId() ?? undefined,
+    });
+    memoryProfiler.start();
+  }
+
   const tui = new MastraTUI({
     harness,
     hookManager,
@@ -102,6 +115,7 @@ async function tuiMain(pipedInput?: string | null) {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    memoryProfiler,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
   tui.run().catch(error => {
@@ -123,6 +137,7 @@ const asyncCleanup = async () => {
   releaseAllThreadLocks();
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
+    memoryProfiler?.stop(),
     mcpManager?.disconnect(),
     harness?.stopHeartbeats(),
     closeSignalsPubSub?.(),

@@ -83,6 +83,9 @@ export interface MastraTUIOptions {
 
   /** Use inline questions instead of dialog overlays */
   inlineQuestions?: boolean;
+
+  /** Optional memory profiler instance (for /profile command) */
+  memoryProfiler?: import('../utils/memory-profiler.js').MemoryProfiler;
 }
 
 // =============================================================================
@@ -221,6 +224,10 @@ export interface TUIState {
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
+
+  // ── Memory profiler ───────────────────────────────────────────────────
+  /** Memory profiler instance (set after MastraTUIOptions construction) */
+  memoryProfiler?: import('../utils/memory-profiler.js').MemoryProfiler;
 }
 
 // =============================================================================
@@ -319,6 +326,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
+
+    // Memory profiler
+    memoryProfiler: options.memoryProfiler,
   };
   editor.getModeColor = () => {
     if (result.activeGoalJudge) {

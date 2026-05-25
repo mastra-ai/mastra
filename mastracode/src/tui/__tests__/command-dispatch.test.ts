@@ -53,6 +53,7 @@ vi.mock('../commands/index.js', () => ({
   handleObservabilityCommand: vi.fn(),
   handleGoalCommand: mocks.handleGoalCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
+  handleProfileCommand: vi.fn(),
 }));
 
 vi.mock('../display.js', () => ({
@@ -152,6 +153,15 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+  });
+
+  it('routes /profile to handleProfileCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/profile status', state, () => ctx);
+
+    expect(handled).toBe(true);
   });
 
   it('routes /skill/name to handleSkillCommand', async () => {
