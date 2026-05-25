@@ -83,6 +83,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
@@ -5440,10 +5441,7 @@ export class Agent<
    */
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId,
-    });
+    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
