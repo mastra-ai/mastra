@@ -379,7 +379,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -415,7 +417,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -437,7 +441,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -453,6 +459,29 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.destroy();
   });
 
+  it('keeps MastraCode always-allowed tools allowed in Harness v1 permission rules', async () => {
+    const runtime = createRuntime({
+      initialState: {
+        permissionRules: {
+          categories: { execute: 'ask' },
+          tools: { task_write: 'deny', execute_command: 'ask' },
+        },
+      },
+    });
+    const setPolicy = vi.fn(async () => undefined);
+
+    await (runtime as any).syncPermissionRules({ permissions: { setPolicy } });
+
+    expect(setPolicy).not.toHaveBeenCalledWith({ toolName: 'task_write', policy: 'deny' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_write', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_update', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_complete', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_check', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'execute_command', policy: 'ask' });
+
+    await runtime.destroy();
+  });
+
   it('filters active tools through prepareStep for non-admission messages', async () => {
     const runtime = createRuntime({ disabledTools: ['blocked_tool'] });
     const message = vi.fn(async () => undefined);
@@ -461,7 +490,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -660,9 +691,15 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.init();
 
     expect((runtime as any).filterActiveTools(['read_file', 'shell'])).toEqual(['read_file']);
-    expect((runtime as any).session.permissions.getRules()).toEqual({
+    expect((runtime as any).session.permissions.getRules()).toMatchObject({
       categories: { execute: 'deny' },
-      tools: { read_file: 'allow' },
+      tools: {
+        read_file: 'allow',
+        task_write: 'allow',
+        task_update: 'allow',
+        task_complete: 'allow',
+        task_check: 'allow',
+      },
     });
 
     await runtime.destroy();
@@ -902,7 +939,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
     const selectOrCreateThread = vi.spyOn(runtime, 'selectOrCreateThread').mockImplementation(async () => {

@@ -3874,6 +3874,7 @@ export class Session {
           modeId: effectiveModeId,
           modelId: effectiveModelId,
           abortSignal: turnAbortSignal,
+          yolo: opts.yolo,
         }),
         activeTurnWaiter.promise,
       ]);
@@ -4811,6 +4812,8 @@ export class Session {
     toolName: string,
     opts?: { args?: Record<string, unknown>; actor?: HarnessActorIdentity },
   ): PermissionPolicy {
+    const state = this._record.state as { yolo?: unknown } | undefined;
+    if (state?.yolo === true) return 'allow';
     const category = this._harness.getToolCategory({ toolName });
     const toolRule = this._record.permissionRules.tools[toolName];
     const categoryRule = category ? this._record.permissionRules.categories[category] : undefined;
@@ -8669,6 +8672,7 @@ export class Session {
           modelId: this._modelIdForQueuedItem(item.id),
           abortSignal: turnAbortController.signal,
           persistedRequestContext: item.requestContext,
+          yolo: item.yolo,
         }),
         activeTurnWaiter.promise,
       ]);
@@ -9657,6 +9661,7 @@ export class Session {
     abortSignal: AbortSignal;
     persistedRequestContext?: PersistedRequestContextInput;
     resolveWorkspace?: boolean;
+    yolo?: boolean;
   }): Promise<RequestContext> {
     const session = this;
     const stateSnapshot = (this._record.state ?? {}) as unknown;
@@ -9744,24 +9749,26 @@ export class Session {
       registerSandboxAccess: params =>
         session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       resolveToolPermission: params =>
-        session._resolveToolPermissionPolicy(params.toolName, {
-          // Prefer caller-supplied actor (an upstream resolver may have
-          // overridden) and fall back to the channel-derived actor on
-          // the slot so per-actor grants resolve for every channel-
-          // originated tool call without the dispatcher needing to
-          // forward identity explicitly.
-          ...((params.actor ?? derivedActor) !== undefined
-            ? { actor: (params.actor ?? derivedActor) as HarnessActorIdentity }
-            : {}),
-          // Forward per-call args. The session-level resolver does
-          // not introspect args itself yet — workspace-policy rules
-          // (file/command/network/mcp) produce the args-aware verdict
-          // recorded on the action journal post-execution today — but
-          // the signature is plumbed so a future profile-side resolver
-          // hook or operator override can read them without another
-          // wire-up commit.
-          ...(params.args ? { args: params.args } : {}),
-        }),
+        turn.yolo === true
+          ? 'allow'
+          : session._resolveToolPermissionPolicy(params.toolName, {
+              // Prefer caller-supplied actor (an upstream resolver may have
+              // overridden) and fall back to the channel-derived actor on
+              // the slot so per-actor grants resolve for every channel-
+              // originated tool call without the dispatcher needing to
+              // forward identity explicitly.
+              ...((params.actor ?? derivedActor) !== undefined
+                ? { actor: (params.actor ?? derivedActor) as HarnessActorIdentity }
+                : {}),
+              // Forward per-call args. The session-level resolver does
+              // not introspect args itself yet — workspace-policy rules
+              // (file/command/network/mcp) produce the args-aware verdict
+              // recorded on the action journal post-execution today — but
+              // the signature is plumbed so a future profile-side resolver
+              // hook or operator override can read them without another
+              // wire-up commit.
+              ...(params.args ? { args: params.args } : {}),
+            }),
       recordWorkspaceAction: params => session._recordWorkspaceAction(params),
       registerBackgroundProcess: handle => session._registerBackgroundProcess(handle),
       extendLease: extendOpts => session.extendLease(extendOpts),

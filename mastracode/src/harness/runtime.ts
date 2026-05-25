@@ -36,6 +36,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { WorkspaceActionJournalEntry } from '@mastra/core/storage';
 
+import { ALWAYS_ALLOW_TOOL_NAMES } from '../permissions.js';
 import { isSubagentToolName } from '../tool-names.js';
 import {
   MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
@@ -1800,13 +1801,15 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       (this.state.permissionRules as
         | { categories?: Record<string, PermissionPolicy>; tools?: Record<string, PermissionPolicy> }
         | undefined) ?? {};
+    const alwaysAllowTools = new Set<string>(ALWAYS_ALLOW_TOOL_NAMES);
     await Promise.all([
       ...Object.entries(rules.categories ?? {})
         .filter(([category]) => TOOL_CATEGORIES.includes(category as ToolCategory))
         .map(([category, policy]) => session.permissions.setPolicy({ category: category as ToolCategory, policy })),
-      ...Object.entries(rules.tools ?? {}).map(([toolName, policy]) =>
-        session.permissions.setPolicy({ toolName, policy }),
-      ),
+      ...Object.entries(rules.tools ?? {})
+        .filter(([toolName]) => !alwaysAllowTools.has(toolName))
+        .map(([toolName, policy]) => session.permissions.setPolicy({ toolName, policy })),
+      ...ALWAYS_ALLOW_TOOL_NAMES.map(toolName => session.permissions.setPolicy({ toolName, policy: 'allow' })),
     ]);
   }
 

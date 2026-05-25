@@ -956,11 +956,11 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
-  it('lets Harness allow policy bypass the global approval scheduling flag', async () => {
+  it('lets Harness allow policy bypass approval requirements', async () => {
     const tools = {
       'ctx-tool': {
         execute: vi.fn().mockResolvedValue({ ok: true }),
-        requireApproval: false,
+        requireApproval: true,
       },
     };
     const toolCallStep = createToolCallStep({
