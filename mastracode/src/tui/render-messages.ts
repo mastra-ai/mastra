@@ -421,6 +421,18 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
+  // Suppress subscription echo of locally-rendered queued messages (Ctrl+F queue).
+  // drainQueuedAction already rendered the message with a local ID; the subscription
+  // echoes it back with a different signal ID which would otherwise create a duplicate.
+  const dedupKey = displayText.trim();
+  const pendingEchoCounts = state.firedQueuedMessageTexts;
+  const dedupCount = pendingEchoCounts?.get(dedupKey) ?? 0;
+  if (dedupCount > 0) {
+    if (dedupCount === 1) pendingEchoCounts!.delete(dedupKey);
+    else pendingEchoCounts!.set(dedupKey, dedupCount - 1);
+    return;
+  }
+
   const legacyReminderMatch = exactDisplayText.match(
     /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
   );

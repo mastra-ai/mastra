@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.20.1-alpha.5
+
+### Patch Changes
+
+- Fixed mode switching delay — Shift+Tab now updates instantly. Fixed modal lag when opening /om and /models. Fixed duplicate messages appearing when queueing with Ctrl+F. Blocked mode switching while agent is active. ([#17008](https://github.com/mastra-ai/mastra/pull/17008))
+
+- Fix Mastra Code TUI crash when ask_user option labels are wider than the terminal — long labels now wrap inside the bordered box, matching how question text already wraps. Reported in #17002. ([#17005](https://github.com/mastra-ai/mastra/pull/17005))
+
+- Updated dependencies [[`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd)]:
+  - @mastra/core@1.37.0-alpha.5
+
 ## 0.20.1-alpha.4
 
 ### Patch Changes
