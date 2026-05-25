@@ -867,6 +867,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       headers['set-cookie'] = setCookies;
     }
     if (isResponseClosed(nodeRes)) {
+      await response.body?.cancel();
       return;
     }
     nodeRes.writeHead(response.status, headers);

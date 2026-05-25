@@ -43,16 +43,6 @@ function createWritableResponse() {
   });
 }
 
-async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
-  const start = Date.now();
-  while (!assertion()) {
-    if (Date.now() - start > timeout) {
-      throw new Error('Timed out waiting for assertion');
-    }
-    await new Promise(resolve => setTimeout(resolve, 1));
-  }
-}
-
 function createMockFGAProvider(authorized = true): IFGAProvider {
   return {
     check: vi.fn().mockResolvedValue(authorized),
@@ -529,15 +519,28 @@ describe('custom route response bridge', () => {
     expect(nodeRes.end).toHaveBeenCalledTimes(1);
   });
 
-  it('skips header writes when the node response is already closed', async () => {
+  it('skips header writes and cancels response streams when the node response is already closed', async () => {
     const adapter = createTestAdapter();
     const nodeRes = createWritableResponse();
+    const cancel = vi.fn();
     nodeRes.destroy();
 
-    await adapter.writeResponse(new Response('late response', { status: 200 }), nodeRes);
+    await adapter.writeResponse(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('late response'));
+          },
+          cancel,
+        }),
+        { status: 200 },
+      ),
+      nodeRes,
+    );
 
     expect(nodeRes.writeHead).not.toHaveBeenCalled();
     expect(nodeRes.end).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalled();
   });
 
   it('cancels custom route response streams when the node response closes early', async () => {
@@ -558,7 +561,7 @@ describe('custom route response bridge', () => {
       nodeRes,
     );
 
-    await waitFor(() => nodeRes.write.mock.calls.length > 0);
+    await vi.waitFor(() => expect(nodeRes.write).toHaveBeenCalled());
 
     const closeError = new Error('client closed') as Error & { code: string };
     closeError.code = 'ECONNRESET';
