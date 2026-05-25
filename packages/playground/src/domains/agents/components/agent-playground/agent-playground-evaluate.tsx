@@ -20,7 +20,6 @@ import {
   TabList,
   Tab,
   Txt,
-  Icon,
   toast,
 } from '@mastra/playground-ui';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
@@ -683,12 +682,7 @@ export function AgentPlaygroundEvaluate({
           return (
             <DataList.RowButton key={id} featured={isFeatured} onClick={() => setDetailView({ type: 'scorer', id })}>
               <DataList.Cell height="compact" className="min-w-0 text-neutral4">
-                <span className="flex items-center gap-1.5 truncate">
-                  <Icon size="sm" className="text-neutral3">
-                    <GaugeIcon />
-                  </Icon>
-                  <span className="truncate">{name}</span>
-                </span>
+                <span className="block truncate">{name}</span>
               </DataList.Cell>
               <DataList.Cell height="compact">
                 <Badge variant={source === 'code' ? 'default' : 'success'}>{source}</Badge>
