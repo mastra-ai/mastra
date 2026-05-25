@@ -126,9 +126,11 @@ describe('Processors Integration Tests', () => {
         ? filteredResult.get.all.db()
         : [filteredResult];
 
-    // Verify ToolCallFilter removed weather tool call messages
-    expect(filteredMessages).toHaveLength(3); // msg-1 (user), msg-5 (user), msg-6 (assistant with 'time' tool)
-    expect(filteredMessages.some(m => m.id === 'msg-2')).toBe(false); // Weather tool call removed
+    // Verify ToolCallFilter removed weather tool parts but preserved top-level assistant text
+    expect(filteredMessages).toHaveLength(4); // msg-1 (user), msg-2 (assistant text), msg-5 (user), msg-6 (assistant with 'time' tool)
+    const weatherMessage = filteredMessages.find(m => m.id === 'msg-2');
+    expect(weatherMessage).toBeDefined();
+    expect(typeof weatherMessage!.content === 'string' ? [] : weatherMessage!.content.parts).toEqual([]);
     expect(filteredMessages.some(m => m.id === 'msg-6')).toBe(true); // Time tool call preserved
     expect(filteredMessages.some(m => m.id === 'msg-1')).toBe(true); // User message preserved
     expect(filteredMessages.some(m => m.id === 'msg-5')).toBe(true); // User message preserved
@@ -137,10 +139,25 @@ describe('Processors Integration Tests', () => {
     // TokenLimiter with a low limit should further reduce messages
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
 
-    const limitedMessages = await tokenLimiter.processInput({
-      messages: filteredMessages,
+    // Create a new MessageList with the filtered messages for the token limiter
+    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of filteredMessages) {
+      limiterMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: limiterMessageList,
+      messages: limiterMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const limitedMessages = limiterMessageList.get.all.db();
 
     // Verify TokenLimiter further reduced messages
     expect(limitedMessages.length).toBeLessThanOrEqual(filteredMessages.length);
@@ -278,10 +295,24 @@ describe('Processors Integration Tests', () => {
 
     // Apply TokenLimiter
     const tokenLimiter = new TokenLimiterProcessor({ limit: 100 });
-    const limitedMessages = await tokenLimiter.processInput({
-      messages: filteredMessages,
+    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of filteredMessages) {
+      limiterMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: limiterMessageList,
+      messages: limiterMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const limitedMessages = limiterMessageList.get.all.db();
 
     // Verify no duplicates by checking unique IDs
     const messageIds = limitedMessages.map(m => m.id);
@@ -438,19 +469,37 @@ describe('Processors Integration Tests', () => {
       ? weatherFilteredResult
       : weatherFilteredResult.get.all.db();
 
-    // Should have fewer messages (msg-2 with weather tool removed)
-    expect(weatherFilteredMessages.length).toBe(5);
-    expect(weatherFilteredMessages.some(m => m.id === 'msg-2')).toBe(false);
+    // Should preserve msg-2 top-level text while removing its weather tool parts
+    expect(weatherFilteredMessages.length).toBe(6);
+    const weatherMessage = weatherFilteredMessages.find(m => m.id === 'msg-2');
+    expect(weatherMessage).toBeDefined();
+    expect(typeof weatherMessage!.content === 'string' ? [] : weatherMessage!.content.parts).toEqual([]);
     expect(weatherFilteredMessages.some(m => m.id === 'msg-4')).toBe(true); // Calculator preserved
 
     // Test 2: Apply token limiting with a low limit to force truncation
     // The limiter uses ~24 tokens for conversation overhead + ~3.8 per message
     // With 6 messages, we need a limit that keeps some but not all messages
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
-    const tokenLimitedResult = await tokenLimiter.processInput({
-      messages: messageList.get.all.db(),
+
+    // Create a separate MessageList for token limiting (processInputStep mutates in-place)
+    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of messageList.get.all.db()) {
+      limiterMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: limiterMessageList,
+      messages: limiterMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const tokenLimitedResult = limiterMessageList.get.all.db();
 
     // Should have fewer messages due to token limit (prioritizes recent messages)
     expect(tokenLimitedResult.length).toBeLessThan(messages.length);
@@ -469,14 +518,36 @@ describe('Processors Integration Tests', () => {
       : combinedFilteredResult.get.all.db();
 
     // Then apply token limiter
-    const finalResult = await tokenLimiter.processInput({
-      messages: combinedFilteredMessages,
+    const finalMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of combinedFilteredMessages) {
+      finalMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: finalMessageList,
+      messages: finalMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
 
-    // Should have no tool call messages
-    expect(combinedFilteredMessages.some(m => m.id === 'msg-2')).toBe(false);
-    expect(combinedFilteredMessages.some(m => m.id === 'msg-4')).toBe(false);
+    const finalResult = finalMessageList.get.all.db();
+
+    // Should have no tool call parts, while preserving top-level assistant text
+    const combinedWeatherMessage = combinedFilteredMessages.find(m => m.id === 'msg-2');
+    const combinedCalculatorMessage = combinedFilteredMessages.find(m => m.id === 'msg-4');
+    expect(combinedWeatherMessage).toBeDefined();
+    expect(combinedCalculatorMessage).toBeDefined();
+    expect(typeof combinedWeatherMessage!.content === 'string' ? [] : combinedWeatherMessage!.content.parts).toEqual(
+      [],
+    );
+    expect(
+      typeof combinedCalculatorMessage!.content === 'string' ? [] : combinedCalculatorMessage!.content.parts,
+    ).toEqual([]);
     // But should still have user messages and simple assistant response
     expect(combinedFilteredMessages.some(m => m.id === 'msg-1')).toBe(true);
     expect(combinedFilteredMessages.some(m => m.id === 'msg-6')).toBe(true);

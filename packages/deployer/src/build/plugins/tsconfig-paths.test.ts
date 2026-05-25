@@ -205,5 +205,38 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).not.toContain(`'@lib/utils'`);
       expect(result.output[0].code).toContain(42);
     });
+
+    it('should resolve .js alias imports to TypeScript source files', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '~/*': ['src/*'],
+            },
+          },
+        }),
+      );
+
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(join(srcDir, 'utils'), { recursive: true });
+      const utilityFile = join(srcDir, 'utils', 'build-flags.ts');
+      fs.writeFileSync(utilityFile, `export const loggerName = 'Mastra';`);
+
+      const indexFile = join(srcDir, 'index.ts');
+      fs.writeFileSync(indexFile, `import { loggerName } from '~/utils/build-flags.js';\nconsole.log(loggerName);`);
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [tsConfigPaths({ tsConfigPath })],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].code).not.toContain(`'~/utils/build-flags.js'`);
+      expect(result.output[0].code).toContain('Mastra');
+    });
   });
 });

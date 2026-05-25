@@ -19,7 +19,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "a": 5,
@@ -45,6 +46,10 @@
             "entityId": "calculator",
             "attributes": {
               "status": "success"
+            },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "operation": "add",

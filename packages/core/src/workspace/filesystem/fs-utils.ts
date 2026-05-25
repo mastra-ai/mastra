@@ -124,8 +124,63 @@ const MIME_TYPES: Record<string, string> = {
   svg: 'image/svg+xml',
   webp: 'image/webp',
   ico: 'image/x-icon',
+  bmp: 'image/bmp',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  avif: 'image/avif',
   // Documents
   pdf: 'application/pdf',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  // Video
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska',
+  // Archives
+  zip: 'application/zip',
+  tar: 'application/x-tar',
+  gz: 'application/gzip',
+  tgz: 'application/gzip',
+  bz2: 'application/x-bzip2',
+  '7z': 'application/x-7z-compressed',
+  rar: 'application/vnd.rar',
+  // Executables / binaries
+  exe: 'application/vnd.microsoft.portable-executable',
+  dll: 'application/vnd.microsoft.portable-executable',
+  so: 'application/x-sharedlib',
+  dylib: 'application/x-sharedlib',
+  bin: 'application/x-binary',
+  dat: 'application/x-binary',
+  // Disk images / packages
+  dmg: 'application/x-apple-diskimage',
+  iso: 'application/x-iso9660-image',
+  deb: 'application/vnd.debian.binary-package',
+  rpm: 'application/x-rpm',
+  // Office documents
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  // Fonts
+  ttf: 'font/ttf',
+  otf: 'font/otf',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  // Compiled code
+  wasm: 'application/wasm',
+  class: 'application/java-vm',
+  pyc: 'application/x-python-code',
 };
 
 /**
@@ -190,26 +245,22 @@ export function isTextFile(filename: string): boolean {
 // =============================================================================
 
 /**
- * Resolve a workspace path to an absolute OS filesystem path.
+ * Resolve a path against a base directory.
  *
- * Workspace paths typically start with '/' but are relative to `basePath`
- * (e.g. "/app.ts" → "basePath/app.ts"). However, with `contained: false` or
- * when the path is already a real path within `basePath`, it should be used as-is.
+ * - Tilde (`~`) is expanded to the user's home directory.
+ * - Absolute paths are normalized and returned as-is.
+ * - Relative paths (including `../`) are resolved against `basePath`.
  *
- * @param basePath - The workspace filesystem base path
- * @param filePath - The workspace path to resolve
- * @returns The absolute OS filesystem path
+ * @param basePath - The absolute base path to resolve against
+ * @param filePath - The path to resolve
+ * @returns The absolute resolved path
  */
-export function resolveWorkspacePath(basePath: string, filePath: string): string {
-  if (path.isAbsolute(filePath)) {
-    const normalizedBase = path.normalize(basePath);
-    const normalizedFile = path.normalize(filePath);
-    const rel = path.relative(normalizedBase, normalizedFile);
-    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
-      return normalizedFile;
-    }
+export function resolveToBasePath(basePath: string, filePath: string): string {
+  const expanded = expandTilde(filePath);
+  if (path.isAbsolute(expanded)) {
+    return path.normalize(expanded);
   }
-  return path.join(basePath, filePath.replace(/^\/+/, ''));
+  return path.resolve(basePath, expanded);
 }
 
 // =============================================================================

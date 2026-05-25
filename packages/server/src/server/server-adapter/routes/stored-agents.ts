@@ -7,6 +7,7 @@ import {
   DELETE_AGENT_VERSION_ROUTE,
   COMPARE_AGENT_VERSIONS_ROUTE,
 } from '../../handlers/agent-versions';
+import { FAVORITE_STORED_AGENT_ROUTE, UNFAVORITE_STORED_AGENT_ROUTE } from '../../handlers/stored-agent-favorites';
 import {
   LIST_STORED_AGENTS_ROUTE,
   GET_STORED_AGENT_ROUTE,
@@ -22,7 +23,7 @@ import type { ServerRoute } from '.';
  * These routes provide API access to agent configurations stored in the database,
  * enabling dynamic creation and management of agents via Mastra Studio.
  */
-export const STORED_AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
+export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
   // ============================================================================
   // Stored Agents CRUD Routes
   // IMPORTANT: Routes with literal paths (e.g., /preview-instructions) must come
@@ -47,4 +48,32 @@ export const STORED_AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   ACTIVATE_AGENT_VERSION_ROUTE,
   RESTORE_AGENT_VERSION_ROUTE,
   DELETE_AGENT_VERSION_ROUTE,
+
+  // ============================================================================
+  // Favorites (EE)
+  // ============================================================================
+  FAVORITE_STORED_AGENT_ROUTE,
+  UNFAVORITE_STORED_AGENT_ROUTE,
+];
+
+/**
+ * Type-level tuple preserving each stored agent route's specific schema types.
+ * Used by ServerRoutes to build the type-level route map.
+ */
+export type StoredAgentRoutes = readonly [
+  typeof LIST_STORED_AGENTS_ROUTE,
+  typeof PREVIEW_INSTRUCTIONS_ROUTE,
+  typeof GET_STORED_AGENT_ROUTE,
+  typeof CREATE_STORED_AGENT_ROUTE,
+  typeof UPDATE_STORED_AGENT_ROUTE,
+  typeof DELETE_STORED_AGENT_ROUTE,
+  typeof LIST_AGENT_VERSIONS_ROUTE,
+  typeof CREATE_AGENT_VERSION_ROUTE,
+  typeof COMPARE_AGENT_VERSIONS_ROUTE,
+  typeof GET_AGENT_VERSION_ROUTE,
+  typeof ACTIVATE_AGENT_VERSION_ROUTE,
+  typeof RESTORE_AGENT_VERSION_ROUTE,
+  typeof DELETE_AGENT_VERSION_ROUTE,
+  typeof FAVORITE_STORED_AGENT_ROUTE,
+  typeof UNFAVORITE_STORED_AGENT_ROUTE,
 ];

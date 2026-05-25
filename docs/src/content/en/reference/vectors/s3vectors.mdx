@@ -1,11 +1,11 @@
 ---
-title: "Reference: Amazon S3 Vectors Store | Vectors"
+title: "Reference: Amazon S3 vectors store | Vectors"
 description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
 packages:
   - "@mastra/s3vectors"
 ---
 
-# Amazon S3 Vectors Store
+# Amazon S3 vectors store
 
 The `S3Vectors` class provides vector search using [Amazon S3 Vectors (Preview)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html). It stores vectors in **vector buckets** and performs similarity search in **vector indexes**, with JSON-based metadata filters.
 
@@ -21,7 +21,7 @@ Amazon S3 Vectors is a Preview service. Preview features may change or be remove
 npm install @mastra/s3vectors@latest
 ```
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { S3Vectors } from '@mastra/s3vectors'
@@ -73,7 +73,7 @@ const results = await store.query({
 await store.disconnect()
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -100,7 +100,7 @@ await store.disconnect()
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new vector index in the configured vector bucket. If the index already exists, the call validates the schema and becomes a no-op (existing metric and dimension are preserved).
 
@@ -127,7 +127,7 @@ Creates a new vector index in the configured vector bucket. If the index already
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or replaces vectors (full-record put). If `ids` aren't provided, UUIDs are generated.
 
@@ -158,7 +158,7 @@ Adds or replaces vectors (full-record put). If `ids` aren't provided, UUIDs are 
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for nearest neighbors with optional metadata filtering.
 
@@ -204,7 +204,7 @@ Results include `score = 1/(1 + distance)` so that higher is better while preser
 
 :::
 
-### describeIndex()
+### `describeIndex()`
 
 Returns information about the index.
 
@@ -228,7 +228,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes an index and its data.
 
@@ -242,13 +242,13 @@ Deletes an index and its data.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all indexes in the configured vector bucket.
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+### `updateVector()`
 
 Updates a vector or metadata for a specific ID within an index.
 
@@ -284,7 +284,7 @@ Updates a vector or metadata for a specific ID within an index.
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a specific vector by ID.
 
@@ -303,11 +303,11 @@ Deletes a specific vector by ID.
 ]}
 />
 
-### disconnect()
+### `disconnect()`
 
 Closes the underlying AWS SDK HTTP handler to free sockets.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -320,7 +320,7 @@ interface QueryResult {
 }
 ```
 
-## Filter Syntax
+## Filter syntax
 
 S3 Vectors supports a strict subset of operators and value types. The Mastra filter translator:
 
@@ -365,7 +365,7 @@ If you set `nonFilterableMetadataKeys` at index creation, those keys are stored 
 
 :::
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -383,7 +383,7 @@ try {
 }
 ```
 
-## Environment Variables
+## Environment variables
 
 Typical environment variables when wiring your app:
 
@@ -391,7 +391,7 @@ Typical environment variables when wiring your app:
 - `AWS_REGION`: AWS region for the S3 Vectors bucket.
 - **AWS credentials**: via the standard AWS SDK provider chain (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, etc.).
 
-## Best Practices
+## Best practices
 
 - Choose the metric (`cosine` or `euclidean`) to match your embedding model; `dotproduct` isn't supported.
 - Keep **filterable** metadata small and structured (string/number/boolean). Store large text (e.g., `content`) as **non-filterable**.

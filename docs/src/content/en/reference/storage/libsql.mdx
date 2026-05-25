@@ -1,5 +1,5 @@
 ---
-title: "Reference: libSQL Storage | Storage"
+title: "Reference: libSQL storage | Storage"
 description: Documentation for the libSQL storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/memory"
 ---
 
-# libSQL Storage
+# libSQL storage
 
 [libSQL](https://docs.turso.tech/libsql) is an open-source, SQLite-compatible database that supports both local and remote deployments. It can be used to store message history, workflow snapshots, traces, and eval scores.
 
@@ -137,6 +137,6 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 
 ## Observability
 
-libSQL supports observability and is ideal for local development. Use the `realtime` [tracing strategy](/docs/observability/tracing/exporters/default#tracing-strategies) for immediate visibility while debugging.
+libSQL supports observability and is ideal for local development. Use the `realtime` [tracing strategy](/docs/observability/tracing/exporters/mastra-storage#tracing-strategies) for immediate visibility while debugging.
 
 For production environments with higher trace volumes, consider using [PostgreSQL](/reference/storage/postgresql) or [ClickHouse via composite storage](/reference/storage/composite#specialized-storage-for-observability).

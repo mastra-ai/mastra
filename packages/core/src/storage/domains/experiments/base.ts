@@ -1,9 +1,11 @@
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -36,7 +38,11 @@ export abstract class ExperimentsStorage extends StorageDomain {
 
   // Results (per-item)
   abstract addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult>;
+  abstract updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult>;
   abstract getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null>;
   abstract listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput>;
   abstract deleteExperimentResults(args: { experimentId: string }): Promise<void>;
+
+  // Aggregation
+  abstract getReviewSummary(): Promise<ExperimentReviewCounts[]>;
 }

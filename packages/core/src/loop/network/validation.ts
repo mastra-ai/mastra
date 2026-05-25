@@ -33,6 +33,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraScorer } from '../../evals/base';
 import { ChunkFrom } from '../../stream';
 import type { NetworkChunkType } from '../../stream/types';
+import { safeStringify } from '../../utils';
 
 // ============================================================================
 // Core Types
@@ -421,7 +422,7 @@ export async function runDefaultCompletionCheck(
 
   const completionPrompt = `
     The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} has contributed to the task.
-    This is the result: ${JSON.stringify(context.primitiveResult)}
+    This is the result: ${safeStringify(context.primitiveResult)}
     
     ${completedSection}
 
@@ -554,7 +555,7 @@ export async function generateFinalResult(
     Original task: ${context.originalTask}
 
     The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} produced this result:
-    ${JSON.stringify(context.primitiveResult)}
+    ${safeStringify(context.primitiveResult)}
 
     IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.
     You should evaluate if the above result is comprehensive enough to accomplish the user's original task.
@@ -647,7 +648,7 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
     Original task: ${context.originalTask}
 
     The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} produced this result:
-    ${JSON.stringify(context.primitiveResult)}
+    ${safeStringify(context.primitiveResult)}
 
     Based on the task and result above, generate a structured response according to the provided schema.
     Use the conversation history and primitive results to craft the response.

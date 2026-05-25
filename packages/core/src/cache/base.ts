@@ -12,7 +12,14 @@ export abstract class MastraServerCache extends MastraBase {
 
   abstract listLength(key: string): Promise<number>;
 
-  abstract set(key: string, value: unknown): Promise<void>;
+  /**
+   * Store a value in the cache.
+   * @param key - Cache key
+   * @param value - Value to store
+   * @param ttlMs - Optional per-key TTL in milliseconds. If not provided, uses
+   *   the implementation's default TTL.
+   */
+  abstract set(key: string, value: unknown, ttlMs?: number): Promise<void>;
 
   abstract listPush(key: string, value: unknown): Promise<void>;
 
@@ -21,4 +28,14 @@ export abstract class MastraServerCache extends MastraBase {
   abstract delete(key: string): Promise<void>;
 
   abstract clear(): Promise<void>;
+
+  /**
+   * Atomically increment a counter and return the new value.
+   * Used for generating sequential indices for events.
+   * Returns 1 on first call (counter starts at 0, increments to 1).
+   *
+   * For Redis: Uses INCR command which is atomic.
+   * For in-memory: Uses a simple counter map.
+   */
+  abstract increment(key: string): Promise<number>;
 }

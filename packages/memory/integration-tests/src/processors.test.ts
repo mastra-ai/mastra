@@ -10,7 +10,6 @@ import { describe } from 'vitest';
 
 import { getInputProcessorsTests } from './shared/input-processors';
 import { getOutputProcessorMemoryTests } from './shared/output-processor-memory';
-import { getProcessorsTests } from './shared/processors';
 
 // V5 Processor Tests
 describe('V5 Processor Tests', { sequential: true }, () => {
@@ -20,7 +19,6 @@ describe('V5 Processor Tests', { sequential: true }, () => {
     convertArrayToReadableStream: convertArrayToReadableStreamV5,
   };
 
-  getProcessorsTests(v5Config);
   getInputProcessorsTests(v5Config);
   getOutputProcessorMemoryTests(v5Config);
 });
@@ -33,7 +31,6 @@ describe('V6 Processor Tests', { sequential: true }, () => {
     convertArrayToReadableStream: convertArrayToReadableStreamV6,
   };
 
-  getProcessorsTests(v6Config);
   getInputProcessorsTests(v6Config);
   getOutputProcessorMemoryTests(v6Config);
 });

@@ -14,6 +14,7 @@
 import { test, expect } from '@playwright/test';
 import { setupMockAuth, setupUnauthenticated, setupAdminAuth, clearMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Login Flow', () => {
   test.afterEach(async () => {
@@ -28,6 +29,10 @@ test.describe('Login Flow', () => {
       // Should see the sign in prompt from AuthRequired component
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
       await expect(page.getByText('You need to sign in to access this page.')).toBeVisible();
+
+      // Sidebar navigation should be hidden while unauthenticated on protected routes
+      await expect(page.getByRole('link', { name: 'Agents', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toHaveCount(0);
     });
 
     test('unauthenticated user sees login button on protected page', async ({ page }) => {
@@ -46,8 +51,10 @@ test.describe('Login Flow', () => {
       await setupUnauthenticated(page);
       await page.goto('/login');
 
-      // Should see the login page content
+      // Should see the login page content centered without protected-route sidebar nav
       await expect(page.getByRole('heading', { name: /Sign in to Mastra Studio/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Agents', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toHaveCount(0);
     });
 
     test('login page shows SSO option when configured', async ({ page }) => {
@@ -94,8 +101,9 @@ test.describe('Login Flow', () => {
       await setupUnauthenticated(page);
       await page.goto('/agents');
 
-      // Verify we see the login prompt
+      // Verify we see the login prompt and hidden protected-route sidebar nav
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Agents', exact: true })).toHaveCount(0);
 
       // Clear routes and set up authenticated state
       await clearMockAuth(page);
@@ -104,8 +112,10 @@ test.describe('Login Flow', () => {
       // Reload to apply new auth state
       await page.reload();
 
-      // Should now see the agents page content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      // Should now see the agents page content and restored sidebar navigation
+      await expectCurrentBreadcrumb(page, 'Agents');
+      await expect(page.getByRole('link', { name: 'Agents', exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
     });
 
     test('redirect parameter is preserved in login URL', async ({ page }) => {
@@ -203,13 +213,13 @@ test.describe('Login Flow', () => {
       await page.goto('/agents');
 
       // Verify we see authenticated content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Reload the page (auth state will still be mocked)
       await page.reload();
 
       // Should still see authenticated content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('authenticated state persists across navigation', async ({ page }) => {
@@ -217,15 +227,15 @@ test.describe('Login Flow', () => {
 
       // Navigate to agents
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Navigate to workflows
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Navigate back to agents
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('unauthenticated state shows login prompt consistently', async ({ page }) => {
@@ -249,7 +259,7 @@ test.describe('Login Flow', () => {
       await page.goto('/agents');
 
       // Wait for the page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see application UI elements (sidebar navigation)
       await expect(page.getByRole('link', { name: /Workflows/i })).toBeVisible();
@@ -260,15 +270,15 @@ test.describe('Login Flow', () => {
 
       // Access agents page
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Access workflows page
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Access tools page
       await page.goto('/tools');
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
     });
 
     test('authenticated user does not see login prompt', async ({ page }) => {
@@ -279,7 +289,7 @@ test.describe('Login Flow', () => {
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).not.toBeVisible();
 
       // Should see the agents content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('unauthenticated user sees login prompt instead of content', async ({ page }) => {
@@ -289,8 +299,8 @@ test.describe('Login Flow', () => {
       // Should see login prompt instead of content
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
 
-      // Should NOT see the agents heading
-      await expect(page.locator('h1:has-text("Agents")')).not.toBeVisible();
+      // Should NOT see the agents route header breadcrumb
+      await expect(page.getByLabel('Breadcrumb').getByText('Agents')).toHaveCount(0);
     });
   });
 

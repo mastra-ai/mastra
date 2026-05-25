@@ -1,7 +1,8 @@
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
-import type z3 from 'zod/v3';
-import type z4 from 'zod/v4';
-import type { StandardSchemaWithJSON } from '../../schema';
+import { AnthropicSchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
+import type { z as z3 } from 'zod/v3';
+import type { z as z4 } from 'zod/v4';
+import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
 
 export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ? undefined : Partial<OUTPUT>;
@@ -18,9 +19,9 @@ export type OutputSchema<OBJECT = any> =
 
 /**
  * @deprecated Use StandardSchemaWithJSON from '../../schema' instead
- * Legacy type for schema validation - accepts both Zod v3 and v4 schemas
+ * Legacy type for schema validation.
  */
-export type SchemaWithValidation<T = any> = z4.ZodType<T, any> | z3.ZodType<T, z3.ZodTypeDef, any>;
+export type SchemaWithValidation<T = any> = z4.ZodType<T, any> | z3.Schema<T, z3.ZodTypeDef, any>;
 
 /**
  * @deprecated Use InferPublicSchema or InferStandardSchemaOutput from '../../schema' instead
@@ -29,7 +30,7 @@ export type SchemaWithValidation<T = any> = z4.ZodType<T, any> | z3.ZodType<T, z
 export type InferSchemaOutput<T> =
   T extends z4.ZodType<infer O, any>
     ? O
-    : T extends z3.ZodType<infer O, z3.ZodTypeDef, any>
+    : T extends z3.Schema<infer O, z3.ZodTypeDef, any>
       ? O
       : T extends Schema<infer O>
         ? O
@@ -39,14 +40,15 @@ export type InferSchemaOutput<T> =
  * @deprecated Use PublicSchema from '../../schema' instead
  */
 export type InferZodLikeSchema<T> =
-  T extends z4.ZodType<infer O, any> ? O : T extends z3.ZodType<infer O, z3.ZodTypeDef, any> ? O : unknown;
+  T extends z4.ZodType<infer O, any> ? O : T extends z3.Schema<infer O, z3.ZodTypeDef, any> ? O : unknown;
 
-export type ZodLikePartialSchema<T = any> = (
-  | z4.core.$ZodType<Partial<T>, any> // Zod v4 partial schema
-  | z3.ZodType<Partial<T>, z3.ZodTypeDef, any> // Zod v3 partial schema
-) & {
-  safeParse(value: unknown): { success: boolean; data?: Partial<T>; error?: any };
-};
+export type ZodLikePartialSchema<T = any> =
+  | (z4.core.$ZodType<Partial<T>, any> & {
+      safeParse(value: unknown): { success: boolean; data?: Partial<T>; error?: any };
+    })
+  | (z3.ZodType<Partial<T>, z3.ZodTypeDef, any> & {
+      safeParse(value: unknown): { success: boolean; data?: Partial<T>; error?: any };
+    });
 
 export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSchema7 | undefined {
   if (!schema) {
@@ -68,8 +70,27 @@ export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSc
   return schema;
 }
 
-export function getTransformedSchema<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
-  const jsonSchema = asJsonSchema(schema);
+type SchemaModelInfo = {
+  provider: string;
+  modelId: string;
+  supportsStructuredOutputs: boolean;
+};
+
+export function getTransformedSchema<OUTPUT = undefined>(
+  schema?: StandardSchemaWithJSON<OUTPUT>,
+  options?: { model?: SchemaModelInfo },
+) {
+  if (!schema) {
+    return undefined;
+  }
+
+  const jsonSchema = options?.model
+    ? (applyCompatLayer({
+        schema: schema as PublicSchema<OUTPUT>,
+        compatLayers: [new AnthropicSchemaCompatLayer(options.model)],
+        mode: 'jsonSchema',
+      }) as JSONSchema7)
+    : asJsonSchema(schema);
 
   if (!jsonSchema) {
     return undefined;
@@ -118,7 +139,10 @@ export function getTransformedSchema<OUTPUT = undefined>(schema?: StandardSchema
   };
 }
 
-export function getResponseFormat(schema?: StandardSchemaWithJSON):
+export function getResponseFormat(
+  schema?: StandardSchemaWithJSON,
+  options?: { model?: SchemaModelInfo },
+):
   | {
       type: 'text';
     }
@@ -130,7 +154,7 @@ export function getResponseFormat(schema?: StandardSchemaWithJSON):
       schema?: JSONSchema7;
     } {
   if (schema) {
-    const transformedSchema = getTransformedSchema(schema);
+    const transformedSchema = getTransformedSchema(schema, options);
     return {
       type: 'json',
       schema: transformedSchema?.jsonSchema,

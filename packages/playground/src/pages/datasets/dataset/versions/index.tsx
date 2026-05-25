@@ -1,23 +1,22 @@
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
   Button,
-  useDataset,
-  useDatasetItems,
-  Columns,
   Column,
-  DatasetCompareVersionToolbar,
-  DatasetCompareVersionsList,
+  Columns,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
+  PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
+import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
+import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -29,7 +28,7 @@ function DatasetCompareVersionsPage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
 
   const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
   const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
@@ -52,22 +51,29 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (!datasetId || versionNumbers.length < 2) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Compare Versions
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select at least two versions to compare.</p>
@@ -91,26 +97,6 @@ function DatasetCompareVersionsPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name || datasetId?.slice(0, 8)}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            <Icon>
-              <ScaleIcon />
-            </Icon>
-            Compare Versions
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <MainHeader>
@@ -126,7 +112,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

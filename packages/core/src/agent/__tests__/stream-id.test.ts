@@ -3,7 +3,7 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
@@ -527,6 +527,76 @@ describe('Stream ID Consistency', () => {
   });
 
   describe('onFinish callback with structured output', () => {
+    it('should persist assistant JSON text when structured output returns an object', async () => {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'test-structured-output-persisted-text',
+        name: 'Test Structured Output Persisted Text',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'text',
+                text: '{"name":"John","age":30}',
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"name":"John","age":30}' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          }),
+        }),
+        memory,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'structured-output-persisted-text';
+      await memory.createThread({ threadId, resourceId });
+
+      const streamResult = await agent.stream([{ role: 'user', content: 'Extract the person data' }], {
+        memory: { thread: threadId, resource: resourceId },
+        structuredOutput: {
+          schema: z.object({
+            name: z.string(),
+            age: z.number(),
+          }),
+        },
+      });
+
+      await streamResult.consumeStream();
+      const fullOutput = await streamResult.getFullOutput();
+      expect(fullOutput.object).toEqual({ name: 'John', age: 30 });
+
+      await vi.waitFor(async () => {
+        const recalled = await memory.recall({ threadId, resourceId });
+        const assistantMessage = [...recalled.messages].reverse().find(message => message.role === 'assistant');
+        const assistantText =
+          assistantMessage?.content.parts
+            .filter(part => part.type === 'text')
+            .map(part => part.text)
+            .join('') ?? '';
+
+        expect(assistantText).toBe('{"name":"John","age":30}');
+      });
+    });
+
     it('should include object field in onFinish callback when using structured output', async () => {
       const mockModel = new MockLanguageModelV2({
         doGenerate: async () => ({

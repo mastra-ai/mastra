@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -8,7 +9,8 @@ import { AgentBuilder } from '../../src/index';
 // Import openai dynamically to handle cases where it might not be available
 const openai = (() => {
   try {
-    return require('@ai-sdk/openai').openai;
+    const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+    return __require('@ai-sdk/openai').openai;
   } catch {
     return null;
   }

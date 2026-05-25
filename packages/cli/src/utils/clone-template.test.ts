@@ -177,7 +177,7 @@ describe('clone-template', () => {
       });
 
       expect(result).toBe('/test-project');
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Could not update package.json'));
+      expect(logger.warn).toHaveBeenCalledWith('Could not update package.json', expect.any(Object));
     });
 
     it('should throw error if directory already exists', async () => {

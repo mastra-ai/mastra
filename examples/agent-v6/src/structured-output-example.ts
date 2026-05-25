@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod';
 import { mastra } from './mastra/index';
 // import { weatherAgent } from './mastra/agents';
 

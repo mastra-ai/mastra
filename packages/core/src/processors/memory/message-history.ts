@@ -2,7 +2,8 @@ import type { ProcessInputArgs, Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { getMemoryTokenLimiterBoundary, parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
-import type { ObservabilityContext } from '../../observability';
+import { SpanType, EntityType } from '../../observability';
+import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import { CoreTokenCounter } from '../../utils/token-counter';
@@ -76,6 +77,24 @@ export class MessageHistory implements Processor {
     }
 
     return null;
+  }
+
+  private createMemorySpan(
+    operationType: MemoryOperationAttributes['operationType'],
+    observabilityContext?: Partial<ObservabilityContext>,
+    input?: any,
+    attributes?: Partial<MemoryOperationAttributes>,
+  ) {
+    const currentSpan = observabilityContext?.tracingContext?.currentSpan;
+    if (!currentSpan) return undefined;
+    return currentSpan.createChildSpan({
+      type: SpanType.MEMORY_OPERATION,
+      name: `memory: ${operationType}`,
+      entityType: EntityType.MEMORY,
+      entityName: 'Memory',
+      input,
+      attributes: { operationType, ...attributes },
+    });
   }
 
   private getBaseTokenCount(args: ProcessInputArgs): number {
@@ -152,7 +171,7 @@ export class MessageHistory implements Processor {
   }
 
   async processInput(args: ProcessInputArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext } = args;
+    const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -163,94 +182,118 @@ export class MessageHistory implements Processor {
 
     const { threadId, resourceId } = context;
 
-    // Check for memory token limiter boundary in thread metadata
-    // If a valid boundary exists, only fetch messages after that point
-    const memoryContext = parseMemoryRequestContext(requestContext);
-    const thread = memoryContext?.thread;
-    let boundaryFilter: { start: Date; startExclusive: boolean } | undefined;
-
-    if (thread?.metadata) {
-      const boundary = getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>);
-      if (boundary) {
-        boundaryFilter = {
-          start: new Date(boundary.createdAt),
-          startExclusive: true,
-        };
-      }
-    }
-
-    // 1. Fetch historical messages from storage (as DB format)
-    const listMessagesOptions: Parameters<MemoryStorage['listMessages']>[0] = {
-      threadId,
-      resourceId,
-      page: 0,
-      perPage: this.lastMessages,
-      orderBy: { field: 'createdAt', direction: 'DESC' },
-    };
-
-    // Apply boundary filter if we have one
-    if (boundaryFilter) {
-      listMessagesOptions.filter = {
-        ...listMessagesOptions.filter,
-        dateRange: {
-          ...listMessagesOptions.filter?.dateRange,
-          start: boundaryFilter.start,
-          startExclusive: boundaryFilter.startExclusive,
-        },
-      };
-    }
-
-    const messages = await this.listTokenLimitedMessages(listMessagesOptions, args);
-
-    // 2. Filter out system messages (they should never be stored in DB)
-    const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-      return msg.role !== 'system';
-    });
-
-    // 3. If boundary exists, defensively remove any messages at or before the boundary
-    //    (handles timestamp collision edge cases where startExclusive may not be supported)
-    const boundaryMessageId = thread?.metadata
-      ? getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>)?.messageId
-      : undefined;
-
-    const boundarySafeMessages = boundaryMessageId
-      ? filteredMessages.filter((msg: MastraDBMessage) => {
-          return msg.id !== boundaryMessageId;
-        })
-      : filteredMessages;
-
-    // 4. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
-    // This includes messages added by previous processors like SemanticRecall
-    const existingMessages = messageList.get.all.db();
-    const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-    const uniqueHistoricalMessages = boundarySafeMessages.filter(
-      (m: MastraDBMessage) => !m.id || !messageIds.has(m.id),
+    const span = this.createMemorySpan(
+      'recall',
+      observabilityContext,
+      { threadId, resourceId },
+      {
+        lastMessages: this.lastMessages,
+      },
     );
 
-    // Reverse to chronological order (oldest first) since we fetched DESC
-    const chronologicalMessages = uniqueHistoricalMessages.reverse();
+    try {
+      // Check for memory token limiter boundary in thread metadata.
+      // If a valid boundary exists, only fetch messages after that point.
+      const memoryContext = parseMemoryRequestContext(requestContext);
+      const thread = memoryContext?.thread;
+      let boundaryFilter: { start: Date; startExclusive: boolean } | undefined;
 
-    if (chronologicalMessages.length === 0) {
-      return messageList;
-    }
-
-    // Add historical messages with source: 'memory'
-    for (const msg of chronologicalMessages) {
-      if (msg.role === 'system') {
-        continue; // memory should not store system messages
-      } else {
-        messageList.add(msg, 'memory');
+      if (thread?.metadata) {
+        const boundary = getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>);
+        if (boundary) {
+          boundaryFilter = {
+            start: new Date(boundary.createdAt),
+            startExclusive: true,
+          };
+        }
       }
-    }
 
-    return messageList;
+      // 1. Fetch historical messages from storage (as DB format)
+      const listMessagesOptions: Parameters<MemoryStorage['listMessages']>[0] = {
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: this.lastMessages,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      };
+
+      // Apply boundary filter if we have one.
+      if (boundaryFilter) {
+        listMessagesOptions.filter = {
+          ...listMessagesOptions.filter,
+          dateRange: {
+            ...listMessagesOptions.filter?.dateRange,
+            start: boundaryFilter.start,
+            startExclusive: boundaryFilter.startExclusive,
+          },
+        };
+      }
+
+      const messages = await this.listTokenLimitedMessages(listMessagesOptions, args);
+
+      // 2. Filter out system messages (they should never be stored in DB)
+      const filteredMessages = messages.filter((msg: MastraDBMessage) => {
+        return msg.role !== 'system';
+      });
+
+      // 3. If boundary exists, defensively remove the boundary message.
+      // This handles timestamp collision edge cases where startExclusive may not be supported.
+      const boundaryMessageId = thread?.metadata
+        ? getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>)?.messageId
+        : undefined;
+
+      const boundarySafeMessages = boundaryMessageId
+        ? filteredMessages.filter((msg: MastraDBMessage) => {
+            return msg.id !== boundaryMessageId;
+          })
+        : filteredMessages;
+
+      // 4. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
+      // This includes messages added by previous processors like SemanticRecall
+      const existingMessages = messageList.get.all.db();
+      const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
+      const uniqueHistoricalMessages = boundarySafeMessages.filter(
+        (m: MastraDBMessage) => !m.id || !messageIds.has(m.id),
+      );
+
+      // Reverse to chronological order (oldest first) since we fetched DESC
+      const chronologicalMessages = uniqueHistoricalMessages.reverse();
+
+      if (chronologicalMessages.length === 0) {
+        span?.end({
+          output: { success: true },
+          attributes: { messageCount: 0 },
+        });
+        return messageList;
+      }
+
+      // Add historical messages with source: 'memory'
+      for (const msg of chronologicalMessages) {
+        if (msg.role === 'system') {
+          continue; // memory should not store system messages
+        } else {
+          messageList.add(msg, 'memory');
+        }
+      }
+
+      span?.end({
+        output: { success: true },
+        attributes: { messageCount: chronologicalMessages.length },
+      });
+
+      return messageList;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
   }
 
   /**
    * Filters messages before persisting to storage:
-   * 1. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
-   * 2. Removes updateWorkingMemory tool invocations (hide args from message history)
-   * 3. Strips <working_memory> tags from text content
+   * 1. Removes system messages - these are runtime instructions and should never be stored
+   * 2. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
+   * 3. Removes updateWorkingMemory tool invocations (hide args from message history)
+   * 4. Strips <working_memory> tags from text content
    *
    * Note: We preserve 'call' state tool invocations because:
    * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
@@ -258,6 +301,7 @@ export class MessageHistory implements Processor {
    */
   private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
+      .filter(m => m.role !== 'system')
       .map(m => {
         const newMessage = { ...m };
         // Only spread content if it's a proper V2 object
@@ -312,7 +356,7 @@ export class MessageHistory implements Processor {
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
-    const { messageList, requestContext } = args;
+    const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -335,11 +379,24 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
-    // add extra 1ms latency to make sure the next generate has not the same input
-    await new Promise(resolve => setTimeout(resolve, 10));
+    const span = this.createMemorySpan('save', observabilityContext, undefined, {
+      messageCount: messagesToSave.length,
+    });
 
-    return messageList;
+    try {
+      await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+      // add extra 1ms latency to make sure the next generate has not the same input
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      span?.end({
+        output: { success: true },
+      });
+
+      return messageList;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
   }
 
   /**

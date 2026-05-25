@@ -1,6 +1,6 @@
 ---
 title: "Reference: OtelExporter | Observability"
-description: OpenTelemetry exporter for Tracing
+description: OpenTelemetry exporter for traces and logs
 packages:
   - "@mastra/otel-exporter"
 ---
@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # OtelExporter
 
-Sends Tracing data to any OpenTelemetry-compatible observability platform using standardized GenAI semantic conventions.
+Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions; logs carry their original severity and message body and are correlated to traces via both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes.
 
 ## Constructor
 
@@ -17,11 +17,15 @@ Sends Tracing data to any OpenTelemetry-compatible observability platform using 
 new OtelExporter(config: OtelExporterConfig)
 ```
 
-## OtelExporterConfig
+## `OtelExporterConfig`
 
 ```typescript
 interface OtelExporterConfig {
   provider?: ProviderConfig
+  signals?: {
+    traces?: boolean
+    logs?: boolean
+  }
   timeout?: number
   batchSize?: number
   logLevel?: 'debug' | 'info' | 'warn' | 'error'
@@ -37,6 +41,13 @@ interface OtelExporterConfig {
     required: true,
   },
   {
+    name: 'signals',
+    type: '{ traces?: boolean; logs?: boolean }',
+    description:
+      'Per-signal toggle. Both default to true. Set a value to false to disable that signal. Log export also requires the matching `@opentelemetry/exporter-logs-otlp-*` package to be installed for the chosen protocol.',
+    required: false,
+  },
+  {
     name: 'timeout',
     type: 'number',
     description: 'Export timeout in milliseconds (default: 30000)',
@@ -45,7 +56,7 @@ interface OtelExporterConfig {
   {
     name: 'batchSize',
     type: 'number',
-    description: 'Number of spans per batch (default: 100)',
+    description: 'Number of spans/logs per batch (default: 512)',
     required: false,
   },
   {
@@ -63,9 +74,9 @@ interface OtelExporterConfig {
 ]}
 />
 
-## Provider Configurations
+## Provider configurations
 
-### Dash0Config
+### `Dash0Config`
 
 ```typescript
 interface Dash0Config {
@@ -98,7 +109,7 @@ interface Dash0Config {
 ]}
 />
 
-### SignozConfig
+### `SignozConfig`
 
 ```typescript
 interface SignozConfig {
@@ -131,7 +142,7 @@ interface SignozConfig {
 ]}
 />
 
-### NewRelicConfig
+### `NewRelicConfig`
 
 ```typescript
 interface NewRelicConfig {
@@ -158,7 +169,7 @@ interface NewRelicConfig {
 ]}
 />
 
-### TraceloopConfig
+### `TraceloopConfig`
 
 ```typescript
 interface TraceloopConfig {
@@ -192,7 +203,7 @@ interface TraceloopConfig {
 ]}
 />
 
-### LaminarConfig
+### `LaminarConfig`
 
 ```typescript
 interface LaminarConfig {
@@ -218,7 +229,7 @@ interface LaminarConfig {
 ]}
 />
 
-### CustomConfig
+### `CustomConfig`
 
 ```typescript
 interface CustomConfig {
@@ -253,7 +264,7 @@ interface CustomConfig {
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -277,7 +288,7 @@ async shutdown(): Promise<void>
 
 Flushes pending traces and shuts down the exporter.
 
-## Usage Examples
+## Usage examples
 
 ### Zero-Config (using environment variables)
 
@@ -327,18 +338,18 @@ const exporter = new OtelExporter({
 })
 ```
 
-## Protocol Requirements
+## Protocol requirements
 
-Different providers require different OTEL exporter packages:
+Different providers require different OTEL exporter packages. Trace and log export are independent: install only the trace package if you only need traces, or install both the trace and log packages for the chosen protocol if you also want log export. Zipkin does not support OTLP logs.
 
-| Protocol | Required Package | Providers |
+| Protocol | Trace package | Log package |
 | - | - | - |
-| gRPC | `@opentelemetry/exporter-trace-otlp-grpc` | Dash0 |
-| HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` | SigNoz, New Relic, Laminar |
-| HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` | Traceloop, Custom |
-| Zipkin | `@opentelemetry/exporter-zipkin` | Zipkin collectors |
+| gRPC | `@opentelemetry/exporter-trace-otlp-grpc` (+ `@grpc/grpc-js`) | `@opentelemetry/exporter-logs-otlp-grpc` (+ `@grpc/grpc-js`) |
+| HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` | `@opentelemetry/exporter-logs-otlp-proto` |
+| HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` | `@opentelemetry/exporter-logs-otlp-http` |
+| Zipkin | `@opentelemetry/exporter-zipkin` | not supported |
 
-## Tags Support
+## Tags support
 
 The OtelExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are stored as the `mastra.tags` attribute.
 
@@ -368,6 +379,6 @@ While the OpenTelemetry specification supports native array attributes, many bac
 
 ## Related
 
-- [OtelExporter Guide](/docs/observability/tracing/exporters/otel) - Setup guide with provider configurations
-- [OtelBridge](/docs/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
-- [Tracing Overview](/docs/observability/tracing/overview) - General tracing concepts
+- [OtelExporter Guide](/docs/observability/tracing/exporters/otel): Setup guide with provider configurations
+- [OtelBridge](/docs/observability/tracing/bridges/otel): For bidirectional OTEL context integration
+- [Tracing Overview](/docs/observability/tracing/overview): General tracing concepts

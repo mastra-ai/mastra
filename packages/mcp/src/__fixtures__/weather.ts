@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer } from 'node:http';
 import { createTool } from '@mastra/core/tools';
-import type { Prompt, PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod/v3';
 import { MCPServer } from '../server/server';
-import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts } from '../server/types';
+import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts, MastraPrompt } from '../server/types';
 
 const getWeather = async (location: string) => {
   // Return mock data for testing
@@ -119,33 +119,27 @@ const weatherResourceContents: Record<string, MCPServerResourceContent> = {
   },
 };
 
-const weatherPrompts: Prompt[] = [
+const weatherPromptContents: Record<string, string> = {
+  current: JSON.stringify({ location: 'Current weather for San Francisco' }),
+  forecast: JSON.stringify({ location: 'Forecast for San Francisco' }),
+  historical: JSON.stringify({ location: 'Historical weather for San Francisco' }),
+};
+
+const weatherPrompts: MastraPrompt[] = [
   {
     name: 'current',
-    version: 'v1',
+    version: '1.0',
     description: 'Get current weather for a location',
-    mimeType: 'application/json',
-    content: JSON.stringify({
-      location: 'Current weather for San Francisco',
-    }),
   },
   {
     name: 'forecast',
-    version: 'v1',
+    version: '1.0',
     description: 'Get weather forecast for a location',
-    mimeType: 'application/json',
-    content: JSON.stringify({
-      location: 'Forecast for San Francisco',
-    }),
   },
   {
     name: 'historical',
-    version: 'v1',
+    version: '1.0',
     description: 'Get historical weather data for a location',
-    mimeType: 'application/json',
-    content: JSON.stringify({
-      location: 'Historical weather for San Francisco',
-    }),
   },
 ];
 
@@ -162,9 +156,15 @@ const mcpServerResources: MCPServerResources = {
 
 const mcpServerPrompts: MCPServerPrompts = {
   listPrompts: async () => weatherPrompts,
-  getPromptMessages: async ({ name }: { name: string }): Promise<PromptMessage[]> => {
-    const prompt = weatherPrompts.find(p => p.name === name);
-    if (!prompt) {
+  getPromptMessages: async ({
+    name,
+    version: _version,
+  }: {
+    name: string;
+    version?: string;
+  }): Promise<PromptMessage[]> => {
+    const content = weatherPromptContents[name];
+    if (!content) {
       throw new Error(`Mock prompt not found for ${name}`);
     }
     return [
@@ -172,7 +172,7 @@ const mcpServerPrompts: MCPServerPrompts = {
         role: 'user',
         content: {
           type: 'text',
-          text: prompt.content as string,
+          text: content,
         },
       },
     ];
@@ -203,10 +203,11 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
   });
 });
 
+const HOST = process.env.WEATHER_SERVER_HOST || '127.0.0.1';
 const PORT = process.env.WEATHER_SERVER_PORT || 60808;
-console.info(`[${serverId}] Starting HTTP server on port ${PORT}`);
-httpServer.listen(PORT, () => {
-  console.info(`[${serverId}] Weather server is running on SSE at http://localhost:${PORT}`);
+console.info(`[${serverId}] Starting HTTP server on ${HOST}:${PORT}`);
+httpServer.listen(Number(PORT), HOST, () => {
+  console.info(`[${serverId}] Weather server is running on SSE at http://${HOST}:${PORT}`);
 });
 
 // --- Interval-based Notifications ---

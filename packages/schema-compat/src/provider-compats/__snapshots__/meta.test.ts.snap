@@ -22,6 +22,10 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
                 "additionalProperties": {
                   "type": "string",
                 },
+                "propertyNames": {
+                  "type": "string",
+                },
+                "required": [],
                 "type": "object",
               },
               "name": {
@@ -200,6 +204,10 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
           },
         ],
       },
+      "propertyNames": {
+        "type": "string",
+      },
+      "required": [],
       "type": "object",
     },
     "preferences": {
@@ -252,7 +260,8 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
       "additionalProperties": false,
       "properties": {
         "age": {
-          "description": "constraints: greater than or equal to 0, lower than or equal to 120",
+          "maximum": 120,
+          "minimum": 0,
           "type": "number",
         },
         "email": {
@@ -294,21 +303,25 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
   "properties": {
     "frequencyPenalty": {
       "default": 0,
-      "description": "constraints: greater than or equal to -2, lower than or equal to 2",
+      "maximum": 2,
+      "minimum": -2,
       "type": "number",
     },
     "maxTokens": {
-      "description": "Maximum tokens to generate
-constraints: greater than or equal to 1, lower than or equal to 4096",
+      "description": "Maximum tokens to generate",
+      "maximum": 4096,
+      "minimum": 1,
       "type": "integer",
     },
     "temperature": {
-      "description": "Sampling temperature
-constraints: greater than or equal to 0, lower than or equal to 1",
+      "description": "Sampling temperature",
+      "maximum": 1,
+      "minimum": 0,
       "type": "number",
     },
     "topP": {
-      "description": "constraints: greater than or equal to 0, lower than or equal to 1",
+      "maximum": 1,
+      "minimum": 0,
       "type": "number",
     },
   },
@@ -316,6 +329,163 @@ constraints: greater than or equal to 0, lower than or equal to 1",
     "temperature",
     "maxTokens",
   ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "person": {
+      "additionalProperties": false,
+      "properties": {
+        "age": {
+          "type": "number",
+        },
+        "email": {
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+        "age",
+        "email",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "person",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "label": {
+      "type": "string",
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+        },
+        "value": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "key",
+        "value",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "metadata",
+    "label",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "locate": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "convertHttpImage2Base64": {
+                  "type": "boolean",
+                },
+                "images": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                      },
+                      "url": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "name",
+                      "url",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "prompt": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "prompt",
+                "images",
+                "convertHttpImage2Base64",
+              ],
+              "type": "object",
+            },
+          ],
+        },
+      },
+      "required": [
+        "prompt",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "locate",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "type": "string",
+        },
+        "b": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "a",
+        "b",
+      ],
+      "type": "object",
+    },
+  },
   "type": "object",
 }
 `;
@@ -444,6 +614,7 @@ exports[`MetaSchemaCompatLayer > processZodType - Basic Transformations > should
         {
           "description": "constraints: a valid date-time",
           "type": "string",
+          "x-date": true,
         },
         {
           "type": "null",
@@ -517,6 +688,7 @@ exports[`MetaSchemaCompatLayer > processZodType - Complex Schemas > should handl
         {
           "description": "constraints: a valid date-time",
           "type": "string",
+          "x-date": true,
         },
         {
           "type": "null",
@@ -985,8 +1157,9 @@ exports[`MetaSchemaCompatLayer > processZodType - Number Constraints > should ha
   "additionalProperties": false,
   "properties": {
     "count": {
-      "description": "A count field
-constraints: greater than or equal to 1, lower than or equal to 100",
+      "description": "A count field",
+      "maximum": 100,
+      "minimum": 1,
       "type": "number",
     },
   },
@@ -1003,10 +1176,13 @@ exports[`MetaSchemaCompatLayer > processZodType - Number Constraints > should ha
   "additionalProperties": false,
   "properties": {
     "age": {
-      "description": "constraints: greater than or equal to 0, lower than or equal to 120",
+      "maximum": 120,
+      "minimum": 0,
       "type": "number",
     },
     "score": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
       "type": "integer",
     },
   },
@@ -1040,6 +1216,10 @@ exports[`MetaSchemaCompatLayer > processZodType - Records > should handle record
       "additionalProperties": {
         "type": "boolean",
       },
+      "propertyNames": {
+        "type": "string",
+      },
+      "required": [],
       "type": "object",
     },
   },
@@ -1059,6 +1239,10 @@ exports[`MetaSchemaCompatLayer > processZodType - Records > should handle record
       "additionalProperties": {
         "type": "number",
       },
+      "propertyNames": {
+        "type": "string",
+      },
+      "required": [],
       "type": "object",
     },
   },

@@ -1,56 +1,75 @@
 import {
-  Button,
-  DocsIcon,
-  HeaderAction,
-  Icon,
-  MainContentContent,
-  useScorers,
-  useLinkComponent,
-  useIsCmsAvailable,
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  ScorersTable,
+  ErrorState,
+  NoDataPageLayout,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { GaugeIcon, Plus } from 'lucide-react';
-import { Link } from 'react-router';
+import { useState } from 'react';
+import { ScorersToolbar, useScorers } from '@/domains/scores';
+import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
+import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 
 export default function Scorers() {
-  const { Link: FrameworkLink } = useLinkComponent();
   const { data: scorers = {}, isLoading, error } = useScorers();
-  const { isCmsAvailable } = useIsCmsAvailable();
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout>
+        <PermissionDenied resource="scorers" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout>
+        <ErrorState title="Failed to load scorers" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(scorers).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout>
+        <NoScorersInfo />
+      </NoDataPageLayout>
+    );
+  }
+
+  const hasFilters = sourceFilter !== 'all' || search !== '';
+
+  const resetFilters = () => {
+    setSearch('');
+    setSourceFilter('all');
+  };
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <GaugeIcon />
-          </Icon>
-          Scorers
-        </HeaderTitle>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <ScorersToolbar
+          search={search}
+          onSearchChange={setSearch}
+          sourceFilter={sourceFilter}
+          onSourceFilterChange={setSourceFilter}
+          onReset={resetFilters}
+          hasActiveFilters={hasFilters}
+        />
+      </PageLayout.TopArea>
 
-        <HeaderAction>
-          {isCmsAvailable && (
-            <Button variant="light" as={FrameworkLink} to="/cms/scorers/create">
-              <Icon>
-                <Plus />
-              </Icon>
-              Create a scorer
-            </Button>
-          )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Scorers documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={!isLoading && Object.keys(scorers || {}).length === 0}>
-        <ScorersTable isLoading={isLoading} scorers={scorers} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <ScorersList scorers={scorers} isLoading={isLoading} search={search} sourceFilter={sourceFilter} />
+    </PageLayout>
   );
 }

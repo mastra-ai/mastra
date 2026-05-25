@@ -1,9 +1,20 @@
-import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
+import { EntityType } from '../observability';
 import type { MastraStorage } from '../storage';
+
+function toScorerTargetEntityType(entityType: string): EntityType | undefined {
+  switch (entityType) {
+    case 'AGENT':
+      return EntityType.AGENT;
+    case 'WORKFLOW':
+      return EntityType.WORKFLOW_RUN;
+    default:
+      return undefined;
+  }
+}
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
@@ -41,19 +52,23 @@ export function createOnScorerHook(mastra: Mastra) {
 
       const { structuredOutput, ...rest } = hookData;
 
-      const runResult = await scorerToUse.scorer.run({
+      const currentSpan = hookData.tracingContext?.currentSpan;
+      const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
+      const spanId = currentSpan?.isValid ? currentSpan.id : undefined;
+      const targetCorrelationContext = currentSpan?.isValid ? currentSpan.getCorrelationContext?.() : undefined;
+      const targetMetadata = currentSpan?.isValid && currentSpan.metadata ? { ...currentSpan.metadata } : undefined;
+      const runResult = (await scorerToUse.scorer.run({
         ...rest,
         input,
         output,
-      });
-
-      let spanId;
-      let traceId;
-      const currentSpan = hookData.tracingContext?.currentSpan;
-      if (currentSpan && currentSpan.isValid) {
-        spanId = currentSpan.id;
-        traceId = currentSpan.traceId;
-      }
+        scoreSource: 'live',
+        targetScope: 'span',
+        targetEntityType: toScorerTargetEntityType(entityType),
+        targetTraceId: traceId,
+        targetSpanId: spanId,
+        targetCorrelationContext,
+        targetMetadata,
+      } as any)) as Record<string, unknown>;
 
       const payload = {
         ...rest,
@@ -70,33 +85,11 @@ export function createOnScorerHook(mastra: Mastra) {
           structuredOutput: !!structuredOutput,
         },
       };
+      // Legacy score-store emission. This path is being deprecated.
+      // ScoreEvent emission already happens inside MastraScorer.run() (see
+      // packages/core/src/evals/base.ts). The hook must not republish or every
+      // exporter would receive the same score twice.
       await validateAndSaveScore(storage, payload);
-
-      if (currentSpan && spanId && traceId) {
-        await pMap(
-          currentSpan.observabilityInstance.getExporters(),
-          async exporter => {
-            if (exporter.addScoreToTrace) {
-              try {
-                await exporter.addScoreToTrace({
-                  traceId: traceId,
-                  spanId: spanId,
-                  score: runResult.score as number,
-                  reason: runResult.reason as string,
-                  scorerName: scorerToUse.scorer.id,
-                  metadata: {
-                    ...(currentSpan.metadata ?? {}),
-                  },
-                });
-              } catch (error) {
-                // Log error but don't fail the hook if exporter fails
-                mastra.getLogger()?.error(`Failed to add score to trace via exporter: ${error}`);
-              }
-            }
-          },
-          { concurrency: 3 },
-        );
-      }
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -113,11 +106,13 @@ export function createOnScorerHook(mastra: Mastra) {
       );
 
       mastra.getLogger()?.trackException(mastraError);
-      mastra.getLogger()?.error(mastraError.toString());
     }
   };
 }
 
+/**
+ * @deprecated Legacy scores-store path. New score emission should use `mastra.observability.addScore()`.
+ */
 export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
   const scoresStore = await storage.getStore('scores');
   if (!scoresStore) {

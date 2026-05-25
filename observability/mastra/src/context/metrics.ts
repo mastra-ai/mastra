@@ -1,107 +1,133 @@
 /**
- * MetricsContextImpl - Metric emission with cardinality protection.
+ * MetricsContextImpl - User-facing metric emission API.
  *
- * Provides counter, gauge, and histogram instrument creation.
- * All metrics pass through cardinality filtering before emission.
- * Context labels are snapshotted at construction time.
+ * All metrics are validated, cardinality-filtered, and constructed here
+ * before being routed through ObservabilityBus.emit().
+ * CorrelationContext and metadata are snapshotted at construction time.
  */
 
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   MetricsContext,
   Counter,
   Gauge,
   Histogram,
-  MetricType,
+  CorrelationContext,
+  CostContext,
   ExportedMetric,
   MetricEvent,
+  MetricEmitOptions,
 } from '@mastra/core/observability';
 
 import type { ObservabilityBus } from '../bus';
 import type { CardinalityFilter } from '../metrics/cardinality';
 
+/** Configuration for creating a MetricsContextImpl. */
 export interface MetricsContextConfig {
-  /** Base labels merged into every emitted metric (entity context, model, provider, serviceName, etc.) */
-  labels?: Record<string, string>;
+  /** Top-level trace identity for emitted metric events */
+  traceId?: string;
+
+  /** Top-level span identity for emitted metric events */
+  spanId?: string;
+
+  /** Canonical correlation context derived from the current span */
+  correlationContext?: CorrelationContext;
+
+  /** Non-canonical metadata to attach to emitted metric events */
+  metadata?: Record<string, unknown>;
+
+  /** Cardinality filter applied to emitted metric labels */
+  cardinalityFilter: CardinalityFilter;
 
   /** Bus for event emission */
   observabilityBus: ObservabilityBus;
-
-  /** Cardinality filter applied to all labels */
-  cardinalityFilter: CardinalityFilter;
 }
 
+/**
+ * User-facing metric emission API. All metrics are routed through
+ * ObservabilityBus.emit() after validation and cardinality filtering.
+ */
 export class MetricsContextImpl implements MetricsContext {
-  private config: MetricsContextConfig;
+  private traceId?: string;
+  private spanId?: string;
+  private correlationContext?: CorrelationContext;
+  private metadata?: Record<string, unknown>;
+  private cardinalityFilter: CardinalityFilter;
+  private observabilityBus: ObservabilityBus;
 
   /**
-   * Create a metrics context. Base labels are defensively copied so
-   * mutations after construction do not affect emitted metrics.
+   * Create a metrics context. Correlation context and metadata are defensively
+   * copied so mutations after construction do not affect emitted metrics.
    */
   constructor(config: MetricsContextConfig) {
-    this.config = {
-      ...config,
-      labels: config.labels ? { ...config.labels } : undefined,
-    };
+    this.correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
+    this.traceId = config.traceId ?? this.correlationContext?.traceId;
+    this.spanId = config.spanId ?? this.correlationContext?.spanId;
+    this.metadata = config.metadata ? structuredClone(config.metadata) : undefined;
+    this.cardinalityFilter = config.cardinalityFilter;
+    this.observabilityBus = config.observabilityBus;
   }
 
-  /**
-   * Create a counter instrument. Call `.add(value)` to increment.
-   *
-   * @param name - Metric name (e.g. `mastra_custom_requests_total`).
-   */
-  counter(name: string): Counter {
-    return {
-      add: (value: number, additionalLabels?: Record<string, string>) => {
-        this.emit(name, 'counter', value, additionalLabels);
-      },
-    };
-  }
+  /** Emit a metric observation. */
+  emit(name: string, value: number, labels?: Record<string, string>, options?: MetricEmitOptions): void {
+    if (!Number.isFinite(value) || value < 0) {
+      return;
+    }
 
-  /**
-   * Create a gauge instrument. Call `.set(value)` to record a point-in-time value.
-   *
-   * @param name - Metric name (e.g. `mastra_queue_depth`).
-   */
-  gauge(name: string): Gauge {
-    return {
-      set: (value: number, additionalLabels?: Record<string, string>) => {
-        this.emit(name, 'gauge', value, additionalLabels);
-      },
-    };
-  }
-
-  /**
-   * Create a histogram instrument. Call `.record(value)` to observe a measurement.
-   *
-   * @param name - Metric name (e.g. `mastra_request_duration_ms`).
-   */
-  histogram(name: string): Histogram {
-    return {
-      record: (value: number, additionalLabels?: Record<string, string>) => {
-        this.emit(name, 'histogram', value, additionalLabels);
-      },
-    };
-  }
-
-  /** Merge base + additional labels, apply cardinality filtering, and emit a MetricEvent. Non-finite values are silently dropped. */
-  private emit(name: string, metricType: MetricType, value: number, additionalLabels?: Record<string, string>): void {
-    if (!Number.isFinite(value)) return;
-
-    const allLabels = {
-      ...this.config.labels,
-      ...additionalLabels,
-    };
-    const filteredLabels = this.config.cardinalityFilter.filterLabels(allLabels);
+    const filteredLabels = labels ? this.cardinalityFilter.filterLabels(labels) : {};
+    const costContext = options?.costContext ? cloneCostContext(options.costContext) : undefined;
 
     const exportedMetric: ExportedMetric = {
+      metricId: generateSignalId(),
       timestamp: new Date(),
+      traceId: this.traceId,
+      spanId: this.spanId,
       name,
-      metricType,
       value,
       labels: filteredLabels,
+      correlationContext: this.correlationContext,
+      costContext,
+      metadata: this.metadata,
     };
 
     const event: MetricEvent = { type: 'metric', metric: exportedMetric };
-    this.config.observabilityBus.emit(event);
+    this.observabilityBus.emit(event);
   }
+
+  /** @deprecated Use `emit()` instead. */
+  counter(name: string): Counter {
+    return {
+      add: (value: number, additionalLabels?: Record<string, string>) => {
+        this.emit(name, value, additionalLabels);
+      },
+    };
+  }
+
+  /** @deprecated Use `emit()` instead. */
+  gauge(name: string): Gauge {
+    return {
+      set: (value: number, additionalLabels?: Record<string, string>) => {
+        this.emit(name, value, additionalLabels);
+      },
+    };
+  }
+
+  /** @deprecated Use `emit()` instead. */
+  histogram(name: string): Histogram {
+    return {
+      record: (value: number, additionalLabels?: Record<string, string>) => {
+        this.emit(name, value, additionalLabels);
+      },
+    };
+  }
+}
+
+function cloneCostContext(costContext: CostContext): CostContext {
+  return {
+    provider: costContext.provider,
+    model: costContext.model,
+    estimatedCost: costContext.estimatedCost,
+    costUnit: costContext.costUnit,
+    costMetadata: costContext.costMetadata ? structuredClone(costContext.costMetadata) : undefined,
+  };
 }

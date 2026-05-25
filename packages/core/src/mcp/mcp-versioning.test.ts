@@ -48,6 +48,21 @@ class MockMCPServer extends MCPServerBase {
       remotes: this.remotes,
     };
   }
+  getToolListInfo() {
+    return { tools: [] };
+  }
+  getToolInfo() {
+    return undefined;
+  }
+  async executeTool() {
+    return {};
+  }
+  async readResource() {
+    return { contents: [] };
+  }
+  async listResources() {
+    return { resources: [] };
+  }
 }
 
 const loggerDebugMock = vi.fn();

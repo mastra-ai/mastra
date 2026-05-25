@@ -1,5 +1,5 @@
+import type { ReactNode } from 'react';
 import { Txt } from '@/ds/components/Txt/Txt';
-import { ReactNode } from 'react';
 
 export type EntryProps = {
   label: ReactNode;

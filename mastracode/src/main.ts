@@ -2,13 +2,17 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
+import fs from 'node:fs';
+
+import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
-import { loadSettings } from './onboarding/settings.js';
+import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
-import { applyThemeMode } from './tui/theme.js';
+import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
+import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
@@ -17,6 +21,8 @@ let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
+let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
+let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
@@ -30,32 +36,31 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain() {
-  const result = await createMastraCode();
+async function tuiMain(pipedInput?: string | null) {
+  const settings = loadSettings();
+  let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
+  const loadBrowser = () => {
+    browserPromise ??= createBrowserFromSettings(settings.browser);
+    return browserPromise;
+  };
+
+  const result = await createMastraCode({ unixSocketPubSub: true });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
+  signalsPubSub = result.signalsPubSub;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
   }
-
-  if (mcpManager?.hasServers()) {
-    await mcpManager.init();
-    const statuses = mcpManager.getServerStatuses();
-    const connected = statuses.filter(s => s.connected);
-    const failed = statuses.filter(s => !s.connected);
-    const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
-    console.info(`MCP: ${connected.length} server(s) connected, ${totalTools} tool(s)`);
-    for (const s of failed) {
-      console.info(`MCP: Failed to connect to "${s.name}": ${s.error}`);
-    }
-    const skipped = mcpManager.getSkippedServers();
-    for (const s of skipped) {
-      console.info(`MCP: Skipped "${s.name}": ${s.reason}`);
-    }
+  if (result.observabilityWarning) {
+    console.info(`⚠ ${result.observabilityWarning}`);
   }
+
+  // MCP connection is deferred to TUI.init() (after ui.start()) so that
+  // status messages use showInfo() instead of console.info(), which would
+  // corrupt the terminal.  Headless mode still inits from headless.ts.
 
   setupDebugLogging();
 
@@ -63,39 +68,73 @@ async function tuiMain() {
   // MASTRA_THEME env var is the highest-priority override
   const envTheme = process.env.MASTRA_THEME?.toLowerCase();
   let themeMode: 'dark' | 'light';
+  let detectedBgHex: string | undefined;
   if (envTheme === 'dark' || envTheme === 'light') {
     themeMode = envTheme;
   } else {
     const settings = loadSettings();
     const themePref = settings.preferences.theme;
-    themeMode = themePref === 'dark' || themePref === 'light' ? themePref : await detectTerminalTheme();
+    if (themePref === 'dark' || themePref === 'light') {
+      themeMode = themePref;
+    } else {
+      const detection = await detectTerminalTheme();
+      themeMode = detection.mode;
+      detectedBgHex = detection.detectedBgHex;
+    }
   }
-  applyThemeMode(themeMode);
+  applyThemeMode(themeMode, detectedBgHex);
+
+  analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
+  analytics.capture('mastracode_session_started', {
+    mode: harness.getCurrentModeId(),
+    resourceId: harness.getResourceId(),
+    hasAuthStorage: Boolean(authStorage),
+    hasMcp: Boolean(mcpManager),
+    theme: themeMode,
+  });
 
   const tui = new MastraTUI({
     harness,
     hookManager,
+    analytics,
     authStorage,
     mcpManager,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
-
   tui.run().catch(error => {
     handleFatalError(error);
   });
+
+  if (settings.browser.enabled) {
+    void loadBrowser()
+      .then(browser => {
+        if (!browser) return;
+        harness.setBrowser(browser);
+        void harness.setState({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+      })
+      .catch(() => {});
+  }
 }
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+    analytics?.shutdown(),
+  ]);
 };
 
 process.on('beforeExit', () => {
   void asyncCleanup();
 });
 process.on('exit', () => {
+  restoreTerminalForeground();
   releaseAllThreadLocks();
 });
 process.on('SIGINT', () => {
@@ -132,11 +171,43 @@ function handleFatalError(error: unknown): never {
     process.exit(1);
   }
 
-  write(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+  const msg = `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
+  write(msg);
+  // Write crash log to file so it persists even if terminal closes
+  try {
+    const crashLog = `[${new Date().toISOString()}] ${msg}\n${error instanceof Error && error.stack ? error.stack + '\n' : ''}`;
+    fs.appendFileSync('/tmp/mastra-crash.log', crashLog);
+  } catch {}
+  if (error instanceof Error && error.stack) {
+    write(error.stack);
+  }
   process.exit(1);
 }
 
-const main = hasHeadlessFlag(process.argv) ? headlessMain : tuiMain;
+async function main() {
+  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+    return headlessMain();
+  }
+
+  // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
+  // before starting the TUI.  The drain blocks until the sender process exits
+  // and closes its stdout, so we never see partial output.
+  let pipedInput: string | null = null;
+  if (!process.stdin.isTTY) {
+    process.stderr.write('Reading piped input...\n');
+    pipedInput = await drainPipedStdin();
+
+    // Always reopen a real TTY — even if the pipe was empty, the original
+    // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
+    const reopenedStdin = reopenStdinFromTTY();
+    if (!reopenedStdin) {
+      process.stderr.write('No TTY available — falling back to headless mode.\n');
+      return headlessMain(pipedInput);
+    }
+  }
+
+  return tuiMain(pipedInput);
+}
 
 main().catch(error => {
   handleFatalError(error);

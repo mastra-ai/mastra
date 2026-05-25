@@ -1,22 +1,39 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
+import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import { Hono } from 'hono';
-import type { ZodError } from 'zod';
+import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
+import {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
+} from '../constants';
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import type { ServerRoute } from './routes';
+import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_STUDIO_CLIENT_TYPE,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
+} from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
@@ -83,6 +100,80 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function isAbortSignalError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code, name } = error as { code?: string; name?: string };
+  return name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function isExpectedResponseCloseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code } = error as { code?: string };
+  return (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === 'ERR_STREAM_DESTROYED' ||
+    code === 'ERR_STREAM_WRITE_AFTER_END' ||
+    code === 'ERR_STREAM_PREMATURE_CLOSE'
+  );
+}
+
+function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
+  return Boolean(response.writableEnded || response.destroyed);
+}
+
+function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
+  return route.requiresAuth !== false;
+}
+
+function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
+  return `${route.method} ${route.path}`;
+}
+
+function getFGAProvider(mastra: any): IFGAProvider | undefined {
+  return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
+}
+
+function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
+  return {
+    path: route.path,
+    method: route.method,
+    requiresAuth: route.requiresAuth,
+    requiresPermission: route.requiresPermission,
+    fga: route.fga,
+  };
+}
+
+function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
+  return [getEffectivePermission(route), route.fga?.permission]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
+}
+
+async function resolveRouteFGAConfig(
+  fgaProvider: IFGAProvider,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<FGARouteConfig | null | undefined> {
+  if (route.fga) {
+    return route.fga;
+  }
+
+  const resolvedConfig = await fgaProvider.resolveRouteFGA?.({
+    route: getFGARouteInfo(route),
+    params,
+    requestContext,
+  });
+  if (resolvedConfig) {
+    return resolvedConfig;
+  }
+
+  return getBuiltInRouteFGAConfig(route);
 }
 
 function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
@@ -335,15 +426,29 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const requestContext = new RequestContext();
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
+        if (isReservedRequestContextKey(key)) continue;
         requestContext.set(key, value);
       }
     }
     if (paramsRequestContext) {
       for (const [key, value] of Object.entries(paramsRequestContext)) {
+        if (isReservedRequestContextKey(key)) continue;
         requestContext.set(key, value);
       }
     }
     return requestContext;
+  }
+
+  protected applyRequestMetadataToContext({
+    requestContext,
+    getHeader,
+  }: {
+    requestContext: RequestContext;
+    getHeader: (name: string) => string | undefined;
+  }): void {
+    if (isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER))) {
+      requestContext.set(MASTRA_IS_STUDIO_KEY, true);
+    }
   }
 
   /**
@@ -368,7 +473,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
     },
-  ): Promise<{ status: number; error: string } | null> {
+  ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     const authConfig = this.mastra.getServer()?.auth;
 
     // No auth config means no auth required
@@ -401,15 +506,20 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       rawRequest: context.request,
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
+      requiresAuth: route.requiresAuth,
     });
 
     if (result.action === 'next') {
+      // Pass through any refresh headers (e.g. Set-Cookie from transparent session refresh)
+      if (result.headers) {
+        return { status: 200, error: '', headers: result.headers };
+      }
       return null;
     }
 
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
-    return { status: result.status, error: errorBody?.error ?? 'Access denied' };
+    return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
   }
 
   /**
@@ -419,6 +529,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * 1. If route has explicit `requiresPermission`, use that
    * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
    * 3. Routes with `requiresAuth: false` skip permission checks
+   *
+   * When the route specifies an array of permissions, the user needs ANY ONE
+   * of them (logical OR).
    *
    * @param route - The route being accessed
    * @param userPermissions - The user's permissions from the request context
@@ -444,12 +557,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return null;
     }
 
-    // Check if user has the required permission
-    if (!userPermissions || !hasPermissionFn(userPermissions, requiredPermission)) {
+    // Check if user has the required permission(s)
+    // When an array is provided, user needs ANY ONE of them (logical OR)
+    const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
+
+    if (!hasAny) {
       return {
         status: 403,
         error: 'Forbidden',
-        message: `Missing required permission: ${requiredPermission}`,
+        message: `Missing required permission: ${permissions.join(' or ')}`,
       };
     }
 
@@ -469,24 +586,31 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateAgentBuilderLicense();
+    await this.validateFGAPolicyCoverage();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
   }
 
   /**
    * Validate that EE features have a valid license in production.
-   * Throws if RBAC is configured without a valid license outside dev/test environments.
+   * Throws if RBAC or FGA is configured without a valid license outside dev/test environments.
    */
   async validateEELicense(): Promise<void> {
-    const rbacProvider = this.mastra.getServer()?.rbac;
-    if (!rbacProvider) return;
+    const serverConfig = this.mastra.getServer();
+    const configuredFeatures = [serverConfig?.rbac ? 'RBAC' : null, serverConfig?.fga ? 'FGA' : null].filter(
+      (feature): feature is string => feature !== null,
+    );
+
+    if (configuredFeatures.length === 0) return;
 
     try {
       const { isEEEnabled } = await import('@mastra/core/auth/ee');
       if (!isEEEnabled()) {
+        const featureList = configuredFeatures.join(' and ');
         throw new Error(
-          '[mastra/auth-ee] RBAC is configured but no valid EE license was found.\n' +
-            'RBAC requires a Mastra Enterprise License for production use.\n' +
+          `[mastra/auth-ee] ${featureList} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but no valid EE license was found.\n` +
+            `${featureList} ${configuredFeatures.length === 1 ? 'requires' : 'require'} a Mastra Enterprise License for production use.\n` +
             'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
             'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
         );
@@ -495,12 +619,85 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
         throw err;
       }
-      // @mastra/core/auth/ee module not available — RBAC cannot function
+      // @mastra/core/auth/ee module not available; EE authorization cannot function.
       throw new Error(
-        '[mastra/auth-ee] RBAC is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+        `[mastra/auth-ee] ${configuredFeatures.join(' and ')} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
+  }
+
+  /**
+   * Validate that an Agent Builder configuration has a valid EE license.
+   * Throws if the editor is configured with builder support but no valid EE license is available.
+   */
+  async validateAgentBuilderLicense(): Promise<void> {
+    const editor = this.mastra.getEditor();
+    if (!editor?.hasEnabledBuilderConfig?.()) return;
+
+    try {
+      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      if (!isEEEnabled()) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      // @mastra/core/auth/ee module not available — Agent Builder cannot function
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
+  /**
+   * Validate route-level FGA policy coverage when an FGA provider opts into
+   * startup checks.
+   */
+  async validateFGAPolicyCoverage(): Promise<void> {
+    const serverConfig = this.mastra.getServer();
+    const fgaProvider = serverConfig?.fga;
+    if (!fgaProvider) return;
+
+    const customRoutes = (this.customApiRoutes ?? serverConfig?.apiRoutes ?? []).filter(
+      route => !route._mastraInternal,
+    );
+    const routes = [...SERVER_ROUTES, ...customRoutes] as ServerRoute[];
+
+    if (fgaProvider.validatePermissions) {
+      const permissions = [...new Set(routes.flatMap(route => getRoutePermissions(route)))];
+      await fgaProvider.validatePermissions(permissions);
+    }
+
+    const auditMode = fgaProvider.auditProtectedRoutes ?? (fgaProvider.requireForProtectedRoutes ? 'warn' : false);
+    if (!auditMode || fgaProvider.resolveRouteFGA) return;
+
+    const missingRoutes = routes.filter(
+      route => isProtectedFGARoute(route) && !route.fga && !getBuiltInRouteFGAConfig(route),
+    );
+
+    if (missingRoutes.length === 0) return;
+
+    const routeList = missingRoutes.map(route => formatRoute(route as ServerRoute));
+    const message =
+      `[mastra/auth-ee] FGA is configured but ${missingRoutes.length} protected route` +
+      `${missingRoutes.length === 1 ? ' is' : 's are'} missing FGA metadata: ${routeList.join(', ')}`;
+
+    if (auditMode === 'error') {
+      throw new Error(message);
+    }
+
+    this.mastra.getLogger()?.warn(message, {
+      routes: routeList,
+      count: missingRoutes.length,
+    });
   }
 
   /**
@@ -510,6 +707,25 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async registerCustomApiRoutes(): Promise<void> {
     // Default no-op. Adapters override this to register custom routes
     // using their framework-specific middleware.
+  }
+
+  /**
+   * Validates that no custom route path collides with the built-in route prefix.
+   * Throws if any route path starts with the server's `apiPrefix`.
+   */
+  protected validateCustomRoutePaths(routes: ApiRoute[]): void {
+    const prefix = this.prefix ?? '';
+    if (!prefix) return;
+    for (const route of routes) {
+      if (route._mastraInternal) continue;
+      if (route.path.startsWith(`${prefix}/`) || route.path === prefix) {
+        throw new Error(
+          `Custom API route "${route.path}" must not start with "${prefix}" — ` +
+            `that path is reserved for built-in Mastra routes. ` +
+            `Choose a different path (e.g. "${route.path.replace(prefix, '/custom')}").`,
+        );
+      }
+    }
   }
 
   /**
@@ -535,6 +751,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       c.set('requestContext', c.env?.requestContext ?? new RequestContext());
       await next();
     });
+
+    // Propagate the server's onError handler so errors from custom route handlers
+    // are caught here (not swallowed by Hono's default plain-text 500).
+    const serverOnError = this.mastra.getServer()?.onError;
+    app.onError((err, c) => {
+      if (serverOnError) {
+        return serverOnError(err, c);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
+
+    this.validateCustomRoutePaths(routes);
 
     // Register each custom route
     for (const route of routes) {
@@ -569,7 +797,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   /**
    * Forwards a request to the internal custom route handler.
    * Returns the Response if a custom route matched, or null to fall through.
-   * Used by non-Hono adapter bridges.
    */
   protected async handleCustomRouteRequest(
     url: string,
@@ -577,6 +804,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     headers: Record<string, string | string[] | undefined>,
     body: unknown,
     requestContext?: RequestContext,
+    signal?: AbortSignal,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -589,15 +817,20 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         });
     }
 
-    const init: RequestInit = { method, headers: fetchHeaders };
-    if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
-      const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
-      if (contentType.includes('application/json')) {
-        init.body = JSON.stringify(body);
-      } else if (typeof body === 'string') {
-        init.body = body;
-      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+    const init: RequestInit = { method, headers: fetchHeaders, signal };
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && body !== undefined) {
+      if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
+        if (body instanceof ReadableStream) {
+          (init as any).duplex = 'half';
+        }
+      } else {
+        const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
+        if (contentType.includes('application/json')) {
+          init.body = JSON.stringify(body);
+        } else if (typeof body === 'string') {
+          init.body = body;
+        }
       }
     }
 
@@ -618,7 +851,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       writeHead(status: number, headers: Record<string, string | string[]>): void;
       write(chunk: unknown): void;
       end(data?: string): void;
-    },
+      writableEnded?: boolean;
+      destroyed?: boolean;
+    } & NodeJS.WritableStream,
+    signal?: AbortSignal,
   ): Promise<void> {
     const headers: Record<string, string | string[]> = {};
     response.headers.forEach((value, key) => {
@@ -630,22 +866,73 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (setCookies && setCookies.length > 0) {
       headers['set-cookie'] = setCookies;
     }
+    if (isResponseClosed(nodeRes)) {
+      await response.body?.cancel();
+      return;
+    }
     nodeRes.writeHead(response.status, headers);
 
     if (response.body) {
-      const reader = response.body.getReader();
+      let responseBodyError: unknown;
+      let responseBodyErrorAfterResponseClosed = false;
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          nodeRes.write(value);
+        const responseStream = Readable.fromWeb(response.body as any);
+        // This listener must run before pipeline's cleanup so source errors are
+        // not mistaken for client disconnects after pipeline destroys nodeRes.
+        responseStream.once('error', error => {
+          responseBodyError = error;
+          responseBodyErrorAfterResponseClosed = isResponseClosed(nodeRes);
+        });
+        if (signal) {
+          await pipeline(responseStream, nodeRes, { signal });
+        } else {
+          await pipeline(responseStream, nodeRes);
         }
-      } finally {
-        nodeRes.end();
+      } catch (error) {
+        const expectedSignalAbort =
+          signal?.aborted && isAbortSignalError(error) && (!responseBodyError || responseBodyErrorAfterResponseClosed);
+        const expectedResponseClose =
+          (!responseBodyError || responseBodyErrorAfterResponseClosed) &&
+          isResponseClosed(nodeRes) &&
+          isExpectedResponseCloseError(error);
+        // Request cancellation is expected unless the response body already reported its own error.
+        if (!expectedSignalAbort && !expectedResponseClose) {
+          throw error;
+        }
       }
     } else {
-      nodeRes.end(await response.text());
+      const text = await response.text();
+      if (!isResponseClosed(nodeRes)) {
+        nodeRes.end(text);
+      }
     }
+  }
+
+  /**
+   * Builds the OpenAPI spec object with servers field and custom route paths.
+   */
+  private buildOpenAPISpec(config: { title: string; version: string; description: string }, prefix?: string): any {
+    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, config);
+
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
+
+    // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
+    const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (allCustomRoutes && allCustomRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      if (prefix) {
+        for (const pathKey of Object.keys(customPaths)) {
+          if (!customPaths[pathKey].servers) {
+            customPaths[pathKey].servers = [{ url: '/' }];
+          }
+        }
+      }
+      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
+    }
+
+    return openApiSpec;
   }
 
   async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
@@ -656,22 +943,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       path = '/openapi.json',
     } = config;
 
-    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, {
-      title,
-      version,
-      description,
-    });
-
-    // Set the servers field so Swagger UI knows routes are served under the prefix
-    if (prefix) {
-      openApiSpec.servers = [{ url: prefix }];
-    }
-
-    // Merge custom API routes into the OpenAPI spec
-    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
-      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
-    }
+    const openApiSpec = this.buildOpenAPISpec({ title, version, description }, prefix);
 
     const openApiRoute: ServerRoute = {
       method: 'GET',
@@ -692,16 +964,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     if (this.openapiPath) {
-      await this.registerOpenAPIRoute(
-        this.app,
-        {
-          title: 'Mastra API',
-          version: '1.0.0',
-          description: 'Mastra Server API',
-          path: this.openapiPath,
-        },
-        { prefix: this.prefix },
-      );
+      const specConfig = {
+        title: 'Mastra API',
+        version: '1.0.0',
+        description: 'Mastra Server API',
+      };
+
+      await this.registerOpenAPIRoute(this.app, { ...specConfig, path: this.openapiPath }, { prefix: this.prefix });
     }
   }
 
@@ -764,4 +1033,98 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
     };
   }
+}
+
+/**
+ * Check FGA authorization for an HTTP route.
+ * Returns null if authorized or FGA not configured, or an error object if denied.
+ */
+export async function checkRouteFGA(
+  mastra: any,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<{ status: number; error: string; message: string } | null> {
+  const fgaProvider = getFGAProvider(mastra);
+  if (!fgaProvider) return null;
+
+  const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);
+  if (!fgaConfig) {
+    if (fgaProvider.requireForProtectedRoutes && isProtectedFGARoute(route)) {
+      return {
+        status: 403,
+        error: 'Forbidden',
+        message: 'FGA authorization denied: route FGA metadata is required',
+      };
+    }
+    return null;
+  }
+
+  const user = requestContext?.get('user');
+  if (!user) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: authenticated user is required',
+    };
+  }
+
+  const resourceId =
+    typeof fgaConfig.resourceId === 'function'
+      ? fgaConfig.resourceId(params, { requestContext })
+      : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
+  if (!fgaConfig.resourceType || !resourceId) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is incomplete',
+    };
+  }
+  const effectivePermission = route.path ? getEffectivePermission(route) : null;
+  const permission =
+    fgaConfig.permission ||
+    effectivePermission ||
+    `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
+
+  const authorized = await fgaProvider.check(user, {
+    resource: { type: fgaConfig.resourceType, id: resourceId },
+    permission,
+    context: { resourceId, requestContext },
+  });
+
+  if (!authorized) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
+    };
+  }
+
+  return null;
+}
+
+function deriveFGAAction(method: string): string {
+  switch (method.toUpperCase()) {
+    case 'GET':
+      return 'read';
+    case 'DELETE':
+      return 'delete';
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+      return 'write';
+    default:
+      return 'read';
+  }
+}
+
+function getFGAResourcePermissionSlug(resourceType: string): string {
+  const resourcePermissionSlugs: Record<string, string> = {
+    agent: 'agents',
+    workflow: 'workflows',
+    tool: 'tools',
+    thread: 'memory',
+  };
+
+  return resourcePermissionSlugs[resourceType] ?? resourceType;
 }

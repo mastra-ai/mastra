@@ -13,7 +13,7 @@ export type SerializedMessage = Omit<MastraDBMessage, 'createdAt'> & {
 export function serializeMessage(message: MastraDBMessage): SerializedMessage {
   return {
     ...message,
-    createdAt: message.createdAt.toUTCString(),
+    createdAt: message.createdAt.toISOString(),
   };
 }
 

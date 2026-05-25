@@ -1,0 +1,11 @@
+{
+  "extends": ["stylelint-config-standard-scss"],
+  "rules": {
+    "scss/at-rule-no-unknown": [
+      "error",
+      {
+        "ignoreAtRules": ["source", "theme", "import", "plugin", "custom-variant", "layer", "apply", "utility"]
+      }
+    ]
+  }
+}

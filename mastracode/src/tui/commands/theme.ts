@@ -28,9 +28,13 @@ export async function handleThemeCommand(ctx: SlashCommandContext, args: string[
   saveSettings(settings);
 
   // Apply immediately
-  const resolved = arg === 'auto' ? await detectTerminalTheme() : arg;
-  applyThemeMode(resolved);
-
-  ctx.showInfo(`Theme set to ${arg}${arg === 'auto' ? ` (detected: ${resolved})` : ''}`);
+  if (arg === 'auto') {
+    const detection = await detectTerminalTheme();
+    applyThemeMode(detection.mode, detection.detectedBgHex);
+    ctx.showInfo(`Theme set to auto (detected: ${detection.mode})`);
+  } else {
+    applyThemeMode(arg);
+    ctx.showInfo(`Theme set to ${arg}`);
+  }
   ctx.state.ui.requestRender();
 }

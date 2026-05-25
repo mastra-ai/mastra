@@ -7,7 +7,7 @@ export interface IMastraLogger {
   info(message: string, ...args: any[]): void;
   warn(message: string, ...args: any[]): void;
   error(message: string, ...args: any[]): void;
-  trackException(error: MastraError): void;
+  trackException(error: MastraError, metadata?: Record<string, unknown>): void;
 
   getTransports(): Map<string, LoggerTransport>;
   listLogs(
@@ -59,7 +59,7 @@ export abstract class MastraLogger implements IMastraLogger {
     return this.transports;
   }
 
-  trackException(_error: MastraError) {}
+  trackException(_error: MastraError, _metadata?: Record<string, unknown>) {}
 
   async listLogs(
     transportId: string,

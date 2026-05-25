@@ -1,11 +1,19 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, vi } from 'vitest';
-import z from 'zod';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 
 import { createTool } from '../../tools';
 import type { Processor } from '../index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('Structured Output with Tool Execution', () => {
   it('should generate structured output when tools are involved', async () => {

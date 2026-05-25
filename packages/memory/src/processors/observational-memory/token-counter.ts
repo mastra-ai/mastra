@@ -2,30 +2,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import imageSize from 'image-size';
-import { Tiktoken } from 'js-tiktoken/lite';
-import type { TiktokenBPE } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import { estimateTokenCount } from 'tokenx';
 
-/**
- * Shared default encoder singleton.
- * Tiktoken(o200k_base) builds two internal Maps with ~200k entries each,
- * costing ~80-120 MB of heap per instance. Since ObservationalMemory creates
- * a TokenCounter for both input and output processors per request, sharing
- * the default encoder avoids duplicating this cost.
- *
- * Reuse the same global key as packages/core so both packages can share one
- * encoder instance without introducing a direct dependency between them.
- */
-const GLOBAL_TIKTOKEN_KEY = '__mastraTiktoken';
-
-function getDefaultEncoder(): Tiktoken {
-  const cached = (globalThis as Record<string, unknown>)[GLOBAL_TIKTOKEN_KEY] as Tiktoken | undefined;
-  if (cached) return cached;
-
-  const encoder = new Tiktoken(o200k_base);
-  (globalThis as Record<string, unknown>)[GLOBAL_TIKTOKEN_KEY] = encoder;
-  return encoder;
-}
+import { formatToolResultForObserver, resolveToolResultValue } from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -72,7 +51,18 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 5;
+const TOKEN_ESTIMATE_CACHE_VERSION = 7;
+
+/**
+ * Cache `source` marker for token estimates supplied by the caller via
+ * `part.providerMetadata.mastra.tokenEstimate`. Pipelines that strip the real
+ * binary payload before persistence (e.g. uploading files to cloud storage and
+ * leaving only a reference token in `data`) cannot rely on the on-device file
+ * size, so they can stamp an authoritative estimate here. Entries marked with
+ * this source survive cache-version rotations and are honored ahead of
+ * provider fetches and the default descriptor estimator.
+ */
+const CLIENT_TOKEN_ESTIMATE_SOURCE = 'client';
 
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
   baseTokens: 85,
@@ -175,14 +165,8 @@ function buildEstimateKey(kind: string, text: string): string {
   return `${kind}:${payloadHash}`;
 }
 
-function resolveEncodingId(encoding?: TiktokenBPE): string {
-  if (!encoding) return 'o200k_base';
-
-  try {
-    return `custom:${createHash('sha1').update(JSON.stringify(encoding)).digest('hex')}`;
-  } catch {
-    return 'custom:unknown';
-  }
+function resolveEstimatorId(): string {
+  return 'tokenx';
 }
 
 function isTokenEstimateEntry(value: unknown): value is TokenEstimateCacheEntry {
@@ -239,6 +223,39 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
+}
+
+/**
+ * Extracts a caller-supplied token estimate stamped on a part via
+ * `part.providerMetadata.mastra.tokenEstimate`. Used by pipelines that strip
+ * the binary payload from file parts (e.g. cloud-storage references) and
+ * therefore cannot rely on the on-device file size. Returns the entry only
+ * when `source === 'client'` and `tokens` is a finite non-negative number.
+ *
+ * Public contract for callers:
+ *   part.providerMetadata = {
+ *     mastra: {
+ *       tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: N }
+ *     }
+ *   }
+ */
+function getClientPartTokenEstimate(part: CacheablePart): TokenEstimateCacheEntry | undefined {
+  const cache = getPartMastraMetadata(part)?.tokenEstimate;
+  if (!cache || typeof cache !== 'object') return undefined;
+
+  const matches = (entry: unknown): entry is TokenEstimateCacheEntry =>
+    isTokenEstimateEntry(entry) &&
+    entry.source === CLIENT_TOKEN_ESTIMATE_SOURCE &&
+    Number.isFinite(entry.tokens) &&
+    entry.tokens >= 0;
+
+  if (matches(cache)) return cache;
+
+  for (const value of Object.values(cache as Record<string, unknown>)) {
+    if (matches(value)) return value;
+  }
+
+  return undefined;
 }
 
 function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstimateCacheEntry | undefined {
@@ -791,6 +808,82 @@ function estimateAnthropicImageTokens(
   return 1600;
 }
 
+/**
+ * Maps a non-image file part's byte size to a token estimate, using a
+ * provider-aware heuristic. This is the non-image-file equivalent of
+ * {@link estimateAnthropicImageTokens} / {@link estimateOpenAIHighDetailTiles}:
+ * it doesn't try to be exact, just close enough that the Observational Memory
+ * threshold check trips on large attachments.
+ *
+ * - Anthropic PDFs: ~1500–3000 tokens/page, ~5KB/page average → `bytes / 3`.
+ * - Google PDFs: 258 tokens/page (Gemini docs), ~5KB/page → `bytes / 20`.
+ * - OpenAI / unknown provider PDFs: `bytes / 4` (conservative).
+ * - Text-ish mime types (`text/*`, JSON, XML, YAML): `bytes / 4`.
+ * - Unknown binary: `bytes / 4` — conservative-upward so OM still fires.
+ *
+ * Floors guarantee a one-page file still produces a meaningful count even when
+ * the underlying bytes are heavily compressed.
+ */
+function estimateFileTokensFromBytes(provider: string | undefined, mimeType: string, sizeBytes: number): number {
+  // MIME types are case-insensitive (RFC 2045) and may carry parameters like
+  // `application/pdf; charset=binary` — normalize before branching.
+  const normalizedMime = (mimeType ?? '').toLowerCase().split(';', 1)[0]!.trim();
+  const isPdf = normalizedMime === 'application/pdf';
+  const isTextish =
+    normalizedMime.startsWith('text/') ||
+    ['application/json', 'application/xml', 'application/x-yaml', 'application/yaml'].includes(normalizedMime);
+
+  if (isPdf) {
+    if (provider === 'google') return Math.max(258, Math.ceil(sizeBytes / 20));
+    if (provider === 'anthropic') return Math.max(1500, Math.ceil(sizeBytes / 3));
+    return Math.max(500, Math.ceil(sizeBytes / 4));
+  }
+
+  if (isTextish) return Math.max(1, Math.ceil(sizeBytes / 4));
+
+  return Math.max(1, Math.ceil(sizeBytes / 4));
+}
+
+/**
+ * Builds a fixed token estimate for a non-image file part from its byte size.
+ * Returns `undefined` when the part has no measurable body (e.g. a remote URL
+ * with no fetched content) — in that case the caller falls back to the
+ * descriptor-only estimate, which preserves prior behavior for URL-only parts.
+ *
+ * Mirrors {@link estimateImageAssetTokens} so non-image files share the same
+ * cache shape as images and benefit from the same persistence path via
+ * `readOrPersistFixedPartEstimate`.
+ */
+function estimateNonImageFileTokens(
+  modelContext: TokenCounterModelContext | undefined,
+  part: CacheablePart,
+): { tokens: number; cachePayload: string } | undefined {
+  const sourceStats = resolveImageSourceStats(getObjectValue(part, 'data'));
+  if (sourceStats.sizeBytes === undefined) {
+    return undefined;
+  }
+
+  const provider = resolveProviderId(modelContext);
+  const modelId = modelContext?.modelId ?? null;
+  const mimeType = getAttachmentMimeType(part, 'application/octet-stream');
+  const filename = getAttachmentFilename(part) ?? null;
+  const tokens = estimateFileTokensFromBytes(provider, mimeType, sourceStats.sizeBytes);
+
+  return {
+    tokens,
+    cachePayload: JSON.stringify({
+      kind: 'non-image-file',
+      provider: provider ?? 'fallback',
+      modelId,
+      estimator: 'bytes',
+      source: sourceStats.source,
+      sizeBytes: sourceStats.sizeBytes,
+      mimeType,
+      filename,
+    }),
+  };
+}
+
 function estimateGoogleImageTokens(
   modelContext: TokenCounterModelContext | undefined,
   part: CacheablePart,
@@ -1118,28 +1211,24 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
 }
 
 /**
- * Token counting utility using tiktoken.
- * Uses o200k_base (GPT-4o encoding) as a reasonable default for text and
+ * Token counting utility using tokenx for rough local estimation and
  * provider-aware heuristics for image parts so multimodal prompts are not
  * undercounted as generic JSON blobs.
  */
 export class TokenCounter {
-  private encoder: Tiktoken;
   private readonly cacheSource: string;
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
-  // Empirically derived from OpenAI's token counting guide (3 tokens per message base +
-  // fractional overhead from name/role encoding). 3.8 is a practical average across models.
+  // 3.8 remains a practical average across providers for OM thresholding.
   private static readonly TOKENS_PER_MESSAGE = 3.8;
   // Conversation-level overhead: system prompt framing, reply priming tokens, etc.
   private static readonly TOKENS_PER_CONVERSATION = 24;
 
-  constructor(encoding?: TiktokenBPE, options?: TokenCounterOptions) {
-    this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
-    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEncodingId(encoding)}`;
+  constructor(options?: TokenCounterOptions) {
+    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
     this.defaultModelContext = parseModelContext(options?.model);
   }
 
@@ -1156,8 +1245,7 @@ export class TokenCounter {
    */
   countString(text: string): number {
     if (!text) return 0;
-    // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
-    return this.encoder.encode(text, 'all').length;
+    return estimateTokenCount(text);
   }
 
   private readOrPersistPartEstimate(part: CacheablePart, kind: string, payload: string): number {
@@ -1217,18 +1305,7 @@ export class TokenCounter {
     part: CacheablePart,
     invocationResult: unknown,
   ): { value: unknown; usingStoredModelOutput: boolean } {
-    const mastraMetadata = (part as any)?.providerMetadata?.mastra;
-    if (mastraMetadata && typeof mastraMetadata === 'object' && 'modelOutput' in mastraMetadata) {
-      return {
-        value: (mastraMetadata as Record<string, unknown>).modelOutput,
-        usingStoredModelOutput: true,
-      };
-    }
-
-    return {
-      value: invocationResult,
-      usingStoredModelOutput: false,
-    };
+    return resolveToolResultValue(part as { providerMetadata?: Record<string, any> }, invocationResult);
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
@@ -1310,6 +1387,13 @@ export class TokenCounter {
   }
 
   private countAttachmentPartSync(part: CacheablePart): number | undefined {
+    if (part.type === 'image' || part.type === 'file') {
+      const clientEstimate = getClientPartTokenEstimate(part);
+      if (clientEstimate) {
+        return clientEstimate.tokens;
+      }
+    }
+
     if (part.type === 'image') {
       const estimate = this.estimateImageTokens(part);
       return this.readOrPersistFixedPartEstimate(part, 'image', estimate.cachePayload, estimate.tokens);
@@ -1321,6 +1405,15 @@ export class TokenCounter {
     }
 
     if (part.type === 'file') {
+      const byteEstimate = estimateNonImageFileTokens(this.getModelContext(), part);
+      if (byteEstimate) {
+        return this.readOrPersistFixedPartEstimate(
+          part,
+          'non-image-file',
+          byteEstimate.cachePayload,
+          byteEstimate.tokens,
+        );
+      }
       return this.readOrPersistPartEstimate(part, 'file-descriptor', serializeNonImageFilePartForTokenCounting(part));
     }
 
@@ -1386,6 +1479,13 @@ export class TokenCounter {
   }
 
   private async countAttachmentPartAsync(part: CacheablePart): Promise<number | undefined> {
+    if (part.type === 'image' || part.type === 'file') {
+      const clientEstimate = getClientPartTokenEstimate(part);
+      if (clientEstimate) {
+        return clientEstimate.tokens;
+      }
+    }
+
     const isImageAttachment = part.type === 'image' || (part.type === 'file' && isImageLikeFilePart(part));
     const remotePayload = this.buildRemoteAttachmentCachePayload(part);
 
@@ -1508,19 +1608,13 @@ export class TokenCounter {
         );
 
         if (resultForCounting !== undefined) {
-          if (typeof resultForCounting === 'string') {
-            tokens += this.readOrPersistPartEstimate(
-              part,
-              usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',
-              resultForCounting,
-            );
-          } else {
-            const resultJson = JSON.stringify(resultForCounting);
-            tokens += this.readOrPersistPartEstimate(
-              part,
-              usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-              resultJson,
-            );
+          const formattedResult = formatToolResultForObserver(resultForCounting);
+          tokens += this.readOrPersistPartEstimate(
+            part,
+            usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
+            formattedResult,
+          );
+          if (typeof resultForCounting !== 'string') {
             overheadDelta -= 12;
           }
         }

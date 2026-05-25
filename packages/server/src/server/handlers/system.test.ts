@@ -4,9 +4,23 @@ import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 
-const createMockMastra = (hasEditor: boolean) =>
+type MockStorage = {
+  name?: string;
+  stores?: {
+    observability?: {
+      constructor?: { name?: string };
+      runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
+    };
+  };
+};
+
+const createMockMastra = (hasEditor: boolean, storage?: MockStorage, hasObservability = false) =>
   ({
     getEditor: () => (hasEditor ? {} : undefined),
+    getStorage: () => storage,
+    observability: {
+      getDefaultInstance: () => (hasObservability ? {} : undefined),
+    },
   }) as any;
 
 describe('System Handlers', () => {
@@ -41,7 +55,15 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages, isDev: false, cmsEnabled: false });
+      expect(result).toEqual({
+        packages,
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE is not set', async () => {
@@ -49,7 +71,15 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [], isDev: false, cmsEnabled: false });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE points to invalid JSON', async () => {
@@ -58,7 +88,15 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [], isDev: false, cmsEnabled: false });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE points to non-existent file', async () => {
@@ -66,7 +104,15 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [], isDev: false, cmsEnabled: false });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
     });
 
     it('should return isDev true when MASTRA_DEV is set', async () => {
@@ -75,7 +121,15 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [], isDev: true, cmsEnabled: false });
+      expect(result).toEqual({
+        packages: [],
+        isDev: true,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
     });
 
     it('should return cmsEnabled true when editor is configured', async () => {
@@ -83,7 +137,15 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(true) } as any);
 
-      expect(result).toEqual({ packages: [], isDev: false, cmsEnabled: true });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: true,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
     });
 
     it('should return cmsEnabled false when editor is not configured', async () => {
@@ -91,7 +153,55 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [], isDev: false, cmsEnabled: false });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
+    });
+
+    it('should return observabilityEnabled true when observability is configured', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, true),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: true,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
+    });
+
+    it('should return runtime tracing strategy from the attached observability store', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: {
+              constructor: { name: 'MockObservabilityStore' },
+              runtimeTracingStrategy: 'realtime',
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'MockObservabilityStore',
+        observabilityRuntimeStrategy: 'realtime',
+      });
     });
   });
 });

@@ -159,7 +159,6 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
         infoError,
       );
       this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
     const existingDim = info?.dimension;
@@ -182,7 +181,6 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
         details: { indexName, existingDim, requestedDim: dimension },
       });
       this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
       throw mastraError;
     } else {
       const mastraError = new MastraError({
@@ -193,7 +191,6 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
         details: { indexName },
       });
       this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
   }

@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { useTreeContext, useTreeDepth } from './tree-context';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface TreeFileProps {
   id?: string;

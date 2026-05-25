@@ -1,7 +1,7 @@
+import { MainHeaderColumn } from './main-header-column';
+import { MainHeaderDescription } from './main-header-description';
 import { MainHeaderRoot } from './main-header-root';
 import { MainHeaderTitle } from './main-header-title';
-import { MainHeaderDescription } from './main-header-description';
-import { MainHeaderColumn } from './main-header-column';
 
 export { type MainHeaderRootProps } from './main-header-root';
 export { type MainHeaderTitleProps } from './main-header-title';

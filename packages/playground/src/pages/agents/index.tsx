@@ -1,70 +1,66 @@
 import {
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
-  useLinkComponent,
-  DocsIcon,
-  useAgents,
-  AgentsTable,
-  AgentIcon,
-  useIsCmsAvailable,
-  usePermissions,
+  ErrorState,
+  ListSearch,
+  NoDataPageLayout,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
+import { useState } from 'react';
+import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
+import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
+import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
 
 function Agents() {
-  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
-  const { isCmsAvailable } = useIsCmsAvailable();
-  const { canEdit } = usePermissions();
+  const [search, setSearch] = useState('');
 
-  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-  const handleCreateClick = () => {
-    navigate('/cms/agents/create');
-  };
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout>
+        <PermissionDenied resource="agents" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout>
+        <ErrorState title="Failed to load agents" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(agents).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout>
+        <NoAgentsInfo />
+      </NoDataPageLayout>
+    );
+  }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <AgentIcon />
-          </Icon>
-          Agents
-        </HeaderTitle>
+    <PageLayout>
+      <AgentHeaderCreateAction />
+      <PageLayout.TopArea>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+        </div>
+      </PageLayout.TopArea>
 
-        <HeaderAction>
-          {canCreateAgent && (
-            <Button variant="light" as={Link} to="/cms/agents/create">
-              <Icon>
-                <Plus />
-              </Icon>
-              Create an agent
-            </Button>
-          )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Agents documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable
-          agents={agents}
-          isLoading={isLoading}
-          error={error}
-          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
-        />
-      </MainContentContent>
-    </MainContentLayout>
+      <AgentsList agents={agents} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }
 

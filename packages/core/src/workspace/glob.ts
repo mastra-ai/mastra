@@ -37,10 +37,10 @@ export function isGlobPattern(input: string): boolean {
  * Returns the deepest non-glob ancestor directory.
  *
  * @example
- * extractGlobBase('/docs/**\/*.md')  // '/docs'
- * extractGlobBase('**\/*.md')        // '/'
- * extractGlobBase('/src/*.ts')      // '/src'
- * extractGlobBase('/exact/path')    // '/exact/path'
+ * extractGlobBase('docs/**\/*.md')   // 'docs'
+ * extractGlobBase('**\/*.md')        // '.'
+ * extractGlobBase('src/*.ts')       // 'src'
+ * extractGlobBase('exact/path')     // 'exact/path'
  */
 export function extractGlobBase(pattern: string): string {
   // Find position of first glob metacharacter
@@ -58,8 +58,8 @@ export function extractGlobBase(pattern: string): string {
   const lastSlash = prefix.lastIndexOf('/');
 
   if (lastSlash <= 0) {
-    // No slash or only root slash — base is root
-    return '/';
+    // No slash or only root slash — base is workspace root
+    return '.';
   }
 
   return prefix.slice(0, lastSlash);
@@ -168,7 +168,7 @@ async function walkAll(
     const results: PathEntry[] = [];
     for (const entry of entries) {
       if (entry.type === 'directory' && entry.isSymlink) continue;
-      const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+      const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
       results.push({ path: fullPath, type: entry.type });
       if (entry.type === 'directory') {
         results.push(...(await walkAll(readdir, fullPath, depth + 1, maxDepth)));

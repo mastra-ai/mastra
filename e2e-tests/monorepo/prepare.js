@@ -1,4 +1,4 @@
-import { cp, mkdir } from 'node:fs/promises';
+import { appendFile, cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
@@ -17,10 +17,14 @@ export async function setupMonorepo(pathToStoreFiles, pkgManager) {
   await mkdir(newPath, { recursive: true });
   await cp(monorepoPath, newPath, { recursive: true });
   await cp(join(__dirname, '..', '..', 'tsconfig.node.json'), join(newPath, 'tsconfig.json'));
+  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
+  await appendFile(join(newPath, 'pnpm-workspace.yaml'), '\nminimumReleaseAge: 0\n');
+
+  const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  await execa(pkgManager, ['install'], {
+  await execa(pkgManager, installArgs, {
     cwd: newPath,
     stdio: 'inherit',
     env: process.env,

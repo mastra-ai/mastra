@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createTool } from './tool';
 import { validateToolInput } from './validation';
@@ -1385,6 +1385,232 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
   });
 });
 
+describe('validateToolInput - Absent Optional Fields in Nested Objects (GitHub #13518)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/13518
+  // When an LLM sends an empty nested object (e.g., { story: {} }) for a schema with
+  // optional string fields inside, the absent fields (undefined) should be accepted by
+  // the original Zod schema's .optional() wrapper. This was previously broken when
+  // processZodType converted .optional() to .nullable() without preserving .optional(),
+  // causing validateToolInput to reject absent fields.
+
+  it('should accept empty nested objects when inner fields are optional (the original #13518 scenario)', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends { name: "Rafael", story: {} } — inner fields are absent
+    const input = { name: 'Rafael', story: {} };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: {} });
+  });
+
+  it('should accept null for optional nested object fields', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends null for the optional nested object
+    const input = { name: 'Rafael', story: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    // null is stripped and becomes undefined for .optional() field
+    expect(result.data).toEqual({ name: 'Rafael' });
+  });
+
+  it('should accept nested objects with null inner fields when outer fields are optional', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends null for inner optional fields
+    const input = { name: 'Rafael', story: { whyTheyCreate: null, howLong: null } };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: {} });
+  });
+
+  it('should accept partially filled nested objects', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends one field but omits the other
+    const input = { name: 'Rafael', story: { whyTheyCreate: 'creativity' } };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: { whyTheyCreate: 'creativity' } });
+  });
+
+  it('should accept completely absent optional nested object', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM omits the optional nested object entirely
+    const input = { name: 'Rafael' };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael' });
+  });
+});
+
+describe('validateToolInput - Value-Based Null Detection (GitHub #14476)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/14476
+  // The null detection in Step 5 should check the actual value at the failing path
+  // rather than relying on error message string matching (e.g., checking for 'null'
+  // in the message). This ensures null values are detected even when validators
+  // return messages like "must be string" or "must be object".
+
+  it('should detect null values even when error message does not contain "null"', () => {
+    // Use a custom refinement whose error message deliberately avoids "null".
+    // This simulates non-Zod Standard Schema validators (e.g. JSON Schema)
+    // that report errors like "must be string" instead of "received null".
+    const schema = z.object({
+      name: z.string(),
+      description: z
+        .string()
+        .optional()
+        .superRefine((val, ctx) => {
+          if (typeof val !== 'string' && val !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a valid string value' });
+          }
+        }),
+      tags: z
+        .array(z.string())
+        .optional()
+        .superRefine((val, ctx) => {
+          if (!Array.isArray(val) && val !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'expected an array of strings' });
+          }
+        }),
+    });
+
+    // LLM sends null for optional fields — error messages won't contain "null"
+    const input = { name: 'test', description: null, tags: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test' });
+  });
+
+  it('should handle null in nested optional fields with non-null error messages', () => {
+    // Custom refinements that produce errors without "null" in the message
+    const schema = z.object({
+      config: z.object({
+        timeout: z
+          .number()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'number' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a numeric value' });
+            }
+          }),
+        retries: z
+          .number()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'number' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a numeric value' });
+            }
+          }),
+        label: z
+          .string()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'string' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a valid string value' });
+            }
+          }),
+      }),
+    });
+
+    const input = {
+      config: {
+        timeout: null,
+        retries: null,
+        label: null,
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ config: {} });
+  });
+
+  it('should still preserve null for .nullable() fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      deletedAt: z.string().nullable(),
+      note: z.string().optional(),
+    });
+
+    const input = { name: 'test', deletedAt: null, note: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', deletedAt: null });
+  });
+
+  it('should not misidentify non-null values at failing paths as null-related', () => {
+    const schema = z.object({
+      count: z.number(),
+      name: z.string(),
+    });
+
+    // Invalid types but not null - these should NOT be treated as null-related
+    const input = { count: 'not-a-number', name: 123 };
+
+    const result = validateToolInput(schema, input);
+
+    // Should still fail validation (can't fix by stripping)
+    expect(result.error).toBeDefined();
+  });
+});
+
 describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () => {
   // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11457
   // When schemas are processed through OpenAI compat layers, .optional() is converted
@@ -1978,5 +2204,82 @@ describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => 
       name: 'test',
       config: { key: 'value' },
     });
+  });
+});
+
+describe('prompt alias normalization (GitHub #14154)', () => {
+  const promptSchema = z.object({
+    prompt: z.string(),
+    threadId: z.string().optional(),
+  });
+
+  it('should normalize "query" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { query: 'give me insights into target USA' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'give me insights into target USA' });
+  });
+
+  it('should normalize "message" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { message: 'hello sub-agent' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hello sub-agent' });
+  });
+
+  it('should normalize "input" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { input: 'process this' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'process this' });
+  });
+
+  it('should prefer "prompt" over alias fields when both are present', () => {
+    const result = validateToolInput(promptSchema, { prompt: 'correct prompt', query: 'should be ignored' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'correct prompt' });
+  });
+
+  it('should still reject input with no prompt or alias fields', () => {
+    const result = validateToolInput(promptSchema, { threadId: 'some-thread' });
+    expect(result.error).toBeDefined();
+  });
+
+  it('should preserve other fields when normalizing alias to prompt', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 'give me insights',
+      threadId: 'thread-123',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      prompt: 'give me insights',
+      threadId: 'thread-123',
+    });
+  });
+
+  it('should prefer "query" over "message" and "input" as alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 'from query',
+      message: 'from message',
+      input: 'from input',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from query' });
+  });
+
+  it('should not normalize aliases for schemas without a "prompt" field', () => {
+    const otherSchema = z
+      .object({
+        name: z.string(),
+      })
+      .strict();
+    const result = validateToolInput(otherSchema, { name: 'ok', query: 'give me insights' });
+    expect(result.error).toBeDefined();
+  });
+
+  it('should skip non-string aliases and fall back to the next string alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 123,
+      message: 'from message',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from message' });
   });
 });

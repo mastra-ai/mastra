@@ -49,6 +49,17 @@ export interface ValidationError<T = unknown> {
   message: string;
   validationErrors: FormattedValidationErrors<T>;
 }
+
+export function isValidationError(value: unknown): value is ValidationError {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'error' in value &&
+    value.error === true &&
+    'validationErrors' in value
+  );
+}
+
 /**
  * Extracts a string key from a path segment (handles both PropertyKey and PathSegment objects).
  */
@@ -323,6 +334,28 @@ function stripNullishValuesAtPaths(input: unknown, paths: Set<string>, currentPa
 }
 
 /**
+ * Gets the value at a path in a nested object, using the same path segment format
+ * as Standard Schema validation issues.
+ *
+ * @param obj The object to traverse
+ * @param pathSegments Array of path segments from a validation issue
+ * @returns The value at the path, or a sentinel symbol if the path doesn't exist
+ */
+const PATH_NOT_FOUND = Symbol('PATH_NOT_FOUND');
+function getValueAtPath(obj: unknown, pathSegments: ReadonlyArray<PropertyKey | { key: PropertyKey }>): unknown {
+  let current: unknown = obj;
+  for (const segment of pathSegments) {
+    if (current === null || current === undefined || typeof current !== 'object') {
+      return PATH_NOT_FOUND;
+    }
+    const key =
+      typeof segment === 'object' && segment !== null && 'key' in segment ? String(segment.key) : String(segment);
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+/**
  * Coerces stringified JSON values in object properties when the schema expects
  * an array or object but the LLM returned a JSON string.
  *
@@ -468,9 +501,18 @@ export function validateToolInput<T = unknown>(
   // LLMs like Gemini send null for optional fields, but Zod's .optional() only
   // accepts undefined, not null. We only strip nulls for fields that caused
   // validation errors, preserving null for .nullable() schemas that need it.
+  //
+  // We detect null-related failures by checking the actual value at the failing
+  // path rather than relying on error message string matching (GitHub #14476).
+  // This ensures we catch null values regardless of the validator's error message
+  // format (e.g., "must be string", "must be object", etc.).
   const failingNullPaths = new Set(
     validation.issues
-      .filter(issue => issue.message?.includes('null'))
+      .filter(issue => {
+        if (!issue.path || issue.path.length === 0) return false;
+        const value = getValueAtPath(normalizedInput, issue.path);
+        return value === null || value === undefined;
+      })
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
       .filter((p): p is string => !!p),
   );
@@ -481,6 +523,36 @@ export function validateToolInput<T = unknown>(
 
   if ('value' in retryValidation) {
     return { data: retryValidation.value };
+  }
+
+  // Step 6: Retry with common prompt alias normalization (GitHub #14154)
+  // LLMs (especially Claude Sonnet via custom gateways) sometimes drift from
+  // using "prompt" to "query", "message", or "input" after repeated sub-agent
+  // tool calls in the same thread. Coerce these aliases to "prompt" and retry.
+  // Only applies when the schema actually declares a "prompt" field.
+  const promptJsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
+  const schemaExpectsPrompt =
+    promptJsonSchema.type === 'object' &&
+    promptJsonSchema.properties != null &&
+    'prompt' in promptJsonSchema.properties;
+
+  if (
+    schemaExpectsPrompt &&
+    normalizedInput != null &&
+    typeof normalizedInput === 'object' &&
+    !Array.isArray(normalizedInput)
+  ) {
+    const obj = normalizedInput as Record<string, unknown>;
+    if (obj.prompt == null) {
+      const alias = [obj.query, obj.message, obj.input].find((v): v is string => typeof v === 'string');
+      if (alias !== undefined) {
+        const coercedPromptInput = { ...obj, prompt: alias };
+        const coercedPromptValidation = safeValidate(schema, coercedPromptInput);
+        if ('value' in coercedPromptValidation) {
+          return { data: coercedPromptValidation.value };
+        }
+      }
+    }
   }
 
   // All attempts failed - return the original (non-stripped) error since it's
@@ -570,7 +642,7 @@ function redactSensitiveKeys(obj: unknown): unknown {
  * Validates request context data against a schema.
  * This is used to validate the request context before tool execution.
  *
- * @param schema The schema to validate against (PublicSchema which accepts Zod v3/v4, JSONSchema, etc.)
+ * @param schema The schema to validate against (PublicSchema which accepts Zod, JSONSchema, etc.)
  * @param requestContext The request context to validate
  * @param identifier Optional identifier (tool/step ID) for better error messages
  * @returns The validated data or a validation error

@@ -31,6 +31,9 @@ export const MC_TOOLS = {
   EXECUTE_COMMAND: 'execute_command',
   GET_PROCESS_OUTPUT: 'get_process_output',
   KILL_PROCESS: 'kill_process',
+
+  // Code intelligence
+  LSP_INSPECT: 'lsp_inspect',
 } as const;
 
 /**
@@ -51,4 +54,5 @@ export const TOOL_NAME_OVERRIDES = {
   [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { name: MC_TOOLS.EXECUTE_COMMAND },
   [WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]: { name: MC_TOOLS.GET_PROCESS_OUTPUT },
   [WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]: { name: MC_TOOLS.KILL_PROCESS },
+  [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: { name: MC_TOOLS.LSP_INSPECT },
 } as const;

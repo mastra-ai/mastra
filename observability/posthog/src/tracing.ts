@@ -19,9 +19,9 @@ export interface PostHogUsageMetrics {
 /**
  * Formats UsageStats to PostHog's expected property format.
  *
- * PostHog expects $ai_input_tokens to be NON-cached tokens only,
- * with cache tokens tracked separately for accurate cost calculation.
- * See: https://posthog.com/docs/llm-analytics/calculating-costs
+ * Pass through gross input token counts with cache fields as subsets.
+ * PostHog subtracts cache tokens when computing costs for non-Anthropic
+ * providers and detects Anthropic-style exclusive reporting on its own.
  *
  * @param usage - The UsageStats from span attributes
  * @returns PostHog-formatted usage properties
@@ -32,25 +32,20 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
   const props: PostHogUsageMetrics = {};
 
   if (usage.inputTokens !== undefined) {
-    // Start with total input tokens (which includes cached tokens from usage.ts)
     props.$ai_input_tokens = usage.inputTokens;
-
-    // Subtract cache tokens to get the actual non-cached input count
-    if (usage.inputDetails?.cacheRead !== undefined) {
-      props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
-      props.$ai_input_tokens -= props.$ai_cache_read_input_tokens;
-    }
-
-    if (usage.inputDetails?.cacheWrite !== undefined) {
-      props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
-      props.$ai_input_tokens -= props.$ai_cache_creation_input_tokens;
-    }
-
-    // Defensive clamp: ensure input tokens is never negative
-    if (props.$ai_input_tokens < 0) props.$ai_input_tokens = 0;
   }
 
-  if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
+  }
+
+  if (usage.inputDetails?.cacheWrite !== undefined) {
+    props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    props.$ai_output_tokens = usage.outputTokens;
+  }
 
   return props;
 }
@@ -483,6 +478,14 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   private formatMessages(data: SpanData, defaultRole: 'user' | 'assistant' = 'user'): PostHogMessage[] {
+    // Unwrap {messages: [...]} wrapper produced by generation span inputs
+    if (typeof data === 'object' && data !== null && !Array.isArray(data) && 'messages' in data) {
+      const wrapped = (data as Record<string, unknown>).messages;
+      if (this.isMessageArray(wrapped)) {
+        return wrapped.map(msg => this.normalizeMessage(msg));
+      }
+    }
+
     if (this.isMessageArray(data)) {
       return data.map(msg => this.normalizeMessage(msg));
     }
@@ -491,11 +494,42 @@ export class PosthogExporter extends TrackingExporter<
       return [{ role: defaultRole, content: [{ type: 'text', text: data }] }];
     }
 
+    if (this.isSpanOutputWithToolCalls(data)) {
+      const content: PostHogContent[] = [];
+      if (data.text) {
+        content.push({ type: 'text', text: data.text });
+      }
+      for (const tc of data.toolCalls) {
+        content.push({
+          type: 'tool-call',
+          id: tc.toolCallId,
+          function: { name: tc.toolName, arguments: tc.args },
+        });
+      }
+      return [{ role: 'assistant', content }];
+    }
+
+    // Extract text from output objects (e.g. generation outputs with text but no tool calls)
+    if (typeof data === 'object' && data !== null && !Array.isArray(data) && 'text' in data) {
+      const text = (data as Record<string, unknown>).text;
+      if (typeof text === 'string') {
+        return [{ role: defaultRole, content: [{ type: 'text', text }] }];
+      }
+    }
+
     return [{ role: defaultRole, content: [{ type: 'text', text: this.safeStringify(data) }] }];
   }
 
+  private isSpanOutputWithToolCalls(
+    data: unknown,
+  ): data is { text?: string; toolCalls: Array<{ toolCallId: string; toolName: string; args: unknown }> } {
+    if (typeof data !== 'object' || data === null || !('toolCalls' in data)) return false;
+    const { toolCalls } = data as Record<string, unknown>;
+    return Array.isArray(toolCalls) && toolCalls.length > 0;
+  }
+
   private isMessageArray(data: unknown): data is MastraMessage[] {
-    if (!Array.isArray(data) || data.length === 0) {
+    if (!Array.isArray(data)) {
       return false;
     }
 

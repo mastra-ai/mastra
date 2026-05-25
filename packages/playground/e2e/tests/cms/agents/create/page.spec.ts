@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { expectCurrentBreadcrumb } from '../../../__utils__/route-header';
 import { resetStorage } from '../../../__utils__/reset-storage';
 
 // Helper to generate unique agent names
@@ -112,7 +113,7 @@ test.describe('Page Structure & Initial State', () => {
     await page.goto('/cms/agents/create');
 
     await expect(page).toHaveTitle(/Mastra Studio/);
-    await expect(page.locator('h1')).toHaveText('Create an agent');
+    await expectCurrentBreadcrumb(page, 'Create agent');
   });
 
   test('displays Create agent button disabled until required fields are filled', async ({ page }) => {
@@ -210,12 +211,12 @@ test.describe('Agent Creation Persistence - Identity', () => {
 
     const agentId = await createAgentAndGetId(page);
 
-    // On edit page: nth(0) = provider, nth(1) = model
+    // On edit page, the version selector precedes provider and model.
     await goToEditSubPage(page, agentId);
 
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
   });
 
   test('persists all identity fields (name, description, provider, model)', async ({ page }) => {
@@ -238,8 +239,8 @@ test.describe('Agent Creation Persistence - Identity', () => {
 
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
     await expect(page.locator('#agent-description')).toHaveValue(description);
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
   });
 });
 
@@ -284,8 +285,8 @@ test.describe('Agent Creation Persistence - Instruction Blocks', () => {
     await editor1.click();
     await page.keyboard.type(block1Content);
 
-    // Add second block (click dropdown trigger, then select inline option)
-    await page.getByRole('button', { name: 'Add Instruction block' }).click();
+    // Add second block — click the add-block dropdown trigger (small + icon button), then select inline option
+    await page.locator('button[aria-haspopup="menu"]').click({ force: true, timeout: 10000 });
     await page.getByRole('menuitem', { name: 'Write inline block' }).click();
     await page.waitForTimeout(500);
 
@@ -315,12 +316,12 @@ test.describe('Agent Creation Persistence - Tools', () => {
     // Navigate to tools page via sidebar
     await clickSidebarLink(page, 'Tools');
 
-    // Wait for tools to load
-    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
+    // Click "Add Tools" to open popover and select weatherInfo
+    await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
+    await page.getByText('weatherInfo').click();
 
-    // Toggle the first tool switch
-    const firstSwitch = page.getByRole('switch').first();
-    await firstSwitch.click();
+    // Verify it appears in the selected list
+    await expect(page.getByLabel('Remove weatherInfo')).toBeVisible({ timeout: 5000 });
 
     const agentId = await createAgentAndGetId(page);
 
@@ -328,7 +329,7 @@ test.describe('Agent Creation Persistence - Tools', () => {
     await page.goto(`/cms/agents/${agentId}/edit/tools`);
     await page.waitForTimeout(2000);
 
-    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -698,11 +699,11 @@ test.describe('Comprehensive Persistence Test', () => {
 
     // === Tools ===
     await clickSidebarLink(page, 'Tools');
-    await page.waitForTimeout(1000);
-    const toolSwitches = page.getByRole('switch');
-    if ((await toolSwitches.count()) > 0) {
-      await toolSwitches.first().click();
-    }
+    await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
+    const firstToolOption = page.locator('[data-slot="popover-content"] button').first();
+    await firstToolOption.waitFor({ state: 'visible', timeout: 5000 });
+    await firstToolOption.click();
+    await expect(page.getByLabel(/^Remove /).first()).toBeVisible({ timeout: 5000 });
 
     // === Workflows ===
     await clickSidebarLink(page, 'Workflows');
@@ -733,9 +734,9 @@ test.describe('Comprehensive Persistence Test', () => {
     await goToEditSubPage(page, agentId);
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
     await expect(page.locator('#agent-description')).toHaveValue(description);
-    // On edit page: nth(0) = provider, nth(1) = model
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    // On edit page, the version selector precedes provider and model.
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
 
     // === Verify Instructions ===
     await page.goto(`/cms/agents/${agentId}/edit/instruction-blocks`);
@@ -747,7 +748,7 @@ test.describe('Comprehensive Persistence Test', () => {
     // === Verify Tools ===
     await page.goto(`/cms/agents/${agentId}/edit/tools`);
     await page.waitForTimeout(2000);
-    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.getByLabel(/^Remove /).first()).toBeVisible({ timeout: 10000 });
 
     // === Verify Workflows ===
     await page.goto(`/cms/agents/${agentId}/edit/workflows`);

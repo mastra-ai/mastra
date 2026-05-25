@@ -1,14 +1,17 @@
 import { PubSub as PubSubClient } from '@google-cloud/pubsub';
 import type { ClientConfig, Message, Subscription } from '@google-cloud/pubsub';
 import { PubSub } from '@mastra/core/events';
-import type { Event } from '@mastra/core/events';
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 
 export class GoogleCloudPubSub extends PubSub {
   private instanceId: string;
   private pubsub: PubSubClient;
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
-  private activeCbs: Record<string, Set<(event: Event, ack: () => Promise<void>) => void>> = {};
+  private activeCbs: Record<string, Set<EventCallback>> = {};
+  // Tracks the actual anonymous message listener registered on each subscription,
+  // so we can remove it cleanly on the final unsubscribe.
+  private messageListeners: Record<string, (message: Message) => void> = {};
 
   constructor(config: ClientConfig) {
     super();
@@ -16,7 +19,10 @@ export class GoogleCloudPubSub extends PubSub {
     this.instanceId = crypto.randomUUID();
   }
 
-  getSubscriptionName(topic: string) {
+  getSubscriptionName(topic: string, group?: string) {
+    if (group) {
+      return `${topic}-${group}`;
+    }
     return `${topic}-${this.instanceId}`;
   }
 
@@ -31,21 +37,33 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
-  async init(topicName: string) {
+  async init(topicName: string, group?: string) {
     try {
       await this.pubsub.createTopic(topicName);
     } catch {
       // no-op
     }
+    const subscriptionName = this.getSubscriptionName(topicName, group);
+    const subscriptionKey = group ? `${topicName}:${group}` : topicName;
     try {
-      const [sub] = await this.pubsub.topic(topicName).createSubscription(this.getSubscriptionName(topicName), {
+      const [sub] = await this.pubsub.topic(topicName).createSubscription(subscriptionName, {
         enableMessageOrdering: true,
-        enableExactlyOnceDelivery: topicName === 'workflows' ? true : false,
+        enableExactlyOnceDelivery: topicName === 'workflows' || !!group,
       });
-      this.activeSubscriptions[topicName] = sub;
+      this.activeSubscriptions[subscriptionKey] = sub;
       return sub;
     } catch {
-      // no-op
+      // Subscription may already exist (e.g. shared group subscription created by another process).
+      // Get the existing subscription instead.
+      if (group) {
+        try {
+          const sub = this.pubsub.subscription(subscriptionName);
+          this.activeSubscriptions[subscriptionKey] = sub;
+          return sub;
+        } catch {
+          // no-op
+        }
+      }
     }
 
     return undefined;
@@ -87,7 +105,7 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
-  async subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     if (topic.startsWith('workflow.events.')) {
       const parts = topic.split('.');
       if (parts[parts.length - 2] === 'v2') {
@@ -97,66 +115,94 @@ export class GoogleCloudPubSub extends PubSub {
       }
     }
 
+    const group = options?.group;
+    // Use a composite key when group is set so grouped and non-grouped subscriptions
+    // on the same topic don't collide
+    const subscriptionKey = group ? `${topic}:${group}` : topic;
+
     // Update tracked callbacks
-    const subscription = this.activeSubscriptions[topic] ?? (await this.init(topic));
+    const subscription = this.activeSubscriptions[subscriptionKey] ?? (await this.init(topic, group));
     if (!subscription) {
       throw new Error(`Failed to subscribe to topic: ${topic}`);
     }
 
-    this.activeSubscriptions[topic] = subscription;
+    this.activeSubscriptions[subscriptionKey] = subscription;
 
-    const activeCbs = this.activeCbs[topic] ?? new Set();
+    const activeCbs = this.activeCbs[subscriptionKey] ?? new Set();
     activeCbs.add(cb);
-    this.activeCbs[topic] = activeCbs;
+    this.activeCbs[subscriptionKey] = activeCbs;
 
     if (subscription.isOpen) {
       return;
     }
 
-    subscription.on('message', async message => {
+    const messageListener = async (message: Message) => {
       const event = JSON.parse(message.data.toString()) as Event;
       event.id = message.id;
       event.createdAt = message.publishTime;
+      event.deliveryAttempt = message.deliveryAttempt ?? 1;
 
       try {
-        const activeCbs = this.activeCbs[topic] ?? [];
+        const activeCbs = this.activeCbs[subscriptionKey] ?? [];
         for (const cb of activeCbs) {
-          cb(event, async () => {
-            try {
-              await this.ackMessage(topic, message);
-            } catch (e) {
-              console.error('Error acking message', e);
-            }
-          });
+          cb(
+            event,
+            async () => {
+              try {
+                await this.ackMessage(subscriptionKey, message);
+              } catch (e) {
+                console.error('Error acking message', e);
+              }
+            },
+            async () => {
+              try {
+                message.nack();
+              } catch (e) {
+                console.error('Error nacking message', e);
+              }
+            },
+          );
         }
       } catch (error) {
         console.error('Error processing event', error);
       }
-    });
+    };
+
+    this.messageListeners[subscriptionKey] = messageListener;
+    subscription.on('message', messageListener);
 
     subscription.on('error', async error => {
-      // if (error.code === 5) {
-      //   await this.init(topic);
-      // } else {
-      //   // TODO: determine if other errors require re-subscription
-      //   // console.error('subscription error, retrying in 5 seconds', error);
-      //   // await new Promise(resolve => setTimeout(resolve, 5000));
-      //   // await this.subscribe(topic, cb);
-      //   console.error('subscription error', error);
-      // }
       console.error('subscription error', error);
     });
   }
 
-  async unsubscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
-    const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(this.getSubscriptionName(topic));
-    const activeCbs = this.activeCbs[topic] ?? new Set();
-    activeCbs.delete(cb);
-    this.activeCbs[topic] = activeCbs;
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    // Check both grouped and non-grouped subscription keys for this callback
+    const keysToCheck = [topic];
+    for (const key of Object.keys(this.activeCbs)) {
+      if (key.startsWith(`${topic}:`) && !keysToCheck.includes(key)) {
+        keysToCheck.push(key);
+      }
+    }
 
-    if (activeCbs.size === 0) {
-      subscription.removeListener('message', cb);
-      await subscription.close();
+    for (const subscriptionKey of keysToCheck) {
+      const activeCbs = this.activeCbs[subscriptionKey];
+      if (activeCbs?.has(cb)) {
+        activeCbs.delete(cb);
+
+        if (activeCbs.size === 0) {
+          const subscription = this.activeSubscriptions[subscriptionKey];
+          const listener = this.messageListeners[subscriptionKey];
+          if (subscription) {
+            if (listener) subscription.removeListener('message', listener);
+            await subscription.close();
+          }
+          delete this.activeSubscriptions[subscriptionKey];
+          delete this.activeCbs[subscriptionKey];
+          delete this.messageListeners[subscriptionKey];
+        }
+        return;
+      }
     }
   }
 

@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { DEFAULT_OM_MODEL_ID } from './constants';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
 
 export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  configDir: z.string().default(DEFAULT_CONFIG_DIR),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
   currentModelId: z.string().default(''),
@@ -15,6 +16,14 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
+  // Whether observations and reflections use the terse caveman-style instruction.
+  // Off by default — caveman style is opt-in via `/om` settings; observers and
+  // reflectors fall back to their built-in (prose) behavior unless enabled.
+  cavemanObservations: z.boolean().default(false),
+  // Whether OM forwards image/file attachment parts to the Observer LLM.
+  // 'auto' (default) checks the provider capabilities registry to decide.
+  // true/false forces the setting regardless of model capabilities.
+  observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort
@@ -32,10 +41,11 @@ export const stateSchema = z.object({
   smartEditing: z.boolean().default(true),
   // Notification mode — alert when TUI needs user attention
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Task list (persisted per-thread)
+  // Task list (ephemeral per-thread, cleared on thread switch/creation)
   tasks: z
     .array(
       z.object({
+        id: z.string().optional(),
         content: z.string(),
         status: z.enum(['pending', 'in_progress', 'completed']),
         activeForm: z.string(),
@@ -53,4 +63,26 @@ export const stateSchema = z.object({
     })
     .nullable()
     .default(null),
+  // Active browser settings (tracks what's actually running vs. what's in the settings file)
+  activeBrowserSettings: z
+    .object({
+      enabled: z.boolean(),
+      provider: z.enum(['stagehand', 'agent-browser']),
+      headless: z.boolean().optional(),
+      viewport: z
+        .object({
+          width: z.number(),
+          height: z.number(),
+        })
+        .optional(),
+      cdpUrl: z.string().optional(),
+      stagehand: z
+        .object({
+          env: z.enum(['LOCAL', 'BROWSERBASE']),
+          apiKey: z.string().optional(),
+          projectId: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });

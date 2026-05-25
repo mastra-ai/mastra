@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { TreeProvider, TreeDepthProvider } from './tree-context';
+import { cn } from '@/lib/utils';
 
 export interface TreeRootProps {
   selectedId?: string;

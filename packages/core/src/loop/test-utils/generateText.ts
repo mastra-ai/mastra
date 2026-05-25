@@ -2,15 +2,17 @@ import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sd
 import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import {
   createMessageListWithUserMessage,
   createTestModels,
+  expectPromptWithoutMastraCreatedAt,
   modelWithFiles,
   modelWithReasoning,
   modelWithSources,
+  stripMastraCreatedAt,
   testUsage,
 } from './utils';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
@@ -93,8 +95,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           },
         });
 
-        console.dir({ resultContent: result.content }, { depth: null });
-
         expect(result.content).toMatchInlineSnapshot(`
             [
               {
@@ -168,7 +168,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(modelWithSources.doGenerateCalls).toMatchSnapshot();
+        expect(stripMastraCreatedAt(modelWithSources.doGenerateCalls)).toMatchSnapshot();
         expect(await result.text).toStrictEqual('Hello, world!');
       });
     });
@@ -195,7 +195,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(await result.sources).toMatchSnapshot();
+        expect(stripMastraCreatedAt(await result.sources)).toMatchSnapshot();
       });
     });
 
@@ -207,7 +207,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(await result.files).toMatchSnapshot();
+        expect(stripMastraCreatedAt(await result.files)).toMatchSnapshot();
       });
     });
 
@@ -304,7 +304,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           },
         });
 
-        expect(await result.steps).toMatchSnapshot();
+        expect(stripMastraCreatedAt(await result.steps)).toMatchSnapshot();
       });
 
       it.todo('should contain sources', async () => {
@@ -317,7 +317,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             currentDate: () => new Date(0),
           },
         });
-        expect(await result.steps).toMatchSnapshot();
+        expect(stripMastraCreatedAt(await result.steps)).toMatchSnapshot();
       });
 
       // TODO: include `files` in step result
@@ -334,7 +334,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           },
         });
 
-        expect(await result.steps).toMatchSnapshot();
+        expect(stripMastraCreatedAt(await result.steps)).toMatchSnapshot();
       });
     });
 
@@ -380,7 +380,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
                   expect(toolChoice).toStrictEqual({ type: 'required' });
 
-                  expect(prompt).toStrictEqual([
+                  expectPromptWithoutMastraCreatedAt(prompt, [
                     {
                       role: 'user',
                       content: [{ type: 'text', text: 'test-input' }],
@@ -468,7 +468,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
                   expect(toolChoice).toStrictEqual({ type: 'auto' });
 
-                  expect(prompt).toStrictEqual([
+                  expectPromptWithoutMastraCreatedAt(prompt, [
                     {
                       role: 'user',
                       content: [{ type: 'text', text: 'test-input' }],
@@ -587,7 +587,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList,
         });
 
-        expect(result.response.messages).toMatchSnapshot();
+        expect(stripMastraCreatedAt(result.response.messages)).toMatchSnapshot();
       });
 
       it('should contain assistant response message and tool message when there are tool calls with results', async () => {
@@ -620,7 +620,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               inputSchema: z.object({ value: z.string() }),
               execute: async (args, options) => {
                 expect(args).toStrictEqual({ value: 'value' });
-                expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
+                expectPromptWithoutMastraCreatedAt(options.messages, [{ role: 'user', content: 'test-input' }]);
                 return 'result1';
               },
             },
@@ -628,7 +628,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList,
         });
 
-        expect(result.response.messages).toMatchSnapshot();
+        expect(stripMastraCreatedAt(result.response.messages)).toMatchSnapshot();
       });
 
       it('should contain reasoning', async () => {
@@ -639,7 +639,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList,
         });
 
-        expect(result.response.messages).toMatchSnapshot();
+        expect(stripMastraCreatedAt(result.response.messages)).toMatchSnapshot();
       });
     });
 
@@ -734,136 +734,51 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
-          {
-            "body": "test body",
-            "dbMessages": [
-              {
-                "content": {
-                  "content": "Hello, world!",
-                  "format": 2,
-                  "metadata": {
-                    "modelId": "test-response-model-id",
-                  },
-                  "parts": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
+        expect(stripMastraCreatedAt(result.steps?.[0]?.response)).toMatchObject({
+          body: 'test body',
+          headers: {
+            'custom-response-header': 'response-header-value',
+          },
+          id: 'test-id-from-model',
+          modelId: 'test-response-model-id',
+          modelProvider: 'mock-provider',
+          modelVersion: 'v2',
+          timestamp: new Date(10000),
+          messages: [
+            {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Hello, world!',
                 },
-                "createdAt": 2024-01-01T00:00:00.001Z,
-                "id": "1234",
-                "role": "assistant",
-              },
-            ],
-            "headers": {
-              "custom-response-header": "response-header-value",
+              ],
             },
-            "id": "test-id-from-model",
-            "messages": [
-              {
-                "content": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
-                "role": "assistant",
-              },
-            ],
-            "modelId": "test-response-model-id",
-            "modelMetadata": {
-              "modelId": "mock-model-id",
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-            },
-            "modelProvider": "mock-provider",
-            "modelVersion": "v2",
-            "timestamp": 1970-01-01T00:00:10.000Z,
-            "uiMessages": [
-              {
-                "id": "1234",
-                "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.001Z,
-                  "modelId": "test-response-model-id",
+          ],
+        });
+
+        expect(stripMastraCreatedAt(await result.response)).toMatchObject({
+          body: 'test body',
+          headers: {
+            'custom-response-header': 'response-header-value',
+          },
+          id: 'test-id-from-model',
+          modelId: 'test-response-model-id',
+          modelProvider: 'mock-provider',
+          modelVersion: 'v2',
+          timestamp: new Date(10000),
+          messages: [
+            {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Hello, world!',
                 },
-                "parts": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
-                "role": "assistant",
-              },
-            ],
-          }
-        `);
-        expect(await result.response).toMatchInlineSnapshot(`
-          {
-            "body": "test body",
-            "dbMessages": [
-              {
-                "content": {
-                  "content": "Hello, world!",
-                  "format": 2,
-                  "metadata": {
-                    "modelId": "test-response-model-id",
-                  },
-                  "parts": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                },
-                "createdAt": 2024-01-01T00:00:00.001Z,
-                "id": "1234",
-                "role": "assistant",
-              },
-            ],
-            "headers": {
-              "custom-response-header": "response-header-value",
+              ],
             },
-            "id": "test-id-from-model",
-            "messages": [
-              {
-                "content": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
-                "role": "assistant",
-              },
-            ],
-            "modelId": "test-response-model-id",
-            "modelMetadata": {
-              "modelId": "mock-model-id",
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-            },
-            "modelProvider": "mock-provider",
-            "modelVersion": "v2",
-            "timestamp": 1970-01-01T00:00:10.000Z,
-            "uiMessages": [
-              {
-                "id": "1234",
-                "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.001Z,
-                  "modelId": "test-response-model-id",
-                },
-                "parts": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
-                "role": "assistant",
-              },
-            ],
-          }
-        `);
+          ],
+        });
       });
     });
 
@@ -899,7 +814,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //                 expect(toolChoice).toStrictEqual({ type: 'auto' });
 
-    //                 expect(prompt).toStrictEqual([
+    //                 expectPromptWithoutMastraCreatedAt(prompt, [
     //                   {
     //                     role: 'user',
     //                     content: [{ type: 'text', text: 'test-input' }],
@@ -955,7 +870,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //             inputSchema: z.object({ value: z.string() }),
     //             execute: async (args, options) => {
     //               expect(args).toStrictEqual({ value: 'value' });
-    //               expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
+    //               expectPromptWithoutMastraCreatedAt(options.messages, [{ role: 'user', content: 'test-input' }]);
     //               return 'result1';
     //             },
     //           }),
@@ -981,7 +896,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     });
 
     //     it('result.response.messages should contain response messages from all steps', () => {
-    //       expect(result.response.messages).toMatchSnapshot();
+    //       expect(stripMastraCreatedAt(result.response.messages)).toMatchSnapshot();
     //     });
 
     //     it('result.totalUsage should sum token usage', () => {
@@ -1099,7 +1014,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //             inputSchema: z.object({ value: z.string() }),
     //             execute: async (args, options) => {
     //               expect(args).toStrictEqual({ value: 'value' });
-    //               expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
+    //               expectPromptWithoutMastraCreatedAt(options.messages, [{ role: 'user', content: 'test-input' }]);
     //               return 'result1';
     //             },
     //           }),
@@ -1605,7 +1520,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     });
 
     //     it('result.response.messages should contain response messages from all steps', () => {
-    //       expect(result.response.messages).toMatchSnapshot();
+    //       expect(stripMastraCreatedAt(result.response.messages)).toMatchSnapshot();
     //     });
 
     //     it('result.totalUsage should sum token usage', () => {
@@ -1703,7 +1618,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //             inputSchema: z.object({ value: z.string() }),
     //             execute: async (input, options) => {
     //               expect(input).toStrictEqual({ value: 'value' });
-    //               expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
+    //               expectPromptWithoutMastraCreatedAt(options.messages, [{ role: 'user', content: 'test-input' }]);
     //               return 'result1';
     //             },
     //           }),
@@ -2198,7 +2113,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //           expect(toolChoice).toStrictEqual({ type: 'required' });
 
-    //           expect(prompt).toStrictEqual([
+    //           expectPromptWithoutMastraCreatedAt(prompt, [
     //             {
     //               role: 'user',
     //               content: [{ type: 'text', text: 'test-input' }],

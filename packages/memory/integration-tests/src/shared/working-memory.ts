@@ -3,8 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { isV5PlusModel, agentGenerate as baseAgentGenerate, setupDummyApiKeys } from '@internal/test-utils';
+import { isV5PlusModel, agentGenerate as baseAgentGenerate } from '@internal/test-utils';
 import type { MastraModelConfig as TestUtilsModelConfig } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -15,9 +14,7 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach, beforeAll } from 'vitest';
-import { z } from 'zod';
-
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
+import { z } from 'zod/v3';
 
 // Local wrapper to handle Agent type compatibility
 // (Agent has complex generic types that don't play well with the shared helper)
@@ -1001,7 +998,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         // Second message adding more info
         await agentGenerate(
           agent,
-          'I am 25 years old.',
+          'I am 25 years old. Update my age in working memory.',
           {
             threadId: thread.id,
             resourceId,

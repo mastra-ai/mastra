@@ -6,6 +6,7 @@ import type {
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
   DataOmObservationStartPart,
+  DataOmThreadUpdatePart,
   ObservationMarkerConfig,
   OmOperationType,
 } from './types';
@@ -206,6 +207,11 @@ export function createActivationMarker(params: {
   threadId: string;
   generationCount: number;
   observations?: string;
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+  lastActivityAt?: number;
+  ttlExpiredMs?: number;
+  previousModel?: string;
+  currentModel?: string;
   config: ObservationMarkerConfig;
 }): DataOmActivationPart {
   return {
@@ -223,6 +229,32 @@ export function createActivationMarker(params: {
       generationCount: params.generationCount,
       config: params.config,
       observations: params.observations,
+      triggeredBy: params.triggeredBy,
+      lastActivityAt: params.lastActivityAt,
+      ttlExpiredMs: params.ttlExpiredMs,
+      previousModel: params.previousModel,
+      currentModel: params.currentModel,
+    },
+  };
+}
+
+/**
+ * Create a thread update marker when the observer suggests a new thread title.
+ */
+export function createThreadUpdateMarker(params: {
+  cycleId: string;
+  threadId: string;
+  oldTitle?: string;
+  newTitle: string;
+}): DataOmThreadUpdatePart {
+  return {
+    type: 'data-om-thread-update',
+    data: {
+      cycleId: params.cycleId,
+      threadId: params.threadId,
+      oldTitle: params.oldTitle,
+      newTitle: params.newTitle,
+      timestamp: new Date().toISOString(),
     },
   };
 }

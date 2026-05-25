@@ -6,12 +6,15 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
+import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
-import { MastraServer } from '@mastra/hono';
+import { MastraServer, setupBrowserStream } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { findMatchingCustomRoute } from '@mastra/server/auth';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
@@ -23,7 +26,7 @@ import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
-import { html } from './welcome';
+import { welcomeHtml } from './welcome';
 
 // Get studio path from env or default to ./studio relative to cwd
 const getStudioPath = () => {
@@ -47,6 +50,36 @@ type Bindings = HonoBindings;
 type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
 };
+
+const DEFAULT_CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+const DEFAULT_CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'];
+const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
+
+function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {
+  const userCors = serverCors && typeof serverCors === 'object' ? serverCors : undefined;
+  const origin =
+    userCors && 'origin' in userCors && userCors.origin
+      ? userCors.origin
+      : credentialsDefault
+        ? (requestOrigin: string) => requestOrigin || undefined
+        : '*';
+  const credentials = userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault;
+
+  return {
+    origin,
+    allowMethods: DEFAULT_CORS_ALLOW_METHODS,
+    credentials,
+    maxAge: 3600,
+    ...userCors,
+    allowHeaders: [...DEFAULT_CORS_ALLOW_HEADERS, ...(userCors?.allowHeaders ?? [])],
+    exposeHeaders: [...DEFAULT_CORS_EXPOSE_HEADERS, ...(userCors?.exposeHeaders ?? [])],
+  };
+}
+
+function getRouteCorsConfig(apiRoutes: ApiRoute[] | undefined, pathname: string, method: string) {
+  const route = findMatchingCustomRoute(pathname, method, apiRoutes)?.route;
+  return route?.cors;
+}
 
 export function getToolExports(tools: Record<string, Function>[]) {
   try {
@@ -90,6 +123,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const apiPrefix = server?.apiPrefix ?? '/api';
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
@@ -144,6 +178,8 @@ export async function createHonoServer(
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
+    prefix: apiPrefix,
+    mcpOptions: server?.mcpOptions,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -159,43 +195,56 @@ export async function createHonoServer(
     }
   }
 
-  //Global cors config
+  // Browser stream WebSocket setup - MUST be before CORS middleware
+  // to avoid "can't modify immutable headers" error on WebSocket upgrade
+  // This is async because it dynamically imports @hono/node-ws to avoid
+  // bundling ws into user code. Returns null if ws is not available.
+  const browserStreamSetup = await setupBrowserStream(app, {
+    getToolset: async (agentId: string) => {
+      // Look up agent and return its browser if configured.
+      // First try the runtime registry (code-defined + previously hydrated agents),
+      // then fall back to the editor for stored agents (hydrates on first access).
+      try {
+        const runtimeAgent = mastra.getAgentById(agentId);
+        if (runtimeAgent) {
+          return runtimeAgent.browser;
+        }
+      } catch {
+        // Agent not in runtime registry — try stored agents via editor
+      }
+
+      try {
+        const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
+        return storedAgent?.browser;
+      } catch {
+        return undefined;
+      }
+    },
+    apiPrefix,
+  });
+
+  // Fallback session probe when browser streaming isn't available
+  // (ws / @hono/node-ws not installed, or serverless environment).
+  // Lets the client decide not to open a WS instead of failing the upgrade.
+  if (!browserStreamSetup) {
+    app.get(`${apiPrefix}/agents/:agentId/browser/session`, c =>
+      c.json({ hasSession: false, screencastAvailable: false }),
+    );
+  }
+
+  // Global CORS config
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
-    // Check if auth is configured - if so, we need credentials for cookie-based sessions
     const hasAuth = !!server?.auth;
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), async (c, next) => {
+      const pathname = new URL(c.req.url).pathname;
+      const method =
+        c.req.method === 'OPTIONS' ? (c.req.header('Access-Control-Request-Method') ?? c.req.method) : c.req.method;
+      const routeCors = getRouteCorsConfig(processedRoutes, pathname, method);
 
-    // When auth + credentials are enabled, origin cannot be '*'.
-    // Use user-configured cors.origin if provided; otherwise fall back to
-    // reflecting the request origin (required for dev/Studio but users should
-    // set an explicit origin in production).
-    let corsOrigin: string | string[] | ((origin: string) => string | undefined | null);
-    if (server?.cors && typeof server.cors === 'object' && 'origin' in server.cors && server.cors.origin) {
-      corsOrigin = server.cors.origin as string | string[] | ((origin: string) => string | undefined | null);
-    } else if (hasAuth) {
-      corsOrigin = (origin: string) => origin || undefined;
-    } else {
-      corsOrigin = '*';
-    }
-
-    const corsConfig = {
-      origin: corsOrigin,
-      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
-      credentials: hasAuth ? true : false,
-      maxAge: 3600,
-      ...server?.cors,
-      allowHeaders: [
-        'Content-Type',
-        'Authorization',
-        'x-mastra-client-type',
-        'x-mastra-dev-playground',
-        ...(server?.cors?.allowHeaders ?? []),
-      ],
-      exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
-    };
-    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
+      return cors(routeCors ? getCorsConfig(routeCors, false) : getCorsConfig(server?.cors, hasAuth))(c, next);
+    });
   }
 
   // Health check endpoint (before auth middleware so it's publicly accessible)
@@ -215,7 +264,7 @@ export async function createHonoServer(
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
-      '/api',
+      apiPrefix,
       describeRoute({
         description: 'API Welcome Page',
         tags: ['system'],
@@ -282,7 +331,7 @@ export async function createHonoServer(
       describeRoute({
         hide: true,
       }),
-      swaggerUI({ url: '/api/openapi.json' }),
+      swaggerUI({ url: `${apiPrefix}/openapi.json` }),
     );
   }
 
@@ -332,6 +381,9 @@ export async function createHonoServer(
       },
     );
 
+    // Enable gzip/deflate compression for studio static assets only
+    app.use(`${studioBasePath}/assets/*`, compress());
+
     // Studio routes - these should come after API routes
     // Serve static assets from studio directory
     // Note: Vite builds with base: './' so all asset URLs are relative
@@ -364,8 +416,8 @@ export async function createHonoServer(
 
     // Skip if it's an API route
     if (
-      requestPath === '/api' ||
-      requestPath.startsWith('/api/') ||
+      requestPath === apiPrefix ||
+      requestPath.startsWith(`${apiPrefix}/`) ||
       requestPath.startsWith('/swagger-ui') ||
       requestPath.startsWith('/openapi.json')
     ) {
@@ -388,7 +440,8 @@ export async function createHonoServer(
       // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
-      const host = serverOptions?.host ?? 'localhost';
+      const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
+      const host = bindHost ?? 'localhost';
       const key =
         serverOptions?.https?.key ??
         (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
@@ -396,9 +449,17 @@ export async function createHonoServer(
         serverOptions?.https?.cert ??
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
+      // Studio host/protocol/port for Studio URL injection — allows bind address
+      // (e.g. 0.0.0.0) to differ from the domain browsers should connect to
+      const studioHost = serverOptions?.studioHost ?? host;
+      const studioProtocol = serverOptions?.studioProtocol ?? protocol;
+      const studioPort = serverOptions?.studioPort ?? port;
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
+      const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
+      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -417,23 +478,26 @@ export async function createHonoServer(
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
       indexHtml = injectStudioHtmlConfig(indexHtml, {
-        host: `'${host}'`,
-        port: `'${port}'`,
-        protocol: `'${protocol}'`,
+        host: `'${studioHost}'`,
+        port: `'${studioPort}'`,
+        protocol: `'${studioProtocol}'`,
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
+        templates: `'${templatesEnabled}'`,
         telemetryDisabled: `''`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        experimentalUI: `'${experimentalUI}'`,
+        agentSignals: `'${agentSignals}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
-    return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
+    return c.newResponse(welcomeHtml(apiPrefix), 200, { 'Content-Type': 'text/html' });
   });
 
   if (options?.studio) {
@@ -455,12 +519,18 @@ export async function createHonoServer(
     );
   }
 
+  // Attach injectWebSocket to app for backwards compatibility
+  // Consumers can use app directly, and optionally call app.injectWebSocket(server) for browser streaming
+  (app as any).injectWebSocket = browserStreamSetup?.injectWebSocket;
+
   return app;
 }
 
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
+  const injectWebSocket = (app as any).injectWebSocket;
   const serverOptions = mastra.getServer();
+  const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
   const key =
     serverOptions?.https?.key ??
@@ -470,15 +540,19 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
   const isHttpsEnabled = Boolean(key && cert);
 
-  const host = serverOptions?.host ?? 'localhost';
+  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
+  const host = bindHost ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
+  const studioHost = serverOptions?.studioHost ?? host;
+  const studioProtocol = serverOptions?.studioProtocol ?? protocol;
+  const studioPort = serverOptions?.studioPort ?? port;
 
   const server = serve(
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host,
+      hostname: bindHost,
       ...(isHttpsEnabled
         ? {
             createServer: https.createServer,
@@ -491,11 +565,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
+      logger.info('Mastra API running', { url: `${protocol}://${host}:${port}${apiPrefix}` });
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
-        const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
-        logger.info(`👨‍💻 Studio available at ${studioUrl}`);
+        const studioUrl = `${studioProtocol}://${studioHost}:${studioPort}${studioBasePath}`;
+        logger.info('Studio available', { url: studioUrl });
       }
 
       if (process.send) {
@@ -508,7 +582,21 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
   );
 
-  await mastra.startEventEngine();
+  // Enable WebSocket support for browser streaming (if available)
+  // MUST be called after serve() returns per @hono/node-ws requirements
+  injectWebSocket?.(server);
+
+  // Backwards compatibility for projects running a newer deployer/CLI with an older @mastra/core.
+  // TODO(v2): call `mastra.startWorkers()` unconditionally once old core versions are unsupported.
+  const workerLifecycle = mastra as unknown as {
+    startWorkers?: () => Promise<void>;
+    startEventEngine: () => Promise<void>;
+  };
+  if (typeof workerLifecycle.startWorkers === 'function') {
+    await workerLifecycle.startWorkers();
+  } else {
+    await workerLifecycle.startEventEngine();
+  }
 
   return server;
 }

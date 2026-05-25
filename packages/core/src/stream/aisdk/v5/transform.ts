@@ -82,6 +82,11 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   // e.g. {"a":1,} → {"a":1}
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
 
+  // Fix 5: Unquoted date/datetime values (issue #14230)
+  // e.g. {"dueStart": 2026-04-15} → {"dueStart": "2026-04-15"}
+  // e.g. {"start": 2026-04-15T09:00:00} → {"start": "2026-04-15T09:00:00"}
+  repaired = repaired.replace(/:\s*(\d{4}-\d{2}-\d{2}(?:T[\d:]+)?)\s*([,}])/g, ': "$1"$2');
+
   try {
     return JSON.parse(repaired);
   } catch {
@@ -196,7 +201,8 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
 
-    case 'file':
+    case 'file': {
+      const pm = (value as any).providerMetadata;
       return {
         type: 'file',
         runId: ctx.runId,
@@ -205,8 +211,10 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           data: value.data,
           base64: typeof value.data === 'string' ? value.data : undefined,
           mimeType: value.mediaType,
+          ...(pm != null ? { providerMetadata: pm } : {}),
         },
       };
+    }
 
     case 'tool-call': {
       let toolCallInput: Record<string, any> | undefined = undefined;
@@ -241,6 +249,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           args: toolCallInput,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
+          ...((value as { observability?: unknown }).observability
+            ? { observability: (value as { observability?: unknown }).observability as any }
+            : {}),
         },
       };
     }
@@ -270,6 +281,10 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolName: value.toolName,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
+          dynamic: (value as { dynamic?: boolean }).dynamic,
+          ...((value as { observability?: unknown }).observability
+            ? { observability: (value as { observability?: unknown }).observability as any }
+            : {}),
         },
       };
 
@@ -306,6 +321,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         runId: ctx.runId,
         from: ChunkFrom.AGENT,
         payload: {
+          providerMetadata: value.providerMetadata,
           stepResult: {
             reason: normalizeFinishReason(value.finishReason),
           },
@@ -316,7 +332,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           metadata: {
             providerMetadata: value.providerMetadata,
           },
-          messages,
+          messages: messages ?? {
+            all: [],
+            user: [],
+            nonUser: [],
+          },
           ...rest,
         },
       };
@@ -423,26 +443,32 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           providerMetadata: chunk.payload.providerMetadata,
         };
       }
-    case 'file':
-      if (mode === 'generate') {
-        return {
-          type: 'file',
-          file: new DefaultGeneratedFile({
-            data: chunk.payload.data,
-            mediaType: chunk.payload.mimeType,
-          }),
-        };
+    case 'file': {
+      const filePart =
+        mode === 'generate'
+          ? {
+              type: 'file' as const,
+              file: new DefaultGeneratedFile({
+                data: chunk.payload.data,
+                mediaType: chunk.payload.mimeType,
+              }),
+            }
+          : {
+              type: 'file' as const,
+              file: new DefaultGeneratedFileWithType({
+                data: chunk.payload.data,
+                mediaType: chunk.payload.mimeType,
+              }),
+            };
+
+      if (chunk.payload.providerMetadata) {
+        (filePart as any).providerMetadata = chunk.payload.providerMetadata;
       }
 
-      return {
-        type: 'file',
-        file: new DefaultGeneratedFileWithType({
-          data: chunk.payload.data,
-          mediaType: chunk.payload.mimeType,
-        }),
-      };
-    case 'tool-call':
-      return {
+      return filePart;
+    }
+    case 'tool-call': {
+      const toolCallPart = {
         type: 'tool-call',
         toolCallId: chunk.payload.toolCallId,
         providerMetadata: chunk.payload.providerMetadata,
@@ -450,6 +476,11 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         toolName: chunk.payload.toolName,
         input: chunk.payload.args,
       };
+      if (chunk.payload.observability) {
+        (toolCallPart as { observability?: unknown }).observability = chunk.payload.observability;
+      }
+      return toolCallPart as OutputChunkType<OUTPUT>;
+    }
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',
@@ -458,6 +489,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         dynamic: !!chunk.payload.dynamic,
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
+        ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
       };
     case 'tool-call-input-streaming-end':
       return {
@@ -473,7 +505,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'step-finish': {
-      const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
+      const { request: _request, providerMetadata: metadataProviderMetadata, ...rest } = chunk.payload.metadata;
       return {
         type: 'finish-step',
         response: {
@@ -484,7 +516,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         },
         usage: chunk.payload.output.usage,
         finishReason: chunk.payload.stepResult.reason,
-        providerMetadata,
+        providerMetadata: metadataProviderMetadata ?? chunk.payload.providerMetadata,
       };
     }
     case 'text-delta':
@@ -586,6 +618,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: undefined,
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
+      cacheCreationInputTokens: undefined,
       raw: undefined,
     };
   }
@@ -600,6 +633,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
+      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
       raw: usage,
     };
   }
@@ -612,6 +646,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
     raw: usage,
   };
 }

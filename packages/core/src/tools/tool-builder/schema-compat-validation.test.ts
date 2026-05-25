@@ -1,6 +1,6 @@
 import { AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import type { ToolAction } from '../types';
 import { CoreToolBuilder } from './builder';

@@ -89,6 +89,30 @@ describe('zod-v3 standard-schema adapter', () => {
       expect(inputJsonSchema).toEqual(outputJsonSchema);
     });
 
+    it('should convert to JSON Schema with draft-2020-12 target', () => {
+      const zodSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+      });
+
+      const standardSchema = toStandardSchema(zodSchema);
+      const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-2020-12' });
+
+      expect(jsonSchema).toMatchSnapshot();
+    });
+
+    it('should convert to JSON Schema with draft-04 target', () => {
+      const zodSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+      });
+
+      const standardSchema = toStandardSchema(zodSchema);
+      const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-04' });
+
+      expect(jsonSchema).toMatchSnapshot();
+    });
+
     it('should throw for unsupported targets', () => {
       const zodSchema = z.object({
         name: z.string(),

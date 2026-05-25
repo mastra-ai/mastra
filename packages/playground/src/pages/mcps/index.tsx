@@ -1,48 +1,64 @@
 import {
-  Icon,
-  DocsIcon,
-  Button,
-  HeaderAction,
-  Header,
-  MainContentContent,
-  MainContentLayout,
-  MCPTable,
-  HeaderTitle,
-  McpServerIcon,
-  useMCPServers,
+  ErrorState,
+  ListSearch,
+  NoDataPageLayout,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-
-import { Link } from 'react-router';
+import { useState } from 'react';
+import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
+import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
+import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
+  const [search, setSearch] = useState('');
 
-  const isEmpty = !isLoading && mcpServers.length === 0;
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout>
+        <PermissionDenied resource="MCP servers" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout>
+        <ErrorState title="Failed to load MCP servers" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (mcpServers.length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout>
+        <NoMCPServersInfo />
+      </NoDataPageLayout>
+    );
+  }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <McpServerIcon />
-          </Icon>
-          MCP Servers
-        </HeaderTitle>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />
+        </div>
+      </PageLayout.TopArea>
 
-        <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            MCP documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={isEmpty}>
-        <MCPTable mcpServers={mcpServers} isLoading={isLoading} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <McpServersList mcpServers={mcpServers} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 };
 

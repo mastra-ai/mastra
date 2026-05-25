@@ -1,9 +1,9 @@
-import { cn } from '@/lib/utils';
-import { ItemListCell } from './item-list-cell';
 import { format } from 'date-fns';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
-import { Chip } from '../Chip';
 import { BanIcon, ClockIcon } from 'lucide-react';
+import { Chip } from '../Chip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { ItemListCell } from './item-list-cell';
+import { cn } from '@/lib/utils';
 
 export type ItemListVersionCellProps = {
   version: string | number;

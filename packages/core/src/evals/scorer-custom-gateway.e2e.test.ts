@@ -1,7 +1,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraModelGateway } from '../llm/model/gateways/base';
 import type { ProviderConfig } from '../llm/model/gateways/base';
 import { Mastra } from '../mastra';

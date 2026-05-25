@@ -140,10 +140,21 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should run a partial concurrency for loop
   {
+    // Track peak concurrent executions to verify the concurrency limit directly,
+    // instead of inferring it from wall-clock duration (which is flaky under load).
+    const concurrencyTracker = {
+      activeCount: 0,
+      peakActive: 0,
+    };
+
     // Register mock factory
     mockRegistry.register('foreach-partial-concurrency:map', () =>
       vi.fn().mockImplementation(async ({ inputData }) => {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        concurrencyTracker.activeCount++;
+        concurrencyTracker.peakActive = Math.max(concurrencyTracker.peakActive, concurrencyTracker.activeCount);
+        // Hold long enough for additional items to enter if the engine permits.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        concurrencyTracker.activeCount--;
         return { value: inputData.value + 11 };
       }),
     );
@@ -193,7 +204,12 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           return mockRegistry.get('foreach-partial-concurrency:map');
         },
       },
-      resetMocks: () => mockRegistry.reset(),
+      concurrencyTracker,
+      resetMocks: () => {
+        mockRegistry.reset();
+        concurrencyTracker.activeCount = 0;
+        concurrencyTracker.peakActive = 0;
+      },
     };
   }
 
@@ -683,17 +699,13 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
       });
     });
 
-    // Note: Timing test skipped for Inngest - network overhead makes timing assertions unreliable
     it.skipIf(skipTests.foreachPartialConcurrencyTiming)('should run a partial concurrency for loop', async () => {
-      const startTime = Date.now();
-      const { workflow } = registry!['foreach-partial-concurrency']!;
+      const { workflow, concurrencyTracker } = registry!['foreach-partial-concurrency']!;
       const result = await execute(workflow, [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }]);
 
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      // Partial concurrency: 4 items with concurrency=2, ~1s (2 batches × 500ms)
-      expect(duration).toBeGreaterThan(900);
-      expect(duration).toBeLessThan(1500);
+      // 4 items with concurrency=2: peak concurrent executions must be exactly 2.
+      // peak < 2 => engine ran sequentially; peak > 2 => engine exceeded the limit.
+      expect(concurrencyTracker.peakActive).toBe(2);
 
       // Verify output (not mock counts - unreliable with memoization)
       expect(result.steps).toMatchObject({

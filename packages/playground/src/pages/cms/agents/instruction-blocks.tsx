@@ -1,5 +1,4 @@
-import { InstructionBlocksPage } from '@mastra/playground-ui';
-
+import { InstructionBlocksPage } from '@/domains/agents/components/agent-cms-pages/instruction-blocks-page';
 export default function CmsAgentInstructionBlocksPage() {
   return <InstructionBlocksPage />;
 }

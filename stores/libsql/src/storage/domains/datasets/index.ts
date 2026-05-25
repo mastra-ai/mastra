@@ -21,6 +21,7 @@ import type {
   DatasetItem,
   DatasetItemRow,
   DatasetVersion,
+  TargetType,
   CreateDatasetInput,
   UpdateDatasetInput,
   AddDatasetItemInput,
@@ -62,31 +63,40 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
     // Migrate: add new columns to existing tables
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'requestContextSchema', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'tags', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'TEXT');
 
-    // T3.24 — SCD-2 indexes on dataset_items
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_version ON "${TABLE_DATASET_ITEMS}" ("datasetId", "datasetVersion")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto_deleted ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo", "isDeleted")`,
-      args: [],
-    });
-
-    // T3.25 — indexes on dataset_versions
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version_unique ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
-      args: [],
-    });
+    // T3.24/T3.25 — idempotent indexes
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_version ON "${TABLE_DATASET_ITEMS}" ("datasetId", "datasetVersion")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto_deleted ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo", "isDeleted")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
+          args: [],
+        },
+        {
+          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version_unique ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
+          args: [],
+        },
+      ],
+      'write',
+    );
   }
 
   async #addColumnIfNotExists(table: string, column: string, sqlType: string): Promise<void> {
@@ -113,6 +123,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
       inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
       groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
       requestContextSchema: row.requestContextSchema ? safelyParseJSON(row.requestContextSchema) : undefined,
+      tags: row.tags ? safelyParseJSON(row.tags) : undefined,
+      targetType: (row.targetType as TargetType) || undefined,
+      targetIds: row.targetIds ? safelyParseJSON(row.targetIds) : undefined,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
       version: row.version as number,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
@@ -126,8 +140,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
       datasetVersion: row.datasetVersion as number,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
+      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
+      source: row.source ? safelyParseJSON(row.source as string) : undefined,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -142,8 +158,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
+      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
+      source: row.source ? safelyParseJSON(row.source as string) : undefined,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -176,6 +194,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
           inputSchema: input.inputSchema ?? null,
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
+          targetType: input.targetType ?? null,
+          targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
+          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -190,6 +211,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
         requestContextSchema: input.requestContextSchema ?? undefined,
+        targetType: input.targetType ?? undefined,
+        targetIds: input.targetIds ?? undefined,
+        scorerIds: input.scorerIds ?? undefined,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -265,6 +289,22 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updates.push('requestContextSchema = ?');
         values.push(args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema));
       }
+      if (args.tags !== undefined) {
+        updates.push('tags = ?');
+        values.push(args.tags === null ? null : JSON.stringify(args.tags));
+      }
+      if (args.targetType !== undefined) {
+        updates.push('targetType = ?');
+        values.push(args.targetType === null ? null : args.targetType);
+      }
+      if (args.targetIds !== undefined) {
+        updates.push('targetIds = ?');
+        values.push(args.targetIds === null ? null : JSON.stringify(args.targetIds));
+      }
+      if (args.scorerIds !== undefined) {
+        updates.push('scorerIds = ?');
+        values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
+      }
 
       values.push(args.id);
 
@@ -284,6 +324,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         requestContextSchema:
           (args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema) ??
           undefined,
+        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? undefined,
+        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? undefined,
+        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? undefined,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? undefined,
         updatedAt: new Date(now),
       };
     } catch (error) {
@@ -406,15 +450,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               args.datasetId,
               args.datasetId,
               jsonbArg(args.input)!,
               jsonbArg(args.groundTruth),
+              jsonbArg(args.expectedTrajectory),
               jsonbArg(args.requestContext),
               jsonbArg(args.metadata),
+              jsonbArg(args.source),
               nowIso,
               nowIso,
             ],
@@ -435,8 +481,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         datasetVersion: newVersion,
         input: args.input,
         groundTruth: args.groundTruth,
+        expectedTrajectory: args.expectedTrajectory,
         requestContext: args.requestContext,
         metadata: args.metadata,
+        source: args.source,
         createdAt: now,
         updatedAt: now,
       };
@@ -478,11 +526,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
-      // Merge fields
-      const mergedInput = args.input ?? existing.input;
-      const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
-      const mergedRequestContext = args.requestContext ?? existing.requestContext;
-      const mergedMetadata = args.metadata ?? existing.metadata;
+      // Merge fields: use new value if provided (including null to clear), else keep existing
+      const mergedInput = args.input !== undefined ? args.input : existing.input;
+      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedExpectedTrajectory =
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
+      const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
+      const mergedSource = args.source !== undefined ? args.source : existing.source;
 
       // T3.8, T3.21 — atomic batch: bump version, close old row, insert new row, insert dataset_version
       const results = await this.#client.batch(
@@ -496,15 +547,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId, args.id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               args.id,
               args.datasetId,
               args.datasetId,
               jsonbArg(mergedInput)!,
               jsonbArg(mergedGroundTruth),
+              jsonbArg(mergedExpectedTrajectory),
               jsonbArg(mergedRequestContext),
               jsonbArg(mergedMetadata),
+              jsonbArg(mergedSource),
               existing.createdAt.toISOString(),
               nowIso,
             ],
@@ -524,8 +577,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         datasetVersion: newVersion,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
+        expectedTrajectory: mergedExpectedTrajectory,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
+        source: mergedSource,
         updatedAt: now,
       };
     } catch (error) {
@@ -570,7 +625,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [datasetId, id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               datasetId,
@@ -579,6 +634,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
               jsonbArg(existing.groundTruth),
               jsonbArg(existing.requestContext),
               jsonbArg(existing.metadata),
+              jsonbArg(existing.source),
               existing.createdAt.toISOString(),
               nowIso,
             ],
@@ -903,15 +959,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const id = crypto.randomUUID();
         items.push({ id, input: itemInput });
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             id,
             input.datasetId,
             input.datasetId,
             jsonbArg(itemInput.input)!,
             jsonbArg(itemInput.groundTruth),
+            jsonbArg(itemInput.expectedTrajectory),
             jsonbArg(itemInput.requestContext),
             jsonbArg(itemInput.metadata),
+            jsonbArg(itemInput.source),
             nowIso,
             nowIso,
           ],
@@ -933,8 +991,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         datasetVersion: newVersion,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
+        expectedTrajectory: itemInput.expectedTrajectory,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
+        source: itemInput.source,
         createdAt: now,
         updatedAt: now,
       }));
@@ -993,7 +1053,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         });
         // Insert tombstone
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             item.id,
             input.datasetId,
@@ -1002,6 +1062,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             jsonbArg(item.groundTruth),
             jsonbArg(item.requestContext),
             jsonbArg(item.metadata),
+            jsonbArg(item.source),
             item.createdAt.toISOString(),
             nowIso,
           ],

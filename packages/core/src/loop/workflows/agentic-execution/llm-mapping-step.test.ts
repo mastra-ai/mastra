@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
@@ -82,6 +82,7 @@ describe('createLLMMappingStep HITL behavior', () => {
         },
       },
       add: vi.fn(),
+      updateToolInvocation: vi.fn(),
     } as unknown as MessageList;
 
     llmExecutionStep = createStep({
@@ -275,8 +276,8 @@ describe('createLLMMappingStep HITL behavior', () => {
         }),
       }),
     );
-    // Should add the error message to the messageList so the model can see it
-    expect(messageList.add).toHaveBeenCalled();
+    // Should update the tool invocation in the messageList so the model can see it
+    expect(messageList.updateToolInvocation).toHaveBeenCalled();
     // isContinued should be true to keep the loop going
     expect(result.stepResult.isContinued).toBe(true);
   });
@@ -295,21 +296,14 @@ describe('createLLMMappingStep HITL behavior', () => {
 
     await llmMappingStep.execute(createExecuteParams(inputData));
 
-    expect(messageList.add).toHaveBeenCalledWith(
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.objectContaining({
-          parts: [
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                toolCallId: 'call-1',
-                toolName: 'unknown_tool',
-              }),
-            }),
-          ],
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'unknown_tool',
         }),
       }),
-      'response',
     );
   });
 
@@ -364,8 +358,8 @@ describe('createLLMMappingStep HITL behavior', () => {
       }),
     );
 
-    // Should add both error and result messages to the messageList
-    expect(messageList.add).toHaveBeenCalledTimes(2);
+    // Should update both error and result tool invocations in the messageList
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(2);
   });
 
   it('should bail when tool-not-found errors are mixed with pending HITL tools', async () => {
@@ -534,6 +528,7 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
         },
       },
       add: vi.fn(),
+      updateToolInvocation: vi.fn(),
     } as unknown as MessageList;
 
     llmExecutionStep = createStep({
@@ -600,8 +595,8 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
       }),
     );
 
-    // The error should be added to messageList so the model can see it
-    expect(messageList.add).toHaveBeenCalled();
+    // The error should be updated in the messageList so the model can see it
+    expect(messageList.updateToolInvocation).toHaveBeenCalled();
 
     // CRITICAL: The loop should NOT bail — it should continue so the model can self-correct
     expect(bail).not.toHaveBeenCalled();
@@ -652,8 +647,8 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
       }),
     );
 
-    // Both error and success messages should be in messageList
-    expect(messageList.add).toHaveBeenCalled();
+    // Both error and success tool invocations should be updated in messageList
+    expect(messageList.updateToolInvocation).toHaveBeenCalled();
 
     // Loop should continue for self-recovery
     expect(bail).not.toHaveBeenCalled();
@@ -684,8 +679,8 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     // Both errors should be emitted as tool-error chunks
     expect(controller.enqueue).toHaveBeenCalledTimes(2);
 
-    // Errors should be added to messageList for the model to see
-    expect(messageList.add).toHaveBeenCalled();
+    // Errors should be updated in messageList for the model to see
+    expect(messageList.updateToolInvocation).toHaveBeenCalled();
 
     // Loop should continue — model should see the errors and adapt
     expect(bail).not.toHaveBeenCalled();
@@ -719,17 +714,10 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     expect(bail).not.toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(true);
 
-    // Should persist the provider-executed result as a separate message
-    const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
-    const providerMessage = addCalls.find(([msg]: [any]) =>
-      msg.content?.parts?.some(
-        (p: any) =>
-          p.providerExecuted &&
-          p.toolInvocation?.toolName === 'web_search_20250305' &&
-          p.toolInvocation?.state === 'result',
-      ),
-    );
-    expect(providerMessage).toBeDefined();
+    // Should only update the error tool invocation — provider-executed tools are handled by llm-execution-step
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+    const updatedPart = (messageList.updateToolInvocation as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(updatedPart.toolInvocation.toolName).toBe('unknown_tool'); // sanitized from 'creating:view'
   });
 });
 
@@ -781,6 +769,7 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
         response: { aiV5: { model: () => [] } },
       },
       add: vi.fn(),
+      updateToolInvocation: vi.fn(),
     } as unknown as MessageList;
 
     llmExecutionStep = createStep({
@@ -813,7 +802,7 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
     );
   });
 
-  it('should split client-executed and provider-executed tools into separate messageList entries', async () => {
+  it('should only call updateToolInvocation for client-executed tools (provider-executed tools are handled by llm-execution-step)', async () => {
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
@@ -832,26 +821,13 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
 
     await llmMappingStep.execute(createExecuteParams(inputData));
 
-    expect(messageList.add).toHaveBeenCalledTimes(2);
-
-    const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
-
-    // First call: client-executed tools only
-    const clientMsg = addCalls[0][0];
-    const clientToolNames = clientMsg.content.parts.map((p: any) => p.toolInvocation.toolName);
-    expect(clientToolNames).toContain('get_company_info');
-    expect(clientToolNames).not.toContain('web_search_20250305');
-
-    // Second call: provider-executed tools with providerExecuted flag
-    const providerMsg = addCalls[1][0];
-    const providerParts = providerMsg.content.parts;
-    expect(providerParts).toHaveLength(1);
-    expect(providerParts[0].toolInvocation.toolName).toBe('web_search_20250305');
-    expect(providerParts[0].toolInvocation.state).toBe('result');
-    expect(providerParts[0].providerExecuted).toBe(true);
+    // Only one updateToolInvocation call — for the client-executed tool
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+    const call = (messageList.updateToolInvocation as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(call.toolInvocation.toolName).toBe('get_company_info');
   });
 
-  it('should add a provider-executed tool-result message to messageList to update state from call to result', async () => {
+  it('should not call updateToolInvocation when only provider-executed tools are present', async () => {
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
@@ -864,14 +840,8 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
 
     await llmMappingStep.execute(createExecuteParams(inputData));
 
-    expect(messageList.add).toHaveBeenCalledTimes(1);
-
-    const addCall = (messageList.add as ReturnType<typeof vi.fn>).mock.calls[0];
-    const msg = addCall[0];
-    expect(msg.content.parts).toHaveLength(1);
-    expect(msg.content.parts[0].toolInvocation.state).toBe('result');
-    expect(msg.content.parts[0].toolInvocation.toolName).toBe('web_search_20250305');
-    expect(msg.content.parts[0].providerExecuted).toBe(true);
+    // No updateToolInvocation calls — provider tools are already state:'result' from llm-execution-step
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
   });
 
   it('should emit stream chunks for provider-executed tools even though they are excluded from the client tool-result message', async () => {
@@ -956,6 +926,7 @@ describe('createLLMMappingStep toModelOutput', () => {
         response: { aiV5: { model: () => [] } },
       },
       add: vi.fn(),
+      updateToolInvocation: vi.fn(),
     } as unknown as MessageList;
 
     llmExecutionStep = createStep({
@@ -1013,30 +984,148 @@ describe('createLLMMappingStep toModelOutput', () => {
     // toModelOutput should have been called with the raw result
     expect(toModelOutputMock).toHaveBeenCalledWith({ temperature: 72, conditions: 'sunny' });
 
-    // The message added to messageList should have providerMetadata.mastra.modelOutput
-    expect(messageList.add).toHaveBeenCalledWith(
+    // The tool invocation should be updated with providerMetadata.mastra.modelOutput
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.objectContaining({
-          parts: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                toolCallId: 'call-1',
-                result: { temperature: 72, conditions: 'sunny' }, // raw result preserved
-              }),
-              providerMetadata: expect.objectContaining({
-                mastra: expect.objectContaining({
-                  modelOutput: {
-                    type: 'text',
-                    value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
-                  },
-                }),
-              }),
-            }),
-          ]),
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          toolCallId: 'call-1',
+          result: { temperature: 72, conditions: 'sunny' }, // raw result preserved
+        }),
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'text',
+              value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+            },
+          }),
         }),
       }),
-      'response',
+    );
+
+    // The emitted tool-result chunk should also carry modelOutput on providerMetadata
+    // so harness consumers (e.g. mastracode TUI) can read it without going through the messageList.
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          providerMetadata: expect.objectContaining({
+            mastra: expect.objectContaining({
+              modelOutput: {
+                type: 'text',
+                value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+              },
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should normalize media parts in toModelOutput to image-data/file-data', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [
+        { type: 'media', data: 'base64png', mediaType: 'image/png' },
+        { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
+        { type: 'text', text: 'caption' },
+      ],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [
+                { type: 'image-data', data: 'base64png', mediaType: 'image/png' },
+                { type: 'file-data', data: 'base64pdf', mediaType: 'application/pdf' },
+                { type: 'text', text: 'caption' },
+              ],
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should not throw when toModelOutput returns malformed content entries', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).resolves.not.toThrow();
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [null, undefined, 'not-an-object', { type: 'image-data', data: 'abc', mediaType: 'image/png' }],
+            },
+          }),
+        }),
+      }),
     );
   });
 
@@ -1069,28 +1158,20 @@ describe('createLLMMappingStep toModelOutput', () => {
 
     await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // Message should NOT have providerMetadata on the part
-    expect(messageList.add).toHaveBeenCalledWith(
+    // Tool invocation should be updated without providerMetadata
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.objectContaining({
-          parts: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                toolCallId: 'call-1',
-                result: { done: true },
-              }),
-            }),
-          ]),
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          toolCallId: 'call-1',
+          result: { done: true },
         }),
       }),
-      'response',
     );
 
     // providerMetadata should not be set on the part
-    const addedMessage = (messageList.add as Mock).mock.calls[0]![0];
-    const part = addedMessage.content.parts[0];
-    expect(part.providerMetadata).toBeUndefined();
+    const updatedPart = (messageList.updateToolInvocation as Mock).mock.calls[0]![0];
+    expect(updatedPart.providerMetadata).toBeUndefined();
   });
 
   it('should call toModelOutput for mixed tools (only the ones that define it)', async () => {
@@ -1141,17 +1222,68 @@ describe('createLLMMappingStep toModelOutput', () => {
     expect(toModelOutputMock).toHaveBeenCalledTimes(1);
     expect(toModelOutputMock).toHaveBeenCalledWith({ data: 'raw' });
 
-    const addedMessage = (messageList.add as Mock).mock.calls[0]![0];
-    const parts = addedMessage.content.parts;
+    const calls = (messageList.updateToolInvocation as Mock).mock.calls;
+    const withTransformPart = calls.find(([p]: [any]) => p.toolInvocation.toolName === 'withTransform')?.[0];
+    const withoutTransformPart = calls.find(([p]: [any]) => p.toolInvocation.toolName === 'withoutTransform')?.[0];
 
     // First tool should have modelOutput
-    expect(parts[0].providerMetadata?.mastra?.modelOutput).toEqual({
+    expect(withTransformPart.providerMetadata?.mastra?.modelOutput).toEqual({
       type: 'text',
       value: 'transformed',
     });
 
     // Second tool should NOT have providerMetadata
-    expect(parts[1].providerMetadata).toBeUndefined();
+    expect(withoutTransformPart.providerMetadata).toBeUndefined();
+  });
+
+  it('should call toModelOutput for tools loaded dynamically via _internal.stepTools (e.g. ToolSearchProcessor)', async () => {
+    const toModelOutputMock = vi.fn((_output: unknown) => ({
+      type: 'text',
+      value: 'summarized',
+    }));
+
+    // Simulate ToolSearchProcessor: tools is empty, dynamically loaded tools are in _internal.stepTools
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: {
+          generateId: () => 'test-message-id',
+          stepTools: {
+            'dynamic-tool': {
+              execute: async () => ({ heavy: 'data' }),
+              toModelOutput: toModelOutputMock,
+              inputSchema: z.object({}),
+            },
+          },
+        },
+        tools: {}, // Empty — simulates tools: {} on agent with ToolSearchProcessor
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'dynamic-tool',
+        args: {},
+        result: { heavy: 'data' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(toModelOutputMock).toHaveBeenCalledTimes(1);
+    expect(toModelOutputMock).toHaveBeenCalledWith({ heavy: 'data' });
+
+    const calls = (messageList.updateToolInvocation as Mock).mock.calls;
+    const dynamicToolPart = calls.find(([p]: [any]) => p.toolInvocation.toolName === 'dynamic-tool')?.[0];
+    expect(dynamicToolPart.providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'text',
+      value: 'summarized',
+    });
   });
 
   it('should NOT call toModelOutput when tool result is null/undefined', async () => {
@@ -1187,5 +1319,199 @@ describe('createLLMMappingStep toModelOutput', () => {
 
     // toModelOutput should NOT be called for undefined results
     expect(toModelOutputMock).not.toHaveBeenCalled();
+  });
+
+  // ---- MAPPING span coverage (issue #15486) ----
+
+  type MockChildSpan = {
+    createOptions: any;
+    endOptions?: any;
+    errorOptions?: any;
+    ended: boolean;
+    errored: boolean;
+    end: Mock;
+    error: Mock;
+  };
+
+  function createMockParentSpan() {
+    const childSpans: MockChildSpan[] = [];
+    const parentSpan: any = {
+      createChildSpan: vi.fn((opts: any) => {
+        const child: MockChildSpan = {
+          createOptions: opts,
+          ended: false,
+          errored: false,
+          end: vi.fn(),
+          error: vi.fn(),
+        };
+        child.end = vi.fn((endOpts: any) => {
+          child.endOptions = endOpts;
+          child.ended = true;
+        }) as any;
+        child.error = vi.fn((errOpts: any) => {
+          child.errorOptions = errOpts;
+          child.errored = true;
+        }) as any;
+        childSpans.push(child);
+        return child;
+      }),
+    };
+    return { parentSpan, childSpans };
+  }
+
+  it('should emit a MAPPING child span when toModelOutput is defined and runs', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+    const toModelOutputMock = vi.fn((output: any) => ({ type: 'text', value: output.temperature }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          weather: {
+            execute: async () => ({ temperature: 72 }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      { toolCallId: 'call-1', toolName: 'weather', args: {}, result: { temperature: 72 } },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+    expect(childSpans).toHaveLength(1);
+    const [span] = childSpans;
+    expect(span.createOptions).toMatchObject({
+      type: 'mapping',
+      name: "tool output mapping: 'weather'",
+      entityType: 'tool',
+      entityId: 'weather',
+      entityName: 'weather',
+      input: { temperature: 72 },
+      attributes: {
+        mappingType: 'toModelOutput',
+        toolCallId: 'call-1',
+      },
+    });
+    expect(span.ended).toBe(true);
+    expect(span.endOptions).toEqual({ output: { type: 'text', value: 72 } });
+    expect(span.errored).toBe(false);
+  });
+
+  it('should NOT emit a MAPPING span when the tool has no toModelOutput', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          plain: {
+            execute: async () => ({ temperature: 72 }),
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      { toolCallId: 'call-1', toolName: 'plain', args: {}, result: { temperature: 72 } },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(childSpans).toHaveLength(0);
+  });
+
+  it('should NOT emit a MAPPING span when tool result is null/undefined even if toModelOutput is defined', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          hitlTool: {
+            toModelOutput: vi.fn(),
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [{ toolCallId: 'call-1', toolName: 'hitlTool', args: {}, result: undefined }];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(childSpans).toHaveLength(0);
+  });
+
+  it('should mark the MAPPING span as errored and re-throw when toModelOutput throws', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+    const failure = new Error('transform failed');
+    const toModelOutputMock = vi.fn(() => {
+      throw failure;
+    });
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          broken: {
+            execute: async () => ({ data: 'raw' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      { toolCallId: 'call-1', toolName: 'broken', args: {}, result: { data: 'raw' } },
+    ];
+
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).rejects.toBe(failure);
+
+    expect(childSpans).toHaveLength(1);
+    const [span] = childSpans;
+    expect(span.ended).toBe(false);
+    expect(span.errored).toBe(true);
+    expect(span.errorOptions).toEqual({ error: failure, endSpan: true });
   });
 });

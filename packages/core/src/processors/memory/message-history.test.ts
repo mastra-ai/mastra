@@ -603,6 +603,93 @@ describe('MessageHistory', () => {
       expect(savedMessages.every((m: any) => m.role !== 'system')).toBe(true);
     });
 
+    it('should not persist system messages even when passed directly to persistMessages', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'system',
+          content: { format: 2, parts: [{ type: 'text', text: 'Runtime-only system instruction' }] },
+          id: 'msg-system',
+          createdAt: new Date(),
+        },
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+          id: 'msg-user',
+          createdAt: new Date(),
+        },
+      ];
+
+      await processor.persistMessages({ messages, threadId: 'thread-1' });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'msg-user', role: 'user' })],
+      });
+    });
+
+    it('should preserve dynamic system reminders in persisted non-system messages to avoid cache invalidation and re-injection', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/core/AGENTS.md">Core guidance</system-reminder>';
+
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: reminderMarkup }] },
+          id: 'msg-reminder',
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList().add(messages, `input`);
+      await processor.processOutputResult({
+        messageList,
+        messages,
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(savedMessages).toHaveLength(1);
+      expect(savedMessages[0]).toEqual(
+        expect.objectContaining({
+          role: 'user',
+          content: expect.objectContaining({
+            parts: [expect.objectContaining({ type: 'text', text: reminderMarkup })],
+          }),
+        }),
+      );
+    });
+
     it('should update thread metadata', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),

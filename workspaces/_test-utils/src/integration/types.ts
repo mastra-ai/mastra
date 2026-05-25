@@ -32,8 +32,8 @@ export interface WorkspaceIntegrationTestConfig {
    * When true: sandbox commands like `cat /mount1/file.txt` see the same files
    * as `fs1.readFile('/file.txt')`. Required for sandbox-dependent multi-mount tests.
    *
-   * When false: only API-level isolation tests run (e.g. prefix-based S3 on same bucket
-   * where s3fs mounts the full bucket, not the prefix).
+   * When false: only API-level isolation tests run for providers/configurations
+   * where sandbox-visible paths do not match filesystem API paths.
    *
    * @default true
    */

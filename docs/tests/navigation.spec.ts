@@ -143,7 +143,10 @@ test.describe('Sidebar navigation', () => {
     await expect(sidebar).toBeVisible()
 
     // Find and click a sidebar link that has a real path (not just # or empty)
-    const sidebarLinks = sidebar.locator('a.menu__link:not(.menu__link--active)[href*="/docs/"]')
+    // Exclude --sublist links: those are collapsible category headers that preventDefault on click
+    const sidebarLinks = sidebar.locator(
+      'a.menu__link:not(.menu__link--active):not(.menu__link--sublist)[href*="/docs/"]',
+    )
     const firstLink = sidebarLinks.first()
     const href = await firstLink.getAttribute('href')
     expect(href).toBeTruthy()
@@ -174,8 +177,8 @@ test.describe('Sidebar navigation', () => {
     const mobileSidebar = page.locator('.navbar-sidebar')
     await expect(mobileSidebar).toBeVisible()
 
-    // Find a navigation link in the mobile sidebar
-    const mobileLink = mobileSidebar.locator('a.menu__link').first()
+    // Find a navigation link in the mobile sidebar (exclude category headers)
+    const mobileLink = mobileSidebar.locator('a.menu__link:not(.menu__link--sublist)').first()
     const href = await mobileLink.getAttribute('href')
     expect(href).toBeTruthy()
 

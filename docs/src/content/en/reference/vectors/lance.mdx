@@ -1,15 +1,15 @@
 ---
-title: "Reference: Lance Vector Store | Vectors"
+title: "Reference: Lance vector store | Vectors"
 description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
 packages:
   - "@mastra/lance"
 ---
 
-# Lance Vector Store
+# Lance vector store
 
 The LanceVectorStore class provides vector search using [LanceDB](https://lancedb.github.io/lancedb/), an embedded vector database built on the Lance columnar format. It offers efficient storage and fast similarity search for both local development and production deployments.
 
-## Factory Method
+## Factory method
 
 The LanceVectorStore uses a factory pattern for creation. You should use the static `create()` method rather than the constructor directly.
 
@@ -29,7 +29,7 @@ The LanceVectorStore uses a factory pattern for creation. You should use the sta
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can create a `LanceVectorStore` instance using the static create method:
 
@@ -50,7 +50,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -86,7 +86,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-#### LanceIndexConfig
+#### `LanceIndexConfig`
 
 <PropertiesTable
   content={[
@@ -155,7 +155,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### createTable()
+### `createTable()`
 
 <PropertiesTable
   content={[
@@ -178,7 +178,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -207,7 +207,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -258,7 +258,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### listTables()
+### `listTables()`
 
 Returns an array of table names as strings.
 
@@ -267,7 +267,7 @@ const tables = await vectorStore.listTables()
 // ['my_vectors', 'embeddings', 'documents']
 ```
 
-### getTableSchema()
+### `getTableSchema()`
 
 <PropertiesTable
   content={[
@@ -281,7 +281,7 @@ const tables = await vectorStore.listTables()
 
 Returns the schema of the specified table.
 
-### deleteTable()
+### `deleteTable()`
 
 <PropertiesTable
   content={[
@@ -293,15 +293,15 @@ Returns the schema of the specified table.
 ]}
 />
 
-### deleteAllTables()
+### `deleteAllTables()`
 
 Deletes all tables in the database.
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -330,7 +330,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -342,7 +342,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -373,7 +373,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -390,7 +390,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -416,11 +416,11 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-### close()
+### `close()`
 
 Closes the database connection.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -434,7 +434,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -451,7 +451,7 @@ try {
 }
 ```
 
-## Best Practices
+## Best practices
 
 - Use the appropriate index type for your use case:
   - HNSW for better recall and performance when memory isn't constrained

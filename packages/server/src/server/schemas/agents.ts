@@ -1,10 +1,84 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
+
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]),
+);
+
+const baseSignalSchema = z.object({
+  id: z.string().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  metadata: jsonRecordSchema.optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+const partProviderOptionsSchema = z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional();
+
+const signalTextPartSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+  providerOptions: partProviderOptionsSchema,
+});
+
+const signalFilePartSchema = z.object({
+  type: z.literal('file'),
+  data: z.string(),
+  mediaType: z.string(),
+  filename: z.string().optional(),
+  providerOptions: partProviderOptionsSchema,
+});
+
+const userMessageSignalContentsSchema = z.union([
+  z.string(),
+  z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
+]);
+
+const agentSignalSchema = baseSignalSchema.extend({
+  type: z.string(),
+  contents: userMessageSignalContentsSchema,
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
+});
+
+/**
+ * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
+ * Use either `status` or `versionId`, not both.
+ * - `status` — 'draft' (latest version, default) or 'published' (active published version).
+ * - `versionId` — Resolve with a specific version ID.
+ */
+export const agentVersionQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published'])
+    .optional()
+    .describe(
+      'Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId.',
+    ),
+  versionId: z
+    .string()
+    .optional()
+    .describe(
+      'Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence.',
+    ),
 });
 
 export const toolIdPathParams = z.object({
@@ -96,6 +170,7 @@ const modelConfigSchema = z.object({
 export const serializedAgentSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   instructions: systemMessageSchema.optional(),
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),
@@ -129,6 +204,10 @@ export const providerSchema = z.object({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
+  envVar: z.union([z.string(), z.array(z.string())]),
+  connected: z.boolean(),
+  docUrl: z.string().optional(),
+  models: z.array(z.string()),
 });
 
 /**
@@ -202,6 +281,18 @@ export const agentExecutionBodySchema = z
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.any()).optional(),
 
+    // Version overrides for sub-agents (and future primitives)
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+      })
+      .optional(),
+
     // Execution Control
     maxSteps: z.number().optional(),
     stopWhen: z.any().optional(),
@@ -267,6 +358,16 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   threadId: z.string().optional(),
 });
 
+export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
+  maxIdleMs: z.number().int().positive().optional(),
+});
+
+export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
+  maxIdleMs: z.number().int().positive().optional(),
+});
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
@@ -342,6 +443,21 @@ export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
  */
 export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
+});
+
+// ============================================================================
+// Resume Stream Schema
+// ============================================================================
+
+/**
+ * Body schema for resuming a suspended agent stream with custom data.
+ * Extends the agent execution body without messages, since resume
+ * continues from a prior suspension point rather than starting fresh.
+ */
+export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
 });
 
 // ============================================================================
@@ -442,3 +558,58 @@ export const enhanceInstructionsResponseSchema = z.object({
   explanation: z.string().describe('Explanation of the changes made'),
   new_prompt: z.string().describe('The enhanced instructions'),
 });
+
+// ============================================================================
+// Observe (Resumable Streams) Schemas
+// ============================================================================
+
+/**
+ * Body schema for observing an agent stream
+ * Used to reconnect to an existing stream and receive missed events
+ */
+export const observeAgentBodySchema = z.object({
+  runId: z.string().describe('The run ID to observe/reconnect to'),
+  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+});
+
+const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
+const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
+
+const sendAgentSignalBaseBodySchema = z.object({
+  signal: agentSignalSchema,
+  ifActive: z
+    .object({
+      behavior: signalActiveBehaviorSchema.optional(),
+    })
+    .optional(),
+});
+
+export const sendAgentSignalBodySchema = z.union([
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string(),
+    resourceId: z.string().optional(),
+    threadId: z.string().optional(),
+    ifIdle: z.undefined().optional(),
+  }),
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string().optional(),
+    resourceId: z.string(),
+    threadId: z.string(),
+    ifIdle: z
+      .object({
+        behavior: signalIdleBehaviorSchema.optional(),
+        streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+      })
+      .optional(),
+  }),
+]);
+
+export const subscribeAgentThreadBodySchema = z.object({
+  resourceId: z.string().optional(),
+  threadId: z.string(),
+});
+
+/**
+ * Response schema for observe endpoint (streaming response)
+ */
+export const observeAgentResponseSchema = z.any(); // Streaming response

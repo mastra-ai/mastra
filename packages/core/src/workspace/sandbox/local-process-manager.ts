@@ -5,6 +5,9 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import * as path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
+
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
 import { getExeca } from './execa';
@@ -24,16 +27,18 @@ const isWindows = process.platform === 'win32';
  * Not exported — internal to this module.
  */
 class LocalProcessHandle extends ProcessHandle {
-  readonly pid: number;
+  readonly pid: string;
   exitCode: number | undefined;
 
+  private readonly _numericPid: number;
   private subprocess: ResultPromise;
   private readonly waitPromise: Promise<CommandResult>;
   private readonly startTime: number;
 
   constructor(subprocess: ResultPromise, pid: number, startTime: number, options?: SpawnProcessOptions) {
     super(options);
-    this.pid = pid;
+    this.pid = String(pid);
+    this._numericPid = pid;
     this.subprocess = subprocess;
     this.startTime = startTime;
 
@@ -44,13 +49,34 @@ class LocalProcessHandle extends ProcessHandle {
           // Kill the entire process tree so child processes are also terminated.
           // We handle timeout ourselves rather than using execa's timeout option
           // because execa only kills the direct subprocess, not the process tree.
-          void killProcessTree(this.pid, subprocess, 'SIGTERM');
+          void killProcessTree(this._numericPid, subprocess, 'SIGTERM');
         }, options.timeout)
       : undefined;
+
+    const stdoutDecoder = new StringDecoder();
+    const stderrDecoder = new StringDecoder();
+    let stdoutDecoderEnded = false;
+    let stderrDecoderEnded = false;
+
+    const flushStdoutDecoder = () => {
+      if (stdoutDecoderEnded) return;
+      stdoutDecoderEnded = true;
+      const data = stdoutDecoder.end();
+      if (data) this.emitStdout(data);
+    };
+
+    const flushStderrDecoder = () => {
+      if (stderrDecoderEnded) return;
+      stderrDecoderEnded = true;
+      const data = stderrDecoder.end();
+      if (data) this.emitStderr(data);
+    };
 
     this.waitPromise = new Promise<CommandResult>(resolve => {
       subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
         if (timeoutId) clearTimeout(timeoutId);
+        flushStdoutDecoder();
+        flushStderrDecoder();
         if (timedOut) {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
           this.emitStderr(timeoutMsg);
@@ -71,6 +97,8 @@ class LocalProcessHandle extends ProcessHandle {
 
       subprocess.on('error', (err: Error) => {
         if (timeoutId) clearTimeout(timeoutId);
+        flushStdoutDecoder();
+        flushStderrDecoder();
         this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({
@@ -84,12 +112,16 @@ class LocalProcessHandle extends ProcessHandle {
     });
 
     subprocess.stdout?.on('data', (data: Buffer) => {
-      this.emitStdout(data.toString());
+      const decoded = stdoutDecoder.write(data);
+      if (decoded) this.emitStdout(decoded);
     });
+    subprocess.stdout?.on('end', flushStdoutDecoder);
 
     subprocess.stderr?.on('data', (data: Buffer) => {
-      this.emitStderr(data.toString());
+      const decoded = stderrDecoder.write(data);
+      if (decoded) this.emitStderr(decoded);
     });
+    subprocess.stderr?.on('end', flushStderrDecoder);
   }
 
   async wait(): Promise<CommandResult> {
@@ -101,7 +133,7 @@ class LocalProcessHandle extends ProcessHandle {
     // Kill the entire process tree to ensure child processes spawned by the
     // shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
-    await killProcessTree(this.pid, this.subprocess, 'SIGKILL');
+    await killProcessTree(this._numericPid, this.subprocess, 'SIGKILL');
     return true;
   }
 
@@ -161,7 +193,22 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const cwd = options.cwd ?? this.sandbox.workingDirectory;
+    let cwd = this.sandbox.workingDirectory;
+    if (options.cwd) {
+      if (path.isAbsolute(options.cwd)) {
+        cwd = options.cwd;
+      } else {
+        // Prevent duplicate nesting when agent passes cwd that's already workspace-relative
+        const normalizedWorkingDir = path.resolve(this.sandbox.workingDirectory);
+        const normalizedOptionsCwd = path.resolve(options.cwd);
+        // Check if path is already under workspace (exact match or nested subpath)
+        const isAlreadyWorkspacePath =
+          normalizedOptionsCwd === normalizedWorkingDir ||
+          normalizedOptionsCwd.startsWith(`${normalizedWorkingDir}${path.sep}`);
+
+        cwd = isAlreadyWorkspacePath ? normalizedOptionsCwd : path.resolve(this.sandbox.workingDirectory, options.cwd);
+      }
+    }
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
