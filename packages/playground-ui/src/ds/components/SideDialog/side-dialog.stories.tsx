@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { EyeIcon, FileInputIcon, HashIcon, ListTreeIcon, PencilIcon, TagIcon, Trash2Icon } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { Section } from '../Section';
@@ -35,6 +35,8 @@ const items = [
   { id: 'item_d4e5f6', name: 'Order status lookup', tokens: 287 },
   { id: 'item_g7h8i9', name: 'Subscription upgrade', tokens: 533 },
 ];
+
+const NESTED_LEVEL_OPEN_DELAY_MS = 220;
 
 const Field = ({ label, value }: { label: string; value: string }) => (
   <div className="flex justify-between gap-4 text-ui-md">
@@ -127,24 +129,46 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
   );
 };
 
-const NestedLevelsDemo = ({ initialDepth }: { initialDepth: 2 | 3 }) => {
-  const [isLevel1Open, setIsLevel1Open] = useState(true);
-  const [isLevel2Open, setIsLevel2Open] = useState(initialDepth >= 2);
-  const [isLevel3Open, setIsLevel3Open] = useState(initialDepth >= 3);
+const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
+  const [isLevel1Open, setIsLevel1Open] = useState(false);
+  const [isLevel2Open, setIsLevel2Open] = useState(false);
+  const [isLevel3Open, setIsLevel3Open] = useState(false);
+  const openTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  const clearOpenTimers = useCallback(() => {
+    openTimers.current.forEach(clearTimeout);
+    openTimers.current = [];
+  }, []);
+
+  useEffect(
+    () => () => {
+      clearOpenTimers();
+    },
+    [clearOpenTimers],
+  );
 
   const openDepth = (depth: 2 | 3) => {
+    clearOpenTimers();
     setIsLevel1Open(true);
-    setIsLevel2Open(true);
-    setIsLevel3Open(depth === 3);
+    setIsLevel2Open(false);
+    setIsLevel3Open(false);
+
+    openTimers.current.push(setTimeout(() => setIsLevel2Open(true), NESTED_LEVEL_OPEN_DELAY_MS));
+
+    if (depth === 3) {
+      openTimers.current.push(setTimeout(() => setIsLevel3Open(true), NESTED_LEVEL_OPEN_DELAY_MS * 2));
+    }
   };
 
   const closeLevel1 = () => {
+    clearOpenTimers();
     setIsLevel1Open(false);
     setIsLevel2Open(false);
     setIsLevel3Open(false);
   };
 
   const closeLevel2 = () => {
+    clearOpenTimers();
     setIsLevel2Open(false);
     setIsLevel3Open(false);
   };
@@ -153,7 +177,7 @@ const NestedLevelsDemo = ({ initialDepth }: { initialDepth: 2 | 3 }) => {
     <div className="p-8">
       <div className="flex gap-2">
         <Button onClick={() => openDepth(2)}>Open Nested Level 2</Button>
-        {initialDepth === 3 && (
+        {depth === 3 && (
           <Button variant="outline" onClick={() => openDepth(3)}>
             Open Nested Level 3
           </Button>
@@ -228,7 +252,7 @@ const NestedLevelsDemo = ({ initialDepth }: { initialDepth: 2 | 3 }) => {
               <TextAndIcon>
                 <HashIcon /> trace_72f19
               </TextAndIcon>
-              {initialDepth === 3 && (
+              {depth === 3 && (
                 <div className="ml-auto">
                   <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
                     Open Span
@@ -258,7 +282,7 @@ const NestedLevelsDemo = ({ initialDepth }: { initialDepth: 2 | 3 }) => {
                 </div>
               </Section>
 
-              {initialDepth === 3 && (
+              {depth === 3 && (
                 <Section>
                   <Section.Header>
                     <Section.Heading>
@@ -276,7 +300,7 @@ const NestedLevelsDemo = ({ initialDepth }: { initialDepth: 2 | 3 }) => {
                 </Section>
               )}
 
-              {initialDepth === 3 && (
+              {depth === 3 && (
                 <SideDialog
                   isOpen={isLevel3Open}
                   onClose={() => setIsLevel3Open(false)}
@@ -326,11 +350,11 @@ export const Default: Story = {
 };
 
 export const Level2: Story = {
-  render: () => <NestedLevelsDemo initialDepth={2} />,
+  render: () => <NestedLevelsDemo depth={2} />,
 };
 
 export const Level3: Story = {
-  render: () => <NestedLevelsDemo initialDepth={3} />,
+  render: () => <NestedLevelsDemo depth={3} />,
 };
 
 const SideDialogWithCodeDemo = () => {
