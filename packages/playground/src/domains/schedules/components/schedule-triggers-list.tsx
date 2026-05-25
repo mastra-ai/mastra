@@ -81,7 +81,7 @@ export function ScheduleTriggersList({
         const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;
 
         const rowKey = `${t.scheduleId}-${t.runId}-${t.actualFireAt}`;
-        const isLinked = Boolean(workflowId && t.run && t.runId && !isPublishFailure);
+        const isLinked = Boolean(workflowId && t.runId && !isPublishFailure);
         const runIdLabel = (
           <span
             className={
