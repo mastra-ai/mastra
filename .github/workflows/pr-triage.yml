@@ -25,10 +25,14 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      needs_issue: ${{ steps.issue_link.outputs.needs_issue }}
+      summary: ${{ steps.issue_link.outputs.summary }}
     steps:
       - name: Checkout automation scripts
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           sparse-checkout: |
             .github/actions
             scripts/pr-issue-link
@@ -48,10 +52,11 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --ignore-workspace
+        run: pnpm install --ignore-workspace --ignore-scripts
         working-directory: scripts/pr-issue-link
 
       - name: Enforce linked issue
+        id: issue_link
         run: npx tsx index.ts
         working-directory: scripts/pr-issue-link
         env:
@@ -62,6 +67,96 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           STALE_DAYS: ${{ vars.PR_NEEDS_ISSUE_STALE_DAYS || '1' }}
 
+  complexity:
+    needs: issue-link-nudge
+    if: ${{ needs['issue-link-nudge'].outputs.needs_issue == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      summary: ${{ steps.complexity.outputs.summary }}
+    steps:
+      - name: Checkout automation scripts
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            scripts/pr-complexity
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts
+        working-directory: scripts/pr-complexity
+
+      - name: Score PR complexity
+        id: complexity
+        run: npx tsx index.ts
+        working-directory: scripts/pr-complexity
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+
+  summarize:
+    needs:
+      - issue-link-nudge
+      - complexity
+    if: ${{ always() && github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout automation scripts
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            scripts/pr-automation-comment
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts
+        working-directory: scripts/pr-automation-comment
+
+      - name: Upsert PR automation comment
+        run: npx tsx index.ts
+        working-directory: scripts/pr-automation-comment
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ISSUE_SUMMARY: ${{ needs['issue-link-nudge'].outputs.summary }}
+          COMPLEXITY_SUMMARY: ${{ needs.complexity.outputs.summary }}
+
   close-stale-unlinked:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
@@ -70,6 +165,7 @@ jobs:
       - name: Checkout automation scripts
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           sparse-checkout: |
             .github/actions
             scripts/pr-issue-link
@@ -89,7 +185,7 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --ignore-workspace
+        run: pnpm install --ignore-workspace --ignore-scripts
         working-directory: scripts/pr-issue-link
 
       - name: Close stale PRs without linked issues

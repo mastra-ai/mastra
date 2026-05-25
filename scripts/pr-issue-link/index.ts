@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { Octokit } from 'octokit';
 
 const OWNER = requireEnv('OWNER');
@@ -9,7 +10,6 @@ const STALE_DAYS = Number(process.env.STALE_DAYS ?? '14');
 
 const NEEDS_ISSUE_LABEL = 'needs-issue';
 const NEEDS_ISSUE_LABEL_COLOR = 'e4e669';
-const NEEDS_ISSUE_COMMENT_MARKER = '<!-- mastra-pr-issue-link -->';
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 const coreContributorCache = new Map<string, Promise<boolean>>();
@@ -56,6 +56,8 @@ async function nudge(prNumber: number) {
   if (await isCoreContributor(author)) {
     console.log(`Skipping #${prNumber}: ${author} is a core contributor`);
     await removeLabelIfPresent(prNumber, NEEDS_ISSUE_LABEL);
+    setOutput('needs_issue', 'false');
+    setOutput('summary', buildCoreContributorSummary(author));
     return;
   }
 
@@ -64,14 +66,16 @@ async function nudge(prNumber: number) {
   if (linkedIssues.length > 0) {
     console.log(`PR #${prNumber} links ${linkedIssues.length} issue(s)`);
     await removeLabelIfPresent(prNumber, NEEDS_ISSUE_LABEL);
-    await upsertIssueComment(prNumber, buildThankYouIssueComment());
+    setOutput('needs_issue', 'false');
+    setOutput('summary', buildLinkedIssueSummary(linkedIssues));
     return;
   }
 
   console.log(`PR #${prNumber} has no linked issue`);
   await ensureNeedsIssueLabel();
   await addLabel(prNumber, NEEDS_ISSUE_LABEL);
-  await upsertIssueComment(prNumber, buildNeedsIssueComment(STALE_DAYS));
+  setOutput('needs_issue', 'true');
+  setOutput('summary', buildNeedsIssueSummary(STALE_DAYS));
 }
 
 async function closeStale() {
@@ -229,43 +233,46 @@ async function removeLabelIfPresent(issueNumber: number, label: string) {
   }
 }
 
-async function upsertIssueComment(issueNumber: number, body: string) {
-  const comments = await octokit.paginate(octokit.rest.issues.listComments, {
-    owner: OWNER,
-    repo: REPO,
-    issue_number: issueNumber,
-    per_page: 100,
-  });
-  const existing = comments.find(comment => comment.body?.includes(NEEDS_ISSUE_COMMENT_MARKER));
+function buildNeedsIssueSummary(staleDays: number) {
+  return `## PR triage
 
-  if (existing) {
-    await octokit.rest.issues.updateComment({ owner: OWNER, repo: REPO, comment_id: existing.id, body });
-    console.log(`Updated needs-issue comment on #${issueNumber}`);
+This PR needs to fix an existing issue. Please link an issue in the PR description, for example with \`Fixes #1234\` or \`Closes #1234\`.
+
+Applied label: \`${NEEDS_ISSUE_LABEL}\`
+
+PRs without a linked issue will automatically close after ${staleDays} day(s) with the label.`;
+}
+
+function buildLinkedIssueSummary(linkedIssues: LinkedIssue[]) {
+  const issueLinks = linkedIssues.map(issue => `#${issue.number}`).join(', ');
+
+  return `## PR triage
+
+Linked issue check passed (${issueLinks}).
+
+Mastra uses CodeRabbit for automated code reviews. Please address all feedback from CodeRabbit by either making changes to your PR or leaving a comment explaining why you disagree with the feedback. Since CodeRabbit is an AI, it may occasionally provide incorrect feedback.`;
+}
+
+function buildCoreContributorSummary(author: string | undefined) {
+  return `## PR triage
+
+Linked issue check skipped${author ? ` for core contributor @${author}` : ''}.`;
+}
+
+function setOutput(name: string, value: string) {
+  const outputPath = process.env.GITHUB_OUTPUT;
+  if (!outputPath) {
+    console.log(`${name}=${value}`);
     return;
   }
 
-  await octokit.rest.issues.createComment({ owner: OWNER, repo: REPO, issue_number: issueNumber, body });
-  console.log(`Created needs-issue comment on #${issueNumber}`);
-}
+  if (value.includes('\n')) {
+    const delimiter = `EOF_${name}_${Date.now()}`;
+    appendFileSync(outputPath, `${name}<<${delimiter}\n${value}\n${delimiter}\n`);
+    return;
+  }
 
-function buildNeedsIssueComment(staleDays: number) {
-  return `${NEEDS_ISSUE_COMMENT_MARKER}
-Thank you for your contribution!
-
-Your PR needs to fix an existing issue. You are required to link issues (e.g. with \`Fixes #1234\`, \`Closes #1234\`) in your PR description.
-
-PRs without a linked issue will automatically closed in ${staleDays} days.
-`;
-}
-
-function buildThankYouIssueComment() {
-  return `${NEEDS_ISSUE_COMMENT_MARKER}
-Thank you for your contribution!
-
-Mastra uses CodeRabbit for automated code reviews. Please address all feedback from CodeRabbit by either making changes to your PR or leaving a comment explaining why you disagree with the feedback. Since CodeRabbit is an AI, it may occasionally provide incorrect feedback.
-
-Addressing CodeRabbit's feedback will greatly increase the chances of your PR being merged. We appreciate your understanding and cooperation in helping us maintain high code quality standards.
-`;
+  appendFileSync(outputPath, `${name}=${value}\n`);
 }
 
 async function isCoreContributor(login: string | undefined) {
