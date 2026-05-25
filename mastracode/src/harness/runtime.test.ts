@@ -1,7 +1,12 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { getDynamicWorkspace } from '../agents/workspace.js';
 import { MASTRACODE_HARNESS_NAME } from './config.js';
 import { MastraCodeHarnessRuntime } from './runtime.js';
 
@@ -16,6 +21,7 @@ function createRuntime(
     resolveModel?: (modelId: string) => unknown;
     browser?: unknown;
     disabledTools?: string[];
+    workspace?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['workspace'];
   } = {},
 ) {
   const agent = new Agent({
@@ -56,6 +62,7 @@ function createRuntime(
     resolveModel: options.resolveModel,
     browser: options.browser as never,
     disabledTools: options.disabledTools,
+    workspace: options.workspace,
   });
 }
 
@@ -68,6 +75,30 @@ describe('MastraCodeHarnessRuntime', () => {
     const runtime = createRuntime();
 
     expect(runtime.getMastra().getHarness(MASTRACODE_HARNESS_NAME)).toBe(runtime.core);
+  });
+
+  it('provides initial runtime state when Harness v1 initializes the shared workspace', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'mastracode-workspace-context-'));
+    let observedProjectPath: string | undefined;
+    const runtime = createRuntime({
+      projectPath,
+      workspace: ({ requestContext, mastra }) => {
+        const harnessContext = requestContext.get('harness') as
+          | { getState?: () => { projectPath?: string } }
+          | undefined;
+        observedProjectPath = harnessContext?.getState?.().projectPath;
+        return getDynamicWorkspace({ requestContext, mastra });
+      },
+    });
+
+    try {
+      await runtime.init();
+      expect(observedProjectPath).toBe(projectPath);
+      expect(runtime.getWorkspace()).toBeTruthy();
+    } finally {
+      await runtime.destroy();
+      rmSync(projectPath, { recursive: true, force: true });
+    }
   });
 
   it('restores Harness v1 thread metadata into MastraCode runtime state', async () => {

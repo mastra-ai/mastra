@@ -304,12 +304,17 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       workspace: config.workspace
         ? {
             kind: 'shared' as const,
-            workspace: ({ requestContext }) => config.workspace!({ requestContext, mastra: this.mastra }),
+            workspace: ({ requestContext }) =>
+              config.workspace!({
+                requestContext: this.withRuntimeHarnessContext(requestContext),
+                mastra: this.mastra,
+              }),
           }
         : undefined,
     });
 
     this.mastra = new Mastra({
+      logger: false,
       agents: harnessV1Agents,
       storage: config.storage,
       observability: config.observability,
@@ -1480,26 +1485,28 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     return modelId && this.config.resolveModel ? this.config.resolveModel(modelId) : undefined;
   }
 
+  private withRuntimeHarnessContext(requestContext: RequestContext): RequestContext {
+    if (requestContext.get('harness')) return requestContext;
+
+    requestContext.set('harness', {
+      harnessId: 'mastra-code',
+      sessionId: this.session?.id,
+      threadId: this.getCurrentThreadId(),
+      resourceId: this.resourceId,
+      modeId: this.currentModeId,
+      state: this.state,
+      getState: () => this.state,
+      setState: (updates: Partial<TState>) => this.setState(updates),
+      getSubagentModelId: (params?: { agentType?: string }) => this.getSubagentModelId(params),
+      workspace: this.currentWorkspace,
+    });
+    return requestContext;
+  }
+
   async getResolvedMemory() {
     if (!this.config.memory) return null;
     if (typeof this.config.memory !== 'function') return this.config.memory;
-    const requestContext = new RequestContext([
-      [
-        'harness',
-        {
-          harnessId: 'mastra-code',
-          sessionId: this.session?.id,
-          threadId: this.getCurrentThreadId(),
-          resourceId: this.resourceId,
-          modeId: this.currentModeId,
-          state: this.state,
-          getState: () => this.state,
-          setState: (updates: Partial<TState>) => this.setState(updates),
-          getSubagentModelId: (params?: { agentType?: string }) => this.getSubagentModelId(params),
-          workspace: this.currentWorkspace,
-        },
-      ],
-    ]) as RequestContext<unknown>;
+    const requestContext = this.withRuntimeHarnessContext(new RequestContext());
     return this.config.memory({ requestContext, mastra: this.mastra });
   }
 

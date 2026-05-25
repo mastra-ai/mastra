@@ -291,6 +291,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
   });
 
+  const observabilityExporters = [
+    ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' as const })] : []),
+    new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+  ];
+
   // Observability (tracing, scoring, feedback)
   const observability = new Observability({
     configs: {
@@ -334,10 +339,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.observationThreshold',
           'harness.state.reflectionThreshold',
         ],
-        exporters: [
-          new MastraStorageExporter({ strategy: 'event-sourced' }),
-          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
-        ],
+        exporters: observabilityExporters,
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
