@@ -1,2 +1,6 @@
 overrides:
   ssri: '>=6.0.2'
+
+allowBuilds:
+  esbuild: true
+  snyk: false

@@ -6,3 +6,6 @@ overrides:
   '@mastra/libsql': link:../../../../stores/libsql
   '@mastra/editor': link:../../../../packages/editor
   '@mastra/mcp': link:../../../../packages/mcp
+
+allowBuilds:
+  msw: false

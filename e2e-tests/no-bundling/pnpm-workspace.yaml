@@ -4,3 +4,4 @@ overrides:
 
 allowBuilds:
   esbuild: true
+  snyk: false

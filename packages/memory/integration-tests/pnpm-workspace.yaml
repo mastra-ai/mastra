@@ -10,3 +10,7 @@ overrides:
   mastra: link:../../cli
   '@internal/llm-recorder': link:../../_llm-recorder
   '@internal/test-utils': link:../../_test-utils
+
+allowBuilds:
+  esbuild: false
+  sharp: false
