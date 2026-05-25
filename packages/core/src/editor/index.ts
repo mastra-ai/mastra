@@ -17,4 +17,5 @@ export type {
   FilesystemProvider,
   SandboxProvider,
   BlobStoreProvider,
+  BrowserProvider,
 } from './types';

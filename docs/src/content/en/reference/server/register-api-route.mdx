@@ -27,7 +27,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths can't start with `/api/` as this prefix is reserved for Mastra server routes.
+**Note:** Custom route paths can't start with the server's configured `apiPrefix` (default: `/api`), as that prefix is reserved for built-in Mastra routes. If you set a custom `apiPrefix`, only that prefix is reserved — for example, with `apiPrefix: '/mastra/api'`, paths like `/api/my-endpoint` are allowed.
 
 ### options
 

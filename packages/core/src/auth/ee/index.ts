@@ -22,6 +22,7 @@ export {
   isFeatureEnabled,
   isDevEnvironment,
   isEEEnabled,
+  clearLicenseCache,
   type LicenseInfo,
 } from './license';
 

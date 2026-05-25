@@ -42,11 +42,8 @@ export class IdleCounterComponent extends Container {
   }
 
   render(width: number): string[] {
-    if (this.idleStartedAt === undefined || this.textChild.render(width).join('').length === 0) {
-      return [];
-    }
-
-    return super.render(width);
+    const rendered = super.render(width);
+    return rendered.length > 0 ? rendered : [''];
   }
 }
 

@@ -136,7 +136,11 @@ export function setupKeyboardShortcuts(
 
   // Shift+Tab - cycle harness modes
   state.editor.onAction('cycleMode', async () => {
-    // Block mode switching while plan approval is active
+    // Block mode switching while the agent is active or plan approval is pending
+    if (state.harness.isRunning()) {
+      showInfo(state, 'Wait for the agent to finish first');
+      return;
+    }
     if (state.activeInlinePlanApproval) {
       showInfo(state, 'Resolve the plan approval first');
       return;
@@ -253,6 +257,7 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
+  state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
   state.ui.addChild(state.editorContainer);
   state.idleCounter = new IdleCounterComponent();

@@ -214,6 +214,11 @@ const sidebars = {
           id: 'memory/memory-processors',
           label: 'Memory Processors',
         },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
+        },
       ],
     },
     {

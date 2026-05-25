@@ -78,6 +78,8 @@ const findUserTool = createTool({
 
 In this case, by calling the `suspend()` function, the tool call will be suspended and the agent will wait for the tool to be resumed.
 
+`suspend()` resolves with `void` and does not throw — your `execute` must return after calling it (idiomatically `return await suspend({ ... })`) so the framework can pause the tool. The `execute` return type allows `void` alongside the `outputSchema` shape for this reason; when a suspension is recorded, output validation is skipped.
+
 You can resume with the `.resumeStreamVNext()` method. You pass `resumeData` to continue execution from the point of suspension. This `resumeData` will be available in the tool execution context, and if specified in the tool options, should match the schema of the `resumeSchema`.
 
 ```typescript

@@ -13,6 +13,7 @@ export * from './config';
 
 // Export all implementations
 export * from './bus';
+export * from './client';
 export * from './context';
 export * from './instances';
 export * from './metrics';
