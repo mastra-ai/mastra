@@ -217,8 +217,7 @@ const agent = new Agent({
     }),
     options: {
       lastMessages: {
-        maxMessages: Infinity, // Load all messages
-        maxTokens: 800_000, // But trim to fit 800K tokens
+        maxTokens: 800_000, // Trim to fit 800K tokens
         atMaxRemoveTokens: 200_000, // Drop by 200K when over budget
       },
     },

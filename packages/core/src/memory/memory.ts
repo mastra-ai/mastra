@@ -61,7 +61,7 @@ function extractModelIdString(model: unknown): string | undefined {
  * Extracted from either the legacy number/false form or the new object form.
  */
 export type NormalizedLastMessages = {
-  /** Number of messages to fetch, or undefined to use default */
+  /** Number of messages to fetch; false means no count cap */
   maxMessages?: number | false;
   /** Max token budget for remembered history, or undefined to disable token limiting */
   maxTokens?: number;
@@ -89,8 +89,8 @@ export function normalizeLastMessages(
     return { maxMessages: lastMessages };
   }
 
-  // Object form
-  const result: NormalizedLastMessages = {};
+  // Object form: omitting maxMessages means there is no count cap.
+  const result: NormalizedLastMessages = { maxMessages: false };
 
   if (lastMessages.maxMessages !== undefined) {
     result.maxMessages = lastMessages.maxMessages;

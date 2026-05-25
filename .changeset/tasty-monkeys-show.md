@@ -10,7 +10,6 @@ The flat `maxTokens` option has been replaced by nested fields under `lastMessag
 new Memory({
   options: {
     lastMessages: {
-      maxMessages: Infinity,     // Optional count-based limit (default: 10)
       maxTokens: 800_000,       // Optional token-based limit
       atMaxRemoveTokens: 200_000, // Optional: drop by N tokens when over budget (default: 25% of maxTokens)
     },

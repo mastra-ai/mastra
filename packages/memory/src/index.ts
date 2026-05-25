@@ -166,20 +166,20 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
-    // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-    // lastMessages can be a number, false, or an object with maxMessages
+    // Use perPage from args if provided, otherwise use threadConfig.lastMessages.
+    // In object form, omitting maxMessages means there is no count cap.
     const configLastMessages = config.lastMessages;
-    const normalizedPerPage =
-      configLastMessages !== null && typeof configLastMessages === 'object'
-        ? (configLastMessages as { maxMessages?: number | false }).maxMessages
-        : configLastMessages;
+    const isLastMessagesObject = configLastMessages !== null && typeof configLastMessages === 'object';
+    const normalizedPerPage = isLastMessagesObject
+      ? ((configLastMessages as { maxMessages?: number | false }).maxMessages ?? false)
+      : configLastMessages;
     const perPage = perPageArg !== undefined ? perPageArg : normalizedPerPage;
 
-    // lastMessages: false means "disable conversation history entirely".
+    // Top-level lastMessages: false means "disable conversation history entirely".
     // When the resolved perPage is false from config (not an explicit caller override),
     // return empty messages. This prevents recall() from treating false as "no limit"
     // and returning ALL messages when the user intended to disable history.
-    const historyDisabledByConfig = normalizedPerPage === false && perPageArg === undefined;
+    const historyDisabledByConfig = configLastMessages === false && perPageArg === undefined;
 
     // When limiting messages (perPage !== false) without explicit orderBy, we need to:
     // 1. Query DESC to get the NEWEST messages (not oldest)

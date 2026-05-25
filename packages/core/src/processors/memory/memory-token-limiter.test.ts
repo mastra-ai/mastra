@@ -468,9 +468,23 @@ describe('Memory.getInputProcessors with nested lastMessages', () => {
     const processors = await memory.getInputProcessors();
     const historyProcessor = processors.find(p => p.id === 'message-history');
     expect(historyProcessor).toBeDefined();
+    expect((historyProcessor as any).lastMessages).toBe(50);
   });
 
-  it('should use Infinity for maxMessages when lastMessages is false', async () => {
+  it('should use no count cap when object lastMessages omits maxMessages', async () => {
+    const memory = new MockMemory();
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      lastMessages: { maxTokens: 100_000 },
+    };
+
+    const processors = await memory.getInputProcessors();
+    const historyProcessor = processors.find(p => p.id === 'message-history');
+    expect(historyProcessor).toBeDefined();
+    expect((historyProcessor as any).lastMessages).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('should use no count cap when object maxMessages is false', async () => {
     const memory = new MockMemory();
     (memory as any).threadConfig = {
       ...(memory as any).threadConfig,

@@ -73,7 +73,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             name: 'lastMessages',
             type: 'number | false | { maxMessages?: number | false; maxTokens?: number; atMaxRemoveTokens?: number }',
             description:
-              'Controls how many messages to load into context. For count-based limiting, use a number (e.g. `10`) or `false` to disable history entirely. For token-based limiting, use object form with `maxTokens`. Set `maxMessages: Infinity` or `maxMessages: false` to load all messages with no count limit.',
+              'Controls how many messages to load into context. For count-based limiting, use a number (e.g. `10`) or `false` to disable history entirely. For token-based limiting, use object form with `maxTokens`. In object form, omit `maxMessages` or set it to `false` to load messages with no count cap.',
             isOptional: true,
             defaultValue: '10',
           },

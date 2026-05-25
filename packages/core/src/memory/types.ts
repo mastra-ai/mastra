@@ -859,7 +859,6 @@ type BaseMemoryConfig = {
    * lastMessages: 5 // Include last 5 messages
    * lastMessages: false // Disable conversation history
    * lastMessages: {
-   *   maxMessages: Infinity, // Fetch all messages (bounded by token limit)
    *   maxTokens: 50_000,     // Trim when total exceeds 50K tokens
    *   atMaxRemoveTokens: 20_000, // Drop to 30K when trimming
    * }
@@ -869,7 +868,7 @@ type BaseMemoryConfig = {
     | number
     | false
     | {
-        /** Max number of messages to fetch, or Infinity/false to fetch all */
+        /** Max number of messages to fetch. Omit or set false for no count cap. */
         maxMessages?: number | false;
         /** Max token budget for remembered history (triggers trimming when exceeded) */
         maxTokens?: number;
