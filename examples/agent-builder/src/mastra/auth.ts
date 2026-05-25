@@ -20,7 +20,7 @@ export async function initWorkOS() {
       // Another admin-level role (should be filtered from preview list)
       superadmin: ['*'],
       // Read and execute across all resources
-      member: ['*:read', '*:execute'],
+      member: ['*'],
       // Can only view and run agents
       operator: ['agents:read', 'agents:execute', 'tools:read', 'workflows:read'],
       // Read-only access — no resources at all
