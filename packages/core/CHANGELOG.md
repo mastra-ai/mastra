@@ -1,5 +1,79 @@
 # @mastra/core
 
+## 1.37.0-alpha.5
+
+### Patch Changes
+
+- Made provider capabilities loading lazy instead of bulk-syncing on every registry access. Removed subscription setup from harness switchMode() — subscriptions are now lazily ensured at send time. Added 10s TTL cache and invalidation method for listAvailableModels(). ([#17008](https://github.com/mastra-ai/mastra/pull/17008))
+
+- Fixed a race in Harness `sendMessage` where a phantom `agent_end: 'complete'` event could fire before any chunks arrived. Subscribers, such as apps running on Cloudflare Workers or Durable Objects, will no longer miss text deltas, messages, or tool events when an agent run completes. ([#17024](https://github.com/mastra-ai/mastra/pull/17024))
+
+  The cause was `AgentThreadStreamRuntime.subscribeToThread`'s `activeRunId()` returning `null` during the gap between `sendSignal` reserving a runId and `registerRun` populating the stream record, which made `waitForCurrentThreadStreamIdle()` exit immediately and `sendMessage` emit a synthetic `agent_end`. The subscriber now treats both a reserved-but-not-yet-registered local run and an active remote run as live, matching `sendSignal`'s own behavior.
+
+## 1.37.0-alpha.4
+
+### Patch Changes
+
+- Connecting or disconnecting an agent through a channel (e.g. Slack) now requires the same write permission as editing the underlying stored agent. The check runs on `POST /channels/:platform/connect` and `POST /channels/:platform/:agentId/disconnect` whenever the target agent has a record in the stored-agents store. Callers without write access receive a `404 Not found`, matching the behavior of the stored-agent edit routes. Agents defined in code (no stored-agents record) are unaffected and continue to honor only the route's existing auth requirement. ([#16949](https://github.com/mastra-ai/mastra/pull/16949))
+
+  The caller must either own the stored agent, have admin bypass, or hold `agents:edit` (or a scoped `agents:edit:<agentId>`).
+
+  ```http
+  POST /channels/slack/connect
+  Authorization: Bearer <token-with-agents:edit>
+  Content-Type: application/json
+
+  { "agentId": "support-bot" }
+  ```
+
+  ```http
+  POST /channels/slack/support-bot/disconnect
+  Authorization: Bearer <token-with-agents:edit>
+  ```
+
+  `@mastra/core` is bumped as a patch to ship the regenerated permission definitions that back this check.
+
+- Fixed `workflow.parallel()` type-checking for steps that declare `requestContextSchema`. ([#16989](https://github.com/mastra-ai/mastra/pull/16989))
+  Steps with matching request context now type-check correctly.
+  Steps with mismatched request context still fail with a type error.
+  Fixes #16975.
+
+- Fixed agent crash when `backgroundTasks.enabled: true` is combined with a tool whose `inputSchema` uses Zod's `.refine()` or `.superRefine()`. On Zod v4, such agents threw `Cannot overwrite keys on object schemas containing refinements` on repeated invocations and became unusable. Tools with refined input schemas now work with background tasks. ([#16966](https://github.com/mastra-ai/mastra/pull/16966))
+
+- Gate stored-workspace handlers by author. Previously any authenticated caller within a tenant could list, read, update, or delete another user's workspace. ([#16974](https://github.com/mastra-ai/mastra/pull/16974))
+
+  **Behavior changes**
+  - `POST /stored/workspaces` — server stamps `authorId` from the authenticated caller; any body-provided `authorId` is ignored.
+  - `GET /stored/workspaces/:id`, `PATCH /stored/workspaces/:id`, `DELETE /stored/workspaces/:id` — return `404 Not found` unless the caller is the owner, an admin (`*`), or holds `stored-workspaces:<action>[:<id>]`.
+  - `GET /stored/workspaces` — filters to the caller's own rows plus legacy unowned records; admins still see every row.
+  - Legacy workspaces created before this change (no `authorId`) remain accessible to any authenticated caller for backwards compatibility.
+
+  **Example**
+
+  ```ts
+  // Client POST body — authorId is ignored if sent
+  await fetch('/stored/workspaces', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'My workspace', authorId: 'someone-else' }),
+  });
+
+  // Stored row — authorId is stamped from the authenticated caller
+  // {
+  //   id: 'my-workspace',
+  //   name: 'My workspace',
+  //   authorId: 'user_abc123', // from requestContext, NOT from body
+  //   ...
+  // }
+  ```
+
+  **Migration**
+  - Existing rows with `authorId === null/undefined` remain readable/writable by any authenticated caller — no action required for backwards compatibility.
+  - To lock down legacy rows, backfill `authorId` directly in the `workspaces` table with the original creator's id.
+  - For service accounts or tooling that need cross-user access, grant `stored-workspaces:*` (or per-id `stored-workspaces:<action>:<id>`) instead of relying on the legacy unowned bypass.
+  - Admins (callers with `*`) continue to see and mutate every row regardless of `authorId`.
+
+  The `@mastra/core` patch regenerates `permissions.generated.ts` to include the `auth` and `infrastructure` resources that already had routes on `main`.
+
 ## 1.37.0-alpha.3
 
 ### Minor Changes
