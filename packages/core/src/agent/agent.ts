@@ -679,8 +679,6 @@ export class Agent<
     }
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
-    // Propagate logger so channel-level logs flow through the configured logger
-    // instead of being silently dropped.
     if (this.logger) {
       agentChannels.__setLogger(this.logger);
     }
