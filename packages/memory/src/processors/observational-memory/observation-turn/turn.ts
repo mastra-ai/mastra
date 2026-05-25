@@ -181,9 +181,9 @@ export class ObservationTurn {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
     }
 
-    // When the agent goes idle, start buffering any unobserved messages in the background.
-    // This ensures messages accumulated during the turn are observed proactively
-    // rather than waiting for the next turn's step.prepare() to trigger buffering.
+    // Capture buffer inputs in locals before dispose() clears the turn's transient references.
+    // The buffer() call receives these values by value in its argument object at call time,
+    // so clearing them after the call is safe — the async closure already holds its own copy.
     if (this.om.buffering.isAsyncObservationEnabled()) {
       const allMessages = this.messageList.get.all.db();
       const record = this._record!;
@@ -204,6 +204,11 @@ export class ObservationTurn {
           });
       }
     }
+
+    // Release heavy transient references (_context, writer, requestContext, etc.)
+    // so that even if a retained input-processor turn reference survives, it no
+    // longer holds large prompt/memory/system-message strings in memory.
+    this.dispose();
 
     return { record: this._record! };
   }
@@ -229,5 +234,24 @@ export class ObservationTurn {
       return otherThreadsContext;
     }
     return this._context?.otherThreadsContext;
+  }
+
+  /**
+   * Release heavy transient references held by this turn. Called after end()
+   * to free _context (which contains systemMessage/memory strings), writer,
+   * requestContext, observabilityContext, actorModelContext, and memory.
+   *
+   * The turn remains usable for its readonly identifiers (threadId, resourceId,
+   * record) and hooks reference, but no longer retains large prompt/context strings.
+   */
+  dispose(): void {
+    this._currentStep?.dispose();
+    this._currentStep = undefined;
+    this._context = undefined;
+    this.writer = undefined;
+    this.requestContext = undefined;
+    this.observabilityContext = undefined;
+    this.actorModelContext = undefined;
+    this.memory = undefined;
   }
 }

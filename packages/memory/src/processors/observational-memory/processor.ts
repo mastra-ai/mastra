@@ -371,6 +371,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           state.__omTurn = undefined;
         }
 
+        // Clear transient processor state that retained model/provider/observability
+        // objects after the turn finished. The turn's own dispose() releases its
+        // internal context references, while the processor state keys hold separate
+        // references that must be cleared here.
+        state.__omActorModelContext = undefined;
+        state.__omObservabilityContext = undefined;
+
         return messageList;
       });
   }

@@ -407,4 +407,13 @@ export class ObservationStep {
       observerExchange: om.observer.lastExchange,
     };
   }
+
+  /**
+   * Release heavy references held by this step. Called after the turn ends.
+   * After disposal, the step should not be used further.
+   */
+  dispose(): void {
+    this._context = undefined;
+    this._prepared = false;
+  }
 }
