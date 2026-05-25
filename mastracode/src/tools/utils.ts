@@ -7,11 +7,15 @@ import { skillPaths } from '../agents/workspace.js';
  *
  * Returns `true` when access should be **allowed**.
  */
-export function isPathAllowed(targetPath: string, projectRoot: string, allowedPaths: string[] = []): boolean {
+export function isPathWithinRoots(targetPath: string, roots: string[] = []): boolean {
   const resolved = path.resolve(targetPath);
-  const roots = [projectRoot, ...allowedPaths].map(p => path.resolve(p));
+  const resolvedRoots = roots.map(p => path.resolve(p));
 
-  return roots.some(root => resolved === root || resolved.startsWith(root + path.sep));
+  return resolvedRoots.some(root => resolved === root || resolved.startsWith(root + path.sep));
+}
+
+export function isPathAllowed(targetPath: string, projectRoot: string, allowedPaths: string[] = []): boolean {
+  return isPathWithinRoots(targetPath, [projectRoot, ...allowedPaths]);
 }
 
 /**

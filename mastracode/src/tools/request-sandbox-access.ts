@@ -3,6 +3,7 @@
  * The user can approve or deny the request via TUI dialog.
  */
 
+import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { HarnessQuestionAnswer, HarnessRequestContext } from '@mastra/core/harness';
@@ -10,12 +11,30 @@ import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
 import type { stateSchema } from '../schema.js';
-import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
+import { isPathAllowed, isPathWithinRoots, getAllowedPathsFromContext } from './utils.js';
 
 function expandTilde(p: string): string {
   if (p === '~') return os.homedir();
   if (p.startsWith('~/') || p.startsWith('~\\')) return path.join(os.homedir(), p.slice(2));
   return p;
+}
+
+function crossesNestedGitBoundary(absolutePath: string, projectRoot: string): boolean {
+  const resolvedPath = path.resolve(absolutePath);
+  const resolvedRoot = path.resolve(projectRoot);
+
+  if (resolvedPath === resolvedRoot || !isPathAllowed(resolvedPath, resolvedRoot)) return false;
+
+  let current = resolvedPath;
+  while (current !== resolvedRoot) {
+    if (existsSync(path.join(current, '.git'))) return true;
+
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+
+  return false;
 }
 
 type MastraCodeState = z.infer<typeof stateSchema>;
@@ -37,10 +56,22 @@ export const requestSandboxAccessTool = createTool({
       const expanded = expandTilde(requestedPath);
       const absolutePath = path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded);
 
-      // Check if already allowed
-      const projectRoot = process.cwd();
-      const allowedPaths = getAllowedPathsFromContext(context);
-      if (isPathAllowed(absolutePath, projectRoot, allowedPaths)) {
+      // Check if already allowed. Nested git trees inside the project root are
+      // not considered accessible until they are explicitly granted.
+      const fs = context?.workspace?.filesystem;
+      const projectRoot = fs instanceof LocalFilesystem ? fs.basePath : process.cwd();
+      const allowedPaths = [
+        ...getAllowedPathsFromContext(context),
+        ...(fs instanceof LocalFilesystem ? [...fs.allowedPaths] : []),
+      ];
+      const crossesBlockedBoundary =
+        (fs instanceof LocalFilesystem && isPathWithinRoots(absolutePath, [...fs.disallowedPaths])) ||
+        crossesNestedGitBoundary(absolutePath, projectRoot);
+      const alreadyGranted =
+        isPathWithinRoots(absolutePath, allowedPaths) ||
+        (isPathAllowed(absolutePath, projectRoot) && !crossesBlockedBoundary);
+
+      if (alreadyGranted) {
         return {
           content: `Access already granted: "${absolutePath}" is within the project root or allowed paths.`,
           isError: false,
