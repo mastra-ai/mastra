@@ -974,6 +974,34 @@ describe('Agent signals', () => {
     expect(recalled.messages).toHaveLength(0);
   });
 
+  it('reports the reserved runId as active before registerRun populates the stream record', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const threadId = 'reservation-gap-thread';
+    const resourceId = 'reservation-gap-user';
+
+    // agent.stream is awaited inside the idle-wake path before registerRun fires. Returning
+    // a never-resolving promise pins the runtime in the gap where sendSignal has reserved
+    // activeThreadRunIds + threadKeysByRunId but threadRunsById is still empty.
+    const agent = {
+      id: 'reservation-gap-agent',
+      stream: () => new Promise(() => {}),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    expect(subscription.activeRunId()).toBeNull();
+
+    const result = runtime.sendSignal(agent, createSignal({ type: 'user-message', contents: 'hello' }), {
+      resourceId,
+      threadId,
+      ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(subscription.activeRunId()).toBe(result.runId);
+
+    subscription.unsubscribe();
+  });
+
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
     let streamCount = 0;
     const memory = new MockMemory();

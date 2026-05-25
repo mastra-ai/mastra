@@ -15,6 +15,9 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -131,6 +134,92 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_scorer', ['scorerId'])
   .index('by_entity', ['entityId', 'entityType'])
   .index('by_run', ['runId'])
+  .index('by_created', ['createdAt']);
+
+/**
+ * Channel installations table - stores platform app installations for agents.
+ *
+ * Platform data is serialized as a JSON string because user/platform payloads
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraChannelInstallationsTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  agentId: v.string(),
+  status: v.string(),
+  webhookId: v.optional(v.union(v.string(), v.null())),
+  data: v.string(),
+  configHash: v.optional(v.union(v.string(), v.null())),
+  error: v.optional(v.union(v.string(), v.null())),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_webhook', ['webhookId'])
+  .index('by_platform_agent', ['platform', 'agentId'])
+  .index('by_platform', ['platform']);
+
+/**
+ * Channel config table - stores platform-level channel configuration.
+ *
+ * The synthetic id mirrors `platform` so the generic Convex storage operations
+ * can use their existing by-record-id lookup path.
+ */
+export const mastraChannelConfigTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  data: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_platform', ['platform']);
+
+/**
+ * Background tasks table - stores durable background task state.
+ *
+ * JSON-like payloads are stored as encoded strings to match the existing
+ * Convex storage serialization used by this adapter.
+ *
+ * Optional fields are stored as null when cleared so partial Convex patches can
+ * preserve the existing task row while explicitly removing suspended state.
+ */
+export const mastraBackgroundTasksTable = defineTable({
+  id: v.string(),
+  tool_call_id: v.string(),
+  tool_name: v.string(),
+  agent_id: v.string(),
+  run_id: v.string(),
+  thread_id: v.union(v.string(), v.null()),
+  resource_id: v.union(v.string(), v.null()),
+  status: v.union(
+    v.literal('pending'),
+    v.literal('running'),
+    v.literal('suspended'),
+    v.literal('completed'),
+    v.literal('failed'),
+    v.literal('cancelled'),
+    v.literal('timed_out'),
+  ),
+  args: v.string(),
+  result: v.union(v.string(), v.null()),
+  error: v.union(v.string(), v.null()),
+  suspend_payload: v.union(v.string(), v.null()),
+  retry_count: v.number(),
+  max_retries: v.number(),
+  timeout_ms: v.number(),
+  createdAt: v.string(),
+  startedAt: v.union(v.string(), v.null()),
+  suspendedAt: v.union(v.string(), v.null()),
+  completedAt: v.union(v.string(), v.null()),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_created', ['status', 'createdAt'])
+  .index('by_agent_status', ['agent_id', 'status'])
+  .index('by_run', ['run_id'])
+  .index('by_tool_call', ['tool_call_id'])
+  .index('by_thread', ['thread_id'])
+  .index('by_resource', ['resource_id'])
+  .index('by_tool', ['tool_name'])
   .index('by_created', ['createdAt']);
 
 // ============================================================================
@@ -269,7 +358,16 @@ export const mastraDocumentsTable = defineTable({
 // Re-export table name constants for convenience
 // ============================================================================
 
-export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS };
+export {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_RESOURCES,
+  TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
+};
 
 // Additional table name constants for vector tables (not in core)
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';

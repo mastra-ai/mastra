@@ -1,5 +1,45 @@
 # @mastra/playground-ui
 
+## 30.0.0-alpha.5
+
+### Patch Changes
+
+- Improved the Select component by migrating it to Base UI for more reliable positioning and accessibility. The public API (`Select`, `SelectTrigger`, `SelectContent`, `SelectItem`, `SelectValue`, `SelectGroup`) is unchanged, so no consumer updates are needed. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Added `DataList.RowStatic`, a non-interactive row primitive. It renders a row that looks identical to other list rows but does not respond to clicks and shows no hover/focus state — use it alongside `DataList.RowButton` / `DataList.RowLink` when only some rows are clickable (e.g. error or placeholder entries in an otherwise navigable list). ([#16970](https://github.com/mastra-ai/mastra/pull/16970))
+
+  ```tsx
+  {
+    rows.map(row =>
+      row.href ? (
+        <DataList.RowLink key={row.id} to={row.href} LinkComponent={Link}>
+          {row.cells}
+        </DataList.RowLink>
+      ) : (
+        <DataList.RowStatic key={row.id}>{row.cells}</DataList.RowStatic>
+      ),
+    );
+  }
+  ```
+
+- Fixed Studio Settings page (and other default-height `PageLayout` pages) clipping their content with no scrollbar on viewports shorter than the form. Users on short laptop screens (under ~991px tall) could not reach the Save button under the Mastra Connection headers form, making it impossible to apply changes. Default-height `PageLayout` pages now grow with their content and scroll through the studio chrome wrapper; `height="full"` pages (Logs, Traces, Metrics, etc.) are unchanged. ([#16999](https://github.com/mastra-ai/mastra/pull/16999))
+
+- Restyled scrollbars across the studio UI to match the design system — thin, themed thumb on a transparent track — replacing the default OS scrollbars that clashed with dark and light surfaces. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Updated dependencies [[`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd)]:
+  - @mastra/core@1.37.0-alpha.5
+  - @mastra/client-js@1.21.0-alpha.5
+  - @mastra/react@0.4.1-alpha.5
+
+## 30.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+  - @mastra/client-js@1.21.0-alpha.4
+  - @mastra/react@0.4.1-alpha.4
+
 ## 30.0.0-alpha.3
 
 ### Minor Changes

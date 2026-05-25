@@ -593,7 +593,10 @@ export class AgentThreadStreamRuntime {
       const runId = state.activeThreadRunIds.get(key);
       if (!runId) return null;
       const record = state.threadRunsById.get(runId);
-      if (!record) return state.threadKeysByRunId.get(runId) === key ? null : runId;
+      // No record yet means either a remote run (record never lives locally) or a local run
+      // that sendSignal has reserved but has not yet registered via registerRun. Both are
+      // in flight from the subscriber's perspective; treat them as active.
+      if (!record) return runId;
       return record.output.status === 'running' ? runId : null;
     };
 

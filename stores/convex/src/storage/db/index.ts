@@ -122,6 +122,23 @@ export class ConvexDB extends MastraBase {
     });
   }
 
+  async patch({
+    tableName,
+    id,
+    record,
+  }: {
+    tableName: TABLE_NAMES;
+    id: string;
+    record: Record<string, any>;
+  }): Promise<boolean> {
+    return this.client.callStorage<boolean>({
+      op: 'patch',
+      tableName,
+      id,
+      record: this.normalizePatch(record),
+    });
+  }
+
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
     const result = await this.client.callStorage<R | null>({
       op: 'load',
@@ -162,6 +179,18 @@ export class ConvexDB extends MastraBase {
     if (!normalized.id) {
       normalized.id = crypto.randomUUID();
     }
+
+    for (const [key, value] of Object.entries(normalized)) {
+      if (value instanceof Date) {
+        normalized[key] = value.toISOString();
+      }
+    }
+
+    return normalized;
+  }
+
+  private normalizePatch(record: Record<string, any>): Record<string, any> {
+    const normalized: Record<string, any> = { ...record };
 
     for (const [key, value] of Object.entries(normalized)) {
       if (value instanceof Date) {
