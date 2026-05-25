@@ -7,14 +7,16 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
+import { finishStreamingAssistantMessage, toUIMessage } from '../lib/ai-sdk';
+import { resolveInitialMessages } from '../lib/ai-sdk/memory/resolveInitialMessages';
+import { AISdkNetworkTransformer } from '../lib/ai-sdk/transformers/AISdkNetworkTransformer';
+import { fromCoreUserMessageToUIMessage } from '../lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import { useMastraClient } from '../mastra-client-context';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
-import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
-import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
-import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
-import { useMastraClient } from '@/mastra-client-context';
+
+type ToolsInput = any;
 
 export interface MastraChatProps {
   agentId: string;
@@ -50,10 +52,14 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
   | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
-export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
+export type GenerateArgs = SharedArgs & {
+  onFinish?: (messages: UIMessage[]) => Promise<void>;
+  clientTools?: ToolsInput;
+};
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
+  clientTools?: ToolsInput;
   signalId?: string;
 };
 
@@ -306,6 +312,7 @@ export const useChat = ({
     signal,
     onFinish,
     tracingOptions,
+    clientTools,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -354,6 +361,7 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       tracingOptions,
       requireToolApproval,
+      clientTools,
     });
 
     // Check if suspended for tool approval
@@ -408,6 +416,7 @@ export const useChat = ({
     modelSettings,
     signal,
     tracingOptions,
+    clientTools,
     signalId,
   }: StreamArgs) => {
     const {
@@ -464,6 +473,7 @@ export const useChat = ({
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
+        clientTools,
       });
 
       _onChunk.current = onChunk;

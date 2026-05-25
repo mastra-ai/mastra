@@ -818,7 +818,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     const init: RequestInit = { method, headers: fetchHeaders, signal };
-    if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
         if (body instanceof ReadableStream) {

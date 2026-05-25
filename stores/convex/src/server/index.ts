@@ -1,5 +1,6 @@
 export { mastraCache } from './cache';
 export { mastraStorage } from './storage';
+export { mastraNativeVectorAction, mastraNativeVectorMutation, mastraNativeVectorQuery } from './native-vector';
 
 // Re-export schema definitions for backward compatibility
 // @mastra/convex/server now re-exports from @mastra/convex/schema
@@ -10,8 +11,13 @@ export {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraChannelInstallationsTable,
+  mastraChannelConfigTable,
+  mastraBackgroundTasksTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
+  defineMastraNativeVectorTable,
+  type MastraNativeVectorTableConfig,
   mastraCacheTable,
   mastraCacheListItemsTable,
   mastraDocumentsTable,
@@ -21,4 +27,7 @@ export {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 } from '../schema';

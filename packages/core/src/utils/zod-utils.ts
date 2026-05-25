@@ -74,6 +74,24 @@ export function isZodObject(value: unknown): value is ZodObjectAny {
 }
 
 /**
+ * Add fields to a ZodObject, compatible with both Zod 3 and Zod 4.
+ *
+ * Zod 4's `.extend()` throws ("Cannot overwrite keys on object schemas containing
+ * refinements. Use `.safeExtend()` instead.") when overwriting a key on a schema that
+ * carries a `.refine()`/`.superRefine()` check. `.safeExtend()` is the v4
+ * escape hatch and keeps the refinement; Zod 3 has neither the restriction nor
+ * `.safeExtend()`, so we fall back to `.extend()` there.
+ *
+ * @param schema - The ZodObject to extend
+ * @param shape - The fields to add
+ * @returns The extended ZodObject
+ */
+export function safeExtendZodObject(schema: ZodObjectAny, shape: Record<string, ZodTypeAny>): ZodObjectAny {
+  const extend = (schema as { safeExtend?: ZodObjectAny['extend'] }).safeExtend ?? schema.extend;
+  return extend.call(schema, shape);
+}
+
+/**
  * Get the def object from a Zod schema, compatible with both Zod 3 and Zod 4.
  * @param schema - The Zod schema
  * @returns The def object

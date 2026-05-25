@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
@@ -94,6 +94,44 @@ describe('resumeStream / resumeGenerate — no snapshot found', () => {
           message: expect.stringContaining('storage'),
         }),
       );
+    });
+  });
+
+  describe('resumeStream — snapshot read race', () => {
+    it('retries the snapshot read until a suspended snapshot is visible', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel() as any,
+      });
+
+      const mastra = new Mastra({
+        agents: { 'test-agent': agent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('test-agent');
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      if (!workflowsStore) throw new Error('workflows store not available');
+
+      const fakeSnapshot = { runId: 'race-run', status: 'suspended' } as any;
+      const loadSpy = vi
+        .spyOn(workflowsStore, 'loadWorkflowSnapshot')
+        .mockImplementationOnce(async () => null)
+        .mockImplementationOnce(async () => null)
+        .mockImplementation(async () => fakeSnapshot);
+
+      let caught: any;
+      try {
+        await registeredAgent.resumeStream({ approved: true }, { runId: 'race-run' });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(loadSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(caught?.id).not.toBe('AGENT_RESUME_NO_SNAPSHOT_FOUND');
     });
   });
 

@@ -21,6 +21,12 @@ export type StorageRequest =
       records: Record<string, any>[];
     }
   | {
+      op: 'patch';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      record: Record<string, any>;
+    }
+  | {
       op: 'load';
       tableName: TABLE_NAMES | string;
       keys: Record<string, any>;
