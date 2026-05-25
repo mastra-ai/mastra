@@ -204,7 +204,10 @@ describe('Lease heartbeat coordination', () => {
       const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
       const append = vi.spyOn(storage, 'appendSessionEvent').mockRejectedValueOnce(new Error('append failed'));
 
-      await expect(harness.shutdown()).rejects.toThrow('append failed');
+      await expect(harness.shutdown()).rejects.toMatchObject({
+        name: 'HarnessStorageError',
+        cause: expect.objectContaining({ message: 'append failed' }),
+      });
       append.mockRestore();
       expect(session.lifecycleState).toBe('live');
 
