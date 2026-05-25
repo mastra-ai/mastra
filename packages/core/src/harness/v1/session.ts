@@ -10,8 +10,9 @@
  * responses, permissions, code/workspace skills, subagents, goals, event
  * forwarding, abort, idle waiting, wakeup queue admission, and the core
  * admission/mutation primitives used by remote routes, plus request-context
- * `registerQuestion` / `registerPlanApproval` pending registration. Remote
- * SDKs and full channel routing remain follow-up lanes.
+ * `registerQuestion` / `registerPlanApproval` / `registerSandboxAccess`
+ * pending registration. Remote SDKs and full channel routing remain
+ * follow-up lanes.
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
@@ -133,6 +134,7 @@ import type {
   QueueOptions,
   RegisterPlanApprovalParams,
   RegisterQuestionParams,
+  RegisterSandboxAccessParams,
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionSignalOptions,
@@ -6650,6 +6652,22 @@ export class Session {
       );
     }
 
+    if (expectedKind === 'sandbox-access') {
+      const approved =
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData &&
+        (resumeData as { approved: unknown }).approved === true;
+      const sandboxAccess = pending.payload?.sandboxAccess;
+      this._emitTurnEvent({
+        type: 'sandbox_access_resolved',
+        requestId: pending.itemId ?? pending.toolCallId,
+        toolCallId: pending.toolCallId,
+        semanticType: sandboxAccess?.semanticType ?? 'custom',
+        approved,
+      });
+    }
+
     // Resumed runs run under a session-owned AbortController too, so
     // `session.abort()` can cancel an in-flight resume (e.g. ESC after the
     // user approved a tool that's now grinding through a long workflow).
@@ -8780,6 +8798,89 @@ export class Session {
     });
   }
 
+  private async _registerSandboxAccess(
+    params: RegisterSandboxAccessParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
+  ): Promise<void> {
+    this._assertOpenForTurn('ctx.registerSandboxAccess');
+    if (typeof params.requestId !== 'string' || params.requestId.length === 0) {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.requestId', 'must be a non-empty string');
+    }
+    const validSemanticTypes = new Set(['file', 'command', 'network', 'mcp', 'custom']);
+    if (!validSemanticTypes.has(params.semanticType)) {
+      throw new HarnessValidationError(
+        'ctx.registerSandboxAccess.semanticType',
+        "must be one of 'file' | 'command' | 'network' | 'mcp' | 'custom'",
+      );
+    }
+    if (params.reason !== undefined && typeof params.reason !== 'string') {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.reason', 'must be a string when provided');
+    }
+    const sanitizedPayload =
+      params.payload !== undefined ? assertJsonValue(params.payload, 'ctx.registerSandboxAccess.payload') : undefined;
+    const runId = params.runId ?? this._currentRunId;
+    const toolCallId = params.toolCallId ?? params.requestId;
+    if (!runId) {
+      throw new HarnessValidationError('ctx.registerSandboxAccess.runId', 'active run id is required');
+    }
+    const modeId = params.modeId ?? this._record.modeId;
+    const pending: PendingResume = {
+      kind: 'sandbox-access',
+      itemId: params.requestId,
+      runId,
+      toolCallId,
+      source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      requestedAt: Date.now(),
+      modeId,
+      runtimeDependencies: this._harness._runtimeDependenciesForMode(
+        modeId,
+        params.modelId ?? this._modelIdForQueuedItem(this._currentQueuedItemId),
+      ),
+      payload: {
+        sandboxAccess: {
+          semanticType: params.semanticType,
+          ...(params.reason !== undefined ? { reason: params.reason } : {}),
+          ...(sanitizedPayload !== undefined ? { payload: sanitizedPayload } : {}),
+        },
+      },
+    };
+    let registered = false;
+    await this._flushUpdate(prev => {
+      const current = prev.pendingResume;
+      if (current) {
+        const currentSandboxAccess = current.payload?.sandboxAccess;
+        if (
+          current.kind === 'sandbox-access' &&
+          current.runId === runId &&
+          current.toolCallId === toolCallId &&
+          current.itemId === params.requestId &&
+          currentSandboxAccess?.semanticType === params.semanticType &&
+          currentSandboxAccess?.reason === params.reason &&
+          jsonValuesEqual(currentSandboxAccess?.payload, sanitizedPayload)
+        ) {
+          return prev;
+        }
+        throw new HarnessValidationError('ctx.registerSandboxAccess', `pending resume is already "${current.kind}"`);
+      }
+      registered = true;
+      return { ...prev, pendingResume: pending };
+    });
+    if (!registered) return;
+    this._emitTurnEvent({
+      type: 'sandbox_access_requested',
+      requestId: params.requestId,
+      toolCallId,
+      semanticType: params.semanticType,
+      ...(params.reason !== undefined ? { reason: params.reason } : {}),
+      ...(sanitizedPayload !== undefined ? { payload: sanitizedPayload } : {}),
+    });
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind: 'sandbox-access',
+      toolCallId,
+      runId,
+    });
+  }
+
   private async _registerPlanApproval(
     params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
   ): Promise<void> {
@@ -9298,6 +9399,8 @@ export class Session {
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerPlanApproval: params =>
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      registerSandboxAccess: params =>
+        session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
@@ -9587,6 +9690,11 @@ function assertJsonValue(value: unknown, path = 'value'): JsonValue {
     return out;
   }
   throw new HarnessValidationError(path, 'must be JSON-serializable for admission hashing');
+}
+
+function jsonValuesEqual(left: JsonValue | undefined, right: JsonValue | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return canonicalJson(left) === canonicalJson(right);
 }
 
 function compactJsonObject<T extends Record<string, unknown>>(value: T): Record<string, unknown> {

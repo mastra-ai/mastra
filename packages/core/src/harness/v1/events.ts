@@ -297,6 +297,14 @@ export interface SandboxAccessRequestedEvent extends HarnessEventBase {
   payload?: JsonValue;
 }
 
+export interface SandboxAccessResolvedEvent extends HarnessEventBase {
+  type: 'sandbox_access_resolved';
+  requestId: string;
+  toolCallId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  approved: boolean;
+}
+
 /**
  * Session-wide cancellation was durably requested. Per-item queue drops are
  * emitted as `queue_item_cancelled` so consumers can audit both the session
@@ -605,6 +613,7 @@ export type HarnessEvent =
   | SuspensionRequiredEvent
   | SuspensionResolvedEvent
   | SandboxAccessRequestedEvent
+  | SandboxAccessResolvedEvent
   | TaskCancellationRequestedEvent
   | QueueItemStartedEvent
   | QueueItemReplayedEvent
@@ -886,6 +895,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'suspension_required',
   'suspension_resolved',
   'sandbox_access_requested',
+  'sandbox_access_resolved',
   'task_cancellation_requested',
   'queue_item_started',
   'queue_item_replayed',

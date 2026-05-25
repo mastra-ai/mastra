@@ -1760,6 +1760,14 @@ export interface RegisterPlanApprovalParams {
   plan: string;
 }
 
+/** Parameters accepted by `ctx.registerSandboxAccess(...)` from a tool needing sandbox approval. */
+export interface RegisterSandboxAccessParams {
+  requestId: string;
+  semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+  reason?: string;
+  payload?: JsonValue;
+}
+
 /**
  * Harness-specific context surfaced on the agent's `RequestContext` under
  * the `'harness'` key. See spec §6 for the full contract.
@@ -1803,6 +1811,8 @@ export interface HarnessRequestContext<TState = unknown> {
   registerQuestion: (params: RegisterQuestionParams) => Promise<void>;
   /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
   registerPlanApproval: (params: RegisterPlanApprovalParams) => Promise<void>;
+  /** Register a pending sandbox-access approval. */
+  registerSandboxAccess?: (params: RegisterSandboxAccessParams) => Promise<void>;
 
   /** Depth of the session in the subagent tree. `0` for the parent. */
   subagentDepth: number;

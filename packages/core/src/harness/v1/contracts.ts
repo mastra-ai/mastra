@@ -134,9 +134,8 @@ export type HarnessEvidence =
 /**
  * Canonical public projection of `PendingResume`, the durable wait point a
  * Harness v1 session pauses on. In the current fork this covers tool
- * approval, tool suspension, question, and plan approval pending kinds.
- * The sandbox-access kind is intentionally not documented here until
- * PF-746 adds that runtime contract.
+ * approval, tool suspension, question, plan approval, and sandbox-access
+ * pending kinds.
  *
  * Runtime recovery fields stay storage-internal; public routes already
  * strip `runtimeDependencies`, and the canonical type keeps that boundary

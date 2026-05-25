@@ -29,6 +29,16 @@ type HarnessV1QuestionContext = {
     toolCallId?: string;
   }) => Promise<void>;
 };
+type HarnessV1SandboxAccessContext = {
+  registerSandboxAccess: (params: {
+    requestId: string;
+    semanticType: 'file';
+    reason?: string;
+    payload?: { path: string };
+    runId?: string;
+    toolCallId?: string;
+  }) => Promise<void>;
+};
 type ToolExecutionContext = {
   agent?: {
     runId?: string;
@@ -47,6 +57,9 @@ type ToolExecutionContext = {
 let requestCounter = 0;
 
 function answerApproved(answer: HarnessQuestionAnswer | unknown): boolean {
+  if (typeof answer === 'object' && answer !== null && 'approved' in answer) {
+    return (answer as { approved: unknown }).approved === true;
+  }
   const value =
     typeof answer === 'object' && answer !== null && 'answer' in answer
       ? (answer as { answer: HarnessQuestionAnswer }).answer
@@ -83,7 +96,10 @@ export const requestSandboxAccessTool = createTool({
         };
       }
 
-      if (!harnessCtx?.registerQuestion) {
+      const hasNativeSandboxAccess =
+        !!harnessCtx && 'registerSandboxAccess' in harnessCtx && typeof harnessCtx.registerSandboxAccess === 'function';
+
+      if (resumeData === undefined && (!harnessCtx || (!harnessCtx.registerQuestion && !hasNativeSandboxAccess))) {
         return {
           content: `Cannot request sandbox access: TUI context not available. The user should manually run /sandbox add ${absolutePath}`,
           isError: true,
@@ -93,20 +109,33 @@ export const requestSandboxAccessTool = createTool({
       const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
       let answer: HarnessQuestionAnswer | unknown = resumeData;
 
-      if (answer === undefined && toolContext?.agent?.suspend && !harnessCtx.emitEvent) {
-        // Harness v1 path: park the tool through the durable question suspension surface.
-        const harnessV1Ctx = harnessCtx as unknown as HarnessV1QuestionContext;
-        await harnessV1Ctx.registerQuestion({
-          questionId,
-          question: `Allow Mastra Code to access ${absolutePath}?\n\n${reason}`,
-          options: [
-            { label: 'Yes', description: 'Grant access for this session.' },
-            { label: 'No', description: 'Deny this access request.' },
-          ],
-          selectionMode: 'single_select',
-          runId: toolContext.agent.runId,
-          toolCallId: toolContext.agent.toolCallId ?? questionId,
-        });
+      if (answer === undefined && toolContext?.agent?.suspend && !harnessCtx?.emitEvent) {
+        // Harness v1 path: park the tool through the native sandbox-access surface when present.
+        if (hasNativeSandboxAccess) {
+          const harnessV1Ctx = harnessCtx as unknown as HarnessV1SandboxAccessContext;
+          await harnessV1Ctx.registerSandboxAccess({
+            requestId: questionId,
+            semanticType: 'file',
+            reason,
+            payload: { path: absolutePath },
+            runId: toolContext.agent.runId,
+            toolCallId: toolContext.agent.toolCallId ?? questionId,
+          });
+        } else {
+          // Older Harness v1 fallback: park the tool through durable question suspension.
+          const harnessV1Ctx = harnessCtx as unknown as HarnessV1QuestionContext;
+          await harnessV1Ctx.registerQuestion({
+            questionId,
+            question: `Allow Mastra Code to access ${absolutePath}?\n\n${reason}`,
+            options: [
+              { label: 'Yes', description: 'Grant access for this session.' },
+              { label: 'No', description: 'Deny this access request.' },
+            ],
+            selectionMode: 'single_select',
+            runId: toolContext.agent.runId,
+            toolCallId: toolContext.agent.toolCallId ?? questionId,
+          });
+        }
         propagatingHarnessV1Suspension = true;
         await toolContext.agent.suspend({});
         propagatingHarnessV1Suspension = false;
@@ -114,7 +143,7 @@ export const requestSandboxAccessTool = createTool({
           content: 'Access request could not be processed: suspension did not complete.',
           isError: true,
         };
-      } else if (answer === undefined && harnessCtx.emitEvent) {
+      } else if (answer === undefined && harnessCtx?.emitEvent) {
         // Legacy Harness path: emit directly and resolve through the in-memory callback registry.
         answer = await new Promise<HarnessQuestionAnswer>(resolve => {
           harnessCtx.registerQuestion!({
@@ -136,9 +165,9 @@ export const requestSandboxAccessTool = createTool({
       const approved = answerApproved(answer);
       if (approved) {
         // Add to allowed paths in harness state (persists across turns)
-        const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const currentAllowed = (harnessCtx?.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
         if (!currentAllowed.includes(absolutePath)) {
-          harnessCtx.setState?.({
+          harnessCtx?.setState?.({
             sandboxAllowedPaths: [...currentAllowed, absolutePath],
           });
         }

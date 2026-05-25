@@ -186,6 +186,12 @@ export interface PendingResume {
     // plan-approval
     title?: string;
     plan?: string;
+    // sandbox-access
+    sandboxAccess?: {
+      semanticType: 'file' | 'command' | 'network' | 'mcp' | 'custom';
+      reason?: string;
+      payload?: JsonValue;
+    };
   };
   /**
    * Plan-approval only. Frozen at registration from the submitting mode's
