@@ -63,6 +63,27 @@ describe('detectNestedGitTrees', () => {
     expect(detectNestedGitTrees(tempDir)).toEqual([]);
   });
 
+  it('skips nested git trees ignored by root .gitignore', async () => {
+    await fs.promises.writeFile(path.join(tempDir, '.gitignore'), 'tmp-repos/\nvendor/ignored-*\n');
+    await fs.promises.mkdir(path.join(tempDir, 'tmp-repos', 'repo', '.git'), { recursive: true });
+    await fs.promises.mkdir(path.join(tempDir, 'vendor', 'ignored-repo', '.git'), { recursive: true });
+    await fs.promises.mkdir(path.join(tempDir, 'vendor', 'tracked-repo', '.git'), { recursive: true });
+
+    const trees = detectNestedGitTrees(tempDir);
+    expect(trees).toHaveLength(1);
+    expect(trees[0]?.relativePath).toBe('vendor/tracked-repo');
+  });
+
+  it('continues scanning when .gitignore is missing or empty', async () => {
+    await fs.promises.writeFile(path.join(tempDir, '.gitignore'), '\n');
+    const nested = path.join(tempDir, 'vendor', 'thing');
+    await fs.promises.mkdir(path.join(nested, '.git'), { recursive: true });
+
+    const trees = detectNestedGitTrees(tempDir);
+    expect(trees).toHaveLength(1);
+    expect(trees[0]?.relativePath).toBe('vendor/thing');
+  });
+
   it('does not recurse into a nested git tree to find further nested ones', async () => {
     // The agent should treat a nested git tree as opaque — its internals are
     // its own sandbox. So we should report only the outermost boundary.

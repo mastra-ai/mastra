@@ -11,7 +11,7 @@ import type { z } from 'zod';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
-import { detectNestedGitTrees } from '../utils/project.js';
+import { getStartupNestedGitTrees } from '../utils/project.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -87,20 +87,18 @@ const NESTED_GIT_DISALLOWED_HINT =
   'path is inside a separate git tree nested under the project root; use the request_access tool to grant access if you really mean to operate inside it';
 
 /**
- * Detect nested git trees inside `projectPath` (worktrees, submodules,
- * vendored repos) and return their absolute paths so they can be wired into
- * `LocalFilesystem.disallowedPaths`. Mastra Code treats these as separate
- * sandboxes — the agent must call `request_access` before touching them.
- *
- * Exported so tests can verify the wiring without having to spin up a full
- * `Workspace` (whose `DEFAULT_ALLOWED_PATHS` would otherwise short-circuit
- * the disallow check when project paths land under `/tmp`).
+ * Convert nested git trees detected at process startup into absolute paths
+ * wired into `LocalFilesystem.disallowedPaths`. Mastra Code treats these as
+ * separate sandboxes — the agent must call `request_access` before touching
+ * them.
  */
 export function getNestedGitDisallowedPaths(projectPath: string): string[] {
-  return detectNestedGitTrees(projectPath).map(t => t.absolutePath);
+  return getStartupNestedGitTrees(projectPath).map(t => t.absolutePath);
 }
 
 export const NESTED_GIT_DISALLOWED_PATH_HINT = NESTED_GIT_DISALLOWED_HINT;
+
+type MastraCodeState = z.infer<typeof stateSchema>;
 
 /**
  * Detect the project's package runner from lock files.
@@ -113,8 +111,6 @@ function detectPackageRunner(projectPath: string): string | undefined {
   if (existsSync(join(projectPath, 'package-lock.json'))) return 'npx --yes';
   return 'npx --yes';
 }
-
-type MastraCodeState = z.infer<typeof stateSchema>;
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
@@ -150,8 +146,6 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     // Not registered yet
   }
 
-  // Re-detect nested git trees on every call so newly-created worktrees /
-  // submodules show up without restarting the harness.
   const disallowedPaths = getNestedGitDisallowedPaths(projectPath);
 
   if (existing) {

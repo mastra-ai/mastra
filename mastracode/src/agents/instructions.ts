@@ -2,7 +2,7 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { z } from 'zod';
 import type { stateSchema } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
-import { detectNestedGitTrees, getCurrentGitBranchAsync } from '../utils/project.js';
+import { getCurrentGitBranchAsync, getStartupNestedGitTrees } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
 
@@ -14,9 +14,7 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
   const modeId = harnessContext?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
 
-  // Re-detect nested git trees on every prompt build so newly-created
-  // worktrees / submodules are picked up without restarting the session.
-  const nestedGitTrees = detectNestedGitTrees(projectPath).map(t => ({
+  const nestedGitTrees = getStartupNestedGitTrees(projectPath).map(t => ({
     relativePath: t.relativePath,
     description: t.description,
   }));

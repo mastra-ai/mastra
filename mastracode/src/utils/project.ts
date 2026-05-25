@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import ignore from 'ignore';
 export interface ProjectInfo {
   /** Unique resource ID for this project (used for thread grouping) */
   resourceId: string;
@@ -42,6 +43,16 @@ export interface NestedGitTree {
   absolutePath: string;
   /** Short human-readable description (e.g. "branch foo", "submodule"). */
   description: string;
+}
+
+const startupNestedGitTreesByRoot = new Map<string, NestedGitTree[]>();
+
+export function setStartupNestedGitTrees(rootPath: string, trees: NestedGitTree[]): void {
+  startupNestedGitTreesByRoot.set(path.resolve(rootPath), trees);
+}
+
+export function getStartupNestedGitTrees(rootPath: string): NestedGitTree[] {
+  return startupNestedGitTreesByRoot.get(path.resolve(rootPath)) ?? [];
 }
 
 /**
@@ -157,6 +168,7 @@ export function detectProject(projectPath: string): ProjectInfo {
   const resourceId = `${slugify(baseName)}-${shortHash(resourceIdSource)}`;
 
   const nestedGitTrees = detectNestedGitTrees(rootPath);
+  setStartupNestedGitTrees(rootPath, nestedGitTrees);
 
   return {
     resourceId,
@@ -218,6 +230,22 @@ const NESTED_GIT_SCAN_MAX_DEPTH = 4;
 /** Hard cap on how many nested trees to surface in case of pathological repos. */
 const NESTED_GIT_SCAN_MAX_RESULTS = 32;
 
+function loadNestedGitIgnore(rootPath: string): ((relativePath: string) => boolean) | undefined {
+  try {
+    const content = fs.readFileSync(path.join(rootPath, '.gitignore'), 'utf-8');
+    if (!content.trim()) return undefined;
+
+    const gitignore = ignore().add(content);
+    return (relativePath: string): boolean => {
+      const normalized = relativePath.split(path.sep).join('/').replace(/^\.\//, '').replace(/^\//, '');
+      if (!normalized) return false;
+      return gitignore.ignores(normalized) || gitignore.ignores(`${normalized}/`);
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Find git trees nested inside `rootPath`. A nested git tree is any
  * directory under `rootPath` (other than `rootPath` itself) that contains a
@@ -236,6 +264,7 @@ const NESTED_GIT_SCAN_MAX_RESULTS = 32;
 export function detectNestedGitTrees(rootPath: string): NestedGitTree[] {
   const results: NestedGitTree[] = [];
   const seen = new Set<string>();
+  const isGitIgnored = loadNestedGitIgnore(rootPath);
 
   const walk = (dir: string, depth: number): void => {
     if (results.length >= NESTED_GIT_SCAN_MAX_RESULTS) return;
@@ -258,6 +287,9 @@ export function detectNestedGitTrees(rootPath: string): NestedGitTree[] {
       if (!entry.isDirectory()) continue;
 
       const childPath = path.join(dir, entry.name);
+      const relativeChildPath = path.relative(rootPath, childPath).split(path.sep).join('/');
+      if (isGitIgnored?.(relativeChildPath)) continue;
+
       const gitEntry = path.join(childPath, '.git');
 
       let hasGit = false;
@@ -271,7 +303,7 @@ export function detectNestedGitTrees(rootPath: string): NestedGitTree[] {
         if (!seen.has(childPath)) {
           seen.add(childPath);
           results.push({
-            relativePath: path.relative(rootPath, childPath).split(path.sep).join('/'),
+            relativePath: relativeChildPath,
             absolutePath: childPath,
             description: describeNestedGitTree(childPath),
           });

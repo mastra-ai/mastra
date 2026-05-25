@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { LocalFilesystem, PermissionError } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { detectNestedGitTrees, setStartupNestedGitTrees } from '../../utils/project.js';
 import { NESTED_GIT_DISALLOWED_PATH_HINT, getNestedGitDisallowedPaths } from '../workspace.js';
 
 /**
@@ -42,13 +43,18 @@ describe('mastracode workspace nested git disallowed paths', () => {
     return dir;
   }
 
+  function detectAtStartup(projectPath: string): string[] {
+    setStartupNestedGitTrees(projectPath, detectNestedGitTrees(projectPath));
+    return getNestedGitDisallowedPaths(projectPath);
+  }
+
   it('detects a vendored .git directory and produces a disallowed path', async () => {
     const tempDir = await makeProject('mc-nested-git-vendor-');
     const nested = path.join(tempDir, 'vendor', 'sub');
     await fs.mkdir(path.join(nested, '.git'), { recursive: true });
     await fs.writeFile(path.join(nested, 'file.ts'), 'inside sub');
 
-    expect(getNestedGitDisallowedPaths(tempDir)).toContain(nested);
+    expect(detectAtStartup(tempDir)).toContain(nested);
   });
 
   it('detects a git worktree (.git is a file, not a dir)', async () => {
@@ -61,7 +67,7 @@ describe('mastracode workspace nested git disallowed paths', () => {
     execSync('git worktree add -q wt-feat -b wt-feat', { cwd: tempDir });
 
     const wtPath = path.join(tempDir, 'wt-feat');
-    expect(getNestedGitDisallowedPaths(tempDir)).toContain(wtPath);
+    expect(detectAtStartup(tempDir)).toContain(wtPath);
   });
 
   it('returns an empty list when no nested git trees exist', async () => {
@@ -70,14 +76,14 @@ describe('mastracode workspace nested git disallowed paths', () => {
     await fs.writeFile(path.join(tempDir, 'file.ts'), 'top');
     await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
 
-    expect(getNestedGitDisallowedPaths(tempDir)).toEqual([]);
+    expect(detectAtStartup(tempDir)).toEqual([]);
   });
 
   it('does not include the project root itself even when basePath has a .git dir', async () => {
     const tempDir = await makeProject('mc-nested-git-root-');
     await fs.mkdir(path.join(tempDir, '.git'), { recursive: true });
 
-    expect(getNestedGitDisallowedPaths(tempDir)).not.toContain(tempDir);
+    expect(detectAtStartup(tempDir)).not.toContain(tempDir);
   });
 
   it('blocks file ops inside a nested git tree with the request_access hint', async () => {
@@ -88,7 +94,7 @@ describe('mastracode workspace nested git disallowed paths', () => {
 
     const localFs = new LocalFilesystem({
       basePath: tempDir,
-      disallowedPaths: getNestedGitDisallowedPaths(tempDir),
+      disallowedPaths: detectAtStartup(tempDir),
       disallowedPathHint: NESTED_GIT_DISALLOWED_PATH_HINT,
     });
 
@@ -104,7 +110,7 @@ describe('mastracode workspace nested git disallowed paths', () => {
 
     const localFs = new LocalFilesystem({
       basePath: tempDir,
-      disallowedPaths: getNestedGitDisallowedPaths(tempDir),
+      disallowedPaths: detectAtStartup(tempDir),
       allowedPaths: [nested],
       disallowedPathHint: NESTED_GIT_DISALLOWED_PATH_HINT,
     });

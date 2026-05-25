@@ -1692,6 +1692,9 @@ importers:
       fastest-levenshtein:
         specifier: ^1.0.16
         version: 1.0.16
+      ignore:
+        specifier: ^7.0.5
+        version: 7.0.5
       partial-json:
         specifier: ^0.1.7
         version: 0.1.7
