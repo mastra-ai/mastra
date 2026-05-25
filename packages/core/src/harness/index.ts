@@ -34,6 +34,7 @@ export type {
   HarnessSession,
   HarnessStateSchema,
   HarnessSubagent,
+  HarnessSubagentHistoryEntry,
   HarnessThread,
   HeartbeatHandler,
   ModelAuthChecker,

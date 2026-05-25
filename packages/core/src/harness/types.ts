@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { PubSub } from '../events/pubsub';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
@@ -274,6 +275,11 @@ export interface HarnessConfig<TState = {}> {
   toolCategoryResolver?: (toolName: string) => ToolCategory | null;
 
   /**
+   * PubSub instance used by the internal Mastra instance and mode agents.
+   */
+  pubsub?: PubSub;
+
+  /**
    * Optional thread locking callbacks.
    * Called during selectOrCreateThread, createThread, and switchThread
    * to prevent concurrent access to the same thread from multiple processes.
@@ -521,6 +527,7 @@ export interface ActiveToolState {
  */
 export interface ActiveSubagentState {
   agentType: string;
+  displayName?: string;
   task: string;
   modelId?: string;
   forked?: boolean;
@@ -530,6 +537,8 @@ export interface ActiveSubagentState {
   durationMs?: number;
   result?: string;
 }
+
+export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
  * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
@@ -736,7 +745,13 @@ export type HarnessEvent =
       resumeSchema?: string;
     }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_end';
+      toolCallId: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
@@ -925,6 +940,7 @@ export interface HarnessMessage {
   role: 'user' | 'assistant' | 'system';
   content: HarnessMessageContent[];
   createdAt: Date;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
   stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
   errorMessage?: string;
 }
@@ -933,7 +949,14 @@ export type HarnessMessageContent =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_result';
+      id: string;
+      name: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | {
       type: 'system_reminder';
       message: string;

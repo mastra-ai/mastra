@@ -16,6 +16,7 @@ import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } f
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };
+export type { AttachmentCapabilities } from './gateways/base.js';
 
 interface RegistryData {
   providers: Record<string, ProviderConfig>;
@@ -71,6 +72,7 @@ const CACHE_DIR = () => path.join(os.homedir(), '.cache', 'mastra');
 const CACHE_FILE = () => path.join(CACHE_DIR(), 'gateway-refresh-time');
 const GLOBAL_PROVIDER_REGISTRY_JSON = () => path.join(CACHE_DIR(), 'provider-registry.json');
 const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.generated.d.ts');
+const GLOBAL_CAPABILITIES_DIR = () => path.join(CACHE_DIR(), 'capabilities');
 
 let modelRouterCacheFailed = false;
 
@@ -156,6 +158,9 @@ function syncGlobalCacheToLocal(): void {
         atomicWriteFileSync(localJsonPath, globalJsonContent, 'utf-8');
       }
     }
+
+    // Capabilities are loaded lazily per-provider by loadProviderAttachmentModels().
+    // The global cache dir is included in findCapabilitiesDirs() so no bulk sync is needed.
 
     // Sync .d.ts file if global exists and differs from local
     if (globalDtsExists) {
@@ -423,6 +428,114 @@ export function getRegisteredProviders(): string[] {
   return Object.keys(providers);
 }
 
+// ---------------------------------------------------------------------------
+// Provider capabilities (per-model attachment / modality metadata)
+// ---------------------------------------------------------------------------
+
+interface ProviderCapabilityFile {
+  attachment: string[];
+}
+
+const providerCapCache = new Map<string, string[] | null>();
+
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function findCapabilitiesDirs(useDynamicLoading: boolean): string[] {
+  const packageRoot = getPackageRoot();
+  const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
+  const sourceCapabilitiesDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+  const workspaceSourceCapabilitiesDir = path.join(process.cwd(), 'packages/core/src/llm/model/capabilities');
+
+  const dirs: string[] = [];
+
+  // In dynamic mode, prefer the global cache so fresher gateway-synced data wins.
+  if (useDynamicLoading) {
+    const globalCapDir = GLOBAL_CAPABILITIES_DIR();
+    if (isDirectory(globalCapDir)) dirs.push(globalCapDir);
+  }
+
+  if (isDirectory(distCapabilitiesDir)) dirs.push(distCapabilitiesDir);
+
+  // Published packages only include dist/. Source fallbacks are for local workspace/dev
+  // runs where @mastra/core may resolve through a stale partial dist while checked-in
+  // source capability files are available.
+  if (isDirectory(sourceCapabilitiesDir)) dirs.push(sourceCapabilitiesDir);
+  if (workspaceSourceCapabilitiesDir !== sourceCapabilitiesDir && isDirectory(workspaceSourceCapabilitiesDir)) {
+    dirs.push(workspaceSourceCapabilitiesDir);
+  }
+
+  return dirs;
+}
+
+let capabilitiesDirCache: string[] | undefined;
+
+function loadProviderAttachmentModels(provider: string, useDynamicLoading: boolean): string[] | null {
+  if (providerCapCache.has(provider)) return providerCapCache.get(provider)!;
+
+  if (capabilitiesDirCache === undefined) {
+    capabilitiesDirCache = findCapabilitiesDirs(useDynamicLoading);
+  }
+
+  for (const capabilitiesDir of capabilitiesDirCache) {
+    const filePath = path.join(capabilitiesDir, `${provider}.json`);
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content) as ProviderCapabilityFile;
+      providerCapCache.set(provider, data.attachment);
+      return data.attachment;
+    } catch {
+      continue;
+    }
+  }
+
+  providerCapCache.set(provider, null);
+  return null;
+}
+
+/**
+ * Check whether a model supports image/file attachments.
+ * Reads only the per-provider capability file for the given model's provider.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
+ */
+function getProviderAttachmentSupport(
+  provider: string,
+  modelId: string,
+  useDynamicLoading: boolean,
+): boolean | undefined {
+  const models = loadProviderAttachmentModels(provider, useDynamicLoading);
+  if (!models) return undefined;
+  return models.includes(modelId);
+}
+
+export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
+  const { provider, modelId } = parseModelString(modelRouterId);
+  if (!provider) return undefined;
+
+  const registry = GatewayRegistry.getInstance();
+  const useDynamicLoading = registry['useDynamicLoading'];
+  const directSupport = getProviderAttachmentSupport(provider, modelId, useDynamicLoading);
+  if (directSupport !== undefined) return directSupport;
+
+  const nestedProviderDelimiter = modelId.indexOf('/');
+  if (nestedProviderDelimiter !== -1) {
+    const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
+    const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
+    if (nestedProvider && nestedModelId) {
+      const nestedSupport = getProviderAttachmentSupport(nestedProvider, nestedModelId, useDynamicLoading);
+      if (nestedSupport !== undefined) return nestedSupport;
+    }
+  }
+
+  return directSupport;
+}
+
 /**
  * Type guard to check if a string is a valid OpenAI-compatible model ID
  */
@@ -533,7 +646,7 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, attachmentCapabilities } = await fetchProvidersFromGateways(gateways);
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();
@@ -541,7 +654,13 @@ export class GatewayRegistry {
       // Write to global cache first (so all projects can benefit)
       try {
         fs.mkdirSync(CACHE_DIR(), { recursive: true });
-        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON(), GLOBAL_PROVIDER_TYPES_DTS(), providers, models);
+        await writeRegistryFiles(
+          GLOBAL_PROVIDER_REGISTRY_JSON(),
+          GLOBAL_PROVIDER_TYPES_DTS(),
+          providers,
+          models,
+          attachmentCapabilities,
+        );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
@@ -551,7 +670,7 @@ export class GatewayRegistry {
       const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
       const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
+      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, attachmentCapabilities);
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
       // Copy to src/ only when explicitly requested (e.g., running the generation script)
@@ -563,12 +682,24 @@ export class GatewayRegistry {
         // Copy the already-generated files
         await fs.promises.copyFile(distJsonPath, srcJsonPath);
         await fs.promises.copyFile(distTypesPath, srcTypesPath);
+
+        const distCapDir = path.join(packageRoot, 'dist', 'capabilities');
+        const srcCapDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+        if (fs.existsSync(distCapDir)) {
+          await fs.promises.mkdir(srcCapDir, { recursive: true });
+          const capFiles = fs.readdirSync(distCapDir).filter(f => f.endsWith('.json'));
+          for (const file of capFiles) {
+            await fs.promises.copyFile(path.join(distCapDir, file), path.join(srcCapDir, file));
+          }
+        }
         // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
       }
 
       // Clear the in-memory cache to force reload (dynamic loading only)
       if (this.useDynamicLoading) {
         registryData = null;
+        providerCapCache.clear();
+        capabilitiesDirCache = undefined;
       }
 
       this.lastRefreshTime = new Date();

@@ -151,7 +151,7 @@ The bridge can be used alongside exporters. The bridge handles OTEL context, whi
 
 ```typescript
 import { Mastra } from '@mastra/core'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { OtelBridge } from '@mastra/otel-bridge'
 import { LangfuseExporter } from '@mastra/langfuse'
 
@@ -162,7 +162,7 @@ const mastra = new Mastra({
         serviceName: 'my-service',
         bridge: new OtelBridge(), // Handles OTEL context
         exporters: [
-          new DefaultExporter(), // Studio access
+          new MastraStorageExporter(), // Studio access
           new LangfuseExporter({
             // Additional destination
             publicKey: process.env.LANGFUSE_PUBLIC_KEY,

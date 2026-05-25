@@ -2676,8 +2676,87 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(approvalFn).toHaveBeenCalledWith({
       toolName: 'greet',
       args: testArgs,
+      annotations: undefined,
       requestContext: { userId: '123' },
     });
+  });
+
+  it('should forward MCP tool annotations to the requireToolApproval callback', async () => {
+    testServer = await setupTestServer(false);
+    // Register a tool with annotations on the test server
+    testServer.mcpServer.tool(
+      'delete_repo',
+      'Delete a repo',
+      { repo: z.string() },
+      {
+        title: 'Delete Repository',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    const approvalFn = vi.fn().mockImplementation(({ annotations }) => Boolean(annotations?.destructiveHint));
+    client = new InternalMastraMCPClient({
+      name: 'approval-annotations-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const destructiveTool = tools.delete_repo;
+    expect(destructiveTool).toBeDefined();
+
+    const result = await (destructiveTool as any).needsApprovalFn({ repo: 'foo' }, {});
+    expect(result).toBe(true);
+    expect(approvalFn).toHaveBeenCalledWith({
+      toolName: 'delete_repo',
+      args: { repo: 'foo' },
+      annotations: expect.objectContaining({
+        title: 'Delete Repository',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      }),
+    });
+  });
+
+  it('should expose MCP tool annotations on the Mastra tool (mcp.annotations)', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.tool(
+      'list_repos',
+      'List repos',
+      { owner: z.string() },
+      {
+        title: 'List Repositories',
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'annotations-exposure-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const readTool = tools.list_repos as any;
+    expect(readTool).toBeDefined();
+    expect(readTool.mcp?.annotations).toMatchObject({
+      title: 'List Repositories',
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+
+    // Tool without annotations should not have `annotations` populated
+    const greetTool = tools.greet as any;
+    expect(greetTool.mcp?.annotations).toBeUndefined();
   });
 
   it('should support async approval functions', async () => {

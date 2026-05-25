@@ -12,7 +12,7 @@ npm install @mastra/observability
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
@@ -20,8 +20,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-app',
         exporters: [
-          new DefaultExporter(), // Persists traces for Mastra Studio
-          new CloudExporter(), // Sends to Mastra platform
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform
         ],
       },
     },

@@ -19,9 +19,10 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { noopObserve } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
-import type { SuspendOptions } from '../../../workflows';
-import { createStep } from '../../../workflows';
+import type { SuspendOptions } from '../../../workflows/step';
+import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -472,6 +473,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
           messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
           outputWriter,
+          observe: noopObserve,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)

@@ -3,7 +3,6 @@ name: Publish to npm
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 on:
   workflow_dispatch:
@@ -45,6 +44,10 @@ jobs:
         (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_type == 'prerelease')
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -62,6 +65,7 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Verify alpha prerelease state
         run: |
@@ -140,6 +144,10 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
       - name: Initial checkout
         uses: actions/checkout@v5
@@ -182,6 +190,7 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
@@ -278,6 +287,9 @@ jobs:
         github.event.inputs.publish_type == 'enter-prerelease'
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Initial checkout
         uses: actions/checkout@v5
@@ -310,6 +322,7 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install
@@ -344,6 +357,10 @@ jobs:
       github.event.inputs.publish_type == 'snapshot' &&
       github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -380,6 +397,7 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest

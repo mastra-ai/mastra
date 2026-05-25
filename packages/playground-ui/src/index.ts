@@ -1,8 +1,5 @@
 import './index.css';
 
-// DS Components - Threads
-export * from './ds/components/Threads';
-
 // DS Components - Existing
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
@@ -29,11 +26,14 @@ export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
 export * from './ds/components/Dialog';
+export * from './ds/components/Drawer';
 export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
+export * from './ds/components/HoverCard';
 export * from './ds/components/Input';
+export * from './ds/components/InputGroup';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';
 export * from './ds/components/MarkdownRenderer';
@@ -63,7 +63,6 @@ export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
 export * from './ds/components/DateTimePicker';
-export * from './ds/components/EntryList';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';

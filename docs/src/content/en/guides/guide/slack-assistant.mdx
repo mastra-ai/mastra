@@ -33,7 +33,7 @@ export const slackAgent = new Agent({
   name: 'Slack Agent',
   instructions:
     'You are a helpful assistant. Answer questions, help with tasks, and have natural conversations.',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),

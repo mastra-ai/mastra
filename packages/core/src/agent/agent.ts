@@ -22,6 +22,7 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
+import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -32,6 +33,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -79,8 +81,10 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
+import type { Step } from '../workflows/step';
+import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import type { AnyWorkflow } from '../workflows/workflow';
+import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -95,12 +99,13 @@ import type {
   DelegationConfig,
   DelegationStartContext,
   DelegationCompleteContext,
-  SubAgent,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import type { SubAgent } from './subagent';
+import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -113,8 +118,13 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   AgentMethodType,
-  StructuredOutputOptions,
+  AgentSignal,
+  AgentSubscribeToThreadOptions,
+  AgentThreadSubscription,
   PublicStructuredOutputOptions,
+  SendAgentSignalOptions,
+  SendAgentSignalResult,
+  StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
@@ -137,12 +147,70 @@ type ModelFallbacks = {
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
 
+type ProcessorLoadedToolsProvider = {
+  getLoadedToolsForRequestContext?: (args: {
+    requestContext: RequestContext;
+  }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
+};
+
+type AgentSnapshotMemoryInfo = {
+  threadId?: string;
+  resourceId?: string;
+};
+
+type ProcessorWorkflowChildrenContainer = {
+  steps?: Record<string, unknown> | unknown[];
+  children?: Record<string, unknown> | unknown[];
+  stepGraph?: Array<{
+    step?: unknown;
+    steps?: Array<{ step?: unknown } | unknown>;
+  }>;
+};
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
   }
 
   return cb(value as T);
+}
+
+function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
+  const workflowChildren = workflow as ProcessorWorkflowChildrenContainer;
+  const children: unknown[] = [];
+  const seen = new Set<unknown>();
+
+  const addChild = (child: unknown) => {
+    if (!child || seen.has(child)) {
+      return;
+    }
+    seen.add(child);
+    children.push(child);
+  };
+
+  const addChildren = (value: ProcessorWorkflowChildrenContainer['steps']) => {
+    if (Array.isArray(value)) {
+      value.forEach(addChild);
+      return;
+    }
+    Object.values(value ?? {}).forEach(addChild);
+  };
+
+  addChildren(workflowChildren.steps);
+  addChildren(workflowChildren.children);
+
+  for (const entry of workflowChildren.stepGraph ?? []) {
+    addChild(entry.step);
+    for (const stepEntry of entry.steps ?? []) {
+      addChild(
+        stepEntry && typeof stepEntry === 'object' && 'step' in stepEntry
+          ? (stepEntry as { step?: unknown }).step
+          : stepEntry,
+      );
+    }
+  }
+
+  return children;
 }
 
 function hasConfiguredProcessor(
@@ -234,17 +302,20 @@ export class Agent<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >
   extends MastraBase
-  implements SubAgent<TOutput, TRequestContext>
+  implements SubAgent<TAgentId, TRequestContext>
 {
   public id: TAgentId;
   public name: string;
   public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
+  readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
+  #pubsub?: PubSub;
+  #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
@@ -254,7 +325,7 @@ export class Agent<
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #agents: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
+  #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: MastraVoice;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
@@ -315,6 +386,7 @@ export class Agent<
 
     this.#instructions = config.instructions;
     this.#description = config.description;
+    this.#metadata = config.metadata;
     this.#options = config.options;
 
     if (!config.model) {
@@ -367,6 +439,7 @@ export class Agent<
     );
 
     this.#tools = config.tools || ({} as TTools);
+    this.#pubsub = config.pubsub;
 
     if (config.mastra) {
       this.__registerMastra(config.mastra);
@@ -377,7 +450,7 @@ export class Agent<
 
     this.#scorers = config.scorers || ({} as MastraScorers);
 
-    this.#agents = config.agents || ({} as Record<string, SubAgent>);
+    this.#agents = config.agents || ({} as Record<string, SubAgent<string, TRequestContext>>);
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -475,6 +548,14 @@ export class Agent<
     return this.#mastra;
   }
 
+  getPubSub() {
+    return this.#pubsub ?? this.#inheritedPubSub ?? this.#mastra?.pubsub;
+  }
+
+  hasOwnPubSub(): boolean {
+    return Boolean(this.#pubsub);
+  }
+
   /**
    * Returns the background tasks configuration for this agent.
    */
@@ -541,7 +622,7 @@ export class Agent<
    * @internal
    */
   private async deriveSubAgentBackgroundConfig(
-    subAgent: SubAgent,
+    subAgent: SubAgent<string, TRequestContext>,
     requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
     try {
@@ -713,6 +794,107 @@ export class Agent<
   }
 
   /**
+   * Extract and forward client observability data from incoming messages.
+   *
+   * ## How client-side tool observability flows through the system
+   *
+   * Client-side tools (defined via `@mastra/client-js`'s `clientTools`)
+   * execute in the browser, not on the server. The observability data
+   * they produce follows a two-request round trip:
+   *
+   * **Request 1 (server → client):**
+   * The agent loop emits a tool-call chunk for a client tool. If
+   * `@mastra/observability` is configured, a CLIENT_TOOL_CALL
+   * span is created and a W3C trace context carrier is injected into
+   * the chunk's `observability` field. This happens in
+   * `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts`
+   * while processing streamed or final tool-call chunks in
+   * `processOutputStream`.
+   *
+   * **Client execution:**
+   * The `@mastra/client-js` SDK sees the carrier on the tool-call
+   * chunk, creates an `ObservabilityCollector` that buffers child
+   * spans and logs, wraps the user's `execute` function (providing
+   * the `observe` helper on the context), and after execution flushes
+   * the collector to an OTLP/JSON payload.
+   *
+   * **Request 2 (client → server):**
+   * The client SDK re-invokes `agent.stream()` / `agent.generate()`
+   * with the tool result appended as a tool-role message. The OTLP
+   * payload and the original W3C carrier are attached to the
+   * tool-result content block as `__mastraObservability`:
+   *
+   * ```
+   * { type: 'tool-result', toolCallId, toolName, result,
+   *   __mastraObservability: { parentContext, payload } }
+   * ```
+   *
+   * This method scans the incoming messages for those metadata blocks,
+   * extracts them, forwards the payload through
+   * `ClientObservabilityProxy.receive()` on the observability bus,
+   * and strips the metadata so the model never sees it. It is called
+   * at the top of `stream()` and `generate()` before messages reach
+   * the loop.
+   */
+  #extractClientObservability(messages: MessageListInput): void {
+    if (!Array.isArray(messages)) return;
+
+    const proxy = this.#mastra?.observability?.getClientObservabilityProxy?.();
+
+    const handleObservabilityBlock = (block: Record<string, unknown>) => {
+      const obs = block.__mastraObservability as
+        | {
+            parentContext?: { traceparent: string; tracestate?: string; baggage?: string };
+            payload?: { spans?: unknown; logs?: unknown; executionDurationMs?: number; toolName?: string };
+          }
+        | undefined;
+
+      if (proxy && obs?.payload && obs.parentContext) {
+        try {
+          proxy.receive(
+            obs.payload as Parameters<typeof proxy.receive>[0],
+            obs.parentContext as Parameters<typeof proxy.receive>[1],
+          );
+        } catch (err) {
+          // Tracing must never break the agent run.
+          this.logger?.warn?.('[ClientObservabilityProxy] failed to receive client observability payload', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // Strip the metadata so the model doesn't see it
+      delete block.__mastraObservability;
+    };
+
+    for (const msg of messages) {
+      if (!msg || typeof msg !== 'object' || !('role' in msg)) continue;
+      const parts = (msg as { parts?: unknown }).parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (!part || typeof part !== 'object') continue;
+          const block = part as Record<string, unknown>;
+          if (block.type !== 'tool-invocation') continue;
+          const toolInvocation = block.toolInvocation;
+          if (!toolInvocation || typeof toolInvocation !== 'object') continue;
+          handleObservabilityBlock(toolInvocation as Record<string, unknown>);
+        }
+      }
+
+      if ((msg as { role: string }).role !== 'tool') continue;
+      const content = (msg as { content?: unknown }).content;
+      if (!Array.isArray(content)) continue;
+
+      for (const part of content) {
+        if (!part || typeof part !== 'object') continue;
+        const block = part as Record<string, unknown>;
+        if (block.type !== 'tool-result') continue;
+        handleObservabilityBlock(block);
+      }
+    }
+  }
+
+  /**
    * Returns the agents configured for this agent, resolving function-based agents if necessary.
    * Used in multi-agent collaboration scenarios where this agent can delegate to other agents.
    *
@@ -723,8 +905,8 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent>
-    | Promise<Record<string, SubAgent>> {
+    | Record<string, SubAgent<string, TRequestContext>>
+    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -746,9 +928,13 @@ export class Agent<
         throw mastraError;
       }
 
+      const pubsub = this.getPubSub();
       Object.entries(agents || {}).forEach(([_agentName, agent]) => {
         if (this.#mastra) {
           agent.__registerMastra?.(this.#mastra);
+        }
+        if (pubsub && agent instanceof Agent && !agent.hasOwnPubSub()) {
+          agent.__setPubSub(pubsub);
         }
       });
 
@@ -870,6 +1056,11 @@ export class Agent<
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const toolProvider = processor as ProcessorLoadedToolsProvider;
+        if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+          (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+            toolProvider.getLoadedToolsForRequestContext.bind(processor);
+        }
       }
       workflow = workflow.then(step);
     }
@@ -1549,6 +1740,33 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Gets the metadata for this agent, resolving function-based metadata if necessary.
+   * Metadata is a classification bag for clients and is never read by the agent runtime.
+   *
+   * @example
+   * ```typescript
+   * const metadata = await agent.getMetadata();
+   * console.log(metadata?.type); // 'support'
+   * ```
+   */
+  public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined> {
+    if (this.#metadata === undefined) {
+      return undefined;
+    }
+    if (typeof this.#metadata !== 'function') {
+      return this.#metadata;
+    }
+    const result = this.#metadata({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
+    return resolveMaybePromise(result, m => m);
   }
 
   /**
@@ -2521,6 +2739,10 @@ export class Agent<
     this.#memory = memory;
   }
 
+  public __setPubSub(pubsub: PubSub) {
+    this.#inheritedPubSub = pubsub;
+  }
+
   public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>) {
     this.#workspace = workspace;
     if (this.#mastra && workspace && typeof workspace !== 'function') {
@@ -2902,6 +3124,99 @@ export class Agent<
   }
 
   /**
+   * Returns tools that input processors loaded into their own state.
+   * These tools need to be available before a resumed approval call enters toolCallStep.
+   * Otherwise the resumed workflow bypasses processInputStep and loses dynamic executors.
+   * @internal
+   */
+  private async listInputProcessorLoadedTools({
+    processors,
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    outputWriter,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+    ...rest
+  }: {
+    processors: InputProcessorOrWorkflow[];
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const convertedProcessorTools: Record<string, CoreTool> = {};
+
+    const collectLoadedTools = async (processor: InputProcessorOrWorkflow | unknown) => {
+      if (isProcessorWorkflow(processor)) {
+        for (const childProcessor of listProcessorWorkflowChildren(processor)) {
+          await collectLoadedTools(childProcessor);
+        }
+      }
+
+      const toolProvider = processor as ProcessorLoadedToolsProvider;
+
+      if (typeof toolProvider.getLoadedToolsForRequestContext !== 'function') {
+        return;
+      }
+
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext });
+      if (!loadedTools || Object.keys(loadedTools).length === 0) {
+        return;
+      }
+
+      const workspace = await this.getWorkspace({ requestContext });
+      const memory = await this.getMemory({ requestContext });
+      const model = await this.getModel({ requestContext });
+
+      for (const [toolName, tool] of Object.entries(loadedTools)) {
+        if (isMastraTool(tool) || isProviderTool(tool)) {
+          convertedProcessorTools[toolName] = makeCoreTool(
+            tool as unknown as ToolToConvert,
+            {
+              name: toolName,
+              runId,
+              threadId,
+              resourceId,
+              logger: this.logger,
+              mastra: mastraProxy as MastraUnion | undefined,
+              memory,
+              agentName: this.name,
+              agentId: this.id,
+              requestContext,
+              ...observabilityContext,
+              model,
+              outputWriter,
+              tracingPolicy: this.#options?.tracingPolicy,
+              requireApproval: (tool as any).requireApproval,
+              backgroundConfig: (tool as any).background,
+              workspace,
+            },
+            undefined,
+            autoResumeSuspendedTools,
+            backgroundTaskEnabled,
+          );
+        } else {
+          convertedProcessorTools[toolName] = tool as CoreTool;
+        }
+      }
+    };
+
+    for (const processor of processors) {
+      await collectLoadedTools(processor);
+    }
+
+    return convertedProcessorTools;
+  }
+
+  /**
    * Executes input processors on the message list before LLM processing.
    * @internal
    */
@@ -2997,6 +3312,7 @@ export class Agent<
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
+      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
@@ -3021,6 +3337,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      providerOptions,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -3037,6 +3354,10 @@ export class Agent<
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
+        const processInputProviderOptions =
+          llm instanceof MastraLLMVNext
+            ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
+            : providerOptions;
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
@@ -3047,6 +3368,7 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
+          providerOptions: processInputProviderOptions,
           retryCount: 0,
         });
         if (result.tools) {
@@ -3650,7 +3972,10 @@ export class Agent<
             // Recompute derived values from the resolved agent (may differ from
             // code-defined agent if a stored version changed the model or defaults)
             const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
-            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedDefaultOptions =
+              'getDefaultOptions' in resolvedAgent
+                ? await (resolvedAgent as Agent).getDefaultOptions({ requestContext })
+                : {};
             const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
 
             // Propagate parent memory to the resolved agent if it doesn't have its own.
@@ -3664,7 +3989,7 @@ export class Agent<
               supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
               if (!resolvedAgent.hasOwnMemory() && this.#memory) {
-                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory, TRequestContext>);
               }
             }
 
@@ -4825,6 +5150,19 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
+      processors: configuredInputProcessors,
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+    });
+
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -4836,6 +5174,7 @@ export class Agent<
       ...skillTools,
       ...channelTools,
       ...browserTools,
+      ...inputProcessorLoadedTools,
     };
     return this.formatTools(allTools);
   }
@@ -5129,22 +5468,80 @@ export class Agent<
     return existingSnapshot;
   }
 
+  #getSnapshotMemoryInfo(existingSnapshot: any): AgentSnapshotMemoryInfo | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+      }
+    }
+
+    return undefined;
+  }
+
+  #getAgentExecutionResourceId({
+    requestContext,
+    memory,
+    snapshotMemoryInfo,
+  }: {
+    requestContext?: RequestContext;
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+  }): string | undefined {
+    const resourceIdFromContext = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
+  }
+
+  async #requireAgentExecutionFGA({
+    requestContext,
+    memory,
+    runId,
+    snapshotMemoryInfo,
+  }: {
+    requestContext?: RequestContext;
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    runId?: string;
+    snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+  }): Promise<void> {
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (!fgaProvider) {
+      return;
+    }
+
+    const user = requestContext?.get('user');
+    const executionResourceId = this.#getAgentExecutionResourceId({ requestContext, memory, snapshotMemoryInfo });
+    const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
+      permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      requestContext,
+      context: {
+        resourceId: executionResourceId,
+      },
+      metadata: {
+        agentId: this.id,
+        agentName: this.name,
+        runId,
+        executionResourceId,
+      },
+    });
+  }
+
   /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
+  async #execute<OUTPUT>({
+    methodType,
+    resumeContext,
+    _threadStreamPubSub,
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
+    const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
-    let snapshotMemoryInfo;
-    if (existingSnapshot) {
-      for (const key in existingSnapshot?.context) {
-        const step = existingSnapshot?.context[key];
-        if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-          snapshotMemoryInfo = step.suspendPayload?.__streamState?.messageList?.memoryInfo;
-          break;
-        }
-      }
-    }
+    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
@@ -5201,7 +5598,6 @@ export class Agent<
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
     const threadFromArgs = resolveThreadIdFromArgs({
@@ -5212,7 +5608,11 @@ export class Agent<
       overrideId: threadIdFromContext,
     });
 
-    const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
+    const resourceId = this.#getAgentExecutionResourceId({
+      requestContext,
+      memory: options.memory,
+      snapshotMemoryInfo,
+    });
     const memoryConfig = options.memory?.options;
 
     const llm = (await this.getLLM({
@@ -5399,6 +5799,7 @@ export class Agent<
             agentBackgroundConfig: this.#backgroundTasks,
           }),
       skipBgTaskWait: options._skipBgTaskWait,
+      drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
     });
 
     const run = await executionWorkflow.createRun();
@@ -5834,23 +6235,12 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
+    // Extract and forward any client observability data attached to
+    // tool-result messages before they reach the loop/model.
+    this.#extractClientObservability(messages);
+
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
-
-    // FGA authorization check
-    const fgaProvider = this.#mastra?.getServer()?.fga;
-    if (fgaProvider) {
-      const user = options?.requestContext?.get('user');
-      if (user) {
-        const { checkFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'agent', id: this.id },
-          permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        });
-      }
-    }
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
@@ -5859,6 +6249,8 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+
+    await this.#requireAgentExecutionFGA(mergedOptions);
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -5903,7 +6295,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<any>;
+    } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
     const result = await this.#execute(executeOptions);
 
@@ -5938,6 +6330,34 @@ export class Agent<
     return fullOutput;
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread<OUTPUT = TOutput>(
+    options: AgentSubscribeToThreadOptions,
+  ): Promise<AgentThreadSubscription<OUTPUT>> {
+    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      options,
+      this.getPubSub(),
+    );
+  }
+
+  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+  }
+
+  abortRunStream(runId: string): boolean {
+    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
+    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
+  }
+
   async stream<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -5966,23 +6386,12 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Extract and forward any client observability data attached to
+    // tool-result messages before they reach the loop/model.
+    this.#extractClientObservability(messages);
+
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
-
-    // FGA authorization check
-    const streamFgaProvider = this.#mastra?.getServer()?.fga;
-    if (streamFgaProvider) {
-      const user = streamOptions?.requestContext?.get('user');
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider: streamFgaProvider,
-          user,
-          resource: { type: 'agent', id: this.id },
-          permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        });
-      }
-    }
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
@@ -5991,6 +6400,8 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+
+    await this.#requireAgentExecutionFGA(mergedOptions);
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6021,8 +6432,23 @@ export class Agent<
       });
     }
 
+    const threadStreamPubSub = this.getPubSub();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      mergedOptions,
+      threadStreamPubSub,
+    );
+
+    mergedOptions.runId ??=
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+      }) ?? randomUUID();
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, threadStreamPubSub);
+
     const executeOptions = {
-      ...mergedOptions,
+      ...preparedOptions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6035,7 +6461,8 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>;
+      _threadStreamPubSub: threadStreamPubSub,
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
     const result = await this.#execute(executeOptions);
 
@@ -6058,6 +6485,13 @@ export class Agent<
         text: 'An unknown error occurred while streaming',
       });
     }
+
+    agentThreadStreamRuntime.registerRun(
+      this as Agent<any, any, any, any>,
+      result.result,
+      preparedOptions as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
     return result.result;
   }
@@ -6252,10 +6686,20 @@ export class Agent<
       requestContext: streamOptions?.requestContext,
     });
 
-    let mergedStreamOptions = deepMerge(
+    const mergedStreamOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+
+    const runId = streamOptions?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedStreamOptions.requestContext,
+      memory: mergedStreamOptions.memory,
+      runId: mergedStreamOptions.runId,
+      snapshotMemoryInfo,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
@@ -6281,11 +6725,19 @@ export class Agent<
       });
     }
 
-    const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const threadStreamPubSub = this.getPubSub();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
     const result = await this.#execute({
-      ...mergedStreamOptions,
+      ...preparedOptions,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
             ...mergedStreamOptions.structuredOutput,
@@ -6300,7 +6752,8 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+      _threadStreamPubSub: threadStreamPubSub,
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -6321,6 +6774,13 @@ export class Agent<
         text: 'An unknown error occurred while streaming',
       });
     }
+
+    agentThreadStreamRuntime.registerRun(
+      this as Agent<any, any, any, any>,
+      result.result as unknown as MastraModelOutput<OUTPUT>,
+      preparedOptions as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
     return result.result as unknown as MastraModelOutput<OUTPUT>;
   }
@@ -6378,6 +6838,15 @@ export class Agent<
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
+    const runId = options?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
+    });
+
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
@@ -6406,9 +6875,6 @@ export class Agent<
       });
     }
 
-    const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
-
     const result = await this.#execute({
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
@@ -6425,7 +6891,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

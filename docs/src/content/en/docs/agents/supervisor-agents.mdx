@@ -41,14 +41,14 @@ const researchAgent = new Agent({
   id: 'research-agent',
   // highlight-next-line
   description: 'Gathers factual information and returns bullet-point summaries.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 const writingAgent = new Agent({
   id: 'writing-agent',
   // highlight-next-line
   description: 'Transforms research into well-structured articles.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 // highlight-start
@@ -56,7 +56,7 @@ const supervisor = new Agent({
   id: 'supervisor',
   instructions: `You coordinate research and writing using specialized agents.
     Delegate to research-agent for facts, then writing-agent for content.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: { researchAgent, writingAgent },
   memory: new Memory({
     storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
@@ -346,7 +346,7 @@ Enable the [backgroundTasks manager](/reference/configuration#backgroundtasks) o
 const supervisor = new Agent({
   id: 'supervisor',
   instructions: 'Coordinate research and writing using the available agents.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: { researchAgent, writingAgent },
   // highlight-start
   backgroundTasks: {
@@ -382,12 +382,12 @@ const result = await supervisor.generate('Research and write about AI safety', {
 })
 ```
 
-Version overrides propagate automatically through delegation. See [Subagent versioning](/docs/editor/overview#subagent-versioning) for details on resolution order and server API usage.
+Version overrides propagate automatically through delegation. See [Subagent versioning](/docs/editor/overview#sub-agent-versioning) for details on resolution order and server API usage.
 
 ## Related
 
 - [Background tasks](./background-tasks)
-- [Subagent versioning](/docs/editor/overview#subagent-versioning)
+- [Subagent versioning](/docs/editor/overview#sub-agent-versioning)
 - [Guide: Research coordinator](/guides/guide/research-coordinator)
 - [Agent.stream() reference](/reference/streaming/agents/stream)
 - [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)

@@ -5,16 +5,32 @@ export const comboboxStyles = {
   /** Root wrapper */
   root: 'flex flex-col gap-1.5',
 
-  /** Trigger — form input look, sized to mirror SelectTrigger. */
+  /** Trigger base — shared layout/typography for all variants. */
   trigger: cn(
-    'inline-flex w-full min-w-32 select-none items-center justify-between gap-1.5 whitespace-nowrap',
-    'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
+    'inline-flex w-full min-w-32 select-none items-center justify-between gap-1.5 whitespace-nowrap cursor-pointer',
+    'rounded-lg border bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
     'outline-none transition-colors duration-normal ease-out-custom',
-    'hover:bg-surface2 hover:text-neutral6 hover:border-border2 active:bg-surface3',
-    'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
-    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+    'focus:outline-none focus-visible:outline-none',
     'disabled:cursor-not-allowed disabled:opacity-50',
   ),
+
+  /** Variant: default — bordered form input look. */
+  triggerDefault: cn(
+    'border-border1',
+    'hover:bg-surface2 hover:text-neutral6 hover:border-border2 active:bg-surface3',
+    'focus-visible:border-border2',
+    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+  ),
+
+  /** Variant: ghost — borderless, hover-only surface. */
+  triggerGhost: cn(
+    'border-transparent',
+    'hover:bg-surface2 hover:text-neutral6 active:bg-surface3',
+    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6',
+  ),
+
+  /** Variant: link — text-only trigger. */
+  triggerLink: cn('border-transparent px-0', 'hover:text-neutral6', 'data-[popup-open]:text-neutral6'),
 
   /** Trigger with error state */
   triggerError: 'border-accent2 hover:border-accent2 focus-visible:border-accent2',

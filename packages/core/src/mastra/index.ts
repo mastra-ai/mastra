@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
@@ -52,8 +53,8 @@ import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../w
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
-import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
+import { computeNextFireAt } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -150,6 +151,25 @@ function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string
     }
   }
   return undefined;
+}
+
+/**
+ * Decodes the owning workflow id directly from a `wf_<encoded>` /
+ * `wf_<encoded>__<...>` row id without needing the workflow to be in the
+ * current registry. Used to identify rows whose workflow has been deleted
+ * from code so we can clean them up on startup.
+ */
+function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
+  if (!rowId.startsWith('wf_')) return undefined;
+  const rest = rowId.slice('wf_'.length);
+  const sep = rest.indexOf('__');
+  const encoded = sep === -1 ? rest : rest.slice(0, sep);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
 }
 
 /** See {@link targetsEqual}. Same approach for free-form metadata. */
@@ -251,14 +271,14 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
+   * import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
    *     configs: {
    *       default: {
    *         serviceName: 'mastra',
-   *         exporters: [new DefaultExporter(), new CloudExporter()],
+   *         exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
    *       },
    *     },
    *   })
@@ -538,8 +558,6 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
-  #scheduler?: WorkflowScheduler;
-  #schedulerInitPromise?: Promise<void>;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
    * Used as a fast short-circuit so users without scheduled workflows pay
@@ -590,6 +608,10 @@ export class Mastra<
     return this.#pubsub;
   }
 
+  get agentThreadStreamRuntime() {
+    return agentThreadStreamRuntime;
+  }
+
   get workers(): readonly MastraWorker[] {
     return this.#workers;
   }
@@ -603,15 +625,15 @@ export class Mastra<
   }
 
   /**
-   * Returns the workflow scheduler if it has been auto-instantiated.
+   * Returns the workflow scheduler owned by the SchedulerWorker,
+   * or undefined if the scheduler is not enabled / not yet started.
    *
-   * The scheduler is created lazily once a workflow with a `schedule`
-   * config is registered (or when `scheduler.enabled` is true on the
-   * Mastra config). Use it to create, pause, resume, or delete
-   * schedules imperatively.
+   * The scheduler is created when `startWorkers()` initializes the
+   * SchedulerWorker (guarded by `#shouldEnableScheduler()`). Use it
+   * to create, pause, resume, or delete schedules imperatively.
    */
-  get scheduler() {
-    return this.#scheduler;
+  get scheduler(): WorkflowScheduler | undefined {
+    return this.#findSchedulerWorker()?.scheduler;
   }
 
   get datasets(): DatasetsManager {
@@ -815,7 +837,7 @@ export class Mastra<
    * as default. If a real observability entrypoint already exists, the exporter
    * is added directly to the existing default instance.
    *
-   * @param exporter - The exporter to register (e.g. a CloudExporter)
+   * @param exporter - The exporter to register (e.g. a MastraPlatformExporter)
    * @param instance - An ObservabilityInstance pre-configured with the exporter, used as default when bootstrapping
    * @param entrypoint - A real ObservabilityEntrypoint to bootstrap if the current one is a no-op
    */
@@ -859,7 +881,7 @@ export class Mastra<
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
    *   observability: new Observability({
-   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *     configs: { default: { serviceName: 'mastra', exporters: [new MastraStorageExporter()] } },
    *   }),
    * });
    * ```
@@ -961,12 +983,9 @@ export class Mastra<
       if (pubsubModes.includes('pull')) {
         defaultWorkers.push(new OrchestrationWorker());
       }
-      // Scheduler needs storage to read schedules from. Without it the worker
-      // would crash on startup (`deps.storage.getStore` on undefined). Match the
-      // pre-worker scheduler behavior: silently skip when storage isn't configured.
-      if (config?.storage) {
-        defaultWorkers.push(new SchedulerWorker(config?.scheduler));
-      }
+      // SchedulerWorker is added lazily in startWorkers() rather than here
+      // because workflows (and their schedule configs) are registered after
+      // this block runs, so #hasScheduledWorkflow is not yet set.
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
@@ -1007,8 +1026,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
+            'Import and instantiate: import { Observability, MastraStorageExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new MastraStorageExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
@@ -1198,10 +1217,6 @@ export class Mastra<
 
     this.setLogger({ logger });
 
-    if (workersOption !== false) {
-      this.#ensureScheduler();
-    }
-
     // Initialize channels asynchronously (auto-provision apps, etc.)
     // This runs after all agents are registered so configs are available
     if (this.#channels) {
@@ -1305,72 +1320,20 @@ export class Mastra<
     return this.#hasScheduledWorkflow;
   }
 
-  #ensureScheduler(): void {
-    if (this.#scheduler || this.#schedulerInitPromise) return;
-    if (!this.#shouldEnableScheduler()) return;
-    if (!this.#storage) return;
-
-    if (!this.#pubsub) {
-      throw new MastraError({
-        id: 'MASTRA_SCHEDULER_REQUIRES_PUBSUB',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Workflow scheduler requires a pubsub instance. Mastra creates an EventEmitterPubSub by default — this error indicates a misconfiguration.',
-      });
-    }
-
-    this.#schedulerInitPromise = this.#initScheduler().catch(error => {
-      // Drop both the in-flight promise and any partially-constructed
-      // scheduler instance so a future #ensureScheduler() call (e.g. after
-      // setStorage attaches storage, or after a transient pubsub failure)
-      // can retry initialization from a clean slate.
-      this.#scheduler = undefined;
-      this.#schedulerInitPromise = undefined;
-      this.#logger?.error('Failed to initialize workflow scheduler', error);
-    });
+  /**
+   * Find the SchedulerWorker from the workers list (if present).
+   */
+  #findSchedulerWorker(): SchedulerWorker | undefined {
+    return this.#workers.find((w): w is SchedulerWorker => w.name === 'scheduler') as SchedulerWorker | undefined;
   }
 
-  async #initScheduler(): Promise<void> {
-    if (this.#scheduler) return;
-    const storage = this.#storage;
-    if (!storage) return;
-
-    const schedulesStore = await storage.getStore('schedules');
-    if (!schedulesStore) {
-      throw new MastraError({
-        id: 'MASTRA_SCHEDULER_STORAGE_NOT_AVAILABLE',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Workflow scheduler requires a storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`). The configured storage does not provide one.',
-      });
-    }
-
-    const scheduler = new WorkflowScheduler({
-      schedulesStore,
-      pubsub: this.#pubsub,
-      config: this.#schedulerConfig,
-    });
-    if (this.#logger) {
-      scheduler.__setLogger(this.#logger as IMastraLogger);
-    }
-    this.#scheduler = scheduler;
-
-    try {
-      await this.#registerDeclarativeSchedules(schedulesStore);
-      await scheduler.start();
-    } catch (err) {
-      // Best-effort cleanup of any partially-started scheduler so the catch
-      // handler in #ensureScheduler() can null out #scheduler safely.
-      try {
-        await scheduler.stop();
-      } catch {
-        // ignore secondary errors during cleanup
-      }
-      throw err;
-    }
-  }
-
-  async #registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
+  /**
+   * Sync code-declared schedule configs to the database. Called by
+   * SchedulerWorker during init and by addWorkflow() for late registrations.
+   *
+   * @internal — public so SchedulerWorker can call it, not part of the user API.
+   */
+  async registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
     const declared = this.#collectDeclarativeSchedules();
     const declaredIds = new Set(declared.map(d => d.scheduleId));
 
@@ -1442,27 +1405,30 @@ export class Mastra<
       }
     }
 
-    // Orphan deletion: drop any storage rows owned by a registered workflow
-    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
-    // present in the current declared set. This keeps the storage in sync
-    // when array-form entries are removed across deploys. We only consider
-    // workflows we actually have registered — schedules belonging to a
-    // removed workflow are left alone (the workflow may be coming back).
-    if (declaredIdsByWorkflow.size > 0) {
-      const allRows = await schedulesStore.listSchedules();
-      for (const row of allRows) {
-        if (declaredIds.has(row.id)) continue;
-        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
-        if (!ownerWorkflowId) continue;
-        try {
-          await schedulesStore.deleteSchedule(row.id);
-        } catch (error) {
-          this.#logger?.error('Failed to delete orphaned declarative schedule', {
-            scheduleId: row.id,
-            workflowId: ownerWorkflowId,
-            error,
-          });
-        }
+    // Orphan deletion: drop any Mastra-managed declarative schedule rows
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) that are no
+    // longer declared in code. This covers two cases:
+    //   1. A registered workflow's array-form entries shrunk across deploys.
+    //   2. The owning workflow itself was deleted from code. Leaving these
+    //      rows behind would have the scheduler keep firing for a workflow
+    //      the processor can't resolve, producing infinite event-redelivery
+    //      loops (see WorkflowEventProcessor#dispatch).
+    // User-created schedules (via the schedules API) don't use the `wf_`
+    // prefix, so they're untouched.
+    const allRows = await schedulesStore.listSchedules();
+    for (const row of allRows) {
+      if (declaredIds.has(row.id)) continue;
+      if (!row.id.startsWith('wf_')) continue;
+      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      if (!ownerWorkflowId) continue;
+      try {
+        await schedulesStore.deleteSchedule(row.id);
+      } catch (error) {
+        this.#logger?.error('Failed to delete orphaned declarative schedule', {
+          scheduleId: row.id,
+          workflowId: ownerWorkflowId,
+          error,
+        });
       }
     }
   }
@@ -3281,16 +3247,17 @@ export class Mastra<
 
     this.registerStaticWorkflowScorers(workflow);
 
-    // If a schedule is declared, mark the flag and either register into the
-    // running scheduler or trigger a lazy ensure.
+    // If a schedule is declared, mark the flag and register into the
+    // running scheduler worker (if already started).
     if (hasSchedule) {
       this.#hasScheduledWorkflow = true;
-      if (this.#scheduler) {
+      const worker = this.#findSchedulerWorker();
+      if (worker?.scheduler) {
         void (async () => {
           try {
             const schedulesStore = await this.#storage?.getStore('schedules');
             if (!schedulesStore) return;
-            await this.#registerDeclarativeSchedules(schedulesStore);
+            await this.registerDeclarativeSchedules(schedulesStore);
           } catch (error) {
             this.#logger?.error('Failed to register declarative schedule for workflow', {
               workflowId: workflow.id,
@@ -3298,9 +3265,9 @@ export class Mastra<
             });
           }
         })();
-      } else {
-        this.#ensureScheduler();
       }
+      // If the worker doesn't exist yet (workers not started), schedules
+      // will be registered when SchedulerWorker.init() runs.
     }
   }
 
@@ -3340,10 +3307,8 @@ export class Mastra<
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
     this.#ensureBackgroundTaskManager();
-    // If storage was attached after construction, the scheduler bootstrap
-    // would have bailed out early in __init(). Retry it now that storage
-    // is available so declarative schedules still get registered + fired.
-    this.#ensureScheduler();
+    // If storage was attached after construction, the SchedulerWorker
+    // will pick it up when startWorkers() is called.
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
@@ -3948,6 +3913,16 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
+    // Lazily inject the SchedulerWorker if the scheduler should be enabled
+    // and no scheduler worker is registered yet. This runs after all
+    // workflows have been registered (unlike the constructor's default-workers
+    // block), so #hasScheduledWorkflow is accurate.
+    if (!name && this.#shouldEnableScheduler() && this.#storage && !this.#findSchedulerWorker()) {
+      const sw = new SchedulerWorker(this.#schedulerConfig);
+      sw.__registerMastra(this);
+      this.#workers.push(sw);
+    }
+
     const deps: WorkerDeps = {
       pubsub: this.#pubsub,
       storage: this.#storage!,
@@ -4309,21 +4284,7 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
-    // Stop legacy scheduler if it was started via #ensureScheduler
-    if (this.#schedulerInitPromise) {
-      try {
-        await this.#schedulerInitPromise;
-      } catch {
-        // init errors are already logged
-      }
-    }
-    if (this.#scheduler) {
-      try {
-        await this.#scheduler.stop();
-      } catch (error) {
-        this.#logger?.error('Failed to stop workflow scheduler', error);
-      }
-    }
+    // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();

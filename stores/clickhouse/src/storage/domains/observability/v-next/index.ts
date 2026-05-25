@@ -27,6 +27,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   BatchCreateLogsArgs,
   ListLogsArgs,
@@ -89,27 +90,38 @@ import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
 
 import {
-  ALL_TABLE_DDL,
-  ALL_MV_DDL,
+  BASE_MV_DDL,
+  BASE_TABLE_DDL,
+  buildAllTableDDL,
+  buildAllMvDDL,
   ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
+  DELTA_CURSOR_COUNTER_NAMES,
+  DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
-  buildRetentionDDL,
+  TABLE_DISCOVERY_VALUES,
+  TABLE_DISCOVERY_PAIRS,
+  buildRetentionEntries,
+  parseTtlExpression,
 } from './ddl';
-import type { RetentionConfig } from './ddl';
+import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export type { RetentionConfig } from './ddl';
 
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
+  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { checkSignalTablesMigrationStatus, isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -146,15 +158,236 @@ function buildSignalMigrationRequiredMessage(args: {
   );
 }
 
+/**
+ * Returns migrations whose target column/index does not yet exist. Falls back
+ * to running every migration if introspection fails — preserves correctness on
+ * older ClickHouse versions or restricted-permission users.
+ */
+async function filterAppliedMigrations(
+  client: ClickHouseClient,
+  migrations: readonly MigrationEntry[],
+): Promise<readonly MigrationEntry[]> {
+  if (migrations.length === 0) return migrations;
+
+  const tables = [...new Set(migrations.map(m => m.table))];
+
+  let existingColumns: Map<string, Set<string>>;
+  let existingIndices: Map<string, Set<string>>;
+  try {
+    [existingColumns, existingIndices] = await Promise.all([
+      queryNamesByTable(
+        client,
+        `SELECT table, name FROM system.columns WHERE database = currentDatabase() AND table IN ({tables:Array(String)})`,
+        tables,
+      ),
+      queryNamesByTable(
+        client,
+        `SELECT table, name FROM system.data_skipping_indices WHERE database = currentDatabase() AND table IN ({tables:Array(String)})`,
+        tables,
+      ),
+    ]);
+  } catch {
+    return migrations;
+  }
+
+  return migrations.filter(m => {
+    const present = m.kind === 'column' ? existingColumns.get(m.table) : existingIndices.get(m.table);
+    // If we don't have introspection data for this table, run the migration
+    // (table may not exist yet — preceding CREATE TABLE IF NOT EXISTS handles it).
+    if (!present) return true;
+    return !present.has(m.name);
+  });
+}
+
+/**
+ * Returns retention entries whose `MODIFY TTL` would actually change the
+ * table's TTL. Falls back to running every entry if introspection fails.
+ */
+async function filterAppliedRetention(
+  client: ClickHouseClient,
+  entries: readonly RetentionEntry[],
+): Promise<readonly RetentionEntry[]> {
+  if (entries.length === 0) return entries;
+
+  const tables = [...new Set(entries.map(e => e.table))];
+
+  let createQueries: Map<string, string>;
+  try {
+    const result = await client.query({
+      query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: { tables },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
+    createQueries = new Map(rows.map(r => [r.name, r.create_table_query ?? '']));
+  } catch {
+    return entries;
+  }
+
+  return entries.filter(e => {
+    const createQuery = createQueries.get(e.table);
+    if (!createQuery) return true;
+    const current = parseTtlExpression(createQuery);
+    if (!current) return true;
+    return current.column !== e.column || current.days !== e.days;
+  });
+}
+
+/**
+ * Reconciles the discovery helper tables with the engine declared in the
+ * current DDL. Skips tables that are already on the expected engine or that
+ * don't exist yet; in those cases the regular `CREATE TABLE IF NOT EXISTS`
+ * in init() handles them.
+ *
+ * When an engine mismatch is found, the refreshable MV is dropped first so
+ * it can't write into the table mid-drop, then the table itself is dropped.
+ * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
+ * recreate both with the current definitions.
+ *
+ * Silently returns if `system.tables` can't be queried — the rest of init
+ * will still run and leave any existing tables untouched.
+ */
+async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void> {
+  let engines: Map<string, string>;
+  try {
+    const result = await client.query({
+      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    engines = new Map(rows.map(r => [r.name, r.engine]));
+  } catch {
+    return;
+  }
+
+  const targets: Array<{ table: string; mv: string }> = [
+    { table: TABLE_DISCOVERY_VALUES, mv: MV_DISCOVERY_VALUES },
+    { table: TABLE_DISCOVERY_PAIRS, mv: MV_DISCOVERY_PAIRS },
+  ];
+
+  // ClickHouse Cloud rewrites `ReplacingMergeTree` to `SharedReplacingMergeTree`
+  // and self-managed replicated clusters rewrite it to `ReplicatedReplacingMergeTree`.
+  // `isReplacingMergeTreeEngine` accepts all three so we don't churn the helper
+  // tables on every init for those deployments.
+  for (const { table, mv } of targets) {
+    const engine = engines.get(table);
+    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
+    await client.command({ query: `DROP VIEW IF EXISTS ${mv}` });
+    await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
+  }
+}
+
+async function queryNamesByTable(
+  client: ClickHouseClient,
+  query: string,
+  tables: string[],
+): Promise<Map<string, Set<string>>> {
+  const result = await client.query({
+    query,
+    query_params: { tables },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ table: string; name: string }>;
+  const out = new Map<string, Set<string>>();
+  for (const row of rows) {
+    let set = out.get(row.table);
+    if (!set) {
+      set = new Set<string>();
+      out.set(row.table, set);
+    }
+    set.add(row.name);
+  }
+  return out;
+}
+
+async function detectDeltaCursorStrategy(
+  client: ClickHouseClient,
+  override?: ClickHouseDeltaCursorStrategy,
+  existingStrategy?: ClickHouseDeltaCursorStrategy | 'mixed' | null,
+): Promise<ClickHouseDeltaCursorStrategy> {
+  if (override) {
+    return override;
+  }
+
+  if (existingStrategy && existingStrategy !== 'mixed') {
+    return existingStrategy;
+  }
+
+  try {
+    await client.query({
+      query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
+      query_params: { counterName: 'mastra_observability_delta_cursor_probe' },
+      format: 'JSONEachRow',
+    });
+    return 'serial';
+  } catch {
+    return 'fallback';
+  }
+}
+
+async function detectExistingDeltaCursorStrategy(
+  client: ClickHouseClient,
+): Promise<ClickHouseDeltaCursorStrategy | 'mixed' | null> {
+  try {
+    const mvResult = await client.query({
+      query: `
+        SELECT name, create_table_query
+        FROM system.tables
+        WHERE database = currentDatabase()
+          AND name IN ({tables:Array(String)})
+      `,
+      query_params: { tables: [...DELTA_MV_NAMES] },
+      format: 'JSONEachRow',
+    });
+
+    const mvRows = (await mvResult.json()) as Array<{ name: string; create_table_query?: string | null }>;
+    if (mvRows.length === 0) {
+      return null;
+    }
+
+    let sawSerialMv = false;
+    let sawFallbackMv = false;
+
+    for (const row of mvRows) {
+      const ddl = row.create_table_query ?? '';
+      if (ddl.includes('generateSerialID(')) {
+        sawSerialMv = true;
+      } else if (ddl.includes('farmFingerprint64(')) {
+        sawFallbackMv = true;
+      }
+    }
+
+    if (sawSerialMv && sawFallbackMv) {
+      return 'mixed';
+    }
+
+    if (sawSerialMv) {
+      return 'serial';
+    }
+
+    if (sawFallbackMv) {
+      return 'fallback';
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
+  readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
     super();
     const { client } = resolveClickhouseConfig(config);
     this.#client = client;
     this.#retention = config.retention;
+    this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
   }
 
   // -------------------------------------------------------------------------
@@ -176,22 +409,73 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
 
     try {
+      const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
+      if (existingStrategy === 'mixed') {
+        this.#deltaCursorStrategy = null;
+        this.logger.error(
+          'ClickHouse observability delta tables use mixed cursor schemas; delta polling has been disabled for this store instance.',
+        );
+      } else if (this.#deltaCursorStrategyOverride) {
+        this.#deltaCursorStrategy = this.#deltaCursorStrategyOverride;
+      } else if (existingStrategy) {
+        this.#deltaCursorStrategy = existingStrategy;
+      } else {
+        this.#deltaCursorStrategy = await detectDeltaCursorStrategy(this.#client, undefined, existingStrategy);
+      }
+
+      // Align the discovery helper tables with the current DDL. The discovery
+      // tables are fully derived from the base signal tables and get
+      // repopulated by the refreshable MV at the end of init(), so it is safe
+      // to recreate them in place when the engine doesn't match.
+      await reconcileDiscoveryTables(this.#client);
+
       // Core tables + incremental MVs (must succeed)
-      for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
+      const coreDdl =
+        this.#deltaCursorStrategy === null
+          ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
+          : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
+      for (const ddl of coreDdl) {
         await this.#client.command({ query: ddl });
       }
 
-      // Additive migrations for existing databases (add new columns)
-      for (const migration of ALL_MIGRATIONS) {
-        await this.#client.command({ query: migration });
+      // Additive migrations for existing databases (add new columns/indexes).
+      // Filter out ALTERs whose target already exists: on Replicated/Shared
+      // MergeTree, every issued ALTER bumps the table's metadata version
+      // even when `IF NOT EXISTS` is a no-op, causing replica-lag retry
+      // errors on every boot when multiple replicas/pods race.
+      const pendingMigrations = await filterAppliedMigrations(this.#client, ALL_MIGRATIONS);
+      for (const migration of pendingMigrations) {
+        await this.#client.command({ query: migration.sql });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
-      // Uses ALTER TABLE ... MODIFY TTL so re-running init is idempotent.
+      // Skip statements whose current TTL already matches: `MODIFY TTL` bumps the
+      // metadata version unconditionally, so re-issuing it on every boot is the
+      // primary source of replica-catch-up races in deployments with retention.
       if (this.#retention) {
-        const ttlStatements = buildRetentionDDL(this.#retention);
-        for (const stmt of ttlStatements) {
-          await this.#client.command({ query: stmt });
+        const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
+        for (const entry of pendingRetention) {
+          await this.#client.command({ query: entry.sql });
+        }
+      }
+
+      // Burn `cursorId = 0` for every delta stream on the `serial` strategy.
+      // `generateSerialID` is server-lifetime keyed and returns 0 on first
+      // call; `max(cursorId)` on an empty delta table also returns 0. Without
+      // this step the very first row inserted after a server cold-start lands
+      // at `cursorId = 0` and is skipped by callers that read with
+      // `WHERE cursorId > 0` after capturing a head cursor on the empty
+      // stream. Advancing each counter once at init guarantees real rows
+      // start at `cursorId >= 1`. Safe to repeat: the cost is one extra
+      // counter tick per signal per init, and the only observable effect is
+      // that the stream skips the value 0 (which carries no row).
+      if (this.#deltaCursorStrategy === 'serial') {
+        for (const counterName of DELTA_CURSOR_COUNTER_NAMES) {
+          await this.#client.query({
+            query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
+            query_params: { counterName },
+            format: 'JSONEachRow',
+          });
         }
       }
     } catch (error) {
@@ -275,6 +559,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       preferred: 'insert-only',
       supported: ['insert-only'],
     };
+  }
+
+  override getFeatures() {
+    if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
+      return undefined;
+    }
+
+    return ['delta-polling'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -406,7 +698,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     try {
-      return await traceRootsOps.listTraces(this.#client, args);
+      return await traceRootsOps.listTraces(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -420,9 +712,25 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    try {
+      return await traceRootsOps.listTracesLight(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES_LIGHT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     try {
-      return await tracingOps.listBranches(this.#client, args);
+      return await tracingOps.listBranches(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -455,7 +763,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listLogs(args: ListLogsArgs): Promise<ListLogsResponse> {
     try {
-      return await logsOps.listLogs(this.#client, args);
+      return await logsOps.listLogs(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -488,7 +796,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listMetrics(args: ListMetricsArgs): Promise<ListMetricsResponse> {
     try {
-      return await metricsOps.listMetrics(this.#client, args);
+      return await metricsOps.listMetrics(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -537,7 +845,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     try {
-      return await scoresOps.listScores(this.#client, args);
+      return await scoresOps.listScores(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -603,7 +911,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     try {
-      return await feedbackOps.listFeedback(this.#client, args);
+      return await feedbackOps.listFeedback(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

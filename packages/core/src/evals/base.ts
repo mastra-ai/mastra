@@ -12,6 +12,7 @@ import {
   createObservabilityContext,
   EntityType,
   getOrCreateSpan,
+  InternalSpans,
   resolveObservabilityContext,
   SpanType,
 } from '../observability';
@@ -28,7 +29,7 @@ import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
-import { createWorkflow, createStep } from '../workflows';
+import { createWorkflow, createStep } from '../workflows/workflow';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -796,6 +797,14 @@ class MastraScorer<
       }),
       options: {
         validateInputs: false,
+        // The scorer pipeline is mastra-owned plumbing — only the SCORER_RUN
+        // span (created in run()) is user-facing. Mark all workflow spans as
+        // internal so they're hidden from exported traces by default. Any
+        // user-defined agents/tools/models invoked from a scorer step keep
+        // their own tracing policy and stay visible.
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
       },
     });
 

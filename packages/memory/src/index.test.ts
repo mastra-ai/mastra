@@ -2271,6 +2271,63 @@ describe('Memory', () => {
       await expect(memory.deleteMessages(['msg-789'])).resolves.not.toThrow();
     });
 
+    it('passes observeAttachments to the ObservationalMemory engine', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            observation: {
+              observeAttachments: 'auto',
+            },
+          },
+        },
+      });
+
+      const engine = await (memory as any)._initOMEngine();
+
+      expect(engine?.getObservationConfig().observeAttachments).toBe('auto');
+    });
+
+    it('should clear thread-scoped observational memory when deleting a thread', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            scope: 'thread',
+          },
+        },
+      });
+      const memoryStore = await storage.getStore('memory');
+      const threadId = 'thread-with-observations';
+      const resourceId = 'resource-with-observations';
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Thread with observations',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await memoryStore?.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.not.toBeNull();
+
+      await memory.deleteThread(threadId);
+
+      await expect(memory.getThreadById({ threadId })).resolves.toBeNull();
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.toBeNull();
+    });
+
     it('should batch message vector deletions when messageIds exceed batch size', async () => {
       const memory = createMemoryWithMockVector('_');
       const messageIds = Array.from({ length: 250 }, (_, i) => `msg-${i}`);
