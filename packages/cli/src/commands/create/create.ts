@@ -143,6 +143,9 @@ export const create = async (args: {
     observability: args.observability,
     observabilityProject: args.observabilityProject,
     observabilityMode: 'create',
+    storage: args.storage,
+    vectorStore: args.vectorStore,
+    observabilityStorage: args.observabilityStorage,
   });
 
   postCreate({ projectName });
