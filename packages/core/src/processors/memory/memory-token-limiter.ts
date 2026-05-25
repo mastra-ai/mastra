@@ -20,7 +20,7 @@ export interface MemoryTokenLimiterOptions {
 /**
  * Default token counter source identifier (matches CoreTokenCounter's cache source).
  */
-const DEFAULT_TOKEN_COUNTER_SOURCE = `v5:o200k_base`;
+const DEFAULT_TOKEN_COUNTER_SOURCE = `v7:tokenx`;
 
 /**
  * Input processor that limits memory history messages by token count.
@@ -34,7 +34,7 @@ const DEFAULT_TOKEN_COUNTER_SOURCE = `v5:o200k_base`;
  * This creates a "sawtooth" behavior: context grows to maxTokens, drops to
  * maxTokens - atMaxRemoveTokens, then grows from that persisted point.
  *
- * Uses tiktoken (o200k_base encoding) via CoreTokenCounter from @mastra/core
+ * Uses tokenx via CoreTokenCounter from @mastra/core
  * for accurate token counting with metadata caching on
  * message.content.metadata.mastra.tokenEstimate.
  *
@@ -55,7 +55,7 @@ export class MemoryTokenLimiter implements Processor {
 
   /**
    * Lazily initialize the CoreTokenCounter.
-   * Uses getDefaultEncoder() which is synchronous and reuses the global singleton.
+   * Uses tokenx's synchronous estimator.
    */
   private getCounter(): CoreTokenCounter {
     if (!this.counter) {

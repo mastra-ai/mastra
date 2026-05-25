@@ -1,7 +1,7 @@
 /**
  * Shared token counting primitives for Mastra core.
  *
- * Provides text token counting via tiktoken (o200k_base), metadata caching
+ * Provides text token counting via tokenx, metadata caching
  * helpers in the `message.content.metadata.mastra.tokenEstimate` /
  * `message.metadata.mastra.tokenEstimate` namespace, and a CoreTokenCounter
  * class that handles message-level counting without provider-specific image
@@ -21,9 +21,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Tiktoken } from 'js-tiktoken/lite';
-import type { TiktokenBPE } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import { estimateTokenCount } from 'tokenx';
 
 import type { MastraDBMessage } from '../../agent';
 
@@ -47,7 +45,7 @@ export type TokenEstimateCacheEntry = {
  * Version identifier for cached token estimates.
  * Increment when the counting algorithm or format changes.
  */
-export const TOKEN_ESTIMATE_CACHE_VERSION = 5;
+export const TOKEN_ESTIMATE_CACHE_VERSION = 7;
 
 /**
  * Per-message overhead: accounts for role tokens, message framing, and
@@ -70,37 +68,13 @@ export const TOKENS_PER_MESSAGE = 3.8;
  */
 export const TOKENS_PER_CONVERSATION = 24;
 
-/**
- * Global key used to share the tiktoken encoder singleton across packages.
- */
-const GLOBAL_TIKTOKEN_KEY = '__mastraTiktoken';
-
-// ──────────────────────────── Encoder ────────────────────────────
+// ──────────────────────────── Estimator ────────────────────────────
 
 /**
- * Get or create the shared Tiktoken encoder instance (synchronous).
- * Uses o200k_base encoding via js-tiktoken.
- * Cached on globalThis so the same instance is reused across packages.
+ * Resolve the token estimator identifier for cache source strings.
  */
-export function getDefaultEncoder(): Tiktoken {
-  const cached = (globalThis as Record<string, unknown>)[GLOBAL_TIKTOKEN_KEY] as Tiktoken | undefined;
-  if (cached) return cached;
-
-  const encoder = new Tiktoken(o200k_base);
-  (globalThis as Record<string, unknown>)[GLOBAL_TIKTOKEN_KEY] = encoder;
-  return encoder;
-}
-
-/**
- * Resolve an encoding identifier for cache source strings.
- */
-export function resolveEncodingId(encoding?: TiktokenBPE): string {
-  if (!encoding) return 'o200k_base';
-  try {
-    return `custom:${createHash('sha1').update(JSON.stringify(encoding)).digest('hex')}`;
-  } catch {
-    return 'custom:unknown';
-  }
+export function resolveEstimatorId(): string {
+  return 'tokenx';
 }
 
 // ──────────────────────────── Cache Key ────────────────────────────
@@ -287,27 +261,25 @@ export function setMessageCacheEntry(message: MastraDBMessage, key: string, entr
 /**
  * Lightweight, cache-aware token counter for text-only messages.
  *
- * Counts tokens using tiktoken (o200k_base by default) and caches estimates
+ * Counts tokens using tokenx and caches estimates
  * on message/content/part metadata under the `mastra.tokenEstimate` namespace.
  *
  * Does NOT include provider-specific image token estimation — that lives in
  * the Observational Memory TokenCounter which extends this class.
  */
 export class CoreTokenCounter {
-  protected encoder: Tiktoken;
   readonly cacheSource: string;
 
-  constructor(encoding?: TiktokenBPE) {
-    this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
-    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEncodingId(encoding)}`;
+  constructor() {
+    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
   }
 
   /**
-   * Count tokens in a plain string using tiktoken.
+   * Count tokens in a plain string using tokenx.
    */
   countString(text: string): number {
     if (!text) return 0;
-    return this.encoder.encode(text, 'all').length;
+    return estimateTokenCount(text);
   }
 
   /**

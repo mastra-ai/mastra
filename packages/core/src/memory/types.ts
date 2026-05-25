@@ -979,8 +979,8 @@ type BaseMemoryConfig = {
    * so subsequent fetches start from the last trim point instead of recounting all history.
    * Active input/system messages are never removed.
    *
-   * Token counting uses tiktoken (o200k_base encoding) for accurate results,
-   * with per-message token estimates cached on message metadata.
+   * Token counting uses tokenx, with per-message token estimates cached on
+   * message metadata.
    *
    * @default 10
    * @example

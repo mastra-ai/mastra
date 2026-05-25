@@ -245,7 +245,7 @@ describe('MemoryTokenLimiter', () => {
     const messageList = new MessageList();
     const ctx = createThreadContext('thread-1');
 
-    // ~50 tiktoken tokens each (exclusive of overhead)
+    // ~50 estimated tokens each (exclusive of overhead)
     const medText = 'x'.repeat(400);
 
     messageList.add(createMessage('mem-0', 'user', medText, 'thread-1', new Date('2025-01-01T00:00:00Z')), 'memory');
@@ -296,7 +296,7 @@ describe('MemoryTokenLimiter', () => {
     expect(boundary!.maxTokens).toBe(5);
     expect(boundary!.atMaxRemoveTokens).toBe(1); // 25% of 5 = 1.25 rounded to 1
     expect(boundary!.targetTokens).toBe(4); // 5 - 1 = 4
-    expect(boundary!.tokenCounterSource).toBe('v5:o200k_base');
+    expect(boundary!.tokenCounterSource).toBe('v7:tokenx');
     expect(boundary!.createdAt).toBeDefined();
     expect(boundary!.updatedAt).toBeDefined();
   });
@@ -323,7 +323,7 @@ describe('MemoryTokenLimiter', () => {
       targetTokens: 4,
       maxTokens: 5,
       atMaxRemoveTokens: 1,
-      tokenCounterSource: 'tiktoken:o200k_base',
+      tokenCounterSource: 'v7:tokenx',
       updatedAt: new Date('2025-01-01T00:00:02Z').toISOString(),
     };
 
@@ -369,8 +369,8 @@ describe('MemoryTokenLimiter', () => {
           expect(partMeta.tokenEstimate).toBeDefined();
 
           const entry = partMeta.tokenEstimate as { v: number; source: string; key: string; tokens: number };
-          expect(entry.v).toBe(5);
-          expect(entry.source).toBe('v5:o200k_base');
+          expect(entry.v).toBe(7);
+          expect(entry.source).toBe('v7:tokenx');
           expect(typeof entry.key).toBe('string');
           expect(typeof entry.tokens).toBe('number');
           // Each text part should have a small positive token count

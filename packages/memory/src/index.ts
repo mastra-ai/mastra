@@ -381,27 +381,27 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
 
+    // Use perPage from args if provided, otherwise use threadConfig.lastMessages.
+    // In object form, omitting maxMessages means there is no count cap.
+    const configLastMessages = config.lastMessages;
+    const isLastMessagesObject = configLastMessages !== null && typeof configLastMessages === 'object';
+    const normalizedPerPage = isLastMessagesObject
+      ? ((configLastMessages as { maxMessages?: number | false }).maxMessages ?? false)
+      : configLastMessages;
+    const perPage = perPageArg !== undefined ? perPageArg : normalizedPerPage;
+
     const span = this.createMemorySpan(
       'recall',
       args.observabilityContext,
       { threadId, resourceId, vectorSearchString },
       {
         semanticRecallEnabled,
-        lastMessages: config.lastMessages,
+        lastMessages: normalizedPerPage,
       },
     );
 
     try {
       if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
-
-      // Use perPage from args if provided, otherwise use threadConfig.lastMessages.
-      // In object form, omitting maxMessages means there is no count cap.
-      const configLastMessages = config.lastMessages;
-      const isLastMessagesObject = configLastMessages !== null && typeof configLastMessages === 'object';
-      const normalizedPerPage = isLastMessagesObject
-        ? ((configLastMessages as { maxMessages?: number | false }).maxMessages ?? false)
-        : configLastMessages;
-      const perPage = perPageArg !== undefined ? perPageArg : normalizedPerPage;
 
       // Top-level lastMessages: false means "disable conversation history entirely".
       // When the resolved perPage is false from config (not an explicit caller override),

@@ -65,7 +65,6 @@ export default defineConfig({
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
     'src/auth/ee/index.ts',
-    'src/utils/token-counter/index.ts',
     'src/agent-builder/ee/index.ts',
     'src/storage/domains/agents/index.ts',
     'src/storage/domains/mcp-clients/index.ts',
