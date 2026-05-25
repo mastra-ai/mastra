@@ -175,7 +175,6 @@ export function handleOMBufferingStart(
   const { state } = ctx;
   state.activeActivationMarker = undefined;
   state.activeActivationData = undefined;
-  state.activeActivationTTLMarker = undefined;
   state.activeActivationProviderChangeMarker = undefined;
   if (state.quietMode) {
     removeChatChild(ctx, state.activeBufferingMarker);
@@ -255,21 +254,6 @@ export function handleOMActivation(
 ): void {
   const { state } = ctx;
 
-  if (triggeredBy === 'ttl' && activateAfterIdle !== undefined && ttlExpiredMs !== undefined) {
-    const ttlData: OMMarkerData = {
-      type: 'om_activation_ttl',
-      activateAfterIdle,
-      ttlExpiredMs,
-    };
-
-    if (state.activeActivationTTLMarker) {
-      state.activeActivationTTLMarker.update(ttlData);
-    } else {
-      state.activeActivationTTLMarker = new OMMarkerComponent(ttlData);
-      addChildBeforeStreaming(ctx, state.activeActivationTTLMarker);
-    }
-  }
-
   if (triggeredBy === 'provider_change' && previousModel && currentModel) {
     const providerChangeData: OMMarkerData = {
       type: 'om_activation_provider_change',
@@ -299,12 +283,14 @@ export function handleOMActivation(
         tokensActivated: previousActivationData.tokensActivated + tokensActivated,
         observationTokens: previousActivationData.observationTokens + observationTokens,
         activationCount: (previousActivationData.activationCount ?? 1) + 1,
+        activateAfterIdle: previousActivationData.activateAfterIdle ?? activateAfterIdle,
       }
     : {
         type: 'om_activation',
         operationType,
         tokensActivated,
         observationTokens,
+        ...(triggeredBy === 'ttl' && activateAfterIdle !== undefined ? { activateAfterIdle } : {}),
       };
 
   if (canCombineActivation && state.activeActivationMarker) {
