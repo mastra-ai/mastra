@@ -186,8 +186,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
           <DialogPrimitive.Backdrop
             className={cn(
               'fixed inset-0 z-40 bg-overlay backdrop-blur-sm',
-              'data-[open]:animate-in data-[closed]:animate-out',
-              'data-[open]:fade-in-0 data-[closed]:fade-out-0',
+              'opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none',
+              'data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[ending-style]:duration-150 data-[ending-style]:ease-in',
             )}
           />
           <DialogPrimitive.Popup

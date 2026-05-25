@@ -38,8 +38,8 @@ export function SideDialogRoot({
           <Dialog.Backdrop
             className={cn(
               'bg-overlay backdrop-blur-sm top-0 bottom-0 right-0 left-0 fixed z-50',
-              'data-[open]:animate-in data-[open]:fade-in-0 data-[open]:duration-200',
-              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:duration-150',
+              'opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none',
+              'data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[ending-style]:duration-150 data-[ending-style]:ease-in',
             )}
           />
         )}
