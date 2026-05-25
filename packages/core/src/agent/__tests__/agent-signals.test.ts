@@ -1116,6 +1116,56 @@ describe('Agent signals', () => {
     },
   );
 
+  it.runIf(process.platform !== 'win32')(
+    'broadcasts to a remote subscriber without a same-runtime subscriber',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-remote-only-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = { id: 'remote-only-agent' } as Agent<any, any, any, any>;
+      const follower = { id: 'remote-only-agent' } as Agent<any, any, any, any>;
+      const runId = 'remote-only-run';
+      let finishRun!: () => void;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId, payload: { text: 'remote only response' } };
+          yield { type: 'finish', runId, payload: {} };
+        })(),
+        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+      } as any;
+
+      try {
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'remote-only-resource', threadId: 'remote-only-thread' },
+          followerPubSub,
+        );
+        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId, memory: { resource: 'remote-only-resource', thread: 'remote-only-thread' } } as any,
+          ownerPubSub,
+        );
+
+        await expect(withTimeout(followerRun, 'Timed out waiting for remote-only subscriber')).resolves.toMatchObject({
+          value: { runId, text: 'remote only response' },
+          done: false,
+        });
+        finishRun();
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('supports cross-instance thread subscriptions through an injected PubSub without Mastra', async () => {
     const pubsub = new EventEmitterPubSub();
     const runner = new Agent({
