@@ -209,7 +209,10 @@ function canonicalJsonForTest(value: unknown): string {
     .join(',')}}`;
 }
 
-async function settleWithinTicks<T>(promise: Promise<T>, ticks = 10): Promise<{ settled: true; value: T } | { settled: false }> {
+async function settleWithinTicks<T>(
+  promise: Promise<T>,
+  ticks = 10,
+): Promise<{ settled: true; value: T } | { settled: false }> {
   return Promise.race([
     promise.then(value => ({ settled: true as const, value })),
     (async () => {
@@ -251,29 +254,50 @@ describe('Session.message() — default path', () => {
     });
   });
 
-  it('forwards the caller-supplied abortSignal (chained into the per-turn signal)', async () => {
+  it('mints a per-turn signal for caller-supplied abortSignal', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const ac = new AbortController();
     await session.message({ content: 'hi', abortSignal: ac.signal });
-    // Session mints its own per-turn AbortController so `session.abort()` can
-    // also cancel the run. Caller's signal is linked into it, so aborting the
-    // caller's controller must abort the signal handed to the agent.
+    // Session mints its own per-turn AbortController so `session.abort()` can also cancel the run.
     const turnSignal = agent.calls[0]!.options.abortSignal as AbortSignal;
     expect(turnSignal).toBeInstanceOf(AbortSignal);
     expect(turnSignal).not.toBe(ac.signal);
     expect(turnSignal.aborted).toBe(false);
   });
 
-  it('aborting the caller signal aborts the per-turn signal handed to the agent', async () => {
+  it('forwards a live caller abort into the per-turn signal', async () => {
+    const agent = new LiveStreamFakeAgent('default');
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const ac = new AbortController();
+    const pending = session.message({ content: 'hi', abortSignal: ac.signal, stream: true });
+    await vi.waitFor(() => expect(agent.calls).toHaveLength(1));
+
+    const turnSignal = agent.calls[0]!.options.abortSignal as AbortSignal;
+    expect(turnSignal.aborted).toBe(false);
+    ac.abort('caller-cancelled');
+    expect(turnSignal.aborted).toBe(true);
+    expect((turnSignal as { reason?: unknown }).reason).toBe('caller-cancelled');
+
+    agent.releaseStream?.();
+    await pending.catch(() => undefined);
+  });
+
+  it('does not let the caller signal abort the per-turn signal after the turn completes', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const ac = new AbortController();
     await session.message({ content: 'hi', abortSignal: ac.signal });
     const turnSignal = agent.calls[0]!.options.abortSignal as AbortSignal;
     ac.abort('caller-cancelled');
-    expect(turnSignal.aborted).toBe(true);
-    expect((turnSignal as { reason?: unknown }).reason).toBe('caller-cancelled');
+    expect(turnSignal.aborted).toBe(false);
   });
 
   it('deduplicates an exact admissionId retry without accepting a second signal', async () => {

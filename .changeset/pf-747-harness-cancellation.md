@@ -10,3 +10,5 @@ await session.cancelQueuedItem({ queuedItemId, reason: 'timed_out' });
 ```
 
 `session.cancel()` cancels active and queued work for the session, emits `task_cancellation_requested`, and prevents later turns from being admitted. `session.cancelQueuedItem()` cancels a queued item that has not reached the queue head yet and emits `queue_item_cancelled`.
+
+Improve cancellation reliability by preventing duplicate terminal events and ensuring run state is cleared.

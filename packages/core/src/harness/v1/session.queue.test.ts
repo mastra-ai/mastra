@@ -609,6 +609,8 @@ describe('Session.queue() — admission', () => {
       return runGoalJudge(...args);
     };
 
+    const events: HarnessEvent[] = [];
+    session.subscribe(event => events.push(event));
     const queued = session.queue({ content: 'do work', admissionId: 'queue-finalization-retry' });
     await new Promise(resolve => setImmediate(resolve));
     expect(session.getRecord().pendingQueue).toHaveLength(1);
@@ -617,6 +619,7 @@ describe('Session.queue() — admission', () => {
       status: 'completed',
     });
     expect(pendingReceipt?.postRunFinalizedAt).toBeUndefined();
+    expect(events.filter(event => event.type === 'agent_end')).toHaveLength(0);
 
     const duplicate = session.queue({ content: 'do work', admissionId: 'queue-finalization-retry' });
     await (session as any)._kickQueueDrain();
@@ -626,6 +629,7 @@ describe('Session.queue() — admission', () => {
     expect(duplicateResult.text).toBe('queued reply');
     expect(markerAttempts).toBe(2);
     expect(goalJudgeAttempts).toBe(1);
+    expect(events.filter(event => event.type === 'agent_end')).toHaveLength(1);
     expect(session.getRecord().pendingQueue).toEqual([]);
     const receipt = Object.values(session.getRecord().queueAdmissionReceipts ?? {})[0];
     expect(receipt).toMatchObject({
@@ -1419,7 +1423,8 @@ describe('Session.queue() — suspension', () => {
 
     expect(result.text).toBe('resumed done');
     expect(events.find(e => e.type === 'suspension_resolved')).toMatchObject({ queuedItemId });
-    expect(events.find(e => e.type === 'agent_end')).toMatchObject({ queuedItemId });
+    const agentEnds = events.filter(e => e.type === 'agent_end');
+    expect(agentEnds).toEqual([expect.objectContaining({ queuedItemId })]);
     expect(events.findIndex(e => e.type === 'agent_end')).toBeGreaterThan(
       events.findIndex(e => e.type === 'suspension_resolved'),
     );

@@ -114,7 +114,7 @@ describe('HarnessRequestContext — state reads/writes', () => {
 });
 
 describe('HarnessRequestContext — abort plumbing', () => {
-  it('aborts the slot signal when the caller-supplied signal aborts', async () => {
+  it('does not abort the slot signal from the caller-supplied signal after the turn completes', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const controller = new AbortController();
@@ -124,7 +124,7 @@ describe('HarnessRequestContext — abort plumbing', () => {
     expect(slot.abortSignal).toBeInstanceOf(AbortSignal);
     expect(slot.abortSignal).not.toBe(controller.signal);
     controller.abort('caller-cancelled');
-    expect(slot.abortSignal.aborted).toBe(true);
+    expect(slot.abortSignal.aborted).toBe(false);
   });
 
   it('mints a fresh signal when the caller did not supply one', async () => {

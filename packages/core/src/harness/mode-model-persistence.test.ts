@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
+import { createSignal } from '../agent/signals';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 
@@ -39,6 +40,21 @@ function createHarness(storage: InMemoryStore): Harness<HarnessTestState> {
       },
     ],
   });
+}
+
+async function settleWithinTicks<T>(
+  promise: Promise<T>,
+  ticks = 10,
+): Promise<{ settled: true; value: T } | { settled: false }> {
+  return Promise.race([
+    promise.then(value => ({ settled: true as const, value })),
+    (async () => {
+      for (let i = 0; i < ticks; i++) {
+        await Promise.resolve();
+      }
+      return { settled: false as const };
+    })(),
+  ]);
 }
 
 describe('Harness mode-model persistence across restarts', () => {
@@ -153,5 +169,70 @@ describe('Harness mode-model persistence across restarts', () => {
     expect(controller.signal.aborted).toBe(true);
     expect(session.getCurrentModeId()).toBe('build');
     expect(resolved).toEqual({ action: 'approved' });
+  });
+
+  it('waits for the aborted plan run to go idle before the next signal starts fresh', async () => {
+    const buildAgent = agent();
+    const planAgent = agent();
+    const session = new Harness<HarnessTestState>({
+      id: 'test-harness-plan-approval-idle',
+      storage,
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: buildAgent,
+        },
+        {
+          id: 'plan',
+          name: 'Plan',
+          agent: planAgent,
+        },
+      ],
+    });
+    await session.init();
+    await session.createThread();
+    await session.switchMode({ modeId: 'plan' });
+
+    let activeRunId: string | null = 'plan-run';
+    vi.spyOn(buildAgent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})() as any,
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => activeRunId,
+    });
+    const sendSignalSpy = vi.spyOn(buildAgent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'fresh-run',
+      signal: createSignal({ type: 'user-message', contents: 'continue' }),
+    });
+
+    (session as any).currentRunId = 'plan-run';
+    (session as any).abortController = new AbortController();
+    (session as any).agentThreadSubscription = {
+      activeRunId: () => 'plan-run',
+      abort: vi.fn(),
+      unsubscribe: vi.fn(),
+      stream: (async function* () {})(),
+    };
+    session.registerPlanApproval({
+      planId: 'plan-1',
+      resolve: () => {},
+    });
+
+    const approval = session.respondToPlanApproval({ planId: 'plan-1', response: { action: 'approved' } });
+    await vi.waitFor(() => expect(buildAgent.subscribeToThread).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(await settleWithinTicks(approval)).toEqual({ settled: false });
+
+    activeRunId = null;
+    await approval;
+
+    const signal = session.sendSignal({ content: 'continue' });
+    await expect(signal.accepted).resolves.toMatchObject({ accepted: true, runId: 'fresh-run' });
+    expect(sendSignalSpy).toHaveBeenCalledTimes(1);
+    expect(sendSignalSpy.mock.calls[0]?.[1]).toMatchObject({ ifIdle: expect.any(Object) });
+    expect(sendSignalSpy.mock.calls[0]?.[1]).not.toHaveProperty('runId');
   });
 });
