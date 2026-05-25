@@ -2052,4 +2052,105 @@ describe('MastraPlatformExporter', () => {
       expect(loggerInfoSpy).toHaveBeenCalledWith('MastraPlatformExporter shutdown complete');
     });
   });
+
+  describe('emitDropEvent integration', () => {
+    const mockSpan = getMockSpan({
+      id: 'span-drop',
+      name: 'drop-span',
+      type: SpanType.AGENT_RUN,
+      isEvent: false,
+      traceId: 'trace-drop',
+    });
+
+    async function makeExporterWithEmitDropEvent() {
+      const emitDropEvent = vi.fn();
+      const cooldownExporter = new MastraPlatformExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+      });
+      // Call init directly to capture emitDropEvent — production wiring is via
+      // ObservabilityInstance, which we don't exercise in this unit test.
+      await cooldownExporter.init({ emitDropEvent } as any);
+      return { cooldownExporter, emitDropEvent };
+    }
+
+    it('emits per-signal drop events with reason "auth-cooldown" while in cooldown', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      const { cooldownExporter, emitDropEvent } = await makeExporterWithEmitDropEvent();
+
+      try {
+        // 1) Trip the cooldown with a single failing flush.
+        mockAuthFailure(401);
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await (cooldownExporter as any).flush();
+
+        // The failed batch itself must emit a drop event for the tracing signal.
+        expect(emitDropEvent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'drop',
+            signal: 'tracing',
+            reason: 'auth-cooldown',
+            count: 1,
+            exporterName: 'mastra-platform-exporter',
+          }),
+        );
+        emitDropEvent.mockClear();
+
+        // 2) Subsequent per-signal events while cooling down should each emit a drop.
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await cooldownExporter.onLogEvent(getMockLogEvent());
+        await cooldownExporter.onMetricEvent(getMockMetricEvent());
+        await cooldownExporter.onScoreEvent(getMockScoreEvent());
+        await cooldownExporter.onFeedbackEvent(getMockFeedbackEvent());
+
+        const signals = emitDropEvent.mock.calls.map(call => (call[0] as any).signal);
+        expect(signals).toEqual(['tracing', 'log', 'metric', 'score', 'feedback']);
+        for (const call of emitDropEvent.mock.calls) {
+          expect(call[0]).toMatchObject({
+            type: 'drop',
+            reason: 'auth-cooldown',
+            count: 1,
+            exporterName: 'mastra-platform-exporter',
+          });
+        }
+      } finally {
+        nowSpy.mockRestore();
+        randomSpy.mockRestore();
+        await cooldownExporter.shutdown();
+      }
+    });
+
+    it('emits one drop per buffered signal when flush short-circuits during cooldown', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      const { cooldownExporter, emitDropEvent } = await makeExporterWithEmitDropEvent();
+
+      try {
+        // Pre-seed the cooldown so the first flush short-circuits without
+        // exercising the recordFailure path again.
+        (cooldownExporter as any).authFailureCooldown.cooldownUntilMs = 5_000_000;
+
+        // Per-signal handlers themselves drop while in cooldown, so each call
+        // emits an immediate drop event and never touches the buffer.
+        await cooldownExporter.onLogEvent(getMockLogEvent());
+        await cooldownExporter.onLogEvent(getMockLogEvent());
+        await cooldownExporter.onMetricEvent(getMockMetricEvent());
+
+        expect((cooldownExporter as any).buffer.totalSize).toBe(0);
+        expect(emitDropEvent).toHaveBeenCalledTimes(3);
+        expect(emitDropEvent.mock.calls.map(call => (call[0] as any).signal)).toEqual(['log', 'log', 'metric']);
+      } finally {
+        nowSpy.mockRestore();
+        randomSpy.mockRestore();
+        await cooldownExporter.shutdown();
+      }
+    });
+  });
 });

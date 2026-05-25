@@ -30,6 +30,14 @@ export interface MastraPlatformExporterConfig extends BaseExporterConfig {
 
 type PlatformSignal = 'traces' | 'logs' | 'metrics' | 'scores' | 'feedback';
 
+const PLATFORM_SIGNAL_TO_DROP_SIGNAL: Record<PlatformSignal, 'tracing' | 'log' | 'metric' | 'score' | 'feedback'> = {
+  traces: 'tracing',
+  logs: 'log',
+  metrics: 'metric',
+  scores: 'score',
+  feedback: 'feedback',
+};
+
 const SIGNAL_PUBLISH_SUFFIXES: Record<PlatformSignal, string> = {
   traces: '/spans/publish',
   logs: '/logs/publish',
@@ -309,6 +317,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      this.emitDrop('tracing', 'auth-cooldown', 1);
       return;
     }
 
@@ -323,6 +332,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      this.emitDrop('log', 'auth-cooldown', 1);
       return;
     }
 
@@ -336,6 +346,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      this.emitDrop('metric', 'auth-cooldown', 1);
       return;
     }
 
@@ -349,6 +360,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      this.emitDrop('score', 'auth-cooldown', 1);
       return;
     }
 
@@ -362,6 +374,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      this.emitDrop('feedback', 'auth-cooldown', 1);
       return;
     }
 
@@ -508,6 +521,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     if (this.authFailureCooldown.dropEventsIfCoolingDown(this.buffer.totalSize)) {
+      this.emitBufferDrops('auth-cooldown');
       this.resetBuffer();
       return;
     }
@@ -552,12 +566,28 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    const signalCounts: Record<PlatformSignal, number> = {
+      traces: spansCopy.length,
+      logs: logsCopy.length,
+      metrics: metricsCopy.length,
+      scores: scoresCopy.length,
+      feedback: feedbackCopy.length,
+    };
+
     if (authFailure?.authFailureStatus !== undefined) {
+      const droppedBatchSize = failedSignals.reduce((sum, signal) => sum + signalCounts[signal], 0);
       this.authFailureCooldown.recordFailure({
         status: authFailure.authFailureStatus,
         failedSignals,
-        droppedBatchSize: batchSize,
+        droppedBatchSize,
       });
+      for (const signal of failedSignals) {
+        this.emitDrop(PLATFORM_SIGNAL_TO_DROP_SIGNAL[signal], 'auth-cooldown', signalCounts[signal]);
+      }
+    } else {
+      for (const signal of failedSignals) {
+        this.emitDrop(PLATFORM_SIGNAL_TO_DROP_SIGNAL[signal], 'retry-exhausted', signalCounts[signal]);
+      }
     }
 
     this.logger.warn('Batch flush completed with dropped signal batches', {
@@ -626,6 +656,23 @@ export class MastraPlatformExporter extends BaseExporter {
       this.logger.trackException(mastraError);
       this.logger.error('Batch upload failed after all retries, dropping batch', mastraError);
       return { signal, succeeded: false };
+    }
+  }
+
+  /** Emit one `ObservabilityDropEvent` per non-empty signal in the buffer. */
+  private emitBufferDrops(reason: 'auth-cooldown' | 'retry-exhausted'): void {
+    const counts: Array<[PlatformSignal, number]> = [
+      ['traces', this.buffer.spans.length],
+      ['logs', this.buffer.logs.length],
+      ['metrics', this.buffer.metrics.length],
+      ['scores', this.buffer.scores.length],
+      ['feedback', this.buffer.feedback.length],
+    ];
+
+    for (const [signal, count] of counts) {
+      if (count > 0) {
+        this.emitDrop(PLATFORM_SIGNAL_TO_DROP_SIGNAL[signal], reason, count);
+      }
     }
   }
 
