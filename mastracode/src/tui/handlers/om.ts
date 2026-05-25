@@ -43,6 +43,15 @@ function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Com
   return insertIndex > 0 && ctx.state.chatContainer.children[insertIndex - 1] === child;
 }
 
+function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {
+  if (!child) return;
+  const idx = ctx.state.chatContainer.children.indexOf(child);
+  if (idx >= 0) {
+    ctx.state.chatContainer.children.splice(idx, 1);
+    ctx.state.chatContainer.invalidate();
+  }
+}
+
 export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: string, tokensToObserve: number): void {
   const { state } = ctx;
   // Show in-progress marker in chat
@@ -166,8 +175,13 @@ export function handleOMBufferingStart(
   const { state } = ctx;
   state.activeActivationMarker = undefined;
   state.activeActivationData = undefined;
-  state.activeActivationTTLMarker = undefined;
   state.activeActivationProviderChangeMarker = undefined;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   state.activeBufferingMarker = new OMMarkerComponent({
     type: 'om_buffering_start',
     operationType,
@@ -185,6 +199,12 @@ export function handleOMBufferingEnd(
   observations?: string,
 ): void {
   const { state } = ctx;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   if (state.activeBufferingMarker) {
     state.activeBufferingMarker.update({
       type: 'om_buffering_end',
@@ -204,6 +224,12 @@ export function handleOMBufferingFailed(
   error: string,
 ): void {
   const { state } = ctx;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   if (state.activeBufferingMarker) {
     state.activeBufferingMarker.update({
       type: 'om_buffering_failed',
@@ -227,21 +253,6 @@ export function handleOMActivation(
   currentModel?: string,
 ): void {
   const { state } = ctx;
-
-  if (triggeredBy === 'ttl' && activateAfterIdle !== undefined && ttlExpiredMs !== undefined) {
-    const ttlData: OMMarkerData = {
-      type: 'om_activation_ttl',
-      activateAfterIdle,
-      ttlExpiredMs,
-    };
-
-    if (state.activeActivationTTLMarker) {
-      state.activeActivationTTLMarker.update(ttlData);
-    } else {
-      state.activeActivationTTLMarker = new OMMarkerComponent(ttlData);
-      addChildBeforeStreaming(ctx, state.activeActivationTTLMarker);
-    }
-  }
 
   if (triggeredBy === 'provider_change' && previousModel && currentModel) {
     const providerChangeData: OMMarkerData = {
@@ -272,12 +283,14 @@ export function handleOMActivation(
         tokensActivated: previousActivationData.tokensActivated + tokensActivated,
         observationTokens: previousActivationData.observationTokens + observationTokens,
         activationCount: (previousActivationData.activationCount ?? 1) + 1,
+        activateAfterIdle: previousActivationData.activateAfterIdle ?? activateAfterIdle,
       }
     : {
         type: 'om_activation',
         operationType,
         tokensActivated,
         observationTokens,
+        ...(triggeredBy === 'ttl' && activateAfterIdle !== undefined ? { activateAfterIdle } : {}),
       };
 
   if (canCombineActivation && state.activeActivationMarker) {
@@ -293,6 +306,7 @@ export function handleOMActivation(
 }
 
 export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {
+  if (ctx.state.quietMode) return;
   const marker = new OMMarkerComponent({
     type: 'om_thread_title_updated',
     newTitle,

@@ -76,6 +76,27 @@ export const DELTA_MV_NAMES = [
 ] as const;
 
 /**
+ * `generateSerialID` counter keys used by the serial delta-cursor strategy.
+ * Each delta MV passes one of these to `generateSerialID(...)` to mint a
+ * monotonic `cursorId` per row.
+ *
+ * ClickHouse's `generateSerialID` is server-lifetime keyed and starts at 0.
+ * On an empty stream `max(cursorId)` also returns 0, which would collide with
+ * the very first row inserted after a server cold-start (both reported as 0,
+ * skipping that row in `WHERE cursorId > 0` reads). `init()` burns the 0
+ * value for every counter so the first real row is guaranteed to land at
+ * `cursorId >= 1`.
+ */
+export const DELTA_CURSOR_COUNTER_NAMES = [
+  'mastra_trace_roots_delta_cursor',
+  'mastra_trace_branches_delta_cursor',
+  'mastra_metric_events_delta_cursor',
+  'mastra_log_events_delta_cursor',
+  'mastra_score_events_delta_cursor',
+  'mastra_feedback_events_delta_cursor',
+] as const;
+
+/**
  * Span types that anchor a listable trace branch -- a named entity got
  * invoked. Materialized into `mastra_trace_branches` so they're listable
  * independently of where they appear in a trace tree.
@@ -900,13 +921,18 @@ FROM (
 // discovery_values — refreshable helper
 // ---------------------------------------------------------------------------
 
+// ReplacingMergeTree with ORDER BY covering every column: the refreshable MV
+// below writes via `REFRESH EVERY ... TO <pre-created table>`, which in
+// ClickHouse appends a fresh copy of its result set on each refresh. Pairing
+// the helper table with ReplacingMergeTree lets background merges collapse
+// the identical rows so on-disk size tracks actual cardinality.
 export const DISCOVERY_VALUES_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_VALUES} (
   kind               LowCardinality(String),
   key1               String,
   value              String
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 ORDER BY (kind, key1, value)
 `;
 
@@ -914,6 +940,7 @@ ORDER BY (kind, key1, value)
 // discovery_pairs — refreshable helper
 // ---------------------------------------------------------------------------
 
+// ReplacingMergeTree for the same reason as DISCOVERY_VALUES_DDL above.
 export const DISCOVERY_PAIRS_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_PAIRS} (
   kind               LowCardinality(String),
@@ -921,7 +948,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_PAIRS} (
   key2               String,
   value              String
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 ORDER BY (kind, key1, key2, value)
 `;
 

@@ -20,6 +20,12 @@ export interface ProviderConfig {
 }
 
 /**
+ * Compact capability data collected from gateways during generation.
+ * Each provider maps to a list of model IDs that support attachments.
+ */
+export type AttachmentCapabilities = Record<string, string[]>;
+
+/**
  * Union type for language models that can be returned by gateways.
  * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
  */

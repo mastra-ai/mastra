@@ -3,7 +3,7 @@ import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TUIState } from '../../state.js';
-import { handleOMActivation } from '../om.js';
+import { handleOMActivation, handleOMBufferingStart } from '../om.js';
 import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
@@ -16,6 +16,22 @@ function createCtx() {
 
   return { ctx, state };
 }
+
+describe('OM event handlers', () => {
+  it('removes an existing buffering marker when quiet mode suppresses buffering start', () => {
+    const { ctx, state } = createCtx();
+    state.quietMode = true;
+    const marker = new Container();
+    state.chatContainer.addChild(marker);
+    state.activeBufferingMarker = marker as any;
+
+    handleOMBufferingStart(ctx, 'observation', 100);
+
+    expect(state.activeBufferingMarker).toBeUndefined();
+    expect(state.chatContainer.children).not.toContain(marker);
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+});
 
 describe('handleOMActivation', () => {
   it('combines consecutive observation activation markers into one line', () => {

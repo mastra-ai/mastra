@@ -643,8 +643,8 @@ importers:
   channels/slack:
     dependencies:
       '@chat-adapter/slack':
-        specifier: ^4.26.0
-        version: 4.28.1(bufferutil@4.1.0)
+        specifier: ^4.29.0
+        version: 4.29.0(bufferutil@4.1.0)(zod@4.3.6)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -662,8 +662,8 @@ importers:
         specifier: ^3.1.1
         version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.15)(@vitest/ui@4.1.5(vitest@4.1.5))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0)
       zod:
-        specifier: ^3.23.0
-        version: 3.25.76
+        specifier: 'catalog:'
+        version: 4.3.6
 
   client-sdks/ai-sdk:
     devDependencies:
@@ -1013,6 +1013,9 @@ importers:
       fs-extra:
         specifier: ^11.3.4
         version: 11.3.4
+      rollup:
+        specifier: ^4.0.0
+        version: 4.60.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -1636,8 +1639,8 @@ importers:
         specifier: ^0.42.0
         version: 0.42.2
       '@mariozechner/pi-tui':
-        specifier: ^0.60.0
-        version: 0.60.0
+        specifier: ^0.73.1
+        version: 0.73.1
       '@mastra/agent-browser':
         specifier: workspace:*
         version: link:../browser/agent-browser
@@ -1692,6 +1695,9 @@ importers:
       partial-json:
         specifier: ^0.1.7
         version: 0.1.7
+      posthog-node:
+        specifier: ^5.28.3
+        version: 5.33.4(rxjs@7.8.1)
       strip-ansi:
         specifier: ^7.2.0
         version: 7.2.0
@@ -2512,6 +2518,9 @@ importers:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.25
         version: 3.0.25(zod@3.25.76)
+      '@ai-sdk/ui-utils':
+        specifier: ^1.2.11
+        version: 1.2.11(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2521,6 +2530,12 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.57.7
         version: 7.58.7(@types/node@22.19.15)
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -2536,6 +2551,12 @@ importers:
       eslint:
         specifier: ^10.2.1
         version: 10.3.0(jiti@2.6.1)
+      eventsource-parser:
+        specifier: ^3.0.6
+        version: 3.0.8
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
@@ -3089,6 +3110,9 @@ importers:
       strip-json-comments:
         specifier: ^5.0.3
         version: 5.0.3
+      tinyglobby:
+        specifier: ^0.2.16
+        version: 0.2.16
       yocto-spinner:
         specifier: ^1.1.0
         version: 1.2.0
@@ -3248,8 +3272,8 @@ importers:
         specifier: ^8.18.0
         version: 8.18.0
       chat:
-        specifier: ^4.24.0
-        version: 4.28.1
+        specifier: ^4.29.0
+        version: 4.29.0(zod@4.3.6)
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -3289,6 +3313,9 @@ importers:
       picomatch:
         specifier: ^4.0.3
         version: 4.0.3
+      posthog-node:
+        specifier: ^5.30.6
+        version: 5.33.4(rxjs@7.8.1)
       tokenx:
         specifier: ^1.3.0
         version: 1.3.0
@@ -3403,7 +3430,7 @@ importers:
         version: 0.4.6(zod@4.3.6)
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.3
-        version: '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.177(zod@4.3.6))(zod@4.3.6)'
+        version: '@openrouter/ai-sdk-provider@1.2.3(zod@4.3.6)'
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -4336,8 +4363,8 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
       zod-v4:
-        specifier: npm:zod@^4.3.6
-        version: zod@4.4.3
+        specifier: npm:zod@4.3.6
+        version: zod@4.3.6
       zustand:
         specifier: ^5.0.12
         version: 5.0.13(@types/react@19.2.14)(immer@11.1.8)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
@@ -4409,8 +4436,8 @@ importers:
         specifier: ^0.2.1
         version: 0.2.1(@assistant-ui/react-markdown@0.12.11(@assistant-ui/react@0.14.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@assistant-ui/react@0.14.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
       '@base-ui/react':
-        specifier: ^1.3.0
-        version: 1.4.1(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        specifier: ^1.5.0
+        version: 1.5.0(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@codemirror/autocomplete':
         specifier: ^6.20.1
         version: 6.20.1
@@ -4447,9 +4474,6 @@ importers:
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-checkbox':
-        specifier: ^1.3.3
-        version: 1.3.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-collapsible':
         specifier: ^1.1.12
         version: 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -4459,33 +4483,15 @@ importers:
       '@radix-ui/react-dropdown-menu':
         specifier: ^2.1.16
         version: 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-hover-card':
-        specifier: ^1.1.15
-        version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-label':
-        specifier: ^2.1.8
-        version: 2.1.8(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-popover':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-radio-group':
-        specifier: ^1.3.8
-        version: 1.3.8(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-select':
         specifier: ^2.2.6
         version: 2.2.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-slider':
-        specifier: ^1.3.6
-        version: 1.3.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-slot':
         specifier: ^1.2.4
         version: 1.2.4(@types/react@19.2.14)(react@19.2.6)
-      '@radix-ui/react-switch':
-        specifier: ^1.2.6
-        version: 1.2.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@radix-ui/react-tabs':
-        specifier: ^1.1.13
-        version: 1.1.13(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -5513,6 +5519,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
 
   stores/cloudflare:
     dependencies:
@@ -6532,13 +6541,13 @@ importers:
 
   voice/cloudflare:
     dependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20260418.1
+        version: 4.20260511.1
       cloudflare:
         specifier: ^5.2.0
         version: 5.2.0(encoding@0.1.13)
     devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20260418.1
-        version: 4.20260511.1
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6862,9 +6871,6 @@ importers:
 
   voice/murf:
     dependencies:
-      ky:
-        specifier: ^1.14.3
-        version: 1.14.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -9715,8 +9721,8 @@ packages:
   '@balena/dockerignore@1.0.2':
     resolution: {integrity: sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q==}
 
-  '@base-ui/react@1.4.1':
-    resolution: {integrity: sha512-Ab5/LIhcmL8BQcsBUYiOfkSDRdLpvgUBzMK30cu684JPcLclYlztharvCZyNNgzJtbAiREzI9q0pI5erHCMgCw==}
+  '@base-ui/react@1.5.0':
+    resolution: {integrity: sha512-z1gSAlced1yY+iM+mHDEtIkD8UI3Ebs52MuBPxvV6f5hRutk+xvCH/wuB7hDqDzK9JG5FoMz5nhrqtSs1wjt1A==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       '@date-fns/tz': ^1.2.0
@@ -9732,8 +9738,8 @@ packages:
       date-fns:
         optional: true
 
-  '@base-ui/utils@0.2.8':
-    resolution: {integrity: sha512-jvOi+c+ftGlGotNcKnzPVg2IhCaDTB6/6R3JeqdjdXktuAJi3wKH9T7+svuaKh1mmfVU11UWzUZVH74JDfi/wQ==}
+  '@base-ui/utils@0.2.9':
+    resolution: {integrity: sha512-x/PDDCYzoqPpjrdyb3VcyylTI2IjUXEtYDGi5foh7KsnmNJIIaVwA2GLgDH1dps1GgXiJbA60hM+AyuTfQzIvw==}
     peerDependencies:
       '@types/react': ^17 || ^18 || ^19
       react: ^17 || ^18 || ^19
@@ -9888,11 +9894,13 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
-  '@chat-adapter/shared@4.28.1':
-    resolution: {integrity: sha512-v7AcZMrvS2gxFlRiUO1o9Nta2iipnnmV54Gie8e3nQTQvnghENfSf7j7nimA5DOUWCgj+e4DV7LE0x1pakNtkA==}
+  '@chat-adapter/shared@4.29.0':
+    resolution: {integrity: sha512-ARqTDoHJHKN9rpytbFPJbNmqqx3fOg5xwsTZdlingQPAssOSeHDBdqrFJkgDhyCRGbmDtG09cuS0FkVzeoh2qg==}
+    engines: {node: '>=20'}
 
-  '@chat-adapter/slack@4.28.1':
-    resolution: {integrity: sha512-JxgV7+cRXXeKpj0MzS7nzG3JvpnfhIgnPo9r/sdEIzeWhIb8tUcT2PbLl/fpSu/cb+WkICS0bCENn1I0PS39Hg==}
+  '@chat-adapter/slack@4.29.0':
+    resolution: {integrity: sha512-s2DXAwkTpmiIKSATXgrO879s1pqFwS70Y0JPd+TRGRzDeh6nfqt5dnKt5Bug0P1zwkB6DoPurhnYS9nqhSmD/w==}
+    engines: {node: '>=20'}
 
   '@clack/core@1.3.0':
     resolution: {integrity: sha512-xJPHpAmEQUBrXSLx0gF+q5K/IyihXpsHZcha+jB+tyahsKRK3Dxo4D0coZDewHo12NhiuzC3dTtMPbm53GEAAA==}
@@ -12723,8 +12731,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mariozechner/pi-tui@0.60.0':
-    resolution: {integrity: sha512-ZAK5gxYhGmfJqMjfWcRBjB8glITltDbTrYJXvcDtfengbKTZN0p39p5uO5pvUB8/PiAWKTRS06yaNMhf/LG26g==}
+  '@mariozechner/pi-tui@0.73.1':
+    resolution: {integrity: sha512-ybVsRnUbzQRtbocltJ2OXb2QogrO67N2BlUyKjZz9BHcZYiDJtNkcKQockxDjsVvDc0uBCLDX6iZJoBElBd8fw==}
     engines: {node: '>=20.0.0'}
     deprecated: please use @earendil-works/pi-tui instead going forward
 
@@ -19890,8 +19898,17 @@ packages:
   chardet@2.1.1:
     resolution: {integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==}
 
-  chat@4.28.1:
-    resolution: {integrity: sha512-oKBeLQ746rSmHWGoXmPgDOqMVdIe9cWFQBQ1G2pw0l2vV4sAsZgfEJmc1UYqSJR4kYy4PxKgRFy31pe4RJ644Q==}
+  chat@4.29.0:
+    resolution: {integrity: sha512-KdPfzaie5ivYytyRICTERg5xT+LeCbYefokvNAqTHe92eqkFaoTMXXkSitikxJVWhZIb2YoXF1b9UZHyzSzKzw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      ai: ^6.0.182
+      zod: ^3.0.0 || ^4.0.0
+    peerDependenciesMeta:
+      ai:
+        optional: true
+      zod:
+        optional: true
 
   check-error@2.1.1:
     resolution: {integrity: sha512-OAlb+T7V4Op9OwdkjmguYRqncdlx5JiofwOAUkmTF+jNdHwzTaTs4sRAGpzLF3oOz5xAyDGrPgeIDFQmDOTiJw==}
@@ -23229,10 +23246,6 @@ packages:
 
   kubernetes-types@1.30.0:
     resolution: {integrity: sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q==}
-
-  ky@1.14.3:
-    resolution: {integrity: sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw==}
-    engines: {node: '>=18'}
 
   kysely@0.28.8:
     resolution: {integrity: sha512-QUOgl5ZrS9IRuhq5FvOKFSsD/3+IA6MLE81/bOOTRA/YQpKDza2sFdN5g6JCB9BOpqMJDGefLCQ9F12hRS13TA==}
@@ -29290,7 +29303,7 @@ snapshots:
   '@ai-sdk/provider-utils@2.1.10(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
     optionalDependencies:
@@ -29314,7 +29327,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       zod: 4.3.6
     optional: true
 
@@ -31995,10 +32008,10 @@ snapshots:
 
   '@balena/dockerignore@1.0.2': {}
 
-  '@base-ui/react@1.4.1(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@base-ui/react@1.5.0(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@babel/runtime': 7.29.2
-      '@base-ui/utils': 0.2.8(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@base-ui/utils': 0.2.9(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@floating-ui/react-dom': 2.1.8(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@floating-ui/utils': 0.2.11
       react: 19.2.6
@@ -32008,7 +32021,7 @@ snapshots:
       '@types/react': 19.2.14
       date-fns: 4.1.0
 
-  '@base-ui/utils@0.2.8(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@base-ui/utils@0.2.9(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@babel/runtime': 7.29.2
       '@floating-ui/utils': 0.2.11
@@ -32073,7 +32086,7 @@ snapshots:
     dependencies:
       '@supercharge/promise-pool': 3.3.0
       undici: 7.25.0
-      zod: 4.3.6
+      zod: 4.4.3
 
   '@browserbasehq/sdk@2.10.0(encoding@0.1.13)':
     dependencies:
@@ -32332,23 +32345,27 @@ snapshots:
       human-id: 4.1.2
       prettier: 2.8.8
 
-  '@chat-adapter/shared@4.28.1':
+  '@chat-adapter/shared@4.29.0(zod@4.3.6)':
     dependencies:
-      chat: 4.28.1
+      chat: 4.29.0(zod@4.3.6)
     transitivePeerDependencies:
+      - ai
       - supports-color
+      - zod
 
-  '@chat-adapter/slack@4.28.1(bufferutil@4.1.0)':
+  '@chat-adapter/slack@4.29.0(bufferutil@4.1.0)(zod@4.3.6)':
     dependencies:
-      '@chat-adapter/shared': 4.28.1
+      '@chat-adapter/shared': 4.29.0(zod@4.3.6)
       '@slack/socket-mode': 2.0.7(bufferutil@4.1.0)
       '@slack/web-api': 7.15.2
-      chat: 4.28.1
+      chat: 4.29.0(zod@4.3.6)
     transitivePeerDependencies:
+      - ai
       - bufferutil
       - debug
       - supports-color
       - utf-8-validate
+      - zod
 
   '@clack/core@1.3.0':
     dependencies:
@@ -33199,7 +33216,7 @@ snapshots:
 
   '@daytonaio/api-client@0.143.0':
     dependencies:
-      axios: 1.13.5
+      axios: 1.16.0
     transitivePeerDependencies:
       - debug
 
@@ -33236,7 +33253,7 @@ snapshots:
 
   '@daytonaio/toolbox-api-client@0.143.0':
     dependencies:
-      axios: 1.13.5
+      axios: 1.16.0
     transitivePeerDependencies:
       - debug
 
@@ -35838,7 +35855,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mariozechner/pi-tui@0.60.0':
+  '@mariozechner/pi-tui@0.73.1':
     dependencies:
       '@types/mime-types': 2.1.4
       chalk: 5.6.2
@@ -36007,7 +36024,7 @@ snapshots:
       cors: 2.8.6
       cross-spawn: 7.0.6
       eventsource: 3.0.7
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       express: 5.2.1
       express-rate-limit: 8.5.1(express@5.2.1)
       hono: 4.12.18
@@ -36031,7 +36048,7 @@ snapshots:
       cors: 2.8.6
       cross-spawn: 7.0.6
       eventsource: 3.0.7
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       express: 5.2.1
       express-rate-limit: 8.5.1(express@5.2.1)
       hono: 4.12.18
@@ -36490,10 +36507,9 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.10(zod@4.3.6)
       zod: 4.3.6
 
-  '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.177(zod@4.3.6))(zod@4.3.6)':
+  '@openrouter/ai-sdk-provider@1.2.3(zod@4.3.6)':
     dependencies:
       '@openrouter/sdk': 0.1.27
-      ai: 6.0.177(zod@4.3.6)
       zod: 4.3.6
 
   '@openrouter/sdk@0.1.27':
@@ -39395,15 +39411,6 @@ snapshots:
       '@radix-ui/react-primitive': 2.1.4(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-    optionalDependencies:
-      '@types/react': 19.2.14
-      '@types/react-dom': 19.2.3(@types/react@19.2.14)
-
-  '@radix-ui/react-label@2.1.8(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@radix-ui/react-primitive': 2.1.4(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -44848,7 +44855,7 @@ snapshots:
 
   chardet@2.1.1: {}
 
-  chat@4.28.1:
+  chat@4.29.0(zod@4.3.6):
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
@@ -44857,6 +44864,8 @@ snapshots:
       remark-stringify: 11.0.0
       remend: 1.3.0
       unified: 11.0.5
+    optionalDependencies:
+      zod: 4.3.6
     transitivePeerDependencies:
       - supports-color
 
@@ -46719,7 +46728,7 @@ snapshots:
 
   eventsource@3.0.7:
     dependencies:
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
 
   execa@5.1.1:
     dependencies:
@@ -48103,7 +48112,7 @@ snapshots:
   http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11
+      follow-redirects: 1.16.0
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -48985,8 +48994,6 @@ snapshots:
   kolorist@1.8.0: {}
 
   kubernetes-types@1.30.0: {}
-
-  ky@1.14.3: {}
 
   kysely@0.28.8: {}
 
