@@ -1813,6 +1813,11 @@ export interface HarnessRequestContext<TState = unknown> {
   registerPlanApproval: (params: RegisterPlanApprovalParams) => Promise<void>;
   /** Register a pending sandbox-access approval. */
   registerSandboxAccess?: (params: RegisterSandboxAccessParams) => Promise<void>;
+  /**
+   * Extend the current session lease before work that may exceed the default
+   * lease TTL or block the event loop long enough for the heartbeat to miss.
+   */
+  extendLease?: (opts: { ttlMs: number }) => Promise<void>;
 
   /** Depth of the session in the subagent tree. `0` for the parent. */
   subagentDepth: number;

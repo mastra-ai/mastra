@@ -147,6 +147,22 @@ export type PendingInteraction = Omit<
 >;
 
 /**
+ * Documentation-only recovery policy for interrupted live sessions.
+ *
+ * Harness owners renew live session leases periodically before the storage
+ * TTL expires. Tools that know they may outlive the default TTL should call
+ * `ctx.extendLease({ ttlMs })` before the long operation starts. If the
+ * process crashes or the event loop is starved long enough for the lease to
+ * expire, a new process may re-open the session after TTL expiry. If another
+ * process already owns the lease, callers receive `HarnessSessionLockedError`
+ * with the current owner id and expiry timestamp instead of silently writing
+ * into a contested session. If a live process loses its lease during renewal,
+ * that local session is evicted with `session_evicted` reason `lease_lost`;
+ * clients should re-resolve the session and replay from durable events.
+ */
+export type HarnessLeaseRecoveryPolicy = never;
+
+/**
  * Documentation-only type. Maps pre-existing identifiers in the
  * harness to the canonical primitive they belong to.
  *

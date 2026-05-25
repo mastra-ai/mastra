@@ -21,8 +21,8 @@
  *   - 'closed'  — `close()` has run; record has `closedAt` set in storage.
  *   - 'deleted' — the session row has been hard-deleted from storage.
  *   - 'evicted' — flushed to storage and dropped from live map; the record
- *                 remains active and the session can be re-hydrated. Currently
- *                 unused; lands with §5.4 idle eviction.
+ *                 remains active and the session can be re-hydrated after
+ *                 fail-closed lease loss.
  *
  * Once a Session leaves 'live', every method except identity reads throws.
  * Callers must re-resolve via `harness.session(...)` to get a fresh instance.
@@ -39,7 +39,9 @@ import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor }
 import { RequestContext } from '../../request-context';
 import {
   HarnessStorageAdmissionConflictError,
+  HarnessStorageLeaseConflictError,
   HarnessStorageSessionEventReplayUnsupportedError,
+  HarnessStorageSessionNotFoundError,
 } from '../../storage/domains/harness';
 import type {
   GoalJudgeDecision,
@@ -83,6 +85,8 @@ import {
   HarnessSessionClosedError,
   HarnessSessionClosingError,
   HarnessSessionDeletedError,
+  HarnessSessionLockedError,
+  HarnessSessionNotFoundError,
   HarnessStateConflictError,
   HarnessSkillArgsValidationError,
   HarnessSkillNotFoundError,
@@ -205,6 +209,8 @@ const QUEUE_POST_RUN_FINALIZATION_RETRY_MS = 1_000;
 const ACTION_CATALOG_DEFAULT_LIMIT = 100;
 const ACTION_CATALOG_MAX_LIMIT = 500;
 const ACTION_CATALOG_MCP_LIST_TIMEOUT_MS = 2_000;
+// Cap explicit extensions to one day so a lost worker cannot pin a session indefinitely.
+const MAX_LEASE_EXTENSION_MS = 24 * 60 * 60 * 1_000;
 const ACTION_CATALOG_MCP_SUCCESS_CACHE_MS = 5_000;
 const ACTION_CATALOG_MCP_FAILURE_CACHE_MS = 30_000;
 const ACTION_CATALOG_MCP_MAX_TIMEOUT_RETRIES = 1;
@@ -718,6 +724,8 @@ export class Session {
    * latest value.
    */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  private _leaseExtensionDeadline?: number;
+  private _leaseRenewalChain: Promise<void> = Promise.resolve();
   /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
    * rejected so callers don't hang on a dead session.
@@ -1653,6 +1661,83 @@ export class Session {
    */
   getTokenUsage(): TokenUsage {
     return { ...this._tokenUsage };
+  }
+
+  async extendLease(opts: { ttlMs: number }): Promise<void> {
+    if (this._state === 'deleted') {
+      throw new HarnessSessionDeletedError(this.id);
+    }
+    if (this._state !== 'live' && this._state !== 'closing') {
+      throw new HarnessSessionClosedError(this.id);
+    }
+    if (!Number.isFinite(opts.ttlMs) || !Number.isInteger(opts.ttlMs) || opts.ttlMs <= 0) {
+      throw new HarnessValidationError('extendLease().ttlMs', 'ttlMs must be a positive integer in milliseconds');
+    }
+    if (opts.ttlMs > MAX_LEASE_EXTENSION_MS) {
+      throw new HarnessValidationError(
+        'extendLease().ttlMs',
+        `ttlMs must be at most ${MAX_LEASE_EXTENSION_MS}ms (24h)`,
+      );
+    }
+
+    const defaultTtl = this._harness._internalLeaseTtlMs;
+    const run = async (): Promise<void> => {
+      if (this._state !== 'live' && this._state !== 'closing') {
+        throw this._state === 'deleted'
+          ? new HarnessSessionDeletedError(this.id)
+          : new HarnessSessionClosedError(this.id);
+      }
+      const remainingExtension =
+        this._leaseExtensionDeadline !== undefined && Number.isFinite(this._leaseExtensionDeadline)
+          ? this._leaseExtensionDeadline - Date.now()
+          : 0;
+      const effectiveTtl = Math.max(opts.ttlMs, defaultTtl, remainingExtension);
+      try {
+        const lease = await this._storage.renewSessionLease({
+          harnessName: this._record.harnessName,
+          sessionId: this.id,
+          ownerId: this._ownerId,
+          ttlMs: effectiveTtl,
+        });
+        this._markLeaseRenewed(lease.expiresAt);
+        this._leaseExtensionDeadline = lease.expiresAt;
+      } catch (err) {
+        if (err instanceof HarnessStorageLeaseConflictError) {
+          await this._harness._internalEvictLiveSessionLeaseLost(this);
+          throw new HarnessSessionLockedError(this.id, err.heldBy, err.expiresAt);
+        }
+        if (err instanceof HarnessStorageSessionNotFoundError) {
+          await this._harness._internalEvictLiveSessionLeaseLost(this);
+          throw new HarnessSessionNotFoundError(this.id);
+        }
+        throw err;
+      }
+    };
+    const next = this._leaseRenewalChain.then(run, run);
+    this._leaseRenewalChain = next.catch(() => {});
+    return next;
+  }
+
+  async withExtendedLease<T>(fn: () => Promise<T>, opts: { ttlMs: number }): Promise<T> {
+    await this.extendLease(opts);
+    return fn();
+  }
+
+  _getEffectiveLeaseTtlMs(defaultTtlMs: number): number {
+    const deadline = this._leaseExtensionDeadline;
+    if (deadline === undefined || !Number.isFinite(deadline)) return defaultTtlMs;
+    const remaining = deadline - Date.now();
+    return remaining > defaultTtlMs ? remaining : defaultTtlMs;
+  }
+
+  _enqueueLeaseRenewal(run: () => Promise<void>): Promise<void> {
+    const guardedRun = async () => {
+      if (this._state !== 'live' && this._state !== 'closing') return;
+      await run();
+    };
+    const next = this._leaseRenewalChain.then(guardedRun, guardedRun);
+    this._leaseRenewalChain = next.catch(() => {});
+    return next;
   }
 
   /**
@@ -9272,6 +9357,15 @@ export class Session {
       return Promise.reject(new HarnessSessionClosedError(this.id));
     }
     const run = async (): Promise<void> => {
+      const leaseExpiresAt = this._record.leaseExpiresAt;
+      if (
+        (this._state === 'live' || this._state === 'closing') &&
+        leaseExpiresAt !== undefined &&
+        leaseExpiresAt <= Date.now()
+      ) {
+        await this._harness._internalEvictLiveSessionLeaseLost(this);
+        throw new HarnessSessionLockedError(this.id, 'unknown', leaseExpiresAt);
+      }
       if (opts?.ifVersion !== undefined && this._record.version !== opts.ifVersion) {
         throw new HarnessStateConflictError(this.id, opts.ifVersion, this._record.version);
       }
@@ -9401,6 +9495,7 @@ export class Session {
         session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
       registerSandboxAccess: params =>
         session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      extendLease: opts => session.extendLease(opts),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
@@ -9530,6 +9625,7 @@ export class Session {
    */
   _markClosed(updatedRecord: SessionRecord): void {
     this._clearQueueWakeTimer();
+    this._leaseExtensionDeadline = undefined;
     this._record = updatedRecord;
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
@@ -9539,6 +9635,7 @@ export class Session {
   /** @internal — used by Harness hard-delete after storage has removed the row. */
   _markDeleted(): void {
     const err = new HarnessSessionDeletedError(this.id);
+    this._leaseExtensionDeadline = undefined;
     this._state = 'deleted';
     this._rejectIdleWaiters(err);
     this._rejectActiveTurnWaiters(err);
@@ -9578,6 +9675,7 @@ export class Session {
    */
   _markEvicted(updatedRecord: SessionRecord): void {
     const err = new HarnessValidationError('session.evict()', 'Session evicted');
+    this._leaseExtensionDeadline = undefined;
     this._record = updatedRecord;
     this._state = 'evicted';
     this._tearDownThreadSubscription(err);

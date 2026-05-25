@@ -211,6 +211,8 @@ describe('Session — surface area (M1)', () => {
         'isBusy',
         'getQueueDepth',
         'getTokenUsage',
+        'extendLease',
+        'withExtendedLease',
         'waitForIdle',
         'listMessages',
         'message',
