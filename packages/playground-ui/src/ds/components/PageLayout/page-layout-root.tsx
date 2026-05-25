@@ -18,10 +18,10 @@ export function PageLayoutRoot({
   return (
     <main
       className={cn(
-        'w-full h-full grid grid-rows-[auto_auto] p-6 content-start overflow-y-auto',
+        'w-full grid grid-rows-[auto_auto] p-6 content-start',
         {
           'max-w-screen-lg mx-auto pt-8': width === 'narrow',
-          'grid-rows-[auto_1fr]': height === 'full',
+          'h-full grid-rows-[auto_1fr] overflow-y-auto': height === 'full',
         },
         className,
         //   'LAYOUT_ROOT border border-dashed border-orange-400',

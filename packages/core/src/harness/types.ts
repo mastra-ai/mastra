@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { PubSub } from '../events/pubsub';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
@@ -272,6 +273,11 @@ export interface HarnessConfig<TState = {}> {
    * If not provided, all tools default to the "other" category.
    */
   toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+
+  /**
+   * PubSub instance used by the internal Mastra instance and mode agents.
+   */
+  pubsub?: PubSub;
 
   /**
    * Optional thread locking callbacks.
@@ -934,6 +940,7 @@ export interface HarnessMessage {
   role: 'user' | 'assistant' | 'system';
   content: HarnessMessageContent[];
   createdAt: Date;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
   stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
   errorMessage?: string;
 }

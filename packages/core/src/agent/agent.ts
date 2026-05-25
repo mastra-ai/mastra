@@ -22,6 +22,7 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
+import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -32,6 +33,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -312,6 +314,8 @@ export class Agent<
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
+  #pubsub?: PubSub;
+  #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
@@ -435,6 +439,7 @@ export class Agent<
     );
 
     this.#tools = config.tools || ({} as TTools);
+    this.#pubsub = config.pubsub;
 
     if (config.mastra) {
       this.__registerMastra(config.mastra);
@@ -541,6 +546,14 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  getPubSub() {
+    return this.#pubsub ?? this.#inheritedPubSub ?? this.#mastra?.pubsub;
+  }
+
+  hasOwnPubSub(): boolean {
+    return Boolean(this.#pubsub);
   }
 
   /**
@@ -781,6 +794,107 @@ export class Agent<
   }
 
   /**
+   * Extract and forward client observability data from incoming messages.
+   *
+   * ## How client-side tool observability flows through the system
+   *
+   * Client-side tools (defined via `@mastra/client-js`'s `clientTools`)
+   * execute in the browser, not on the server. The observability data
+   * they produce follows a two-request round trip:
+   *
+   * **Request 1 (server → client):**
+   * The agent loop emits a tool-call chunk for a client tool. If
+   * `@mastra/observability` is configured, a CLIENT_TOOL_CALL
+   * span is created and a W3C trace context carrier is injected into
+   * the chunk's `observability` field. This happens in
+   * `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts`
+   * while processing streamed or final tool-call chunks in
+   * `processOutputStream`.
+   *
+   * **Client execution:**
+   * The `@mastra/client-js` SDK sees the carrier on the tool-call
+   * chunk, creates an `ObservabilityCollector` that buffers child
+   * spans and logs, wraps the user's `execute` function (providing
+   * the `observe` helper on the context), and after execution flushes
+   * the collector to an OTLP/JSON payload.
+   *
+   * **Request 2 (client → server):**
+   * The client SDK re-invokes `agent.stream()` / `agent.generate()`
+   * with the tool result appended as a tool-role message. The OTLP
+   * payload and the original W3C carrier are attached to the
+   * tool-result content block as `__mastraObservability`:
+   *
+   * ```
+   * { type: 'tool-result', toolCallId, toolName, result,
+   *   __mastraObservability: { parentContext, payload } }
+   * ```
+   *
+   * This method scans the incoming messages for those metadata blocks,
+   * extracts them, forwards the payload through
+   * `ClientObservabilityProxy.receive()` on the observability bus,
+   * and strips the metadata so the model never sees it. It is called
+   * at the top of `stream()` and `generate()` before messages reach
+   * the loop.
+   */
+  #extractClientObservability(messages: MessageListInput): void {
+    if (!Array.isArray(messages)) return;
+
+    const proxy = this.#mastra?.observability?.getClientObservabilityProxy?.();
+
+    const handleObservabilityBlock = (block: Record<string, unknown>) => {
+      const obs = block.__mastraObservability as
+        | {
+            parentContext?: { traceparent: string; tracestate?: string; baggage?: string };
+            payload?: { spans?: unknown; logs?: unknown; executionDurationMs?: number; toolName?: string };
+          }
+        | undefined;
+
+      if (proxy && obs?.payload && obs.parentContext) {
+        try {
+          proxy.receive(
+            obs.payload as Parameters<typeof proxy.receive>[0],
+            obs.parentContext as Parameters<typeof proxy.receive>[1],
+          );
+        } catch (err) {
+          // Tracing must never break the agent run.
+          this.logger?.warn?.('[ClientObservabilityProxy] failed to receive client observability payload', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // Strip the metadata so the model doesn't see it
+      delete block.__mastraObservability;
+    };
+
+    for (const msg of messages) {
+      if (!msg || typeof msg !== 'object' || !('role' in msg)) continue;
+      const parts = (msg as { parts?: unknown }).parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (!part || typeof part !== 'object') continue;
+          const block = part as Record<string, unknown>;
+          if (block.type !== 'tool-invocation') continue;
+          const toolInvocation = block.toolInvocation;
+          if (!toolInvocation || typeof toolInvocation !== 'object') continue;
+          handleObservabilityBlock(toolInvocation as Record<string, unknown>);
+        }
+      }
+
+      if ((msg as { role: string }).role !== 'tool') continue;
+      const content = (msg as { content?: unknown }).content;
+      if (!Array.isArray(content)) continue;
+
+      for (const part of content) {
+        if (!part || typeof part !== 'object') continue;
+        const block = part as Record<string, unknown>;
+        if (block.type !== 'tool-result') continue;
+        handleObservabilityBlock(block);
+      }
+    }
+  }
+
+  /**
    * Returns the agents configured for this agent, resolving function-based agents if necessary.
    * Used in multi-agent collaboration scenarios where this agent can delegate to other agents.
    *
@@ -814,9 +928,13 @@ export class Agent<
         throw mastraError;
       }
 
+      const pubsub = this.getPubSub();
       Object.entries(agents || {}).forEach(([_agentName, agent]) => {
         if (this.#mastra) {
           agent.__registerMastra?.(this.#mastra);
+        }
+        if (pubsub && agent instanceof Agent && !agent.hasOwnPubSub()) {
+          agent.__setPubSub(pubsub);
         }
       });
 
@@ -2621,6 +2739,10 @@ export class Agent<
     this.#memory = memory;
   }
 
+  public __setPubSub(pubsub: PubSub) {
+    this.#inheritedPubSub = pubsub;
+  }
+
   public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>) {
     this.#workspace = workspace;
     if (this.#mastra && workspace && typeof workspace !== 'function') {
@@ -3190,6 +3312,7 @@ export class Agent<
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
+      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
@@ -3214,6 +3337,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      providerOptions,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -3230,6 +3354,10 @@ export class Agent<
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
+        const processInputProviderOptions =
+          llm instanceof MastraLLMVNext
+            ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
+            : providerOptions;
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
@@ -3240,6 +3368,7 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
+          providerOptions: processInputProviderOptions,
           retryCount: 0,
         });
         if (result.tools) {
@@ -5404,7 +5533,13 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
+  async #execute<OUTPUT>({
+    methodType,
+    resumeContext,
+    _threadStreamPubSub,
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
+    const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
@@ -5664,7 +5799,7 @@ export class Agent<
             agentBackgroundConfig: this.#backgroundTasks,
           }),
       skipBgTaskWait: options._skipBgTaskWait,
-      drainPendingSignals: this.#getThreadStreamRuntime().drainPendingSignals.bind(this.#getThreadStreamRuntime()),
+      drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
     });
 
     const run = await executionWorkflow.createRun();
@@ -6100,6 +6235,10 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
+    // Extract and forward any client observability data attached to
+    // tool-result messages before they reach the loop/model.
+    this.#extractClientObservability(messages);
+
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
 
@@ -6156,7 +6295,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<any>;
+    } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
     const result = await this.#execute(executeOptions);
 
@@ -6191,32 +6330,32 @@ export class Agent<
     return fullOutput;
   }
 
-  #getThreadStreamRuntime() {
-    return agentThreadStreamRuntime;
-  }
-
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
-    return this.#getThreadStreamRuntime().subscribeToThread<OUTPUT>(this as Agent<any, any, any, any>, options);
+    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      options,
+      this.getPubSub(),
+    );
   }
 
   abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
-    return this.#getThreadStreamRuntime().abortThread(options);
+    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return this.#getThreadStreamRuntime().abortRun(runId);
+    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    return this.#getThreadStreamRuntime().sendSignal(this as Agent<any, any, any, any>, signal, target);
+    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
   }
 
   async stream<
@@ -6247,6 +6386,10 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Extract and forward any client observability data attached to
+    // tool-result messages before they reach the loop/model.
+    this.#extractClientObservability(messages);
+
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
 
@@ -6289,7 +6432,12 @@ export class Agent<
       });
     }
 
-    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(this as Agent<any, any, any, any>, mergedOptions);
+    const threadStreamPubSub = this.getPubSub();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      mergedOptions,
+      threadStreamPubSub,
+    );
 
     mergedOptions.runId ??=
       this.#mastra?.generateId({
@@ -6297,7 +6445,7 @@ export class Agent<
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
-    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(mergedOptions);
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, threadStreamPubSub);
 
     const executeOptions = {
       ...preparedOptions,
@@ -6313,7 +6461,8 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>;
+      _threadStreamPubSub: threadStreamPubSub,
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
     const result = await this.#execute(executeOptions);
 
@@ -6337,10 +6486,11 @@ export class Agent<
       });
     }
 
-    this.#getThreadStreamRuntime().registerRun(
+    agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
     );
 
     return result.result;
@@ -6575,12 +6725,15 @@ export class Agent<
       });
     }
 
-    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(
+    const threadStreamPubSub = this.getPubSub();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
     );
-    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
     );
 
     const result = await this.#execute({
@@ -6599,7 +6752,8 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+      _threadStreamPubSub: threadStreamPubSub,
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -6621,10 +6775,11 @@ export class Agent<
       });
     }
 
-    this.#getThreadStreamRuntime().registerRun(
+    agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result as unknown as MastraModelOutput<OUTPUT>,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
     );
 
     return result.result as unknown as MastraModelOutput<OUTPUT>;
@@ -6736,7 +6891,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

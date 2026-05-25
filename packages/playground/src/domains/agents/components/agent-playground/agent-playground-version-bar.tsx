@@ -72,7 +72,7 @@ export function AgentPlaygroundVersionBar({
 
   const { data } = useAgentVersions({
     agentId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -200,7 +200,7 @@ export function AgentPlaygroundVersionBar({
           </ButtonsGroup>
 
           <Button
-            variant="cta"
+            variant="primary"
             size="md"
             onClick={onPublish}
             disabled={
