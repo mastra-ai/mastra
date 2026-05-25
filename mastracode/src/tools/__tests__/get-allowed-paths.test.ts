@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const { buildSkillPathsMock } = vi.hoisted(() => ({
-  buildSkillPathsMock: vi.fn((_projectPath: string, _configDir: string) => ['/mock/skills/dir-a', '/mock/skills/dir-b']),
+  buildSkillPathsMock: vi.fn((_projectPath: string, _configDir: string) => [
+    '/mock/skills/dir-a',
+    '/mock/skills/dir-b',
+  ]),
 }));
 
 // Mock the workspace module to control buildSkillPaths

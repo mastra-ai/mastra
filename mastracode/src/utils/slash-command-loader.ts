@@ -136,7 +136,10 @@ export async function scanCommandDirectory(dirPath: string, rootDir?: string): P
  * Load custom slash commands from all configured directories
  * Priority: mastra project > claude project > opencode project > mastra user > claude user > opencode user
  */
-export async function loadCustomCommands(projectDir?: string, configDirName = DEFAULT_CONFIG_DIR): Promise<SlashCommandMetadata[]> {
+export async function loadCustomCommands(
+  projectDir?: string,
+  configDirName = DEFAULT_CONFIG_DIR,
+): Promise<SlashCommandMetadata[]> {
   // Use a Map so later (higher priority) sources override earlier ones with the same name
   const commandMap = new Map<string, SlashCommandMetadata>();
 

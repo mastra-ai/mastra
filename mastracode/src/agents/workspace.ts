@@ -145,11 +145,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const skillPaths = buildSkillPaths(projectPath, configDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [
-    ...skillPaths,
-    ...DEFAULT_ALLOWED_PATHS,
-    ...sandboxPaths.map((p: string) => path.resolve(p)),
-  ];
+  const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {

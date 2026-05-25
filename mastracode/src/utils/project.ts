@@ -287,7 +287,11 @@ export type StorageConfig = LibSQLStorageConfig | PgStorageConfig;
  * For LibSQL, the legacy env vars still work:
  *   MASTRA_DB_URL + MASTRA_DB_AUTH_TOKEN
  */
-export function getStorageConfig(projectDir?: string, storageSettings?: StorageSettings, configDirName = DEFAULT_CONFIG_DIR): StorageConfig {
+export function getStorageConfig(
+  projectDir?: string,
+  storageSettings?: StorageSettings,
+  configDirName = DEFAULT_CONFIG_DIR,
+): StorageConfig {
   // 1. Environment variable — explicit backend selection
   const envBackend = process.env.MASTRA_STORAGE_BACKEND as StorageBackend | undefined;
 
