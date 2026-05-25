@@ -534,6 +534,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     createProcessor: vi.fn(),
   };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    hasEnabledBuilderConfig: () => true,
+    resolveBuilder: async () => ({
+      enabled: true,
+      getFeatures: () => ({ agent: { favorites: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -544,6 +551,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
+      create: vi.fn().mockImplementation(async (input: any) => {
+        // Delegate to storage directly, mirroring what editor.agent.create does
+        const agents = await mastra.getStorage()!.getStore('agents');
+        return agents!.create({ agent: input });
+      }),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
         name: 'Test Agent (Clone)',

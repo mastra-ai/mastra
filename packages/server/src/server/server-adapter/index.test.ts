@@ -14,6 +14,23 @@ class TestMastraServer extends MastraServer<any, any, any> {
   registerContextMiddleware = vi.fn();
   registerAuthMiddleware = vi.fn();
   registerHttpLoggingMiddleware = vi.fn();
+
+  buildCustomRouteHandlerForTest() {
+    return this.buildCustomRouteHandler();
+  }
+
+  handleCustomRouteRequestForTest(
+    url: string,
+    method: string,
+    headers: Record<string, string | string[] | undefined>,
+    body: unknown,
+  ) {
+    return this.handleCustomRouteRequest(url, method, headers, body);
+  }
+
+  validateCustomRoutePathsForTest(routes: Parameters<typeof this.validateCustomRoutePaths>[0]) {
+    return this.validateCustomRoutePaths(routes);
+  }
 }
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
@@ -23,6 +40,45 @@ function createMockFGAProvider(authorized = true): IFGAProvider {
     filterAccessible: vi.fn(),
   };
 }
+
+describe('custom route forwarding', () => {
+  it('should forward DELETE JSON bodies to custom routes', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/items/:id',
+            method: 'DELETE',
+            handler: async c => {
+              const body = await c.req.json();
+              const { id } = c.req.param();
+
+              return c.json({ deleted: id, reason: body.reason });
+            },
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.buildCustomRouteHandlerForTest()).resolves.toBe(true);
+
+    const response = await adapter.handleCustomRouteRequestForTest(
+      'http://localhost/items/123',
+      'DELETE',
+      { 'content-type': 'application/json' },
+      { reason: 'no longer needed' },
+    );
+
+    expect(response).not.toBeNull();
+    expect(response!.status).toBe(200);
+    await expect(response!.json()).resolves.toEqual({
+      deleted: '123',
+      reason: 'no longer needed',
+    });
+  });
+});
 
 describe('FGA Middleware - checkRouteFGA', () => {
   let checkRouteFGA: (
@@ -252,6 +308,79 @@ describe('FGA Middleware - checkRouteFGA', () => {
         resource: { type: 'conversation', id: 'conv-1' },
         permission: 'agents:delete',
         context: { resourceId: 'conv-1', requestContext },
+      },
+    );
+  });
+
+  it('should derive built-in FGA metadata for stored resource item and collection routes', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+    requestContext.set('mastra__resourceId', 'team-1');
+
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/stored/agents/:storedAgentId',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { storedAgentId: 'agent-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'POST',
+          path: '/stored/skills/:storedSkillId/publish',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { storedSkillId: 'skill-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/stored/workspaces',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        {},
+      ),
+    ).resolves.toBeNull();
+
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      1,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-agents', id: 'agent-1' },
+        permission: 'stored-agents:read',
+        context: { resourceId: 'agent-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      2,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-skills', id: 'skill-1' },
+        permission: 'stored-skills:publish',
+        context: { resourceId: 'skill-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      3,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-workspaces', id: 'team-1' },
+        permission: 'stored-workspaces:read',
+        context: { resourceId: 'team-1', requestContext },
       },
     );
   });
@@ -523,5 +652,74 @@ describe('FGA policy coverage validation', () => {
     const adapter = new TestMastraServer({ app: {}, mastra });
 
     await expect(adapter.validateFGAPolicyCoverage()).rejects.toThrow('protected routes are missing FGA metadata');
+  });
+});
+
+describe('validateCustomRoutePaths', () => {
+  const mockHandler = vi.fn();
+
+  it('should throw when a custom route collides with the default /api prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api/foo', method: 'GET', handler: mockHandler }]),
+    ).toThrow(/must not start with "\/api"/);
+  });
+
+  it('should throw when a custom route exactly matches the prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api', method: 'GET', handler: mockHandler }]),
+    ).toThrow(/must not start with "\/api"/);
+  });
+
+  it('should allow routes outside the default /api prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/webhooks/stripe', method: 'POST', handler: mockHandler }]),
+    ).not.toThrow();
+  });
+
+  it('should allow /api/ routes when a custom prefix is configured', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/mastra/api' });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api/my-endpoint', method: 'GET', handler: mockHandler }]),
+    ).not.toThrow();
+  });
+
+  it('should throw when a custom route collides with a custom prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/mastra/api' });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/mastra/api/agents', method: 'GET', handler: mockHandler }]),
+    ).toThrow(/must not start with "\/mastra\/api"/);
+  });
+
+  it('should skip internal routes marked with _mastraInternal', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([
+        { path: '/api/agents', method: 'GET', handler: mockHandler, _mastraInternal: true },
+      ]),
+    ).not.toThrow();
+  });
+
+  it('should not throw when prefix is empty', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '' });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
+    ).not.toThrow();
   });
 });
