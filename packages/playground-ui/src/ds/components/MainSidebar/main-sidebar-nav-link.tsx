@@ -1,4 +1,3 @@
-import { Slot } from '@radix-ui/react-slot';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
@@ -58,11 +57,15 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
   /** Override the Provider-level LinkComponent for this row. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
   /**
-   * When true, render `children` as the interactive element (Radix Slot pattern).
+   * When true, render `children` as the interactive element.
    * Use for `<button>` items or custom router Links. Item classes are forwarded
    * to the slotted element. `link` and `LinkComponent` are ignored.
    */
   asChild?: boolean;
+};
+
+type SlottedNavChildProps = {
+  className?: string;
 };
 
 export function MainSidebarNavLink({
@@ -94,8 +97,13 @@ export function MainSidebarNavLink({
   let interactiveEl: React.ReactNode = null;
 
   if (asChild) {
-    // Slot merges itemClassName onto the consumer-provided element (button, a, custom).
-    interactiveEl = <Slot className={itemClassName}>{children}</Slot>;
+    if (React.isValidElement<SlottedNavChildProps>(children)) {
+      interactiveEl = React.cloneElement(children, {
+        className: cn(itemClassName, children.props.className),
+      });
+    } else {
+      interactiveEl = children;
+    }
   } else if (link) {
     interactiveEl = (
       <Link href={link.url} {...linkParams} className={itemClassName}>

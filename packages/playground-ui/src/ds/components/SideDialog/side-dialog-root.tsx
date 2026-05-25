@@ -1,6 +1,4 @@
-import * as Dialog from '@radix-ui/react-dialog';
-
-import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+import { Dialog } from '@base-ui/react/dialog';
 import { ChevronsRightIcon } from 'lucide-react';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -29,50 +27,56 @@ export function SideDialogRoot({
   const isConfirmation = variant === 'confirmation';
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={onClose}>
+    <Dialog.Root
+      open={isOpen}
+      onOpenChange={open => {
+        if (!open) onClose?.();
+      }}
+    >
       <Dialog.Portal>
         {!isConfirmation && (
-          <Dialog.Overlay
+          <Dialog.Backdrop
             className={cn(
               'bg-overlay backdrop-blur-sm top-0 bottom-0 right-0 left-0 fixed z-50',
-              'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-200',
-              'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-150',
+              'data-[open]:animate-in data-[open]:fade-in-0 data-[open]:duration-200',
+              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:duration-150',
             )}
           />
         )}
-        <Dialog.Content
+        <Dialog.Popup
           className={cn(
             'fixed top-0 bottom-0 right-0 border-l border-border2 z-50 bg-surface2',
-            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-right-1/4 data-[state=closed]:duration-200',
+            'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:slide-out-to-right-1/4 data-[closed]:duration-200',
             {
               'w-[75vw] 2xl:w-[65vw] 4xl:w-[55vw]': level === 1,
               'w-[70vw] 2xl:w-[59vw] 4xl:w-[48vw]': level === 2,
               'w-[65vw] 2xl:w-[53vw] 4xl:w-[41vw]': level === 3,
-              'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-right-1/4 data-[state=open]:duration-300 shadow-dialog':
+              'data-[open]:animate-in data-[open]:fade-in-0 data-[open]:slide-in-from-right-1/4 data-[open]:duration-300 shadow-dialog':
                 !isConfirmation,
               'bg-surface2/70 backdrop-blur-sm': isConfirmation,
             },
             className,
           )}
         >
-          <VisuallyHidden.Root>
-            <Dialog.Title>{dialogTitle}</Dialog.Title>
-            <Dialog.Description>{dialogDescription}</Dialog.Description>
-          </VisuallyHidden.Root>
+          <Dialog.Title className="sr-only">{dialogTitle}</Dialog.Title>
+          <Dialog.Description className="sr-only">{dialogDescription}</Dialog.Description>
 
           {!isConfirmation && (
-            <Dialog.Close asChild>
-              <button
-                className={cn(
-                  'flex appearance-none items-center justify-center rounded-bl-lg h-14 w-14 absolute top-0 -left-14 bg-surface2 text-neutral3 border-l border-b border-border2',
-                  transitions.all,
-                  'hover:bg-surface4 hover:text-neutral5',
-                )}
-                aria-label="Close"
-              >
-                <ChevronsRightIcon />
-              </button>
-            </Dialog.Close>
+            <Dialog.Close
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    'flex appearance-none items-center justify-center rounded-bl-lg h-14 w-14 absolute top-0 -left-14 bg-surface2 text-neutral3 border-l border-b border-border2',
+                    transitions.all,
+                    'hover:bg-surface4 hover:text-neutral5',
+                  )}
+                  aria-label="Close"
+                >
+                  <ChevronsRightIcon />
+                </button>
+              }
+            />
           )}
 
           <div
@@ -82,7 +86,7 @@ export function SideDialogRoot({
           >
             {children}
           </div>
-        </Dialog.Content>
+        </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
   );
