@@ -40,8 +40,13 @@ function makeJsonReplacer(): (key: string, value: unknown) => unknown {
   };
 }
 
-function writeJson(filePath: string, data: unknown): void {
-  fs.writeFileSync(filePath, JSON.stringify(data, makeJsonReplacer(), 2) + '\n', 'utf8');
+function writeJson(filePath: string, data: unknown, mode?: number): void {
+  const content = JSON.stringify(data, makeJsonReplacer(), 2) + '\n';
+  if (mode !== undefined) {
+    fs.writeFileSync(filePath, content, { encoding: 'utf8', mode });
+  } else {
+    fs.writeFileSync(filePath, content, 'utf8');
+  }
 }
 
 function timestampSlug(date: Date): string {
@@ -117,7 +122,15 @@ export async function handleDebugChatExportCommand(ctx: SlashCommandContext): Pr
     omHistory = [];
   }
 
-  const thread = (await harness.listThreads({ allResources: true })).find(t => t.id === threadId) ?? null;
+  let thread: Record<string, unknown> | null;
+  try {
+    thread = ((await harness.listThreads({ allResources: true })).find(t => t.id === threadId) ?? null) as
+      | Record<string, unknown>
+      | null;
+  } catch (err) {
+    ctx.showError(`Failed to list threads: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
 
   const mastracodeVersion = (() => {
     try {
@@ -135,15 +148,7 @@ export async function handleDebugChatExportCommand(ctx: SlashCommandContext): Pr
   const currentModeId = harness.getCurrentModeId();
   const state = harness.getState();
 
-  const slug = timestampSlug(exportedAt);
-  const exportDir = path.join(getAppDataDir(), DEBUG_EXPORT_DIRNAME, `${slug}-${threadId.slice(0, 8)}`);
-  fs.mkdirSync(exportDir, { recursive: true });
-
-  writeJson(path.join(exportDir, 'thread.json'), thread);
-  writeJson(path.join(exportDir, 'messages.json'), messages);
-  writeJson(path.join(exportDir, 'om-current.json'), currentOm);
-  writeJson(path.join(exportDir, 'om-history.json'), omHistory);
-  writeJson(path.join(exportDir, 'meta.json'), {
+  const metaPayload = {
     mastracodeVersion,
     platform: {
       node: process.version,
@@ -159,7 +164,7 @@ export async function handleDebugChatExportCommand(ctx: SlashCommandContext): Pr
       reflectionThreshold,
     },
     state,
-  });
+  };
 
   const manifest = {
     exportedAt: exportedAt.toISOString(),
@@ -171,21 +176,49 @@ export async function handleDebugChatExportCommand(ctx: SlashCommandContext): Pr
     hasCurrentOm: currentOm !== null,
     files: ['thread.json', 'messages.json', 'om-current.json', 'om-history.json', 'meta.json', 'README.md'],
   };
-  writeJson(path.join(exportDir, 'manifest.json'), manifest);
 
-  fs.writeFileSync(
-    path.join(exportDir, 'README.md'),
-    buildReadme({
-      exportedAt,
-      threadId,
-      resourceId,
-      mastracodeVersion,
-      messageCount: messages.length,
-      omHistoryCount: omHistory.length,
-      hasCurrentOm: currentOm !== null,
-    }),
-    'utf8',
-  );
+  const readmeContent = buildReadme({
+    exportedAt,
+    threadId,
+    resourceId,
+    mastracodeVersion,
+    messageCount: messages.length,
+    omHistoryCount: omHistory.length,
+    hasCurrentOm: currentOm !== null,
+  });
+
+  const FILE_MODE = 0o600;
+  const DIR_MODE = 0o700;
+
+  const debugRoot = path.join(getAppDataDir(), DEBUG_EXPORT_DIRNAME);
+  const slug = timestampSlug(exportedAt);
+  const exportDir = path.join(debugRoot, `${slug}-${threadId.slice(0, 8)}`);
+  const tmpSuffix = `.tmp-${exportedAt.getTime()}`;
+  const tmpDir = exportDir + tmpSuffix;
+
+  try {
+    fs.mkdirSync(debugRoot, { recursive: true, mode: DIR_MODE });
+    fs.mkdirSync(tmpDir, { mode: DIR_MODE });
+
+    writeJson(path.join(tmpDir, 'thread.json'), thread, FILE_MODE);
+    writeJson(path.join(tmpDir, 'messages.json'), messages, FILE_MODE);
+    writeJson(path.join(tmpDir, 'om-current.json'), currentOm, FILE_MODE);
+    writeJson(path.join(tmpDir, 'om-history.json'), omHistory, FILE_MODE);
+    writeJson(path.join(tmpDir, 'meta.json'), metaPayload, FILE_MODE);
+    writeJson(path.join(tmpDir, 'manifest.json'), manifest, FILE_MODE);
+
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), readmeContent, { encoding: 'utf8', mode: FILE_MODE });
+
+    fs.renameSync(tmpDir, exportDir);
+  } catch (err) {
+    try {
+      if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+    ctx.showError(`Failed to write export: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
 
   ctx.showInfo(
     [

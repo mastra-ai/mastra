@@ -4,6 +4,29 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Track whether mkdirSync should throw for the write-failure test
+// Use var so the vi.mock factory (hoisted) can access this binding
+var failMkdirCallCount = 0;
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    mkdirSync: vi.fn((...args: Parameters<typeof fs.mkdirSync>) => {
+      // Fail on the second call (the one inside the atomic write try block)
+      if (failMkdirCallCount > 0) {
+        failMkdirCallCount--;
+        if (failMkdirCallCount === 0) {
+          throw new Error('disk full');
+        }
+      }
+      return actual.mkdirSync(...args);
+    }),
+  };
+});
+
+const IS_WINDOWS = process.platform === 'win32';
+
 import { handleDebugChatExportCommand } from '../debug-chat-export.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -96,6 +119,7 @@ describe('handleDebugChatExportCommand', () => {
   let prevAppData: string | undefined;
 
   beforeEach(() => {
+    failMkdirCallCount = 0;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'debug-chat-export-'));
     // Redirect the app data dir to our temp directory (works on Linux/macOS/Windows).
     prevXdgDataHome = process.env.XDG_DATA_HOME;
@@ -214,5 +238,89 @@ describe('handleDebugChatExportCommand', () => {
 
     expect(infoMessages).toEqual([]);
     expect(errorMessages[0]).toContain('Failed to read messages: storage offline');
+  });
+
+  it('reports an error when listThreads fails and writes nothing', async () => {
+    const { ctx, infoMessages, errorMessages } = createMockSetup({
+      listThreads: async () => {
+        throw new Error('thread storage unavailable');
+      },
+    });
+
+    await handleDebugChatExportCommand(ctx);
+
+    expect(infoMessages).toEqual([]);
+    expect(errorMessages[0]).toContain('Failed to list threads: thread storage unavailable');
+
+    // Verify no export directory was created
+    const debugExportsDir = path.join(tmpDir, 'debug-exports');
+    expect(fs.existsSync(debugExportsDir)).toBe(false);
+  });
+
+  it('reports an error on filesystem write failure and does not leave a temp directory', async () => {
+    const { ctx, infoMessages, errorMessages } = createMockSetup();
+
+    // Fail on the first mkdirSync call (debugRoot creation, previously unguarded)
+    failMkdirCallCount = 1;
+
+    await handleDebugChatExportCommand(ctx);
+
+    expect(infoMessages).toEqual([]);
+    expect(errorMessages[0]).toContain('Failed to write export');
+    expect(errorMessages[0]).toContain('disk full');
+
+    // Verify no export directory was created for this failed export
+    const debugExportsDir = path.join(tmpDir, 'debug-exports');
+    if (fs.existsSync(debugExportsDir)) {
+      const entries = fs.readdirSync(debugExportsDir);
+      const tmpDirs = entries.filter(e => e.startsWith('.tmp-'));
+      expect(tmpDirs).toHaveLength(0);
+    }
+  });
+
+  it('applies restrictive permissions on non-Windows platforms', async () => {
+    // Skip on Windows where POSIX permission bits don't apply
+    if (IS_WINDOWS) return;
+
+    const { ctx, infoMessages } = createMockSetup();
+
+    await handleDebugChatExportCommand(ctx);
+
+    const exportDirLine = infoMessages[0]!.split('\n').find(l => l.trim().startsWith(tmpDir));
+    expect(exportDirLine).toBeDefined();
+    const exportDir = exportDirLine!.trim();
+
+    // Check directory permission
+    const dirStat = fs.statSync(exportDir);
+    // 0o700 = owner rwx only
+    expect(dirStat.mode & 0o777).toBe(0o700);
+
+    // Check a sample file permission
+    const threadStat = fs.statSync(path.join(exportDir, 'thread.json'));
+    // 0o600 = owner rw only
+    expect(threadStat.mode & 0o777).toBe(0o600);
+
+    // Check README.md too (written via writeFileSync directly)
+    const readmeStat = fs.statSync(path.join(exportDir, 'README.md'));
+    expect(readmeStat.mode & 0o777).toBe(0o600);
+  });
+
+  it('serializes OM history from the harness method faithfully', async () => {
+    const { ctx, infoMessages } = createMockSetup({
+      getObservationalMemoryHistory: async () => [
+        { id: 'prior-2', generationCount: 5, activeObservations: 'gen-5' },
+        { id: 'prior-1', generationCount: 3, activeObservations: 'gen-3' },
+      ],
+    });
+
+    await handleDebugChatExportCommand(ctx);
+
+    const exportDirLine = infoMessages[0]!.split('\n').find((l: string) => l.trim().startsWith(tmpDir));
+    const exportDir = exportDirLine!.trim();
+
+    const omHistory = JSON.parse(fs.readFileSync(path.join(exportDir, 'om-history.json'), 'utf8'));
+    expect(omHistory).toHaveLength(2);
+    expect(omHistory[0].id).toBe('prior-2');
+    expect(omHistory[1].id).toBe('prior-1');
   });
 });

@@ -1401,8 +1401,21 @@ export class Harness<TState = {}> {
     if (!this.currentThreadId) return [];
 
     try {
+      const currentRecord = await this.getObservationalMemoryRecord();
+      const currentId = currentRecord?.id;
+
       const memoryStorage = await this.getMemoryStorage();
-      return await memoryStorage.getObservationalMemoryHistory(this.currentThreadId, this.resourceId, options?.limit);
+      // Request one extra record so that after filtering out the current
+      // record we can still return the requested limit count.
+      const rawLimit = options?.limit !== undefined ? options.limit + 1 : undefined;
+      const records = await memoryStorage.getObservationalMemoryHistory(
+        this.currentThreadId,
+        this.resourceId,
+        rawLimit,
+      );
+
+      const history = currentId ? records.filter(r => r.id !== currentId) : records;
+      return options?.limit !== undefined ? history.slice(0, options.limit) : history;
     } catch {
       return [];
     }
