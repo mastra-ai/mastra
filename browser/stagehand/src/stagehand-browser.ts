@@ -1208,6 +1208,22 @@ export class StagehandBrowser extends MastraBrowser {
         stream.emitUrl(params.frame.url);
         // Update session state on navigation
         this.updateSessionBrowserState(threadId);
+
+        // Same-tab navigations (e.g. clicking a link that loads a new origin
+        // in the current tab) can silently stop Chromium's screencast on the
+        // existing target. Reconnect so frames keep flowing. Reuses the
+        // per-thread debounce timer to coalesce rapid sub-navigations.
+        const existingTimer = this.tabChangeDebounceTimers.get(streamKey);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        this.tabChangeDebounceTimers.set(
+          streamKey,
+          setTimeout(() => {
+            this.tabChangeDebounceTimers.delete(streamKey);
+            void this.reconnectScreencastForThread(threadId, 'same-tab navigation');
+          }, 300),
+        );
       }
     };
 

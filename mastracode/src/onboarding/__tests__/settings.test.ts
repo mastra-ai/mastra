@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createBrowserFromSettings,
   getCustomProviderId,
   loadSettings,
   migrateLegacyVariedPack,
@@ -13,7 +14,7 @@ import {
   resolveThreadActiveModelPackId,
   saveSettings,
 } from '../settings.js';
-import type { GlobalSettings, StorageSettings } from '../settings.js';
+import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
@@ -495,5 +496,48 @@ describe('migrateLegacyVariedPack', () => {
       build: 'anthropic/claude-sonnet-4-5',
       fast: 'anthropic/claude-haiku-4-5',
     });
+  });
+});
+
+describe('createBrowserFromSettings — recording tools gating', () => {
+  const RECORDING_TOOL_NAMES = ['browser_record', 'browser_record_caption'] as const;
+
+  function makeBrowserSettings(overrides: Partial<BrowserSettings> = {}): BrowserSettings {
+    return {
+      enabled: true,
+      provider: 'stagehand',
+      headless: true,
+      ...overrides,
+    } as BrowserSettings;
+  }
+
+  it('returns undefined when browser is disabled', async () => {
+    const result = await createBrowserFromSettings({ enabled: false } as BrowserSettings);
+    expect(result).toBeUndefined();
+  });
+
+  it('exposes the browser_record and browser_record_caption tools on a Mastra Code-constructed stagehand browser', async () => {
+    const browser = await createBrowserFromSettings(makeBrowserSettings({ provider: 'stagehand' }));
+    expect(browser).toBeDefined();
+    const tools = browser!.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be present`).toBeDefined();
+    }
+  });
+
+  it('keeps the underlying provider tools intact when wrapping', async () => {
+    const browser = await createBrowserFromSettings(makeBrowserSettings({ provider: 'stagehand' }));
+    const tools = browser!.getTools();
+    // The stagehand provider's own navigate tool should still be present alongside recording tools.
+    expect(tools['stagehand_navigate']).toBeDefined();
+  });
+
+  it('does NOT expose recording tools when StagehandBrowser is constructed directly', async () => {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    const browser = new StagehandBrowser({ headless: true });
+    const tools = browser.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be absent on direct StagehandBrowser`).toBeUndefined();
+    }
   });
 });

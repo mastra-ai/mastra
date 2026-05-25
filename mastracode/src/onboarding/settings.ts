@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { createBrowserRecordingTools } from '../tools/browser-recording.js';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -894,6 +895,24 @@ export function checkProfileProviderMismatch(
 }
 
 /**
+ * Attach Mastra Code-only browser recording tools to a browser instance.
+ *
+ * The recording tools are intentionally NOT part of `@mastra/stagehand` or
+ * `@mastra/agent-browser`. We add them here so they only appear when Mastra
+ * Code itself constructs the browser. All other browser methods continue to
+ * delegate to the underlying provider unchanged.
+ */
+function attachRecordingTools(browser: MastraBrowser): MastraBrowser {
+  const originalGetTools = browser.getTools.bind(browser);
+  const recordingTools = createBrowserRecordingTools(browser);
+  browser.getTools = () => ({
+    ...originalGetTools(),
+    ...recordingTools,
+  });
+  return browser;
+}
+
+/**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
  * Returns undefined if browser is disabled.
@@ -920,14 +939,16 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
       preserveUserDataDir: stagehand?.preserveUserDataDir,
     };
-    return cdpUrl
+    const browser = cdpUrl
       ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
       : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
+    return attachRecordingTools(browser);
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
-    return cdpUrl
+    const browser = cdpUrl
       ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
       : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
+    return attachRecordingTools(browser);
   }
 
   throw new Error(`Unsupported browser provider: ${provider}`);
