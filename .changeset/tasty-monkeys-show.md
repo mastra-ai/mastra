@@ -17,6 +17,6 @@ new Memory({
 })
 ```
 
-When `maxTokens` is configured and total tokens exceed the budget, oldest memory history messages are removed down to `maxTokens - atMaxRemoveTokens`. The newest removed message is persisted as a thread boundary (`thread.metadata.mastra.memoryTokenLimiter`) so future turns skip older messages instead of recounting all history. Token estimates are cached on message metadata (`content.metadata.mastra.tokenEstimate`) for reuse across turns.
+When `maxTokens` is configured and total tokens exceed the budget, oldest memory history messages are removed down to `maxTokens - atMaxRemoveTokens`. The trim point is remembered between turns, so future requests start from the same effective history boundary instead of repeatedly recounting and dropping the same old messages.
 
 Legacy `lastMessages: number | false` still works. Input, context, and system messages are never removed.

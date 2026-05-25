@@ -8,6 +8,8 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import { CoreTokenCounter } from '../../utils/token-counter';
 
+import { DEFAULT_TOKEN_COUNTER_SOURCE, getDefaultAtMaxRemoveTokens } from './memory-token-limiter';
+
 /**
  * Options for the MessageHistory processor
  */
@@ -16,6 +18,8 @@ export interface MessageHistoryOptions {
   lastMessages?: number;
   tokenLimit?: {
     maxTokens: number;
+    atMaxRemoveTokens?: number;
+    tokenCounterSource?: string;
   };
 }
 
@@ -49,6 +53,39 @@ export class MessageHistory implements Processor {
     }
 
     return this.counter;
+  }
+
+  private getCurrentBoundaryConfig():
+    | { maxTokens: number; atMaxRemoveTokens: number; tokenCounterSource: string }
+    | undefined {
+    if (!this.tokenLimit) {
+      return undefined;
+    }
+
+    return {
+      maxTokens: this.tokenLimit.maxTokens,
+      atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens ?? getDefaultAtMaxRemoveTokens(this.tokenLimit.maxTokens),
+      tokenCounterSource: this.tokenLimit.tokenCounterSource ?? DEFAULT_TOKEN_COUNTER_SOURCE,
+    };
+  }
+
+  private countSystemMessageTokens(
+    message: ProcessInputArgs['systemMessages'][number],
+    counter: CoreTokenCounter,
+  ): number {
+    const content = message.content;
+    const dbContent = Array.isArray(content)
+      ? { format: 2 as const, parts: content as MastraDBMessage['content']['parts'] }
+      : content && typeof content === 'object'
+        ? { format: 2 as const, ...(content as Record<string, unknown>) }
+        : { format: 2 as const, parts: [{ type: 'text' as const, text: String(content ?? '') }] };
+
+    return counter.countMessage({
+      id: 'system',
+      role: 'system',
+      content: dbContent as MastraDBMessage['content'],
+      createdAt: new Date(),
+    });
   }
 
   /**
@@ -102,9 +139,7 @@ export class MessageHistory implements Processor {
     let totalTokens = 0;
 
     for (const msg of args.systemMessages ?? []) {
-      if (typeof msg.content === 'string') {
-        totalTokens += counter.countString(msg.content);
-      }
+      totalTokens += this.countSystemMessageTokens(msg, counter);
     }
 
     for (const message of args.messageList.get.all.db()) {
@@ -196,16 +231,16 @@ export class MessageHistory implements Processor {
       // If a valid boundary exists, only fetch messages after that point.
       const memoryContext = parseMemoryRequestContext(requestContext);
       const thread = memoryContext?.thread;
+      const boundary = thread?.metadata
+        ? getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>, this.getCurrentBoundaryConfig())
+        : undefined;
       let boundaryFilter: { start: Date; startExclusive: boolean } | undefined;
 
-      if (thread?.metadata) {
-        const boundary = getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>);
-        if (boundary) {
-          boundaryFilter = {
-            start: new Date(boundary.createdAt),
-            startExclusive: true,
-          };
-        }
+      if (boundary) {
+        boundaryFilter = {
+          start: new Date(boundary.createdAt),
+          startExclusive: true,
+        };
       }
 
       // 1. Fetch historical messages from storage (as DB format)
@@ -238,9 +273,7 @@ export class MessageHistory implements Processor {
 
       // 3. If boundary exists, defensively remove the boundary message.
       // This handles timestamp collision edge cases where startExclusive may not be supported.
-      const boundaryMessageId = thread?.metadata
-        ? getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>)?.messageId
-        : undefined;
+      const boundaryMessageId = boundary?.messageId;
 
       const boundarySafeMessages = boundaryMessageId
         ? filteredMessages.filter((msg: MastraDBMessage) => {

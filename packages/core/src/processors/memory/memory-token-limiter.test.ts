@@ -40,7 +40,7 @@ function createAbort(): (reason?: string) => never {
 function createProcessArgs(
   messageList: MessageList,
   overrides?: {
-    systemMessages?: { role: 'system'; content: string }[];
+    systemMessages?: any[];
     requestContext?: RequestContext;
   },
 ) {
@@ -594,5 +594,88 @@ describe('Memory.getInputProcessors with nested lastMessages', () => {
         }),
       }),
     );
+  });
+
+  it('should ignore stale token limiter boundaries when the limiter config changes', async () => {
+    const storage = {
+      listMessages: vi.fn(async (_options: any) => ({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      })),
+    };
+    const staleBoundary: MemoryTokenLimiterBoundary = {
+      messageId: 'mem-old-boundary',
+      createdAt: '2024-01-01T10:00:00.000Z',
+      droppedFromTokens: 100,
+      targetTokens: 75,
+      maxTokens: 50,
+      atMaxRemoveTokens: 12,
+      tokenCounterSource: 'v7:tokenx',
+      updatedAt: '2024-01-01T10:00:00.000Z',
+    };
+
+    const history = new MessageHistory({
+      storage: storage as any,
+      lastMessages: 10,
+      tokenLimit: { maxTokens: 100 },
+    });
+
+    await history.processInput(
+      createProcessArgs(new MessageList(), {
+        requestContext: createBoundaryContext('thread-1', staleBoundary),
+      }),
+    );
+
+    expect(storage.listMessages.mock.calls[0]![0].filter).toBeUndefined();
+  });
+
+  it('should persist the actual pre-trim token total in boundary metadata', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 100, atMaxRemoveTokens: 10 });
+    const messageList = new MessageList();
+    const ctx = createThreadContext('thread-1');
+
+    messageList.add(createMessage('mem-1', 'user', 'x'.repeat(2000)), 'memory');
+    messageList.add(createMessage('mem-2', 'assistant', 'x'.repeat(2000)), 'memory');
+    messageList.add(createMessage('input-1', 'user', 'Hi'), 'input');
+
+    await limiter.processInput(createProcessArgs(messageList, { requestContext: ctx }));
+
+    const memoryContext = ctx.get('MastraMemory') as { thread?: { metadata?: Record<string, unknown> } };
+    const boundary = getMemoryTokenLimiterBoundary(memoryContext.thread?.metadata, {
+      maxTokens: 100,
+      atMaxRemoveTokens: 10,
+      tokenCounterSource: 'v7:tokenx',
+    });
+
+    expect(boundary).toBeDefined();
+    expect(boundary!.droppedFromTokens).toBeGreaterThan(boundary!.maxTokens);
+  });
+
+  it('should validate token limiter options', () => {
+    expect(() => new MemoryTokenLimiter({ maxTokens: -1 })).toThrow(/maxTokens/);
+    expect(() => new MemoryTokenLimiter({ maxTokens: Infinity })).toThrow(/maxTokens/);
+    expect(() => new MemoryTokenLimiter({ maxTokens: 100, atMaxRemoveTokens: -1 })).toThrow(/atMaxRemoveTokens/);
+  });
+
+  it('should account for structured system message content in the budget', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 20 });
+    const messageList = new MessageList();
+
+    messageList.add(createMessage('mem-1', 'user', 'Hello from memory'), 'memory');
+    messageList.add(createMessage('input-1', 'user', 'Hi'), 'input');
+
+    await limiter.processInput(
+      createProcessArgs(messageList, {
+        systemMessages: [
+          { role: 'system' as const, content: [{ type: 'text', text: 'You are helpful. '.repeat(20) }] },
+        ],
+      }),
+    );
+
+    expect(messageList.get.remembered.db()).toHaveLength(0);
+    expect(messageList.get.input.db()).toHaveLength(1);
   });
 });

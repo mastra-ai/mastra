@@ -20,7 +20,17 @@ export interface MemoryTokenLimiterOptions {
 /**
  * Default token counter source identifier (matches CoreTokenCounter's cache source).
  */
-const DEFAULT_TOKEN_COUNTER_SOURCE = `v7:tokenx`;
+export const DEFAULT_TOKEN_COUNTER_SOURCE = `v7:tokenx`;
+
+export function getDefaultAtMaxRemoveTokens(maxTokens: number): number {
+  return Math.max(1, Math.floor(maxTokens * 0.25));
+}
+
+function assertFiniteNonNegative(name: string, value: number): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`MemoryTokenLimiter: ${name} must be a finite non-negative number`);
+  }
+}
 
 /**
  * Input processor that limits memory history messages by token count.
@@ -48,9 +58,13 @@ export class MemoryTokenLimiter implements Processor {
   private counter: CoreTokenCounter | undefined;
 
   constructor(options: MemoryTokenLimiterOptions) {
+    assertFiniteNonNegative('maxTokens', options.maxTokens);
+
+    const atMaxRemoveTokens = options.atMaxRemoveTokens ?? getDefaultAtMaxRemoveTokens(options.maxTokens);
+    assertFiniteNonNegative('atMaxRemoveTokens', atMaxRemoveTokens);
+
     this.maxTokens = options.maxTokens;
-    // Default atMaxRemoveTokens to 25% of maxTokens if not specified
-    this.atMaxRemoveTokens = options.atMaxRemoveTokens ?? Math.max(1, Math.floor(options.maxTokens * 0.25));
+    this.atMaxRemoveTokens = atMaxRemoveTokens;
   }
 
   /**
@@ -64,6 +78,25 @@ export class MemoryTokenLimiter implements Processor {
     return this.counter;
   }
 
+  private countSystemMessageTokens(
+    message: ProcessInputArgs['systemMessages'][number],
+    counter: CoreTokenCounter,
+  ): number {
+    const content = message.content;
+    const dbContent = Array.isArray(content)
+      ? { format: 2 as const, parts: content as MastraDBMessage['content']['parts'] }
+      : content && typeof content === 'object'
+        ? { format: 2 as const, ...(content as Record<string, unknown>) }
+        : { format: 2 as const, parts: [{ type: 'text' as const, text: String(content ?? '') }] };
+
+    return counter.countMessage({
+      id: 'system',
+      role: 'system',
+      content: dbContent as MastraDBMessage['content'],
+      createdAt: new Date(),
+    });
+  }
+
   async processInput(args: ProcessInputArgs): Promise<MessageList> {
     const { messageList, systemMessages, requestContext } = args;
     const counter = this.getCounter();
@@ -72,9 +105,7 @@ export class MemoryTokenLimiter implements Processor {
     let totalTokens = 0;
     if (systemMessages && systemMessages.length > 0) {
       for (const msg of systemMessages) {
-        if (typeof msg.content === 'string') {
-          totalTokens += counter.countString(msg.content);
-        }
+        totalTokens += this.countSystemMessageTokens(msg, counter);
       }
     }
 
@@ -97,6 +128,8 @@ export class MemoryTokenLimiter implements Processor {
     if (totalTokens <= this.maxTokens) {
       return messageList;
     }
+
+    const droppedFromTokens = totalTokens;
 
     // Calculate target: drop down to maxTokens - atMaxRemoveTokens
     const target = Math.max(0, this.maxTokens - this.atMaxRemoveTokens);
@@ -123,7 +156,7 @@ export class MemoryTokenLimiter implements Processor {
 
     // Persist the boundary if we have one to persist and a thread to persist it on
     if (newestRemovedMessage && requestContext) {
-      this.persistBoundary(requestContext, newestRemovedMessage, totalTokens + this.atMaxRemoveTokens, target);
+      this.persistBoundary(requestContext, newestRemovedMessage, droppedFromTokens, target);
     }
 
     return messageList;

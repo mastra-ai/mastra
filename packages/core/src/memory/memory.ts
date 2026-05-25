@@ -810,6 +810,7 @@ https://mastra.ai/en/docs/memory/overview`,
               normalizedLM.maxTokens !== undefined
                 ? {
                     maxTokens: normalizedLM.maxTokens,
+                    atMaxRemoveTokens: normalizedLM.atMaxRemoveTokens,
                   }
                 : undefined,
           }),
