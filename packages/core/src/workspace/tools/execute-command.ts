@@ -210,7 +210,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     // opt out, or a function to build a custom payload (return `undefined`
     // from the function to skip firing for this exit).
     const signalOnExit = bgConfig?.signalOnExit ?? true;
-    if (bgConfig?.onExit || signalOnExit !== false) {
+    if ((bgConfig?.onExit || signalOnExit !== false) && typeof handle.wait === 'function') {
       void handle.wait().then(async result => {
         const meta: BackgroundProcessExitMeta = {
           pid: handle.pid,
