@@ -1305,7 +1305,6 @@ export class AgentChannels {
           const ctx: TypingStatusContext = {
             platform,
             threadId: chatThread.id,
-            toolCalls: new Map(),
             currentStatus: currentTypingStatus,
             channelTools: this.channelToolNames,
           };

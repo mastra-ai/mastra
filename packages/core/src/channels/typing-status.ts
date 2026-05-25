@@ -15,12 +15,6 @@ export interface TypingStatusContext {
   platform: string;
   /** Chat SDK thread id for the current run. */
   threadId: string;
-  /**
-   * Live, read-only view of tools the run has called so far. Keyed by
-   * `toolCallId`. Useful for branching on the number of concurrent tools or
-   * the most recently called tool.
-   */
-  toolCalls: ReadonlyMap<string, { toolName: string; args: unknown; startedAt: number }>;
   /** Status string currently displayed (last value set), or `undefined` if none. */
   currentStatus: string | undefined;
   /**
