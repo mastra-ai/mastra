@@ -3357,11 +3357,13 @@ export class Agent<
     requestContext,
     messageList,
     outputProcessorOverrides,
+    processorStates,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -3377,6 +3379,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
+        processorStates,
       });
 
       try {

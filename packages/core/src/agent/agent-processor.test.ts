@@ -125,6 +125,34 @@ describe('Input and Output Processors', () => {
       expect((result.response.messages![0].content[0] as any).text).toContain('Processor was here!');
     }, 50000);
 
+    it('should share processor state between input-step and output processors', async () => {
+      let outputStateValue: unknown;
+      const processor = {
+        id: 'state-sharing-processor',
+        name: 'State Sharing Processor',
+        processInputStep: async ({ state }: any) => {
+          state.turn = 'created';
+        },
+        processOutputResult: async ({ messages, state }: any) => {
+          outputStateValue = state.turn;
+          return messages;
+        },
+      };
+
+      const agentWithProcessor = new Agent({
+        id: 'state-sharing-agent',
+        name: 'State Sharing Agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [processor],
+        outputProcessors: [processor],
+      });
+
+      await agentWithProcessor.generate('Hello');
+
+      expect(outputStateValue).toBe('created');
+    });
+
     it('should run multiple processors in order', async () => {
       const processor1 = {
         id: 'processor-1',
@@ -2056,6 +2084,41 @@ describe('New Processor Features', () => {
 
 describe('v1 model - output processors', () => {
   describe('generate output processors', () => {
+    it('should share processor state between input-step and output processors', async () => {
+      let outputStateValue: unknown;
+      const processor = {
+        id: 'legacy-state-sharing-processor',
+        name: 'Legacy State Sharing Processor',
+        processInputStep: async ({ state }: any) => {
+          state.turn = 'created';
+        },
+        processOutputResult: async ({ messages, state }: any) => {
+          outputStateValue = state.turn;
+          return messages;
+        },
+      };
+
+      const agent = new Agent({
+        id: 'legacy-state-sharing-agent',
+        name: 'Legacy State Sharing Agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'legacy response',
+            finishReason: 'stop',
+            usage: { completionTokens: 2, promptTokens: 2 },
+          }),
+        }),
+        inputProcessors: [processor],
+        outputProcessors: [processor],
+      });
+
+      await agent.generateLegacy('Hello');
+
+      expect(outputStateValue).toBe('created');
+    });
+
     it('should process final text through output processors', async () => {
       let processedText = '';
 
