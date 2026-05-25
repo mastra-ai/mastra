@@ -1,4 +1,15 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type {
+  ActionEvent,
+  Adapter,
+  Author,
+  CardElement,
+  ChatConfig,
+  Message,
+  ReactionEvent,
+  StateAdapter,
+  StreamChunk,
+  Thread,
+} from 'chat';
 
 import type { Mastra } from '../mastra';
 import type { ApiRoute, CorsOptions } from '../server/types';
@@ -304,6 +315,52 @@ export type ChannelHandler = (
  */
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 
+/**
+ * Result of the built-in action handler for tool approval buttons.
+ *
+ * Returned by `defaultHandler()` when an `onAction` override delegates to it.
+ * Returns `undefined` when the action ID was not handled by the default
+ * (e.g. a custom action ID like `explain:weatherTool`); the override already
+ * has `event.actionId` for branching on its own IDs.
+ */
+export type ActionHandlerResult = { kind: 'approved'; toolCallId: string } | { kind: 'denied'; toolCallId: string };
+
+/**
+ * Custom handler for action (button click) events.
+ *
+ * When supplied, the override fully owns the event. Call `defaultHandler()` to
+ * run the built-in tool approval flow (handles `tool_approve:<toolCallId>` /
+ * `tool_deny:<toolCallId>` action IDs, edits the card, and resumes the
+ * suspended tool); skip it to fully replace the default behavior. Set the
+ * handler config to `false` to disable the default routing entirely.
+ */
+export type ActionHandler = (
+  event: ActionEvent,
+  defaultHandler: () => Promise<ActionHandlerResult | undefined>,
+) => unknown | Promise<unknown>;
+
+/**
+ * Custom handler for reaction (emoji) events.
+ *
+ * When supplied, the override fully owns the event. `defaultHandler` is
+ * currently a no-op (channels does not consume reactions by default); the
+ * signature matches `ActionHandler` for consistency and to leave room for
+ * future built-in behavior.
+ */
+export type ReactionHandlerFn = (
+  event: ReactionEvent,
+  defaultHandler: () => Promise<void>,
+) => unknown | Promise<unknown>;
+
+/**
+ * Handler configuration for action / reaction events.
+ * - `undefined` or omitted → use default handler
+ * - `false` → disable handler entirely (event ignored)
+ * - function → custom handler (receives defaultHandler to wrap/extend)
+ */
+export type ActionHandlerConfig = ActionHandler | false | undefined;
+export type ReactionHandlerConfig = ReactionHandlerFn | false | undefined;
+
 /** Handler overrides for built-in channel event handlers. */
 export interface ChannelHandlers {
   /**
@@ -323,7 +380,79 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onSubscribedMessage?: ChannelHandlerConfig;
+
+  /**
+   * Handler for action events (e.g. button clicks in cards).
+   *
+   * Default: Routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`
+   * action IDs through the tool approval flow (edits the card, resumes the
+   * suspended tool). All other action IDs are ignored — custom handlers
+   * inspect `event.actionId` directly to branch on their own IDs.
+   *
+   * Pair with `toolDisplay: fn` (which can post custom cards with custom
+   * action IDs) and `channels.approveTool(toolCallId, event)` /
+   * `channels.denyTool(toolCallId, event)` (which resolve approvals
+   * programmatically) to build fully custom approval flows.
+   *
+   * @example
+   * ```ts
+   * onAction: async (event, defaultHandler) => {
+   *   if (event.actionId.startsWith('explain:')) {
+   *     await event.thread?.post('Here is what this tool does…');
+   *     return;
+   *   }
+   *   // Fall through to built-in tool_approve / tool_deny handling
+   *   return defaultHandler();
+   * }
+   * ```
+   */
+  onAction?: ActionHandlerConfig;
+
+  /**
+   * Handler for reaction (emoji) events.
+   *
+   * Default: no-op (channels does not consume reactions by default).
+   *
+   * Pair with `toolDisplay: fn` (post a plain "react ✅ to approve" message)
+   * and `channels.approveTool(toolCallId, event)` /
+   * `channels.denyTool(toolCallId, event)` to drive approvals via reactions
+   * on platforms without button support.
+   *
+   * @example
+   * ```ts
+   * onReaction: async (event) => {
+   *   const toolCallId = pendingApprovals.get(event.messageId);
+   *   if (!toolCallId) return;
+   *   if (event.emoji.name === 'white_check_mark') {
+   *     await channels.approveTool(toolCallId, event);
+   *   } else if (event.emoji.name === 'x') {
+   *     await channels.denyTool(toolCallId, event);
+   *   }
+   * }
+   * ```
+   */
+  onReaction?: ReactionHandlerConfig;
 }
+
+/**
+ * Source for a programmatic approval / denial call to
+ * `channels.approveTool` / `channels.denyTool`.
+ *
+ * - Pass an `ActionEvent` directly when handling a custom button click.
+ * - Pass a `ReactionEvent` directly when handling a reaction-based approval.
+ * - Pass `{ chatThread, platform, actor, messageId? }` when resolving an
+ *   approval from somewhere other than an inbound chat event (workflows,
+ *   scheduled jobs, etc.).
+ */
+export type ApprovalSource =
+  | ActionEvent
+  | ReactionEvent
+  | {
+      chatThread: Thread;
+      platform: string;
+      actor: Author;
+      messageId?: string;
+    };
 
 /** Configuration for agent chat channels. */
 export interface ChannelConfig {

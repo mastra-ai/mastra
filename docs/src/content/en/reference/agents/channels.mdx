@@ -340,6 +340,19 @@ const agent = new Agent({
     isOptional: true,
     description: 'Called for messages in threads the agent has subscribed to.',
   },
+  {
+    name: 'onAction',
+    type: 'ActionHandler | false',
+    isOptional: true,
+    description:
+      'Called when the bot receives an action (e.g. button click). Receives a `defaultHandler` that routes built-in `tool_approve:<toolCallId>` / `tool_deny:<toolCallId>` action IDs. Inspect `event.actionId` to branch on your own custom IDs.',
+  },
+  {
+    name: 'onReaction',
+    type: 'ReactionHandler | false',
+    isOptional: true,
+    description: 'Called when the bot receives a reaction (emoji) event. Default is a no-op.',
+  },
 ]}
 />
 
@@ -351,7 +364,47 @@ type ChannelHandler = (
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
 ) => Promise<void>
+
+type ActionHandler = (
+  event: ActionEvent,
+  defaultHandler: () => Promise<ActionHandlerResult | undefined>,
+) => unknown | Promise<unknown>
+
+type ReactionHandler = (
+  event: ReactionEvent,
+  defaultHandler: () => Promise<void>,
+) => unknown | Promise<unknown>
+
+type ActionHandlerResult =
+  | { kind: 'approved'; toolCallId: string }
+  | { kind: 'denied'; toolCallId: string }
 ```
+
+`defaultHandler()` returns the `ActionHandlerResult` when it handled a built-in `tool_approve:*` / `tool_deny:*` action, or `undefined` for any other action ID.
+
+When you supply an `ActionHandler` or `ReactionHandler`, the override fully owns the event — the default handler runs only if you call `defaultHandler()` explicitly. This matches the existing `onDirectMessage` / `onMention` / `onSubscribedMessage` semantics. Use `handlers.onAction: false` (or `handlers.onReaction: false`) to disable the default routing entirely.
+
+## Programmatic approval
+
+The `AgentChannels` instance (`agent.channels`) exposes two methods for resolving suspended tool approvals from outside the default click handler:
+
+```typescript
+agent.channels.approveTool(toolCallId, source)
+agent.channels.denyTool(toolCallId, source)
+```
+
+Both look up the `runId` for `toolCallId` (in-memory first, persisted metadata fallback) and resume the suspended tool. Neither edits any message — the caller owns the UI. If no pending approval exists for `toolCallId` (e.g. a stale click), the call silently returns.
+
+`source` describes who is resolving the approval and from where:
+
+```typescript
+type ApprovalSource =
+  | ActionEvent
+  | ReactionEvent
+  | { chatThread: Thread; platform: string; actor: Author; messageId?: string }
+```
+
+Pass an `ActionEvent` or `ReactionEvent` when resolving from an inbound chat event handler. Use the explicit `{ chatThread, platform, actor }` form when resolving from a workflow, scheduled job, or any code path that isn't responding to an inbound event.
 
 ## Inline media
 

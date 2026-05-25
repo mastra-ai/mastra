@@ -121,6 +121,52 @@ When the agent calls this tool, users see a card with the tool name, arguments, 
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode does not post approval buttons.
 
+## Custom action and reaction handlers
+
+For approval flows that need extra buttons or custom logic, combine three pieces:
+
+- `toolDisplay: fn` posts whatever message you want (custom buttons, plain text, etc.).
+- `handlers.onAction` / `handlers.onReaction` route inbound events to your code.
+- `channels.approveTool(toolCallId, source)` / `channels.denyTool(toolCallId, source)` resume the suspended tool call.
+
+### Custom approval card with an extra button
+
+The `toolDisplay` fn posts a Block Kit card with an additional "Explain" button. `onAction` handles the custom `explain:*` action ID and delegates to `defaultHandler()` for the built-in `tool_approve:*` / `tool_deny:*` IDs. When you supply `onAction`, you own the event — the default handler only runs if you call it.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  name: 'ops',
+  instructions: '…',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: slackAdapter,
+        toolDisplay: event => {
+          if (event.kind !== 'approval') return undefined
+          return {
+            kind: 'post',
+            message: buildCardWithExplainButton(event),
+          }
+        },
+      },
+    },
+    handlers: {
+      onAction: async (event, defaultHandler) => {
+        if (event.actionId.startsWith('explain:')) {
+          await event.thread?.post('This tool will delete the file at the given path.')
+          return
+        }
+        // Fall through to built-in tool_approve / tool_deny routing.
+        return defaultHandler()
+      },
+    },
+  },
+})
+```
+
 ## Multi-user awareness
 
 In group conversations, Mastra automatically prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:
