@@ -1,5 +1,102 @@
 # @mastra/playground-ui
 
+## 30.0.0-alpha.5
+
+### Patch Changes
+
+- Improved the Select component by migrating it to Base UI for more reliable positioning and accessibility. The public API (`Select`, `SelectTrigger`, `SelectContent`, `SelectItem`, `SelectValue`, `SelectGroup`) is unchanged, so no consumer updates are needed. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Added `DataList.RowStatic`, a non-interactive row primitive. It renders a row that looks identical to other list rows but does not respond to clicks and shows no hover/focus state — use it alongside `DataList.RowButton` / `DataList.RowLink` when only some rows are clickable (e.g. error or placeholder entries in an otherwise navigable list). ([#16970](https://github.com/mastra-ai/mastra/pull/16970))
+
+  ```tsx
+  {
+    rows.map(row =>
+      row.href ? (
+        <DataList.RowLink key={row.id} to={row.href} LinkComponent={Link}>
+          {row.cells}
+        </DataList.RowLink>
+      ) : (
+        <DataList.RowStatic key={row.id}>{row.cells}</DataList.RowStatic>
+      ),
+    );
+  }
+  ```
+
+- Fixed Studio Settings page (and other default-height `PageLayout` pages) clipping their content with no scrollbar on viewports shorter than the form. Users on short laptop screens (under ~991px tall) could not reach the Save button under the Mastra Connection headers form, making it impossible to apply changes. Default-height `PageLayout` pages now grow with their content and scroll through the studio chrome wrapper; `height="full"` pages (Logs, Traces, Metrics, etc.) are unchanged. ([#16999](https://github.com/mastra-ai/mastra/pull/16999))
+
+- Restyled scrollbars across the studio UI to match the design system — thin, themed thumb on a transparent track — replacing the default OS scrollbars that clashed with dark and light surfaces. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Updated dependencies [[`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd)]:
+  - @mastra/core@1.37.0-alpha.5
+  - @mastra/client-js@1.21.0-alpha.5
+  - @mastra/react@0.4.1-alpha.5
+
+## 30.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+  - @mastra/client-js@1.21.0-alpha.4
+  - @mastra/react@0.4.1-alpha.4
+
+## 30.0.0-alpha.3
+
+### Minor Changes
+
+- Added a Drawer component — a panel that slides in from any edge of the screen with swipe-to-dismiss gestures. ([#16958](https://github.com/mastra-ai/mastra/pull/16958))
+
+  The Drawer can be anchored to any of the four screen edges and supports snap points, nested stacking, controlled state, non-modal mode, swipe-to-open areas, and detached triggers.
+
+  ```tsx
+  import {
+    Drawer,
+    DrawerTrigger,
+    DrawerContent,
+    DrawerHeader,
+    DrawerTitle,
+    DrawerDescription,
+    DrawerFooter,
+    DrawerClose,
+    Button,
+  } from '@mastra/playground-ui';
+
+  <Drawer side="right">
+    <DrawerTrigger asChild>
+      <Button>Open</Button>
+    </DrawerTrigger>
+    <DrawerContent>
+      <DrawerHeader>
+        <DrawerTitle>Library</DrawerTitle>
+        <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
+      </DrawerHeader>
+      <DrawerFooter>
+        <DrawerClose asChild>
+          <Button variant="outline">Close</Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </DrawerContent>
+  </Drawer>;
+  ```
+
+- Added a reusable `HoverCard` component (`HoverCard`, `HoverCardTrigger`, `HoverCardContent`) built on Base UI. You can now use these exported components to add hover card interactions anywhere in your UI. ([#16919](https://github.com/mastra-ai/mastra/pull/16919))
+
+  ```tsx
+  import { HoverCard, HoverCardTrigger, HoverCardContent } from '@mastra/playground-ui';
+
+  <HoverCard>
+    <HoverCardTrigger>Weather Agent</HoverCardTrigger>
+    <HoverCardContent>Answers questions about current conditions and forecasts.</HoverCardContent>
+  </HoverCard>;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e)]:
+  - @mastra/core@1.37.0-alpha.3
+  - @mastra/client-js@1.21.0-alpha.3
+  - @mastra/react@0.4.1-alpha.3
+
 ## 30.0.0-alpha.2
 
 ### Patch Changes

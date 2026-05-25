@@ -871,6 +871,34 @@ describe('Agent signals', () => {
     expect(result).toEqual(expect.objectContaining({ accepted: true }));
   });
 
+  it('reports the reserved runId as active before registerRun populates the stream record', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const threadId = 'reservation-gap-thread';
+    const resourceId = 'reservation-gap-user';
+
+    // agent.stream is awaited inside the idle-wake path before registerRun fires. Returning
+    // a never-resolving promise pins the runtime in the gap where sendSignal has reserved
+    // activeThreadRunIds + threadKeysByRunId but threadRunsById is still empty.
+    const agent = {
+      id: 'reservation-gap-agent',
+      stream: () => new Promise(() => {}),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    expect(subscription.activeRunId()).toBeNull();
+
+    const result = runtime.sendSignal(agent, createSignal({ type: 'user-message', contents: 'hello' }), {
+      resourceId,
+      threadId,
+      ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(subscription.activeRunId()).toBe(result.runId);
+
+    subscription.unsubscribe();
+  });
+
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
     let streamCount = 0;
     const memory = new MockMemory();
@@ -1108,6 +1136,56 @@ describe('Agent signals', () => {
         await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
         finishRun();
         ownerSubscription.unsubscribe();
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'broadcasts to a remote subscriber without a same-runtime subscriber',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-remote-only-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = { id: 'remote-only-agent' } as Agent<any, any, any, any>;
+      const follower = { id: 'remote-only-agent' } as Agent<any, any, any, any>;
+      const runId = 'remote-only-run';
+      let finishRun!: () => void;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId, payload: { text: 'remote only response' } };
+          yield { type: 'finish', runId, payload: {} };
+        })(),
+        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+      } as any;
+
+      try {
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'remote-only-resource', threadId: 'remote-only-thread' },
+          followerPubSub,
+        );
+        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId, memory: { resource: 'remote-only-resource', thread: 'remote-only-thread' } } as any,
+          ownerPubSub,
+        );
+
+        await expect(withTimeout(followerRun, 'Timed out waiting for remote-only subscriber')).resolves.toMatchObject({
+          value: { runId, text: 'remote only response' },
+          done: false,
+        });
+        finishRun();
         followerSubscription.unsubscribe();
       } finally {
         await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
