@@ -42,6 +42,7 @@ describe('Workspace generic type inference', () => {
     expectTypeOf(workspace.resolveSandbox).toEqualTypeOf<
       (options: { requestContext: RequestContext }) => Promise<WorkspaceSandbox | undefined>
     >();
+    expectTypeOf(workspace.clearSandboxCache).toEqualTypeOf<(cacheKey?: string) => void>();
   });
 
   it('should infer both filesystem and sandbox types', () => {

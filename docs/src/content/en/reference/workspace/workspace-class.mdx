@@ -565,6 +565,32 @@ const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
 
 **Returns:** `Promise<WorkspaceSandbox | undefined>`
 
+#### `clearSandboxCache(cacheKey?)`
+
+Clear resolver-backed sandboxes cached by `sandboxCacheKey`. Pass a cache key to clear one entry, or omit it to clear all keyed sandbox entries.
+
+The workspace does not own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
+
+```typescript
+workspace.clearSandboxCache('thread-123')
+workspace.clearSandboxCache()
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cacheKey',
+    type: 'string',
+    description: 'The cache key to clear. Omit this value to clear all keyed sandbox entries.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `void`
+
 ## Agent tools
 
 A workspace provides tools to agents based on what's configured.

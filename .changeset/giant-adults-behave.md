@@ -41,3 +41,5 @@ const workspace = new Workspace({
   sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
 });
 ```
+
+Use `workspace.clearSandboxCache(cacheKey)` when a cached sandbox is no longer needed. This drops the workspace cache entry without destroying the resolver-owned sandbox.

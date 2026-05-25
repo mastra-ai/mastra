@@ -848,6 +848,21 @@ export class Workspace<
   }
 
   /**
+   * Clear cached resolver-backed sandboxes stored by `sandboxCacheKey`.
+   *
+   * The workspace does not own resolver-returned sandboxes, so this only drops
+   * references from the workspace cache. Callers remain responsible for
+   * destroying any sandbox instances they created.
+   */
+  clearSandboxCache(cacheKey?: string): void {
+    if (cacheKey === undefined) {
+      this._sandboxKeyCache.clear();
+      return;
+    }
+    this._sandboxKeyCache.delete(cacheKey);
+  }
+
+  /**
    * Access skills stored in this workspace.
    * Skills are SKILL.md files discovered from the configured skillPaths.
    *
@@ -1234,6 +1249,8 @@ export class Workspace<
       if (this._fs) {
         await callLifecycle(this._fs, 'destroy');
       }
+
+      this.clearSandboxCache();
 
       this._status = 'destroyed';
     } catch (error) {

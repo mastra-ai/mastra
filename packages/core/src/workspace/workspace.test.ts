@@ -2578,6 +2578,63 @@ Line 3 conclusion`;
       expect(first).toBe(second);
       expect(other).not.toBe(first);
     });
+
+    it('should clear cached sandboxes by sandboxCacheKey', async () => {
+      let resolverCalls = 0;
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          return new LocalSandbox({ workingDirectory: tempDir });
+        },
+        sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string | undefined,
+      });
+
+      const t1 = new RequestContext([['thread-id', 't1']]);
+      const t2 = new RequestContext([['thread-id', 't2']]);
+
+      const first = await workspace.resolveSandbox({ requestContext: t1 });
+      const other = await workspace.resolveSandbox({ requestContext: t2 });
+
+      workspace.clearSandboxCache('t1');
+
+      const afterClear = await workspace.resolveSandbox({ requestContext: new RequestContext([['thread-id', 't1']]) });
+      const otherStillCached = await workspace.resolveSandbox({
+        requestContext: new RequestContext([['thread-id', 't2']]),
+      });
+
+      expect(resolverCalls).toBe(3);
+      expect(afterClear).not.toBe(first);
+      expect(otherStillCached).toBe(other);
+    });
+
+    it('should clear all cached sandboxes on destroy without destroying resolver-owned sandboxes', async () => {
+      let resolverCalls = 0;
+      const destroy = vi.fn();
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          return {
+            id: `sandbox-${resolverCalls}`,
+            name: `Sandbox ${resolverCalls}`,
+            provider: 'test',
+            status: 'running',
+            destroy,
+          } as any;
+        },
+        sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string | undefined,
+      });
+
+      const requestContext = new RequestContext([['thread-id', 't1']]);
+      const first = await workspace.resolveSandbox({ requestContext });
+
+      await workspace.destroy();
+
+      const second = await workspace.resolveSandbox({ requestContext: new RequestContext([['thread-id', 't1']]) });
+
+      expect(resolverCalls).toBe(2);
+      expect(second).not.toBe(first);
+      expect(destroy).not.toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================

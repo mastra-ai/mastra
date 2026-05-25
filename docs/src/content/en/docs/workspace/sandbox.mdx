@@ -79,7 +79,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'multi-tenant-agent',
-  model: 'openai/gpt-5.4',
+  model: 'your-provider/your-model',
   workspace,
 })
 ```
@@ -139,6 +139,8 @@ const workspace = new Workspace({
 ```
 
 Without a `sandboxCacheKey`, the resolver must return the same sandbox itself for follow-up calls that share a tenant, user, or session.
+
+When a cached sandbox is no longer needed, destroy the sandbox in your own lifecycle code and call `workspace.clearSandboxCache(cacheKey)` to drop the workspace cache entry. Call `workspace.clearSandboxCache()` to clear all keyed sandbox entries.
 
 ### Workspace instructions
 
