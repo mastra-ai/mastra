@@ -23,7 +23,10 @@ async function main() {
 }
 
 function buildComment(sections: Array<string | undefined>) {
-  const body = sections.map(section => section?.trim()).filter((section): section is string => Boolean(section)).join('\n\n---\n\n');
+  const body = sections
+    .map(section => section?.trim())
+    .filter((section): section is string => Boolean(section))
+    .join('\n\n---\n\n');
 
   return `${COMMENT_MARKER}
 ${body}`;
@@ -63,7 +66,9 @@ async function upsertComment(body: string) {
 
 async function deleteLegacyComments() {
   const comments = await listComments();
-  const legacyComments = comments.filter(comment => LEGACY_COMMENT_MARKERS.some(marker => comment.body?.includes(marker)));
+  const legacyComments = comments.filter(comment =>
+    LEGACY_COMMENT_MARKERS.some(marker => comment.body?.includes(marker)),
+  );
 
   for (const comment of legacyComments) {
     await octokit.rest.issues.deleteComment({ owner: OWNER, repo: REPO, comment_id: comment.id });

@@ -44,7 +44,8 @@ async function main() {
 
   // Complexity score = file breadth + change size - author repo experience - test coverage bonus.
   const fileScore = Math.min(fileCount, FILE_SCORE_CAP) * FILE_SCORE_WEIGHT;
-  const lineScore = Math.min(Math.floor(linesChanged / LINE_SCORE_BUCKET_SIZE), LINE_SCORE_BUCKET_CAP) * LINE_SCORE_WEIGHT;
+  const lineScore =
+    Math.min(Math.floor(linesChanged / LINE_SCORE_BUCKET_SIZE), LINE_SCORE_BUCKET_CAP) * LINE_SCORE_WEIGHT;
   const experienceDiscount = Math.min(authorMergedPRCount, EXPERIENCE_DISCOUNT_CAP);
   const testBonus = hasTests ? TEST_COVERAGE_BONUS : 0;
   const score = fileScore + lineScore - experienceDiscount - testBonus;
@@ -54,7 +55,18 @@ async function main() {
   await replaceComplexityLabel(label.name);
   setOutput(
     'summary',
-    buildComment({ fileCount, linesChanged, hasTests, authorMergedPRCount, fileScore, lineScore, experienceDiscount, testBonus, score, label: label.name }),
+    buildComment({
+      fileCount,
+      linesChanged,
+      hasTests,
+      authorMergedPRCount,
+      fileScore,
+      lineScore,
+      experienceDiscount,
+      testBonus,
+      score,
+      label: label.name,
+    }),
   );
 
   console.log(`Applied ${label.name} to #${PR_NUMBER} with score ${score}`);
@@ -136,10 +148,7 @@ function labelForScore(score: number) {
 }
 
 function isTestFile(filename: string) {
-  return (
-    /(^|\/)(test|tests|__tests__)\//.test(filename) ||
-    /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(filename)
-  );
+  return /(^|\/)(test|tests|__tests__)\//.test(filename) || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(filename);
 }
 
 function buildComment(input: {

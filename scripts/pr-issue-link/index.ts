@@ -112,7 +112,9 @@ async function closeStale() {
     const labelAgeMs = now - labelAppliedAt.getTime();
     if (labelAgeMs < staleMs) {
       const labelAgeDays = Math.floor(labelAgeMs / (24 * 60 * 60 * 1000));
-      console.log(`Skipping #${pr.number}: ${NEEDS_ISSUE_LABEL} applied ${labelAgeDays} day(s) ago, threshold is ${STALE_DAYS}`);
+      console.log(
+        `Skipping #${pr.number}: ${NEEDS_ISSUE_LABEL} applied ${labelAgeDays} day(s) ago, threshold is ${STALE_DAYS}`,
+      );
       continue;
     }
 

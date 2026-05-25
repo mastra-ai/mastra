@@ -67,7 +67,6 @@ async function listPullFiles(): Promise<PullFile[]> {
   });
 }
 
-
 function getChangedTestFiles(files: PullFile[]) {
   return files
     .filter(file => file.status !== 'removed')
@@ -92,7 +91,6 @@ No changed test files were detected.
 Applied label: \`tests: no tests added\``;
 }
 
-
 function buildCompletedTestsSummary(passed: boolean) {
   return `## Changed test gate
 
@@ -100,7 +98,6 @@ Changed test files ${passed ? 'passed' : 'failed'}.
 
 Applied label: \`${passed ? 'tests: green ✅' : 'tests: failing ❌'}\``;
 }
-
 
 async function ensureTestLabels() {
   await Promise.all(TEST_LABELS.map(label => ensureLabel(label.name, label.color, label.description)));
@@ -127,7 +124,9 @@ async function replaceTestLabel(nextLabel: string) {
     .map(label => (typeof label === 'string' ? label : label.name))
     .filter((name): name is string => Boolean(name));
 
-  await Promise.all(labels.filter(label => label.startsWith('tests:') && label !== nextLabel).map(removeLabelIfPresent));
+  await Promise.all(
+    labels.filter(label => label.startsWith('tests:') && label !== nextLabel).map(removeLabelIfPresent),
+  );
 
   if (!labels.includes(nextLabel)) {
     await octokit.rest.issues.addLabels({ owner: OWNER, repo: REPO, issue_number: PR_NUMBER, labels: [nextLabel] });
@@ -159,7 +158,6 @@ function setOutput(name: string, value: string) {
 
   appendFileSync(outputPath, `${name}=${value}\n`);
 }
-
 
 function requireEnv(name: string) {
   const value = process.env[name];
