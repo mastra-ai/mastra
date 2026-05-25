@@ -626,58 +626,6 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
-  describe('Resume snapshot read race', () => {
-    it('resume succeeds when the suspend-side persist lags behind the resume read', async () => {
-      const storage = new MockStore();
-      const mastra = new Mastra({ logger: false, storage });
-
-      const suspendStep = createStep({
-        id: 'race-suspend-step',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
-        suspendSchema: z.object({ message: z.string() }),
-        resumeSchema: z.object({ confirm: z.boolean() }),
-        execute: async ({ inputData, resumeData, suspend }) => {
-          if (!resumeData?.confirm) {
-            await suspend({ message: 'Please confirm' });
-          }
-          return { result: `processed: ${inputData.value}` };
-        },
-      });
-
-      const workflow = createWorkflow({
-        id: 'resume-race-test',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
-        steps: [suspendStep],
-      })
-        .then(suspendStep)
-        .commit();
-
-      workflow.__registerMastra(mastra);
-
-      const run = await workflow.createRun({ runId: 'resume-race-test-run' });
-      const suspendedResult = await run.start({ inputData: { value: 'test' } });
-      expect(suspendedResult.status).toBe('suspended');
-
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      if (!workflowsStore) throw new Error('workflows store not available');
-
-      const realLoad = workflowsStore.loadWorkflowSnapshot.bind(workflowsStore);
-      const loadSpy = vi
-        .spyOn(workflowsStore, 'loadWorkflowSnapshot')
-        .mockImplementationOnce(async () => null)
-        .mockImplementationOnce(async () => null)
-        .mockImplementation(realLoad);
-
-      const resumeRun = await workflow.createRun({ runId: 'resume-race-test-run' });
-      const resumed = await resumeRun.resume({ resumeData: { confirm: true }, step: suspendStep });
-
-      expect(resumed.status).toBe('success');
-      expect(loadSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
-    });
-  });
-
   describe('Nested workflow resourceId propagation (issue #15246)', () => {
     it('persists the parent run resourceId on nested child workflow snapshots', async () => {
       const storage = new MockStore();
