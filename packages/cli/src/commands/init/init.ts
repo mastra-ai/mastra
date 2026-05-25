@@ -42,7 +42,6 @@ export const init = async ({
   observabilityToken,
   storage = 'libsql',
   vectorStore,
-  memoryStore = 'same',
   observabilityStorage = 'duckdb',
 }: {
   directory?: string;
@@ -59,7 +58,6 @@ export const init = async ({
   observabilityToken?: string;
   storage?: string;
   vectorStore?: string;
-  memoryStore?: string;
   observabilityStorage?: string;
   /**
    * `'create'` skips the picker and always provisions a new platform project
@@ -90,12 +88,11 @@ export const init = async ({
         addScorers: components.includes('scorers'),
         storage,
         vectorStore,
-        memoryStore,
         observabilityStorage,
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
-      writeStorageEnv({ storage, vectorStore, memoryStore, observabilityStorage }),
+      writeStorageEnv({ storage, vectorStore, observabilityStorage }),
     ]);
 
     if (addExample) {

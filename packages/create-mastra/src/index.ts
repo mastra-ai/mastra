@@ -50,7 +50,6 @@ program
   .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
   .option('-m, --mcp <mcp>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)')
   .option('--storage <store>', 'Database storage (libsql, pg, mongodb, etc.)')
-  .option('--memory <store>', 'Memory store (same, libsql, pg, mongodb, etc.)')
   .option('--vector <store>', 'Vector store (pinecone, qdrant, mongodb, etc.)')
   .option('--observability-storage <store>', 'Observability storage (duckdb, clickhouse, pg, mongodb, etc.)')
   .option(
@@ -91,7 +90,6 @@ program
             observability: args.observe,
             storage: args.storage,
             vectorStore: args.vector,
-            memoryStore: args.memory,
             observabilityStorage: args.observabilityStorage,
           });
           return;
@@ -112,7 +110,6 @@ program
           observability: args.observe,
           storage: args.storage,
           vectorStore: args.vector,
-          memoryStore: args.memory,
           observabilityStorage: args.observabilityStorage,
         });
       },

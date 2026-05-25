@@ -35,7 +35,6 @@ export const create = async (args: {
   observabilityProject?: string;
   storage?: string;
   vectorStore?: string;
-  memoryStore?: string;
   observabilityStorage?: string;
 }) => {
   if (args.template !== undefined) {
@@ -68,7 +67,6 @@ export const create = async (args: {
     observability: args?.observability,
     storage: args?.storage,
     vectorStore: args?.vectorStore,
-    memoryStore: args?.memoryStore,
     observabilityStorage: args?.observabilityStorage,
     needsInteractive,
     onObservabilitySelected: event => getAnalytics()?.trackEvent('cli_observability_selected', event),
@@ -107,7 +105,6 @@ export const create = async (args: {
       observabilityToken: result?.observabilityToken,
       storage: result?.storage || args.storage || 'libsql',
       vectorStore: result?.vectorStore || args.vectorStore,
-      memoryStore: result?.memoryStore || args.memoryStore || 'same',
       observabilityStorage: result?.observabilityStorage || args.observabilityStorage || 'duckdb',
     });
     postCreate({ projectName });

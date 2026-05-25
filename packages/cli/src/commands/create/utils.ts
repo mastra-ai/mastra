@@ -165,7 +165,6 @@ export const createMastraProject = async ({
   observability,
   storage,
   vectorStore,
-  memoryStore,
   observabilityStorage,
   needsInteractive,
   onObservabilitySelected,
@@ -180,7 +179,6 @@ export const createMastraProject = async ({
   observability?: boolean;
   storage?: string;
   vectorStore?: string;
-  memoryStore?: string;
   observabilityStorage?: string;
   needsInteractive?: boolean;
   onObservabilitySelected?: (event: {
@@ -225,7 +223,6 @@ export const createMastraProject = async ({
         observability: observability !== undefined,
         storage: storage !== undefined,
         vectorStore: vectorStore !== undefined,
-        memoryStore: memoryStore !== undefined,
         observabilityStorage: observabilityStorage !== undefined,
         directory: true,
         gitInit: skipGitInit,

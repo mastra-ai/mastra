@@ -518,7 +518,6 @@ export const writeIndexFile = async ({
   addScorers,
   storage = 'libsql',
   vectorStore,
-  memoryStore = 'same',
   observabilityStorage = 'duckdb',
 }: {
   dirPath: string;
@@ -528,7 +527,6 @@ export const writeIndexFile = async ({
   addScorers: boolean;
   storage?: string;
   vectorStore?: string;
-  memoryStore?: string;
   observabilityStorage?: string;
 }) => {
   const indexPath = dirPath + '/index.ts';
@@ -553,13 +551,8 @@ export const mastra = new Mastra()
       return;
     }
 
-    const storageImports = generateStorageImports({
-      storage,
-      vectorStore,
-      _memoryStore: memoryStore,
-      observabilityStorage,
-    });
-    const storageCode = generateStorageCode({ storage, vectorStore, _memoryStore: memoryStore, observabilityStorage });
+    const storageImports = generateStorageImports({ storage, vectorStore, observabilityStorage });
+    const storageCode = generateStorageCode({ storage, vectorStore, observabilityStorage });
 
     await fs.writeFile(
       destPath,
@@ -731,12 +724,10 @@ export const writeObservabilityEnv = async ({
 export const writeStorageEnv = async ({
   storage,
   vectorStore,
-  memoryStore,
   observabilityStorage = 'duckdb',
 }: {
   storage: string;
   vectorStore?: string;
-  memoryStore?: string;
   observabilityStorage?: string;
 }) => {
   const envFileName = '.env.example';
@@ -754,15 +745,6 @@ export const writeStorageEnv = async ({
     if (vectorOption?.envVar) {
       lines.push(`# ${vectorOption.label} Configuration (Vector)`);
       lines.push(`${vectorOption.envVar}=${vectorOption.defaultUrl || 'your-api-key-or-url'}`);
-      lines.push('');
-    }
-  }
-
-  if (memoryStore && memoryStore !== 'same' && memoryStore !== 'none' && memoryStore !== storage) {
-    const memoryOption = getStoreOption(memoryStore);
-    if (memoryOption?.envVar) {
-      lines.push(`# ${memoryOption.label} Configuration (Memory)`);
-      lines.push(`${memoryOption.envVar}_MEMORY=${memoryOption.defaultUrl || 'your-connection-string'}`);
       lines.push('');
     }
   }
@@ -788,12 +770,10 @@ export const writeStorageEnv = async ({
 export function generateStorageCode({
   storage,
   vectorStore,
-  _memoryStore,
   observabilityStorage = 'duckdb',
 }: {
   storage: string;
   vectorStore?: string;
-  _memoryStore?: string;
   observabilityStorage?: string;
 }): string {
   const storageOption = getStoreOption(storage);
@@ -935,12 +915,10 @@ function getUrlConfigKey(storeValue: string): string {
 export function generateStorageImports({
   storage,
   vectorStore,
-  _memoryStore,
   observabilityStorage = 'duckdb',
 }: {
   storage: string;
   vectorStore?: string;
-  _memoryStore?: string;
   observabilityStorage?: string;
 }): string[] {
   const imports: string[] = [];
@@ -1030,7 +1008,6 @@ interface InteractivePromptArgs {
     observability?: boolean;
     storage?: boolean;
     vectorStore?: boolean;
-    memoryStore?: boolean;
     observabilityStorage?: boolean;
   };
 }
@@ -1114,23 +1091,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             })),
           ],
           initialValue: 'none',
-        });
-      },
-      memoryStore: () => {
-        if (skip?.memoryStore) return undefined;
-
-        return p.select({
-          message: 'Which memory store do you want to use?',
-          options: [
-            { value: 'same', label: 'Same as storage', hint: 'recommended' },
-            { value: 'none', label: 'None', hint: 'No memory persistence' },
-            ...ALL_STORAGE_OPTIONS.map(opt => ({
-              value: opt.value,
-              label: opt.label,
-              hint: opt.hint,
-            })),
-          ],
-          initialValue: 'same',
         });
       },
       observabilityStorage: () => {
@@ -1353,7 +1313,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
     storage: rest.storage as string | undefined,
     vectorStore: rest.vectorStore as string | undefined,
-    memoryStore: rest.memoryStore as string | undefined,
     observabilityStorage: rest.observabilityStorage as string | undefined,
   };
 };
