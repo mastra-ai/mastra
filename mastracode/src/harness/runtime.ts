@@ -169,6 +169,73 @@ function isHarnessSessionLifecycleError(error: unknown): boolean {
   return error instanceof Error && HARNESS_SESSION_LIFECYCLE_ERROR_NAMES.has(error.name);
 }
 
+function isValidCavemanObservations(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+function isValidObserveAttachments(value: unknown): value is 'auto' | boolean {
+  return value === 'auto' || typeof value === 'boolean';
+}
+
+function isValidOMThreshold(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isValidModelId(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sanitizeMastraCodeOMStatePatch<T extends Record<string, unknown>>(patch: T): T {
+  const sanitized = { ...patch };
+  for (const key of ['observerModelId', 'reflectorModelId', 'subagentModelId']) {
+    if (
+      Object.prototype.hasOwnProperty.call(sanitized, key) &&
+      sanitized[key] !== undefined &&
+      !isValidModelId(sanitized[key])
+    ) {
+      delete sanitized[key];
+    }
+  }
+  for (const key of Object.keys(sanitized)) {
+    if (key.startsWith('subagentModelId_') && sanitized[key] !== undefined && !isValidModelId(sanitized[key])) {
+      delete sanitized[key];
+    }
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(sanitized, 'observationThreshold') &&
+    sanitized.observationThreshold !== undefined &&
+    !isValidOMThreshold(sanitized.observationThreshold)
+  ) {
+    delete sanitized.observationThreshold;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(sanitized, 'reflectionThreshold') &&
+    sanitized.reflectionThreshold !== undefined &&
+    !isValidOMThreshold(sanitized.reflectionThreshold)
+  ) {
+    delete sanitized.reflectionThreshold;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(sanitized, 'cavemanObservations') &&
+    sanitized.cavemanObservations !== undefined &&
+    !isValidCavemanObservations(sanitized.cavemanObservations)
+  ) {
+    delete sanitized.cavemanObservations;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(sanitized, 'observeAttachments') &&
+    sanitized.observeAttachments !== undefined &&
+    !isValidObserveAttachments(sanitized.observeAttachments)
+  ) {
+    delete sanitized.observeAttachments;
+  }
+  return sanitized as T;
+}
+
 function toLegacyThread(thread: ThreadRecord): HarnessThread {
   return {
     id: thread.id,
@@ -287,7 +354,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.modes = config.modes;
     this.defaultModeId = resolveDefaultModeId(config.modes);
     this.currentModeId = this.defaultModeId;
-    this.state = { ...config.initialState };
+    this.state = sanitizeMastraCodeOMStatePatch({ ...config.initialState });
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes, this.state);
     const exposedSubagents = this.shouldExposeSubagentTool() ? config.subagents : [];
@@ -419,7 +486,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.activeToolCalls.delete(endedToolCallId);
     if (!tool || isError || !isHarnessWorkspaceFileMutationTool(tool.name)) return;
 
-    const filePath = getHarnessWorkspaceActionPathInput(tool.name, tool.args as Record<string, unknown>);
+    const filePath = getHarnessWorkspaceActionPathInput(tool.name, isRecord(tool.args) ? tool.args : {});
     if (!filePath) return;
 
     const existing = this.modifiedFiles.get(filePath);
@@ -781,16 +848,17 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   private applyLocalState(updates: Partial<TState>, options: { emitLegacy?: boolean } = {}): void {
-    this.state = { ...this.state, ...updates };
-    if (Object.prototype.hasOwnProperty.call(updates, 'tasks')) {
+    const sanitizedUpdates = sanitizeMastraCodeOMStatePatch(updates as Record<string, unknown>) as Partial<TState>;
+    this.state = { ...this.state, ...sanitizedUpdates };
+    if (Object.prototype.hasOwnProperty.call(sanitizedUpdates, 'tasks')) {
       this.previousDisplayTasks = [...this.currentDisplayTasks];
-      this.currentDisplayTasks = cloneTasks((updates as Record<string, unknown>).tasks);
+      this.currentDisplayTasks = cloneTasks((sanitizedUpdates as Record<string, unknown>).tasks);
     }
     if (options.emitLegacy ?? true) {
       this.emit({
         type: 'state_changed',
         state: this.state,
-        changedKeys: Object.keys(updates),
+        changedKeys: Object.keys(sanitizedUpdates),
       } as unknown as HarnessEvent);
     }
   }
@@ -1681,18 +1749,23 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     if (typeof projectPath === 'string' && projectPath.length > 0) {
       metadata.projectPath = projectPath;
     }
-    for (const key of [
-      'observerModelId',
-      'reflectorModelId',
-      'observationThreshold',
-      'reflectionThreshold',
-      'subagentModelId',
-      'cavemanObservations',
-    ]) {
-      if (this.state[key] !== undefined) metadata[key] = this.state[key];
+    for (const key of ['observerModelId', 'reflectorModelId', 'subagentModelId']) {
+      if (isValidModelId(this.state[key])) metadata[key] = this.state[key];
+    }
+    if (isValidOMThreshold(this.state.observationThreshold)) {
+      metadata.observationThreshold = this.state.observationThreshold;
+    }
+    if (isValidOMThreshold(this.state.reflectionThreshold)) {
+      metadata.reflectionThreshold = this.state.reflectionThreshold;
+    }
+    if (isValidCavemanObservations(this.state.cavemanObservations)) {
+      metadata.cavemanObservations = this.state.cavemanObservations;
+    }
+    if (isValidObserveAttachments(this.state.observeAttachments)) {
+      metadata.observeAttachments = this.state.observeAttachments;
     }
     for (const [key, value] of Object.entries(this.state)) {
-      if (key.startsWith('subagentModelId_') && value !== undefined) {
+      if (key.startsWith('subagentModelId_') && isValidModelId(value)) {
         metadata[key] = value;
       }
     }
@@ -1743,14 +1816,20 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       if (fallback) updates.currentModelId = fallback;
     }
 
-    for (const key of [
-      'observerModelId',
-      'reflectorModelId',
-      'observationThreshold',
-      'reflectionThreshold',
-      'subagentModelId',
-    ]) {
-      if (metadata[key] !== undefined) updates[key] = metadata[key];
+    for (const key of ['observerModelId', 'reflectorModelId', 'subagentModelId']) {
+      if (isValidModelId(metadata[key])) updates[key] = metadata[key];
+    }
+    if (isValidOMThreshold(metadata.observationThreshold)) {
+      updates.observationThreshold = metadata.observationThreshold;
+    }
+    if (isValidOMThreshold(metadata.reflectionThreshold)) {
+      updates.reflectionThreshold = metadata.reflectionThreshold;
+    }
+    if (isValidCavemanObservations(metadata.cavemanObservations)) {
+      updates.cavemanObservations = metadata.cavemanObservations;
+    }
+    if (isValidObserveAttachments(metadata.observeAttachments)) {
+      updates.observeAttachments = metadata.observeAttachments;
     }
     for (const [key, value] of Object.entries(metadata)) {
       if (key.startsWith('subagentModelId_') && typeof value === 'string') {

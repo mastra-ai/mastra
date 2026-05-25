@@ -2,7 +2,12 @@ import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MASTRACODE_HARNESS_NAME, toHarnessV1Agents, toHarnessV1Modes } from './config.js';
+import {
+  MASTRACODE_HARNESS_NAME,
+  MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
+  toHarnessV1Agents,
+  toHarnessV1Modes,
+} from './config.js';
 import { MastraCodeHarnessRuntime } from './runtime.js';
 
 function createRuntime(
@@ -80,10 +85,33 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.switchObserverModel({ modelId: 'google/gemini-2.5-flash' });
     await runtime.switchReflectorModel({ modelId: 'anthropic/claude-haiku-4-5' });
     await runtime.setSubagentModelId({ modelId: 'openai/gpt-5.4-mini' });
+    await runtime.setState({
+      observationThreshold: 12_345,
+      reflectionThreshold: 54_321,
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
+    // Mirror the `/om` flow: update live state and persist the same per-thread settings.
+    await runtime.setThreadSetting({ key: 'observationThreshold', value: 12_345 });
+    await runtime.setThreadSetting({ key: 'reflectionThreshold', value: 54_321 });
+    await runtime.setThreadSetting({ key: 'cavemanObservations', value: true });
+    await runtime.setThreadSetting({ key: 'observeAttachments', value: false });
 
-    await runtime.createThread({ title: 'second' });
+    const second = await runtime.createThread({ title: 'second' });
+    expect(second.metadata).toMatchObject({
+      observationThreshold: 12_345,
+      reflectionThreshold: 54_321,
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
     await runtime.switchMode({ modeId: 'build' });
     await runtime.switchModel({ modelId: 'anthropic/claude-opus-4-6' });
+    await runtime.setState({
+      observationThreshold: 30_000,
+      reflectionThreshold: 40_000,
+      cavemanObservations: false,
+      observeAttachments: 'auto',
+    });
 
     await runtime.switchThread({ threadId: first.id });
 
@@ -92,8 +120,142 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(runtime.getObserverModelId()).toBe('google/gemini-2.5-flash');
     expect(runtime.getReflectorModelId()).toBe('anthropic/claude-haiku-4-5');
     expect(runtime.getSubagentModelId()).toBe('openai/gpt-5.4-mini');
+    expect(runtime.getObservationThreshold()).toBe(12_345);
+    expect(runtime.getReflectionThreshold()).toBe(54_321);
+    expect(runtime.getState()).toMatchObject({
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
 
     await runtime.destroy();
+  });
+
+  it('ignores invalid Harness v1 thread metadata for MastraCode-owned OM settings', async () => {
+    const runtime = createRuntime();
+    await runtime.init();
+    const firstThreadId = runtime.getCurrentThreadId();
+    if (!firstThreadId) throw new Error('expected initial thread');
+    await runtime.core.threads.setSettings({
+      resourceId: runtime.getResourceId(),
+      threadId: firstThreadId,
+      patch: {
+        observerModelId: 42,
+        reflectorModelId: false,
+        subagentModelId: null,
+        subagentModelId_reviewer: {},
+        observationThreshold: 0,
+        reflectionThreshold: -1,
+        cavemanObservations: 'false',
+        observeAttachments: null,
+      },
+    });
+
+    await runtime.createThread({ title: 'second' });
+    await runtime.setState({
+      observerModelId: 'google/gemini-2.5-flash',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      subagentModelId: 'openai/gpt-5.4-mini',
+      subagentModelId_reviewer: 'openai/gpt-5.4',
+      observationThreshold: 12_345,
+      reflectionThreshold: 54_321,
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
+
+    await runtime.switchThread({ threadId: firstThreadId });
+
+    expect(runtime.getState()).toMatchObject({
+      observerModelId: 'google/gemini-2.5-flash',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      subagentModelId: 'openai/gpt-5.4-mini',
+      subagentModelId_reviewer: 'openai/gpt-5.4',
+      observationThreshold: 12_345,
+      reflectionThreshold: 54_321,
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
+
+    await runtime.destroy();
+  });
+
+  it('does not seed invalid MastraCode-owned OM settings into new Harness v1 thread metadata', async () => {
+    const runtime = createRuntime({
+      initialState: {
+        observerModelId: 42,
+        reflectorModelId: false,
+        subagentModelId: null,
+        subagentModelId_reviewer: {},
+        observationThreshold: 0,
+        reflectionThreshold: -1,
+        cavemanObservations: 'true',
+        observeAttachments: 42,
+      },
+    });
+
+    const thread = await runtime.createThread({ title: 'invalid metadata seed' });
+
+    expect(thread.metadata).not.toHaveProperty('cavemanObservations');
+    expect(thread.metadata).not.toHaveProperty('observeAttachments');
+    expect(thread.metadata).not.toHaveProperty('observerModelId');
+    expect(thread.metadata).not.toHaveProperty('reflectorModelId');
+    expect(thread.metadata).not.toHaveProperty('subagentModelId');
+    expect(thread.metadata).not.toHaveProperty('subagentModelId_reviewer');
+    expect(thread.metadata).not.toHaveProperty('observationThreshold');
+    expect(thread.metadata).not.toHaveProperty('reflectionThreshold');
+    expect(runtime.getState()).not.toHaveProperty('cavemanObservations');
+    expect(runtime.getState()).not.toHaveProperty('observeAttachments');
+    expect(runtime.getState()).not.toHaveProperty('observerModelId');
+    expect(runtime.getState()).not.toHaveProperty('reflectorModelId');
+    expect(runtime.getState()).not.toHaveProperty('subagentModelId');
+    expect(runtime.getState()).not.toHaveProperty('subagentModelId_reviewer');
+    expect(runtime.getState()).not.toHaveProperty('observationThreshold');
+    expect(runtime.getState()).not.toHaveProperty('reflectionThreshold');
+
+    await runtime.setState({
+      observerModelId: 'google/gemini-2.5-flash',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      subagentModelId: 'openai/gpt-5.4-mini',
+      subagentModelId_reviewer: 'openai/gpt-5.4',
+      observationThreshold: 12_345,
+      reflectionThreshold: 54_321,
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
+    await runtime.setState({
+      observerModelId: 42,
+      reflectorModelId: false,
+      subagentModelId: null,
+      subagentModelId_reviewer: {},
+      observationThreshold: 0,
+      reflectionThreshold: -1,
+      cavemanObservations: 'true',
+      observeAttachments: 42,
+    } as any);
+
+    expect(runtime.getState()).toMatchObject({
+      observerModelId: 'google/gemini-2.5-flash',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      subagentModelId: 'openai/gpt-5.4-mini',
+      subagentModelId_reviewer: 'openai/gpt-5.4',
+      observationThreshold: 12_345,
+      reflectionThreshold: 54_321,
+      cavemanObservations: true,
+      observeAttachments: false,
+    });
+
+    await runtime.destroy();
+  });
+
+  it('pins MastraCode recoverable runtime work to the compatibility generation', () => {
+    const runtime = createRuntime();
+    const modelId = runtime.getCurrentModelId();
+
+    expect((runtime.core as any)._runtimeDependenciesForMode('build', modelId)).toMatchObject({
+      modeId: 'build',
+      agentId: 'code-agent',
+      modelId,
+      runtimeCompatibilityGeneration: MASTRACODE_RUNTIME_COMPATIBILITY_GENERATION,
+    });
   });
 
   it('does not write target thread metadata into the previously active session while switching threads', async () => {
@@ -440,6 +602,50 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(prepareStep({ tools: { allowed_tool: {}, blocked_tool: {} } })).toEqual({ activeTools: ['allowed_tool'] });
 
     await runtime.destroy();
+  });
+
+  it('delegates the action catalog through the active Harness v1 session', async () => {
+    const runtime = createRuntime();
+    const actions = {
+      list: vi.fn(async () => [{ id: 'action-1' }]),
+      search: vi.fn(async () => [{ id: 'action-2' }]),
+      refresh: vi.fn(async () => undefined),
+    };
+    (runtime as any).session = { actions };
+
+    await expect(runtime.actions.list({ source: 'skill' })).resolves.toEqual([{ id: 'action-1' }]);
+    await expect(runtime.actions.search('inspect', { source: 'mcp-tool' })).resolves.toEqual([{ id: 'action-2' }]);
+    await expect(runtime.actions.refresh()).resolves.toBeUndefined();
+
+    expect(actions.list).toHaveBeenCalledWith({ source: 'skill' });
+    expect(actions.search).toHaveBeenCalledWith('inspect', { source: 'mcp-tool' });
+    expect(actions.refresh).toHaveBeenCalled();
+  });
+
+  it('queues active follow-ups through Harness v1 with runtime controls', async () => {
+    const runtime = createRuntime({ initialState: { yolo: true }, disabledTools: ['blocked_tool'] });
+    const queue = vi.fn(async () => ({ status: 'completed' }));
+    (runtime as any).session = {
+      isRunning: () => true,
+      queue,
+    };
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+
+    await runtime.followUp({ content: 'next turn' });
+
+    expect(listener).toHaveBeenCalledWith({ type: 'follow_up_queued', count: 1 });
+    expect(queue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'next turn',
+        yolo: true,
+        prepareStep: expect.any(Function),
+      }),
+    );
+    const [{ prepareStep }] = queue.mock.calls[0] as any;
+    expect(prepareStep({ tools: { allowed_tool: {}, blocked_tool: {} } })).toEqual({ activeTools: ['allowed_tool'] });
+
+    await vi.waitFor(() => expect(runtime.getFollowUpCount()).toBe(0));
   });
 
   it('persists system reminder messages and first user previews through memory storage', async () => {
@@ -854,6 +1060,18 @@ describe('MastraCodeHarnessRuntime', () => {
       type: 'tool_end',
       toolCallId: 'tool-2',
       result: 'ok',
+      isError: false,
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'subagent_tool_start',
+      innerToolCallId: 'sub-tool-1',
+      toolName: 'write_file',
+    });
+    await (runtime as any).handleCoreEvent({
+      type: 'subagent_tool_end',
+      innerToolCallId: 'sub-tool-1',
+      toolName: 'write_file',
+      output: 'ok',
       isError: false,
     });
 
