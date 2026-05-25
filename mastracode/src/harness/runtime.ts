@@ -81,6 +81,13 @@ type AgentWithBrowser = {
   hasOwnBrowser?: () => boolean;
 };
 
+type AgentWithWorkspace = {
+  __setWorkspace?: (workspace: NonNullable<MastraCodeRuntimeConfig<Record<string, unknown>>['workspace']>) => void;
+  hasOwnWorkspace?: () => boolean;
+};
+
+type RuntimeWorkspaceFactory = NonNullable<MastraCodeRuntimeConfig<Record<string, unknown>>['workspace']>;
+
 type SignalInput =
   | {
       content: string | HarnessMessageContentPart[];
@@ -290,6 +297,13 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.state = { ...config.initialState };
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
+    const workspaceFactory: RuntimeWorkspaceFactory | undefined = config.workspace
+      ? ({ requestContext, mastra }) =>
+          config.workspace!({
+            requestContext: this.withRuntimeHarnessContext(requestContext),
+            mastra: mastra ?? this.mastra,
+          })
+      : undefined;
     const exposedSubagents = this.shouldExposeSubagentTool() ? config.subagents : [];
     const harnessV1Subagents =
       exposedSubagents.length > 0 ? { types: toHarnessV1Subagents(exposedSubagents) } : undefined;
@@ -302,14 +316,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       toolCategoryResolver: config.toolCategoryResolver,
       models: [],
       modelAuthStatusResolver: modelId => this.resolveHarnessV1AuthStatus(modelId),
-      workspace: config.workspace
+      workspace: workspaceFactory
         ? {
             kind: 'shared' as const,
-            workspace: ({ requestContext }) =>
-              config.workspace!({
-                requestContext: this.withRuntimeHarnessContext(requestContext),
-                mastra: this.mastra,
-              }),
+            workspace: ({ requestContext }) => workspaceFactory({ requestContext, mastra: this.mastra }),
           }
         : undefined,
     });
@@ -322,6 +332,10 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       workers: false,
       harnesses: { [MASTRACODE_HARNESS_NAME]: this.core },
     });
+
+    if (workspaceFactory) {
+      this.setWorkspaceOnAgents(harnessV1Agents, workspaceFactory);
+    }
 
     if (config.browser && typeof config.browser !== 'function') {
       this.setBrowser(config.browser);
@@ -1484,6 +1498,17 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   getResolvedReflectorModel(): unknown {
     const modelId = this.getReflectorModelId();
     return modelId && this.config.resolveModel ? this.config.resolveModel(modelId) : undefined;
+  }
+
+  private setWorkspaceOnAgents(agents: Record<string, unknown>, workspaceFactory: RuntimeWorkspaceFactory): void {
+    const seen = new Set<unknown>();
+    for (const agent of Object.values(agents)) {
+      if (seen.has(agent)) continue;
+      seen.add(agent);
+      const workspaceAgent = agent as AgentWithWorkspace;
+      if (workspaceAgent.hasOwnWorkspace?.()) continue;
+      workspaceAgent.__setWorkspace?.(workspaceFactory);
+    }
   }
 
   private withRuntimeHarnessContext(requestContext: RequestContext): RequestContext {

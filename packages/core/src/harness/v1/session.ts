@@ -5473,12 +5473,11 @@ export class Session {
 
     const kind = this._classifyResumeKind(payload);
     const existing = this._record.pendingResume;
-    if (
-      existing &&
-      existing.kind === kind &&
-      existing.runId === full.runId &&
-      existing.toolCallId === payload.toolCallId
-    ) {
+    if (existing && existing.runId === full.runId && existing.toolCallId === payload.toolCallId) {
+      // Tools can register richer pending resume records before calling
+      // suspend() (question, plan approval, sandbox access). The later
+      // generic suspended payload is only the transport signal; do not
+      // downgrade the explicit pending kind or emit a duplicate prompt.
       return;
     }
     const pending: PendingResume = {
@@ -7188,7 +7187,22 @@ export class Session {
     let full: FullOutput<unknown>;
     try {
       assertResumedTurnNotDeleted();
+      const mode = this._harness._getMode(resumeModeId);
+      const toolsets = this._buildToolsets(mode, undefined);
+      const requestContext = await Promise.race([
+        this._buildRequestContext({
+          modeId: resumeModeId,
+          modelId: resumeRuntimeDependencies.modelId ?? this._record.modelId,
+          abortSignal: turnAbortController.signal,
+          yolo: ((this._record.state ?? {}) as { yolo?: unknown }).yolo === true,
+        }),
+        activeTurnWaiter.promise,
+      ]);
       const resumeStream = agent.resumeStream(resumeData, {
+        memory: { thread: this.threadId, resource: this.resourceId },
+        requestContext,
+        ...(toolsets ? { toolsets } : {}),
+        ...(this._shouldRequireToolApproval() ? { requireToolApproval: true } : {}),
         runId: pending.runId,
         toolCallId: pending.toolCallId,
         abortSignal: turnAbortController.signal,

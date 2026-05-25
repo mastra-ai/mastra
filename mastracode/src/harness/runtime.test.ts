@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -95,6 +96,49 @@ describe('MastraCodeHarnessRuntime', () => {
       await runtime.init();
       expect(observedProjectPath).toBe(projectPath);
       expect(runtime.getWorkspace()).toBeTruthy();
+    } finally {
+      await runtime.destroy();
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates the runtime workspace factory to Harness v1 agents', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'mastracode-agent-workspace-'));
+    const agent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    let observedProjectPath: string | undefined;
+    const runtime = createRuntime({
+      projectPath,
+      agents: { 'code-agent': agent },
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          color: 'green',
+          default: true,
+          defaultModelId: 'anthropic/claude-haiku-4-5',
+          agent,
+        },
+      ] as any,
+      workspace: ({ requestContext, mastra }) => {
+        const harnessContext = requestContext.get('harness') as
+          | { getState?: () => { projectPath?: string } }
+          | undefined;
+        observedProjectPath = harnessContext?.getState?.().projectPath;
+        return getDynamicWorkspace({ requestContext, mastra });
+      },
+    });
+
+    try {
+      await runtime.init();
+      observedProjectPath = undefined;
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeTruthy();
+      expect(observedProjectPath).toBe(projectPath);
     } finally {
       await runtime.destroy();
       rmSync(projectPath, { recursive: true, force: true });

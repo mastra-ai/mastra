@@ -44,7 +44,7 @@ interface RunSpec {
 
 interface ResumeCall {
   resumeData: unknown;
-  options: { runId?: string; toolCallId?: string; abortSignal?: AbortSignal };
+  options: any;
 }
 
 class FakeAgent extends Agent<any, any, any> {
@@ -373,6 +373,42 @@ describe('Session — suspend capture on message()', () => {
     expect(pending.payload).toEqual({ title: 'registered title', plan: 'registered plan' });
     expect(pending.transitionModeId).toBe('builder');
   });
+
+  it('keeps sandbox access registered by the tool before suspend capture', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await (session as any)._registerSandboxAccess({
+      requestId: 'sandbox-registered',
+      semanticType: 'file',
+      reason: 'needs repo access',
+      payload: { path: '/outside/project' },
+      runId: 'run-sandbox',
+      toolCallId: 'tc-sandbox',
+    });
+    await (session as any)._maybeCaptureSuspend({
+      runId: 'run-sandbox',
+      finishReason: 'suspended',
+      suspendPayload: {
+        toolCallId: 'tc-sandbox',
+        toolName: 'request_access',
+        args: { path: '/outside/project', reason: 'needs repo access' },
+        suspendPayload: {},
+      },
+    });
+
+    const pending = session.getRecord().pendingResume!;
+    expect(pending.kind).toBe('sandbox-access');
+    expect(pending.itemId).toBe('sandbox-registered');
+    expect(pending.toolCallId).toBe('tc-sandbox');
+    expect(pending.payload).toEqual({
+      sandboxAccess: {
+        semanticType: 'file',
+        reason: 'needs repo access',
+        payload: { path: '/outside/project' },
+      },
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -387,7 +423,12 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
       runId: 'run-A',
       suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
     });
-    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const session = await harness.session({
+      resourceId: 'u',
+      threadId: { fresh: true },
+      modelId: 'anthropic/test-model',
+    });
+    await session.setState({ currentModelId: 'anthropic/test-model' });
     const first = await session.message({ content: 'go' });
 
     agent.enqueueRun({ finishReason: 'stop', runId: first.runId, text: 'done' });
@@ -400,6 +441,12 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ approved: true });
     expect(agent.resumeCalls[0]!.options).toMatchObject({ runId: first.runId, toolCallId: 'tc-1' });
     expect(agent.resumeCalls[0]!.options.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(agent.resumeCalls[0]!.options.memory).toEqual({ thread: session.threadId, resource: 'u' });
+    const requestContext = agent.resumeCalls[0]!.options.requestContext;
+    const harnessContext = requestContext.get('harness') as any;
+    expect(harnessContext.modelId).toBe('anthropic/test-model');
+    expect(harnessContext.state.currentModelId).toBe('anthropic/test-model');
+    expect(harnessContext.threadId).toBe(session.threadId);
     expect(session.getRecord().pendingResume).toBeUndefined();
     expect(session.getDisplayState().pending).toBeNull();
   });

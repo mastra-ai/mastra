@@ -178,9 +178,10 @@ describe('request_access', () => {
     expect(result.content).toContain('Access granted');
   });
 
-  it('registers a Harness v1 durable question when no legacy event emitter is present', async () => {
+  it('registers a Harness v1 native sandbox access request when no legacy event emitter is present', async () => {
     const registerQuestion = vi.fn(async () => undefined);
-    const suspend = vi.fn(async () => {
+    const registerSandboxAccess = vi.fn(async () => undefined);
+    const suspend = vi.fn(async (_payload?: unknown) => {
       throw new Error('suspended');
     });
 
@@ -195,6 +196,7 @@ describe('request_access', () => {
           key === 'harness'
             ? {
                 registerQuestion,
+                registerSandboxAccess,
                 getState: () => ({ sandboxAllowedPaths: [] }),
                 setState: vi.fn(),
               }
@@ -210,15 +212,17 @@ describe('request_access', () => {
       ),
     ).rejects.toThrow('suspended');
 
-    expect(registerQuestion).toHaveBeenCalledWith(
+    expect(registerSandboxAccess).toHaveBeenCalledWith(
       expect.objectContaining({
-        questionId: expect.stringMatching(/^sandbox_/),
-        question: expect.stringContaining('/outside/project/dir'),
+        requestId: expect.stringMatching(/^sandbox_/),
+        semanticType: 'file',
+        reason: 'need to read config',
+        payload: { path: '/outside/project/dir' },
         runId: 'run-1',
         toolCallId: 'tool-1',
-        selectionMode: 'single_select',
       }),
     );
+    expect(registerQuestion).not.toHaveBeenCalled();
     expect(suspend).toHaveBeenCalled();
     expect(suspend.mock.calls[0]?.[0]).toEqual({});
   });
@@ -229,7 +233,7 @@ describe('request_access', () => {
 
     const context = {
       agent: {
-        resumeData: { answer: 'yes' },
+        resumeData: { approved: true },
       },
       requestContext: {
         get: (key: string) =>
