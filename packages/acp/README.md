@@ -148,5 +148,58 @@ By default, the ACP workspace uses `cwd` as its filesystem root. Pass a Mastra `
 | `persistSession`      | `boolean`                        | Keep the ACP process alive after execution. Defaults to `true`.                        |
 | `onPermissionRequest` | `(request) => Promise<Response>` | Callback for ACP permission requests.                                                  |
 | `workspace`           | `Workspace`                      | Workspace used for ACP file reads and writes.                                          |
+| `model`               | `string`                         | Model ID to select after session creation via the ACP `session/set_model` method.      |
 
 `AcpAgent` also accepts `name` to set the display name used by Mastra agent delegation.
+
+## Configure the model
+
+ACP agents may expose selectable models. Instead of setting an environment variable like `ANTHROPIC_MODEL`, you can pass a `model` ID directly in the configuration.
+
+### Discover available models
+
+Call `getAvailableModels()` to see which models the ACP agent supports. This starts the agent process and returns the model list from the session:
+
+```typescript
+import { AcpAgent } from '@mastra/acp';
+
+const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'An ACP-compatible coding agent',
+  command: 'claude',
+  args: ['--acp'],
+});
+
+const models = await codeAgent.getAvailableModels();
+// [{ modelId: 'agent-reported-model-id', name: 'Agent Reported Model' }, ...]
+```
+
+### Set the model
+
+Pass the `model` option to select a model at connection time:
+
+```typescript
+import { AcpAgent } from '@mastra/acp';
+
+const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'An ACP-compatible coding agent',
+  command: 'claude',
+  args: ['--acp'],
+  model: 'agent-reported-model-id',
+});
+```
+
+You can also change the model at runtime with `setModel()`:
+
+```typescript
+await codeAgent.setModel('agent-reported-model-id');
+```
+
+If the ACP agent advertises available models and your model ID doesn't match any of them, Mastra throws an error listing the valid options:
+
+```text
+Model "bad-model-id" is not available. Available models: agent-reported-model-id, another-model-id
+```
+
+If the agent doesn't advertise a model list, the value is passed through without validation.

@@ -21,4 +21,6 @@ export const MODEL_TOKENS: Record<string, string> = {
   __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-4-6',
   __GATEWAY_ANTHROPIC_MODEL_OPUS__: 'anthropic/claude-opus-4-6',
   __GATEWAY_ANTHROPIC_MODEL_HAIKU__: 'anthropic/claude-haiku-4-5',
+  __AI_SDK_ANTHROPIC_MODEL_SONNET__: 'claude-sonnet-4-6',
+  __AI_SDK_ANTHROPIC_MODEL_HAIKU__: 'claude-haiku-4-5',
 }
