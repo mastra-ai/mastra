@@ -1,3 +1,4 @@
+import { writeBarLine } from '../../utils/clack-bar.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import {
@@ -427,13 +428,13 @@ async function pollServerLogs(deployId: string, token: string, orgId: string, si
       if (data) {
         const newBuild = data.buildLogs.slice(printedBuild);
         for (const line of newBuild) {
-          process.stdout.write(`${line}\n`);
+          await writeBarLine(line);
         }
         printedBuild = data.buildLogs.length;
 
         const newDeploy = data.deployLogs.slice(printedDeploy);
         for (const line of newDeploy) {
-          process.stdout.write(`${line}\n`);
+          await writeBarLine(line);
         }
         printedDeploy = data.deployLogs.length;
       }
