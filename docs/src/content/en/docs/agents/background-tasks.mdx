@@ -94,7 +94,7 @@ import { Agent } from '@mastra/core/agent'
 export const researcher = new Agent({
   id: 'researcher',
   instructions: 'You research topics and answer questions.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { researchTool, summarizeTool },
   // highlight-start
   backgroundTasks: {
@@ -195,7 +195,7 @@ import { Agent } from '@mastra/core/agent'
 const supervisor = new Agent({
   id: 'supervisor',
   instructions: 'Coordinate research and writing using the available agents.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: { researchAgent, writingAgent },
   // highlight-start
   backgroundTasks: {
@@ -222,7 +222,7 @@ The background config used for the inherited dispatch (for example `waitTimeoutM
 const researchAgent = new Agent({
   id: 'research-agent',
   description: 'Gathers factual information.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: { deepResearchTool },
   // highlight-start
   backgroundTasks: {
