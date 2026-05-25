@@ -91,31 +91,20 @@ export class Deps extends MastraBase {
   }
 
   private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
-    const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
+    const npmrcPath = path.join(dir, '.npmrc');
 
-    // Build the YAML content manually for supportedArchitectures
-    const lines: string[] = ['onlyBuiltDependencies:'];
-    // Collect all packages that need building from the architecture options
-    lines.push('  - esbuild');
-    lines.push('  - sharp');
-    lines.push('  - protobufjs');
-    lines.push('  - workerd');
-    if (options.os?.length || options.cpu?.length || options.libc?.length) {
-      lines.push('');
-      lines.push('supportedArchitectures:');
-      if (options.os?.length) {
-        lines.push(`  os: ${JSON.stringify(options.os)}`);
-      }
-      if (options.cpu?.length) {
-        lines.push(`  cpu: ${JSON.stringify(options.cpu)}`);
-      }
-      if (options.libc?.length) {
-        lines.push(`  libc: ${JSON.stringify(options.libc)}`);
-      }
+    const lines: string[] = ['dangerously-allow-all-builds=true'];
+    if (options.os?.length) {
+      lines.push(`supported-os=${options.os.join(',')}`);
     }
-    lines.push('');
+    if (options.cpu?.length) {
+      lines.push(`supported-cpu=${options.cpu.join(',')}`);
+    }
+    if (options.libc?.length) {
+      lines.push(`supported-libc=${options.libc.join(',')}`);
+    }
 
-    await fsPromises.writeFile(workspaceYamlPath, lines.join('\n'), 'utf-8');
+    await fsPromises.appendFile(npmrcPath, '\n' + lines.join('\n') + '\n', 'utf-8');
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {

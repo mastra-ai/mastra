@@ -88,10 +88,10 @@ export abstract class Bundler extends MastraBundler {
       ),
     );
 
-    // pnpm v11 requires build policy via pnpm-workspace.yaml, not package.json#pnpm
+    // pnpm v11 requires build policy via .npmrc since deploy output installs use --ignore-workspace
     await writeFile(
-      join(outputDirectory, 'pnpm-workspace.yaml'),
-      'onlyBuiltDependencies:\n  - esbuild\n  - sharp\n  - protobufjs\n  - workerd\n  - bufferutil\n  - utf-8-validate\n',
+      join(outputDirectory, '.npmrc'),
+      'dangerously-allow-all-builds=true\n',
     );
   }
 
