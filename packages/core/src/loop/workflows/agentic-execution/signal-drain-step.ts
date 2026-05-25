@@ -1,4 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { isDataPartType } from '../../../agent/signals';
 import type { ChunkType } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
@@ -25,6 +26,12 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
 
       messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
       for (const pendingSignal of pendingSignals) {
+        // Data-part signals are streamed to the client but never added to
+        // the message list — the LLM should never see them.
+        if (isDataPartType(pendingSignal.type)) {
+          controller.enqueue(pendingSignal.toDataPart() as ChunkType<OUTPUT>);
+          continue;
+        }
         const signalForTranscript = messageList.addSignal(pendingSignal);
         controller.enqueue(signalForTranscript.toDataPart() as ChunkType<OUTPUT>);
       }

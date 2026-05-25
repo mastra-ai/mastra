@@ -81,6 +81,8 @@ export type StreamInternal = {
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   initialSignalEchoes?: CreatedAgentSignal[];
+  // Pre-bound callback for sending data parts (never seen by LLM, always persisted).
+  sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

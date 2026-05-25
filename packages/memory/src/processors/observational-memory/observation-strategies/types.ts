@@ -19,6 +19,8 @@ export interface ObservationRunOpts {
   startedAt?: string;
 
   writer?: ProcessorStreamWriter;
+  /** Reliable data-part emitter that works even when the stream is idle. */
+  sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
   requestContext?: RequestContext;

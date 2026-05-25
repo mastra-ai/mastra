@@ -52,6 +52,9 @@ export class ObservationTurn {
   /** Optional stream writer for emitting markers. */
   writer?: ProcessorStreamWriter;
 
+  /** Reliable data-part emitter that works even when the stream is idle. */
+  sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>;
+
   /** Optional request context for observation calls. */
   requestContext?: RequestContext;
 
@@ -196,6 +199,7 @@ export class ObservationTurn {
             messages: unobservedMessages,
             record,
             writer: this.writer,
+            sendDataPart: this.sendDataPart,
             requestContext: this.requestContext,
             observabilityContext: this.observabilityContext,
           })

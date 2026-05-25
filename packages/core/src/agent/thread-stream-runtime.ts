@@ -8,14 +8,18 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal, resolveDeliveryAttributes } from './signals';
+import type { MessageList } from './message-list';
+import { createSignal, dataPartToDBMessage, resolveDeliveryAttributes } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
+  DataPartInput,
   SendAgentSignalOptions,
   SendAgentSignalResult,
+  SendDataPartOptions,
+  SendDataPartResult,
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -73,7 +77,8 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'stream-part'; runId: string; part: unknown; sourceId: string }
   | { type: 'run-completed'; runId: string }
   | { type: 'run-aborted'; runId: string }
-  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string };
+  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string }
+  | { type: 'data-part'; part: DataPartInput; sourceId: string };
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -123,6 +128,18 @@ export class AgentThreadStreamRuntime {
     return signal;
   }
 
+  #getActiveRunRecord(resourceId: string, threadId: string, pubsub?: PubSub): AgentThreadRunRecord<any> | undefined {
+    const key = this.#threadKey(resourceId, threadId);
+    const state = this.#getState(pubsub);
+    const activeRunId = state.activeThreadRunIds.get(key);
+    if (!activeRunId) return undefined;
+
+    const record = state.threadRunsById.get(activeRunId);
+    if (!record || record.threadId !== threadId || record.resourceId !== resourceId) return undefined;
+
+    return record;
+  }
+
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     void this.#publishAndWait(pubsub, key, event).catch(() => {});
   }
@@ -130,7 +147,7 @@ export class AgentThreadStreamRuntime {
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
       type: event.type,
-      runId: event.runId,
+      runId: 'runId' in event ? event.runId : '',
       data: event,
     });
   }
@@ -554,6 +571,7 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     const seenRunIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
+    const pendingDataParts: DataPartInput[] = [];
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
       string,
@@ -666,6 +684,12 @@ export class AgentThreadStreamRuntime {
         state.pendingSignalsByThread.set(key, queue);
         return;
       }
+      if (data.type === 'data-part') {
+        if (data.sourceId === this.#id) return;
+        pendingDataParts.push(data.part);
+        wake();
+        return;
+      }
       if (data.type === 'run-completed' || data.type === 'run-aborted') {
         if (state.activeThreadRunIds.get(key) === data.runId) {
           state.activeThreadRunIds.delete(key);
@@ -705,7 +729,11 @@ export class AgentThreadStreamRuntime {
       unsubscribe,
       stream: (async function* () {
         try {
-          while (!done || pendingRuns.length > 0) {
+          while (!done || pendingRuns.length > 0 || pendingDataParts.length > 0) {
+            // Yield any standalone data parts that arrived outside a run
+            while (pendingDataParts.length > 0) {
+              yield pendingDataParts.shift()! as any;
+            }
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
@@ -723,6 +751,10 @@ export class AgentThreadStreamRuntime {
                 if (streamDone) break;
                 const typedPart = part as any;
                 yield typedPart;
+                // Also drain data parts that arrived during the run
+                while (pendingDataParts.length > 0) {
+                  yield pendingDataParts.shift()! as any;
+                }
                 if (done) break;
                 if (
                   typedPart.type === 'finish' ||
@@ -927,6 +959,126 @@ export class AgentThreadStreamRuntime {
       });
 
     return { accepted: true, runId, signal };
+  }
+
+  /**
+   * Send a data part to a thread. Data parts are:
+   * - Always persisted to storage
+   * - Always streamed to any subscriber
+   * - Never seen by the LLM
+   * - Never wake the agent (never start a new run)
+   */
+  sendDataPart(
+    agent: Agent<any, any, any, any>,
+    dataPart: DataPartInput,
+    target: SendDataPartOptions,
+    pubsub?: PubSub,
+    activeMessageList?: MessageList,
+  ): SendDataPartResult {
+    const key = this.#threadKey(target.resourceId, target.threadId);
+
+    // Broadcast to subscribers so active UIs see the data part in real-time
+    this.#publish(pubsub, key, {
+      type: 'data-part',
+      part: dataPart,
+      sourceId: this.#getSourceId(),
+    });
+
+    // Persist to storage
+    const activeRunRecord = this.#getActiveRunRecord(target.resourceId, target.threadId, pubsub);
+    const persisted = this.#persistDataPart(
+      agent,
+      dataPart,
+      target.resourceId,
+      target.threadId,
+      activeRunRecord,
+      activeMessageList,
+    );
+    void persisted.catch(() => {});
+
+    return { accepted: true, persisted };
+  }
+
+  /**
+   * @deprecated Use {@link sendDataPart} instead.
+   */
+  sendDataPartSignal(
+    agent: Agent<any, any, any, any>,
+    dataPart: DataPartInput,
+    target: SendDataPartOptions,
+    pubsub?: PubSub,
+  ): SendDataPartResult {
+    return this.sendDataPart(agent, dataPart, target, pubsub);
+  }
+
+  async #persistDataPart(
+    agent: Agent<any, any, any, any>,
+    dataPart: DataPartInput,
+    resourceId: string,
+    threadId: string,
+    activeRunRecord?: AgentThreadRunRecord<any>,
+    activeMessageList?: MessageList,
+  ) {
+    const memory = await agent.getMemory();
+    if (!memory) return;
+
+    const part = { type: dataPart.type, data: dataPart.data };
+
+    // Only append to the assistant message that belongs to the active run.
+    // Idle sends must not mutate an arbitrary historical assistant message.
+    if (activeRunRecord?.output.messageId) {
+      const activeAssistant = activeRunRecord.output.messageList.get.response
+        .db()
+        .find(message => message.id === activeRunRecord.output.messageId && message.role === 'assistant');
+
+      if (activeAssistant) {
+        activeAssistant.content = {
+          ...activeAssistant.content,
+          parts: [...(activeAssistant.content?.parts ?? []), part],
+        };
+        return;
+      }
+
+      try {
+        const memoryStore = await memory.storage.getStore('memory');
+        if (memoryStore) {
+          const { messages } = await memoryStore.listMessagesById({ messageIds: [activeRunRecord.output.messageId] });
+          const persistedActiveAssistant = messages.find(message => message.role === 'assistant');
+          if (persistedActiveAssistant) {
+            await memoryStore.updateMessages({
+              messages: [
+                {
+                  id: persistedActiveAssistant.id,
+                  content: {
+                    ...persistedActiveAssistant.content,
+                    parts: [...(persistedActiveAssistant.content?.parts ?? []), part],
+                  } as any,
+                },
+              ],
+            });
+            return;
+          }
+        }
+      } catch {
+        // Fall through to creating a new message
+      }
+    }
+
+    if (activeMessageList) {
+      const activeAssistant = [...activeMessageList.get.response.db()]
+        .reverse()
+        .find(message => message.role === 'assistant');
+      if (activeAssistant) {
+        activeAssistant.content = {
+          ...activeAssistant.content,
+          parts: [...(activeAssistant.content?.parts ?? []), part],
+        };
+        return;
+      }
+    }
+
+    const dbMessage = dataPartToDBMessage(dataPart, { threadId, resourceId });
+    await memory.saveMessages({ messages: [dbMessage] });
   }
 }
 

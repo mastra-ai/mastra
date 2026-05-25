@@ -221,9 +221,82 @@ await subscription.processDataStream({
 })
 ```
 
+## Data parts
+
+Data parts are a separate channel for streaming client-visible updates that the LLM never sees. Use `sendDataPart()` when you need to push status or progress updates from background processes to the UI without waking the agent or entering model context.
+
+Data parts differ from signals:
+
+- **Never visible to the LLM** — data parts are filtered from the prompt. Signals become model context.
+- **Never wake the agent** — data parts are always persisted and streamed but never start a new run.
+- **Persist as assistant parts** — data parts sent during an active agent response are stored on that response message. If there is no current assistant response, Mastra creates a small assistant message whose only part is the data part.
+- **Round-trip cleanly** — persisted data parts reload with the exact `{ type, data }` shape they were sent with.
+
+```typescript title="src/mastra/data-parts.ts"
+agent.sendDataPart(
+  {
+    type: 'data-om-observation',
+    data: { observationId: 'obs-1', summary: 'User prefers dark mode' },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+The return value includes `accepted` and a `persisted` promise. During an active response, the data part is appended to the current assistant message, similar to `writer.custom()`. When the thread is idle or no current assistant message is available, Mastra writes a new assistant message that contains only the data part.
+
+```typescript title="src/mastra/data-parts.ts"
+const result = agent.sendDataPart(
+  { type: 'data-status', data: { progress: 0.5 } },
+  { resourceId: 'user_123', threadId: 'thread_456' },
+)
+
+// result.accepted is true
+await result.persisted // wait for storage write
+```
+
+### Data parts in processors
+
+Processors receive `sendDataPart` on their context. This is the recommended way for background processors like Observational Memory to emit lifecycle markers.
+
+```typescript title="src/mastra/processor.ts"
+const myProcessor = createOutputProcessor({
+  id: 'status-emitter',
+  execute: async ({ context }) => {
+    if (context.sendDataPart) {
+      await context.sendDataPart({
+        type: 'data-processing-status',
+        data: { step: 'analysis', progress: 1.0 },
+      })
+    }
+  },
+})
+```
+
+### Data parts in subscriptions
+
+Active `subscribeToThread()` subscribers receive data parts in real time alongside stream chunks:
+
+```typescript title="src/mastra/subscribe.ts"
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+for await (const chunk of subscription.stream) {
+  if (chunk.type.startsWith('data-')) {
+    // This is a data part — render it in the UI
+    console.log('Data part:', chunk.type, chunk.data)
+  }
+}
+```
+
 ## Related
 
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
+- [`Agent.sendDataPart()`](/reference/agents/agent#senddatapartdatapart-target)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)

@@ -168,8 +168,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       threadId,
       observations: processed.observations,
     });
-    if (this.opts.writer) {
-      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+    if (this.opts.sendDataPart) {
+      void this.opts.sendDataPart(endMarker).catch(() => {});
+    } else if (this.opts.writer) {
       void this.opts.writer.custom({ ...endMarker, transient: true }).catch(() => {});
     }
     await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
@@ -187,8 +188,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       recordId: record.id,
       threadId,
     });
-    if (this.opts.writer) {
-      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+    if (this.opts.sendDataPart) {
+      void this.opts.sendDataPart(failedMarker).catch(() => {});
+    } else if (this.opts.writer) {
       void this.opts.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
     }
     await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);

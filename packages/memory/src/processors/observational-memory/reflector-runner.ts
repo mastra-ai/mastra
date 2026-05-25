@@ -189,6 +189,22 @@ export class ReflectorRunner {
     this.mastra = mastra;
   }
 
+  /**
+   * Emit a marker via the best available channel: prefer sendDataPart (reliable
+   * even when the stream is idle), fall back to writer.custom() for inline delivery.
+   */
+  private emitMarker(
+    marker: { type: string; data: unknown },
+    writer?: ProcessorStreamWriter,
+    sendDataPart?: (dataPart: { type: `data-${string}`; data: unknown }) => Promise<void>,
+  ): void {
+    if (sendDataPart) {
+      void sendDataPart(marker as { type: `data-${string}`; data: unknown }).catch(() => {});
+    } else if (writer) {
+      void writer.custom({ ...marker, transient: true }).catch(() => {});
+    }
+  }
+
   private createAgent(model: ConcreteReflectionModel): Agent {
     const agent = new Agent({
       id: 'observational-memory-reflector',

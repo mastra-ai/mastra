@@ -153,7 +153,10 @@ export abstract class ObservationStrategy {
   }
 
   protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
-    if (this.opts.writer) {
+    // Prefer sendDataPart (reliable even when idle), fall back to writer.custom().
+    if (this.opts.sendDataPart) {
+      await this.opts.sendDataPart(marker as { type: `data-${string}`; data: unknown }).catch(() => {});
+    } else if (this.opts.writer) {
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       await this.opts.writer.custom({ ...marker, transient: true }).catch(() => {});
     }

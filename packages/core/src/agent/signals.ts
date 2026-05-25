@@ -523,3 +523,44 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
 export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal {
   return createSignal(part.data);
 }
+
+/**
+ * Returns true when a signal type represents a data part (prefixed with `data-`).
+ * Data parts are streamed to subscribers but never included in the LLM prompt.
+ */
+export function isDataPartType(type: string): boolean {
+  return type.startsWith('data-');
+}
+
+/**
+ * @deprecated Use {@link isDataPartType} instead.
+ */
+export const isDataPartSignalType = isDataPartType;
+
+/**
+ * Create a DB message for a data part.
+ * Persisted as an assistant message with the data part in `content.parts`,
+ * matching the same shape that `writer.custom()` produces.
+ */
+export function dataPartToDBMessage(
+  dataPart: { type: `data-${string}`; data: unknown },
+  options: { threadId: string; resourceId: string },
+): MastraDBMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: 'assistant',
+    createdAt: new Date(),
+    threadId: options.threadId,
+    resourceId: options.resourceId,
+    content: {
+      format: 2,
+      parts: [{ type: dataPart.type, data: dataPart.data } as any],
+      content: '',
+    },
+  };
+}
+
+/**
+ * @deprecated Use {@link dataPartToDBMessage} instead.
+ */
+export const dataPartSignalToDBMessage = dataPartToDBMessage;
