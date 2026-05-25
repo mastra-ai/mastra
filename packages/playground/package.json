@@ -104,6 +104,7 @@
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint-plugin-react-hooks": "^7.1.0",

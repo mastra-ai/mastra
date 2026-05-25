@@ -1,6 +1,7 @@
 import { Combobox, Skeleton, cn } from '@mastra/playground-ui';
 import type { ComboboxProps, ComboboxOption } from '@mastra/playground-ui';
 import { Info } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
@@ -57,7 +58,7 @@ export const LLMProviders = ({
             'hover:text-neutral4 hover:opacity-100',
             'group-data-[highlighted]/item:opacity-100',
           )}
-          onClick={e => {
+          onClick={(e: MouseEvent<SVGSVGElement>) => {
             e.stopPropagation();
             window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
           }}

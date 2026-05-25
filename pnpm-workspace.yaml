@@ -43,6 +43,12 @@ patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
+packageExtensions:
+  '@uiw/codemirror-theme-dracula@*':
+    dependencies:
+      '@babel/runtime': ^7.29.2
+      '@lezer/highlight': ^1.2.3
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
@@ -64,6 +70,8 @@ trustPolicyExclude:
   - 'prettier-plugin-tailwindcss@0.7.4'
   # 4.0.0-beta.59 is published with provenance attestation rather than trusted publisher.
   - 'effect@4.0.0-beta.59'
+  # 1.2.2 is published with provenance attestation rather than trusted publisher.
+  - 'tinyexec@1.2.2'
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15

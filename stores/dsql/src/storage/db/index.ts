@@ -112,7 +112,7 @@ export function resolveDsqlConfig(config: DsqlDomainConfig): {
     host: config.host,
     database: config.database,
     user: config.user,
-    Client: AuroraDSQLClient,
+    Client: AuroraDSQLClient as any,
   });
   return {
     client: new PoolAdapter(pool),

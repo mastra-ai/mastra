@@ -33,7 +33,7 @@ export function createTestPool(): Pool {
     host: TEST_CONFIG.host,
     user: TEST_CONFIG.user ?? 'admin',
     database: TEST_CONFIG.database ?? 'postgres',
-    Client: AuroraDSQLClient,
+    Client: AuroraDSQLClient as any,
     region,
     max: DSQL_POOL_DEFAULTS.max,
     min: DSQL_POOL_DEFAULTS.min,
