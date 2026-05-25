@@ -570,6 +570,21 @@ export class Mastra<
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
+  /**
+   * Tracks whether `startWorkers()` has already run. Used to decide whether
+   * lazy scheduler injection (e.g. from `agent.setHeartbeat()` after boot)
+   * needs to also `init`/`start` the worker, or whether the normal
+   * `startWorkers()` path will pick it up.
+   */
+  #workersStarted = false;
+  /**
+   * Set when something has signalled that the scheduler is needed at runtime
+   * (e.g. the built-in heartbeat workflow was registered via
+   * `__ensureHeartbeatWorkflowRegistered()`). Causes `#shouldEnableScheduler()`
+   * to return `true` even when there are no declarative scheduled workflows,
+   * unless the user explicitly set `scheduler: { enabled: false }`.
+   */
+  #schedulerRequested = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -1317,7 +1332,7 @@ export class Mastra<
   #shouldEnableScheduler(): boolean {
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#hasScheduledWorkflow;
+    return this.#hasScheduledWorkflow || this.#schedulerRequested;
   }
 
   /**
@@ -3271,6 +3286,60 @@ export class Mastra<
     }
   }
 
+  /**
+   * Lazily register the built-in heartbeat workflow. Imported via dynamic
+   * import to keep `mastra/index` out of the heartbeat → workflows → agent
+   * module-init cycle. Idempotent — subsequent calls return the cached promise.
+   *
+   * @internal
+   */
+  __ensureHeartbeatWorkflowRegistered(): Promise<void> {
+    if (this.#heartbeatRegistration) return this.#heartbeatRegistration;
+    this.#heartbeatRegistration = (async () => {
+      const { buildHeartbeatWorkflow } = await import('../agent/heartbeat/workflow');
+      this.addWorkflow(buildHeartbeatWorkflow() as any);
+      // Heartbeats are imperative — each `setHeartbeat()` call writes a row
+      // to the schedules store. The workflow itself has no declarative
+      // `schedule` config, so `#hasScheduledWorkflow` won't flip. Signal
+      // explicitly that the scheduler is needed, and if workers are already
+      // running, lazily inject + start it.
+      this.#schedulerRequested = true;
+      if (this.#workersStarted) {
+        await this.#ensureSchedulerWorkerStarted();
+      }
+    })();
+    return this.#heartbeatRegistration;
+  }
+
+  /**
+   * Lazily inject and start the SchedulerWorker after `startWorkers()` has
+   * already run. Used by features that surface a need for the scheduler at
+   * runtime (e.g. `agent.setHeartbeat()`). No-op when the scheduler is
+   * disabled, no storage is configured, or the worker is already present.
+   *
+   * @internal
+   */
+  async #ensureSchedulerWorkerStarted(): Promise<void> {
+    if (!this.#shouldEnableScheduler()) return;
+    if (!this.#storage) return;
+    if (this.#findSchedulerWorker()) return;
+
+    const sw = new SchedulerWorker(this.#schedulerConfig);
+    sw.__registerMastra(this);
+    this.#workers.push(sw);
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+    await sw.init(deps);
+    await sw.start();
+  }
+
+  #heartbeatRegistration?: Promise<void>;
+
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
     for (const step of Object.values(workflow.steps ?? {})) {
       const scorers = step.scorers;
@@ -3997,6 +4066,11 @@ export class Mastra<
         }
       }
     }
+
+    // Track that the boot path has executed at least once so subsequent
+    // runtime signals (e.g. `agent.setHeartbeat()`) know whether they need
+    // to lazily inject + start additional workers themselves.
+    this.#workersStarted = true;
   }
 
   /**
@@ -4025,6 +4099,7 @@ export class Mastra<
     this.#userEventSubscriptions = [];
 
     await this.#pubsub.flush();
+    this.#workersStarted = false;
   }
 
   /**

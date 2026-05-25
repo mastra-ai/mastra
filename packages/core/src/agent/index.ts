@@ -3,6 +3,14 @@ export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDe
 export type { OutputFormat } from './message-list';
 export * from './types';
 export * from './signals';
+export {
+  HEARTBEAT_WORKFLOW_ID,
+  HEARTBEAT_SCHEDULE_PREFIX,
+  type HeartbeatInput,
+  type HeartbeatOutput,
+  type HeartbeatOutcome,
+  type SetHeartbeatOptions,
+} from './heartbeat';
 export * from './agent';
 export * from './utils';
 

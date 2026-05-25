@@ -68,6 +68,7 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
+import type { Schedule } from '../storage/domains/schedules/base';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -81,6 +82,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
+import { validateCron, computeNextFireAt } from '../workflows/scheduler/cron';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
@@ -101,6 +103,8 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import { HEARTBEAT_SCHEDULE_PREFIX, HEARTBEAT_WORKFLOW_ID } from './heartbeat/types';
+import type { HeartbeatInput, SetHeartbeatOptions } from './heartbeat/types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -6466,6 +6470,197 @@ export class Agent<
    */
   sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
     return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
+  }
+
+  /**
+   * Resolve the schedules store from the bound Mastra instance.
+   *
+   * Heartbeats require a storage adapter that implements the `schedules`
+   * domain. Throws a descriptive error if storage is missing or the
+   * adapter does not provide a schedules store.
+   */
+  async #getSchedulesStore() {
+    if (!this.#mastra) {
+      throw new MastraError({
+        id: 'AGENT_HEARTBEAT_NO_MASTRA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.id}" must be registered with a Mastra instance before using heartbeats.`,
+      });
+    }
+    const storage = this.#mastra.getStorage();
+    const store = await storage?.getStore('schedules');
+    if (!store) {
+      throw new MastraError({
+        id: 'AGENT_HEARTBEAT_NO_SCHEDULES_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.id}" cannot use heartbeats without a storage adapter that implements the schedules domain.`,
+      });
+    }
+    return store;
+  }
+
+  /**
+   * Build the deterministic heartbeat schedule id.
+   * `hb_<agentId>` (threadless) or `hb_<agentId>_<threadId>` (threaded).
+   */
+  #defaultHeartbeatId(threadId?: string): string {
+    return threadId ? `${HEARTBEAT_SCHEDULE_PREFIX}${this.id}_${threadId}` : `${HEARTBEAT_SCHEDULE_PREFIX}${this.id}`;
+  }
+
+  /**
+   * Resolve an id-or-threadId argument to a concrete schedule id.
+   * If the value starts with the heartbeat prefix it is used as-is;
+   * otherwise it is treated as a threadId.
+   */
+  #resolveHeartbeatId(idOrThreadId?: string): string {
+    if (!idOrThreadId) return this.#defaultHeartbeatId();
+    if (idOrThreadId.startsWith(HEARTBEAT_SCHEDULE_PREFIX)) return idOrThreadId;
+    return this.#defaultHeartbeatId(idOrThreadId);
+  }
+
+  /**
+   * @experimental Agent heartbeats are experimental and may change in a future release.
+   *
+   * Register a recurring heartbeat for this agent. Each fire either sends an
+   * agent signal (threaded mode) or calls `agent.generate(prompt)` (threadless
+   * mode) according to the supplied options. Heartbeats are persisted in the
+   * `schedules` storage domain and survive restarts.
+   *
+   * Calling `setHeartbeat` with an existing id upserts (rewrites cron / target
+   * payload and recomputes `nextFireAt`).
+   */
+  async setHeartbeat(opts: SetHeartbeatOptions): Promise<Schedule> {
+    validateCron(opts.cron, opts.timezone);
+
+    if (opts.threadId && !opts.resourceId) {
+      throw new MastraError({
+        id: 'AGENT_HEARTBEAT_MISSING_RESOURCE_ID',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'setHeartbeat requires `resourceId` when `threadId` is set.',
+      });
+    }
+    if (!opts.threadId) {
+      const offenders: string[] = [];
+      if (opts.signalType !== undefined) offenders.push('signalType');
+      if (opts.ifActive !== undefined) offenders.push('ifActive');
+      if (opts.ifIdle !== undefined) offenders.push('ifIdle');
+      if (opts.idleThresholdMs !== undefined) offenders.push('idleThresholdMs');
+      if (opts.resourceId !== undefined) offenders.push('resourceId');
+      if (offenders.length > 0) {
+        throw new MastraError({
+          id: 'AGENT_HEARTBEAT_THREADLESS_OPTIONS',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `setHeartbeat: ${offenders.join(', ')} require a threadId.`,
+        });
+      }
+    }
+
+    const store = await this.#getSchedulesStore();
+    // Lazily register the built-in heartbeat workflow on the Mastra instance.
+    await this.#mastra!.__ensureHeartbeatWorkflowRegistered();
+    const id = opts.id ?? this.#defaultHeartbeatId(opts.threadId);
+    const now = Date.now();
+    const nextFireAt = computeNextFireAt(opts.cron, { timezone: opts.timezone, after: now });
+
+    const inputData: HeartbeatInput = {
+      scheduleId: id,
+      agentId: this.id,
+      prompt: opts.prompt,
+      ...(opts.threadId ? { threadId: opts.threadId } : {}),
+      ...(opts.resourceId ? { resourceId: opts.resourceId } : {}),
+      ...(opts.signalType ? { signalType: opts.signalType } : {}),
+      ...(opts.ifActive ? { ifActive: opts.ifActive } : {}),
+      ...(opts.ifIdle ? { ifIdle: opts.ifIdle } : {}),
+      ...(opts.activeHours ? { activeHours: opts.activeHours } : {}),
+      ...(opts.idleThresholdMs !== undefined ? { idleThresholdMs: opts.idleThresholdMs } : {}),
+    };
+
+    const target: Schedule['target'] = {
+      type: 'workflow',
+      workflowId: HEARTBEAT_WORKFLOW_ID,
+      inputData,
+    };
+
+    const existing = await store.getSchedule(id);
+    if (existing) {
+      return store.updateSchedule(id, {
+        cron: opts.cron,
+        timezone: opts.timezone,
+        target,
+        nextFireAt,
+        metadata: opts.metadata,
+        ownerType: 'agent',
+        ownerId: this.id,
+      });
+    }
+
+    const schedule: Schedule = {
+      id,
+      target,
+      cron: opts.cron,
+      timezone: opts.timezone,
+      status: 'active',
+      nextFireAt,
+      createdAt: now,
+      updatedAt: now,
+      ownerType: 'agent',
+      ownerId: this.id,
+      ...(opts.metadata ? { metadata: opts.metadata } : {}),
+    };
+    return store.createSchedule(schedule);
+  }
+
+  /**
+   * @experimental Agent heartbeats are experimental and may change in a future release.
+   *
+   * Remove a previously registered heartbeat. Accepts either a full schedule
+   * id (any value beginning with `hb_`) or a `threadId` (resolved to
+   * `hb_<agentId>_<threadId>`). Omit the argument to clear the threadless
+   * heartbeat (`hb_<agentId>`). No-op when the schedule does not exist.
+   */
+  async clearHeartbeat(idOrThreadId?: string): Promise<void> {
+    const store = await this.#getSchedulesStore();
+    const id = this.#resolveHeartbeatId(idOrThreadId);
+    const existing = await store.getSchedule(id);
+    if (!existing) return;
+    if (existing.ownerType !== 'agent' || existing.ownerId !== this.id) {
+      throw new MastraError({
+        id: 'AGENT_HEARTBEAT_OWNER_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Schedule "${id}" is not owned by agent "${this.id}".`,
+      });
+    }
+    await store.deleteSchedule(id);
+  }
+
+  /**
+   * @experimental Agent heartbeats are experimental and may change in a future release.
+   *
+   * Look up a heartbeat by id or threadId. Returns `null` when no heartbeat
+   * exists or when the schedule is not owned by this agent.
+   */
+  async getHeartbeat(idOrThreadId?: string): Promise<Schedule | null> {
+    const store = await this.#getSchedulesStore();
+    const id = this.#resolveHeartbeatId(idOrThreadId);
+    const schedule = await store.getSchedule(id);
+    if (!schedule) return null;
+    if (schedule.ownerType !== 'agent' || schedule.ownerId !== this.id) return null;
+    return schedule;
+  }
+
+  /**
+   * @experimental Agent heartbeats are experimental and may change in a future release.
+   *
+   * List every heartbeat owned by this agent.
+   */
+  async listHeartbeats(): Promise<Schedule[]> {
+    const store = await this.#getSchedulesStore();
+    return store.listSchedules({ ownerType: 'agent', ownerId: this.id });
   }
 
   async stream<
