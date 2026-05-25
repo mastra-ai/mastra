@@ -11,6 +11,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
@@ -134,9 +135,16 @@ export function getCurrentModel(model?: { provider?: string; modelId?: string })
 
 export { didProviderChange } from './model-context';
 
-function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
-  if (value === undefined) {
+function parseActivationTTL(
+  value: number | string | false | undefined,
+  fieldPath: string,
+): number | 'auto' | undefined {
+  if (value === undefined || value === false) {
     return undefined;
+  }
+
+  if (value === 'auto') {
+    return value;
   }
 
   if (typeof value === 'number') {
@@ -449,6 +457,10 @@ export class ObservationalMemory {
       }
     }
 
+    const observationActivateAfterIdle = config.observation?.activateAfterIdle ?? config.activateAfterIdle;
+    const observationActivateAfterIdlePath =
+      config.observation?.activateAfterIdle !== undefined ? 'observation.activateAfterIdle' : 'activateAfterIdle';
+
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
@@ -476,8 +488,9 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
+      activateOnProviderChange:
+        config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -490,6 +503,7 @@ export class ObservationalMemory {
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
+      observeAttachments: config.observation?.observeAttachments ?? true,
     };
 
     // Resolve reflection config with defaults
@@ -509,8 +523,8 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -1310,6 +1324,10 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
+      if (msg.role === 'system') {
+        continue;
+      }
+
       // First check: skip if this message ID was already observed (safeguard against re-observation)
       if (observedMessageIds?.has(msg.id)) {
         continue;
@@ -1739,7 +1757,7 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages;
+    return result.messages.filter(msg => msg.role !== 'system');
   }
 
   /**
@@ -3140,6 +3158,7 @@ ${formattedMessages}
 
     let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' = 'threshold';
     let activationLastActivityAt: number | undefined;
+    let activationActivateAfterIdle: number | undefined;
     let activateAfterIdleExpiredMs: number | undefined;
     let previousModel: string | undefined;
     let currentModel: string | undefined;
@@ -3154,7 +3173,7 @@ ${formattedMessages}
           record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
         ));
 
-      const activateAfterIdle = this.observationConfig.activateAfterIdle;
+      const activateAfterIdle = resolveActivationTTL(this.observationConfig.activateAfterIdle, opts.currentModel);
       const lastActivityAt = getLastActivityFromMessages(thresholdMessages);
       const ttlExpiredMs =
         activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
@@ -3172,6 +3191,7 @@ ${formattedMessages}
       } else if (ttlExpired) {
         activationTriggeredBy = 'ttl';
         activationLastActivityAt = lastActivityAt;
+        activationActivateAfterIdle = activateAfterIdle;
         activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
         const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
@@ -3262,7 +3282,10 @@ ${formattedMessages}
           ttlExpiredMs: activateAfterIdleExpiredMs,
           previousModel,
           currentModel,
-          config: this.getObservationMarkerConfig(),
+          config: {
+            ...this.getObservationMarkerConfig(),
+            activateAfterIdle: activationActivateAfterIdle ?? this.observationConfig.activateAfterIdle,
+          },
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         void opts.writer.custom({ ...activationMarker, transient: true }).catch(() => {});

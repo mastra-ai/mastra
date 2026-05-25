@@ -1,18 +1,15 @@
 import {
   Button,
-  ButtonWithTooltip,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
-  WorkflowIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, CalendarClockIcon } from 'lucide-react';
+import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
@@ -25,7 +22,7 @@ function Workflows() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -33,7 +30,7 @@ function Workflows() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="workflows" />
       </NoDataPageLayout>
     );
@@ -41,7 +38,7 @@ function Workflows() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load workflows" message={error.message} />
       </NoDataPageLayout>
     );
@@ -49,7 +46,7 @@ function Workflows() {
 
   if (Object.keys(workflows || {}).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <NoWorkflowsInfo />
       </NoDataPageLayout>
     );
@@ -58,33 +55,15 @@ function Workflows() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <WorkflowIcon /> Workflows
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <Button as={Link} to="/workflows/schedules">
-              <CalendarClockIcon />
-              Schedules
-            </Button>
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/workflows/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Workflows documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
+        <PageLayout.Row align="center" stack="responsive">
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+          </div>
+          <Button as={Link} to="/workflows/schedules" variant="primary" className="shrink-0">
+            <CalendarClockIcon />
+            Schedules
+          </Button>
         </PageLayout.Row>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
-        </div>
       </PageLayout.TopArea>
 
       <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />

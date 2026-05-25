@@ -2,9 +2,11 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources).
-- `ConvexVector` stores embeddings inside Convex and performs cosine similarity search.
-- `@mastra/convex/server` exposes the required Convex table definitions and storage mutation.
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, channels).
+- `ConvexVector` stores embeddings inside Convex and performs development-scale cosine similarity search.
+- `ConvexNativeVector` uses Convex native vector search for production workloads.
+- `ConvexServerCache` stores Mastra server cache entries in Convex for durable stream replay and response caching.
+- `@mastra/convex/server` exposes the required Convex table definitions, storage mutation, cache handlers, and native vector handlers.
 
 ## Quick start
 
@@ -26,8 +28,12 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraChannelInstallationsTable,
+  mastraChannelConfigTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
+  mastraCacheTable,
+  mastraCacheListItemsTable,
   mastraDocumentsTable,
 } from '@mastra/convex/schema';
 
@@ -37,13 +43,17 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_channel_installations: mastraChannelInstallationsTable,
+  mastra_channel_config: mastraChannelConfigTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
+  mastra_cache: mastraCacheTable,
+  mastra_cache_list_items: mastraCacheListItemsTable,
   mastra_documents: mastraDocumentsTable,
 });
 ```
 
-### 3. Create the storage handler
+### 3. Create the storage and cache handlers
 
 In `convex/mastra/storage.ts`:
 
@@ -51,6 +61,14 @@ In `convex/mastra/storage.ts`:
 import { mastraStorage } from '@mastra/convex/server';
 
 export const handle = mastraStorage;
+```
+
+In `convex/mastra/cache.ts`:
+
+```ts
+import { mastraCache } from '@mastra/convex/server';
+
+export const handle = mastraCache;
 ```
 
 ### 4. Deploy to Convex
@@ -64,7 +82,7 @@ npx convex deploy
 ### 5. Use in Mastra
 
 ```ts
-import { ConvexStore } from '@mastra/convex';
+import { ConvexServerCache, ConvexStore } from '@mastra/convex';
 
 const storage = new ConvexStore({
   id: 'convex',
@@ -72,7 +90,17 @@ const storage = new ConvexStore({
   adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
   storageFunction: 'mastra/storage:handle', // default
 });
+
+const cache = new ConvexServerCache({
+  deploymentUrl: process.env.CONVEX_URL!,
+  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  cacheFunction: 'mastra/cache:handle', // default
+  requestTimeoutMs: 30_000, // default
+});
 ```
+
+`clear()` removes rows whose stored prefix exactly matches the configured cache prefix. Cleanup runs in bounded batches, so reads for a key being cleared can return empty results until cleanup finishes. During cleanup, cache metadata can briefly use an internal `deleted` state before the next cleanup pass removes it. List pushes refresh the configured cache TTL.
+Use this cache for durable replay of moderate-frequency events; batch high-frequency token streams or use a lower-latency cache backend.
 
 For vectors:
 
@@ -86,20 +114,69 @@ const vector = new ConvexVector({
 });
 ```
 
+`ConvexVector` scans stored vectors through the storage handler and computes similarity in the adapter. Use it for local development, tests, and small datasets.
+
+For native Convex vector search, define a dedicated table in `convex/schema.ts`:
+
+```ts
+import { defineSchema } from 'convex/server';
+import { defineMastraNativeVectorTable } from '@mastra/convex/schema';
+
+export default defineSchema({
+  docs_vectors: defineMastraNativeVectorTable({
+    dimensions: 1536,
+  }),
+});
+```
+
+Export the native vector handlers in `convex/mastra/nativeVector.ts`:
+
+```ts
+import { mastraNativeVectorAction, mastraNativeVectorMutation, mastraNativeVectorQuery } from '@mastra/convex/server';
+
+export const query = mastraNativeVectorAction;
+export const read = mastraNativeVectorQuery;
+export const write = mastraNativeVectorMutation;
+```
+
+Configure the native vector adapter:
+
+```ts
+import { ConvexNativeVector } from '@mastra/convex';
+
+const vector = new ConvexNativeVector({
+  id: 'convex-native-vectors',
+  deploymentUrl: process.env.CONVEX_URL!,
+  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  indexes: {
+    docs: {
+      tableName: 'docs_vectors',
+      vectorIndexName: 'by_embedding',
+      dimension: 1536,
+    },
+  },
+});
+```
+
+Native vector search uses Convex's schema-defined vector indexes and action-only `ctx.vectorSearch` API. It supports `topK` values from 1 to 256 and equality filters on fields declared in the Convex vector index `filterFields`.
+
 ## Architecture
 
 This adapter uses **typed Convex tables** for each Mastra domain:
 
-| Domain         | Convex Table                | Purpose              |
-| -------------- | --------------------------- | -------------------- |
-| Threads        | `mastra_threads`            | Conversation threads |
-| Messages       | `mastra_messages`           | Chat messages        |
-| Resources      | `mastra_resources`          | User working memory  |
-| Workflows      | `mastra_workflow_snapshots` | Workflow state       |
-| Scorers        | `mastra_scorers`            | Evaluation data      |
-| Vector Indexes | `mastra_vector_indexes`     | Index metadata       |
-| Vectors        | `mastra_vectors`            | Embeddings           |
-| Fallback       | `mastra_documents`          | Unknown tables       |
+| Domain         | Convex Table                                            | Purpose                          |
+| -------------- | ------------------------------------------------------- | -------------------------------- |
+| Threads        | `mastra_threads`                                        | Conversation threads             |
+| Messages       | `mastra_messages`                                       | Chat messages                    |
+| Resources      | `mastra_resources`                                      | User working memory              |
+| Workflows      | `mastra_workflow_snapshots`                             | Workflow state                   |
+| Scorers        | `mastra_scorers`                                        | Evaluation data                  |
+| Channels       | `mastra_channel_installations`, `mastra_channel_config` | Channel installations and config |
+| Vector Indexes | `mastra_vector_indexes`                                 | Index metadata                   |
+| Vectors        | `mastra_vectors`                                        | Embeddings                       |
+| Cache          | `mastra_cache`                                          | Cache metadata                   |
+| Cache Items    | `mastra_cache_list_items`                               | Cache list entries               |
+| Fallback       | `mastra_documents`                                      | Unknown tables                   |
 
 All typed tables include:
 

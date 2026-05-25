@@ -1,9 +1,9 @@
 /**
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
-import type { HarnessEvent, HarnessThread, TaskItem } from '@mastra/core/harness';
+import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
 
-import { getCurrentGitBranch } from '../utils/project.js';
+import { getCurrentGitBranchAsync } from '../utils/project.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -44,6 +44,14 @@ import type { TUIState } from './state.js';
 /**
  * Dispatch a HarnessEvent to the appropriate handler.
  */
+function trackInteractivePrompt(
+  ectx: EventHandlerContext,
+  promptType: string,
+  properties?: Record<string, unknown>,
+): void {
+  ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
 export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
   switch (event.type) {
     case 'agent_start':
@@ -77,6 +85,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'tool_approval_required':
+      trackInteractivePrompt(ectx, 'tool_approval_required', {
+        toolName: event.toolName,
+        threadId: state.harness.getCurrentThreadId(),
+        resourceId: state.harness.getResourceId(),
+      });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -89,6 +102,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'tool_input_start':
+      if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
+        trackInteractivePrompt(ectx, event.toolName, {
+          toolName: event.toolName,
+          threadId: state.harness.getCurrentThreadId(),
+          resourceId: state.harness.getResourceId(),
+        });
+      }
       handleToolInputStart(ectx, event.toolCallId, event.toolName);
       break;
 
@@ -129,14 +149,16 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
       }
-      state.taskWriteInsertIndex = -1;
+      state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
-      // Refresh git branch so TUI status line reflects the current branch
-      const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
-      if (freshBranch) {
-        state.projectInfo.gitBranch = freshBranch;
-      }
+      // Refresh git branch async so TUI status line reflects the current branch
+      getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
+        if (freshBranch) {
+          state.projectInfo.gitBranch = freshBranch;
+          ectx.updateStatusLine();
+        }
+      });
       // Update current thread title for status line display
       const threads = await state.harness.listThreads();
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
@@ -171,7 +193,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
-      state.taskWriteInsertIndex = -1;
+      state.taskToolInsertIndex = -1;
       break;
     }
 
@@ -300,11 +322,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'task_updated': {
-      const tasks = event.tasks as TaskItem[];
+      const tasks = event.tasks as TaskItemSnapshot[];
       if (state.taskProgress) {
         state.taskProgress.updateTasks(tasks ?? []);
 
-        // Find the most recent task_write tool component and get its position
+        // Defensive cleanup for older or non-streaming task_write components.
+        // Current task tools update the pinned component directly through task_updated.
         let insertIndex = -1;
         for (let i = state.allToolComponents.length - 1; i >= 0; i--) {
           const comp = state.allToolComponents[i];
@@ -316,19 +339,21 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           }
         }
         // Fall back to the position recorded during streaming (when no inline component was created)
-        if (insertIndex === -1 && state.taskWriteInsertIndex >= 0) {
-          insertIndex = state.taskWriteInsertIndex;
-          state.taskWriteInsertIndex = -1;
+        if (insertIndex === -1 && state.taskToolInsertIndex >= 0) {
+          insertIndex = state.taskToolInsertIndex;
+          state.taskToolInsertIndex = -1;
         }
 
         // Check if all tasks are completed
         const allCompleted = tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed');
-        if (allCompleted) {
+        const previousTasks = state.harness.getDisplayState().previousTasks;
+        const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
+        if (allCompleted && !wasAllCompleted) {
           // Show collapsed completed list (pinned/live)
           ectx.renderCompletedTasksInline(tasks, insertIndex, true);
-        } else if (state.harness.getDisplayState().previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
-          ectx.renderClearedTasksInline(state.harness.getDisplayState().previousTasks, insertIndex);
+          ectx.renderClearedTasksInline(previousTasks, insertIndex);
         }
 
         state.ui.requestRender();

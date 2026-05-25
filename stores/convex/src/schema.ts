@@ -15,6 +15,8 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -133,6 +135,44 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_run', ['runId'])
   .index('by_created', ['createdAt']);
 
+/**
+ * Channel installations table - stores platform app installations for agents.
+ *
+ * Platform data is serialized as a JSON string because user/platform payloads
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraChannelInstallationsTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  agentId: v.string(),
+  status: v.string(),
+  webhookId: v.optional(v.union(v.string(), v.null())),
+  data: v.string(),
+  configHash: v.optional(v.union(v.string(), v.null())),
+  error: v.optional(v.union(v.string(), v.null())),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_webhook', ['webhookId'])
+  .index('by_platform_agent', ['platform', 'agentId'])
+  .index('by_platform', ['platform']);
+
+/**
+ * Channel config table - stores platform-level channel configuration.
+ *
+ * The synthetic id mirrors `platform` so the generic Convex storage operations
+ * can use their existing by-record-id lookup path.
+ */
+export const mastraChannelConfigTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  data: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_platform', ['platform']);
+
 // ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
 // ============================================================================
@@ -163,6 +203,93 @@ export const mastraVectorsTable = defineTable({
   .index('by_index_id', ['indexName', 'id']) // Composite for scoped lookups per index
   .index('by_index', ['indexName']);
 
+export type MastraNativeVectorTableConfig = {
+  /**
+   * Vector dimensions for the deployed Convex vector index.
+   */
+  dimensions: number;
+  /**
+   * Convex vector index name.
+   *
+   * @default 'by_embedding'
+   */
+  vectorIndexName?: string;
+  /**
+   * Stage the vector index for a later backfill.
+   *
+   * @default false
+   */
+  staged?: boolean;
+};
+
+/**
+ * Defines a dedicated Convex table for native vector search with the default
+ * `ConvexNativeVector` field names.
+ *
+ * Use a custom `defineTable()` when you need native vector `filterFields`,
+ * because filter fields must also be declared in the table schema.
+ */
+export function defineMastraNativeVectorTable({
+  dimensions,
+  vectorIndexName = 'by_embedding',
+  staged = false,
+}: MastraNativeVectorTableConfig) {
+  if (!Number.isInteger(dimensions) || dimensions < 2 || dimensions > 4096) {
+    throw new Error('defineMastraNativeVectorTable: dimensions must be an integer between 2 and 4096.');
+  }
+
+  const table = defineTable({
+    id: v.string(),
+    embedding: v.array(v.float64()),
+    metadata: v.optional(v.any()),
+  }).index('by_record_id', ['id']);
+
+  if (staged) {
+    return table.vectorIndex(vectorIndexName, {
+      vectorField: 'embedding',
+      dimensions,
+      staged: true,
+    });
+  }
+
+  return table.vectorIndex(vectorIndexName, {
+    vectorField: 'embedding',
+    dimensions,
+  });
+}
+
+// ============================================================================
+// Server Cache Tables - Used by ConvexServerCache
+// ============================================================================
+
+/**
+ * Cache metadata table - stores scalar cache values, list counters, and numeric
+ * counters used by ConvexServerCache.
+ */
+export const mastraCacheTable = defineTable({
+  key: v.string(),
+  keyPrefix: v.string(),
+  kind: v.union(v.literal('value'), v.literal('list'), v.literal('counter'), v.literal('deleted')),
+  value: v.optional(v.string()),
+  counter: v.optional(v.number()),
+  expiresAt: v.union(v.number(), v.null()),
+})
+  .index('by_key', ['key'])
+  .index('by_key_prefix', ['keyPrefix']);
+
+/**
+ * Cache list item table - stores each list entry as its own row so replay
+ * history does not grow into a single large Convex document.
+ */
+export const mastraCacheListItemsTable = defineTable({
+  key: v.string(),
+  keyPrefix: v.string(),
+  index: v.number(),
+  value: v.string(),
+})
+  .index('by_key_prefix', ['keyPrefix'])
+  .index('by_key_index', ['key', 'index']);
+
 // ============================================================================
 // Fallback Table - For unknown/custom tables
 // ============================================================================
@@ -182,7 +309,15 @@ export const mastraDocumentsTable = defineTable({
 // Re-export table name constants for convenience
 // ============================================================================
 
-export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS };
+export {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_RESOURCES,
+  TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+};
 
 // Additional table name constants for vector tables (not in core)
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';

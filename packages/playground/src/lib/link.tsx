@@ -19,7 +19,7 @@ export const Link: LinkComponent = forwardRef<HTMLAnchorElement, LinkComponentPr
     }
 
     return (
-      <RouterLink ref={ref} to={href} viewTransition {...props}>
+      <RouterLink ref={ref} to={href ?? ''} viewTransition {...props}>
         {children}
       </RouterLink>
     );

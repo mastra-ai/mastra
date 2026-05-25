@@ -4,12 +4,14 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  ClientObservabilityProxy,
   CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
   FeedbackInput,
   FeedbackEvent,
   ObservabilityEntrypoint,
+  ObservabilityDropEvent,
   ObservabilityInstance,
   RecordedTrace,
   ScoreInput,
@@ -17,9 +19,10 @@ import type {
 } from '@mastra/core/observability';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { routeToHandler } from './bus/route-event';
+import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
-import { CloudExporter, DefaultExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import {
   buildFeedbackEvent,
@@ -48,6 +51,7 @@ function isInstance(
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
   #mastra?: Mastra;
+  #clientObservabilityProxy?: ClientObservabilityProxy;
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -125,7 +129,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     if (config.default?.enabled) {
       console.warn(
         '[Mastra Observability] The "default: { enabled: true }" configuration is deprecated and will be removed in a future version. ' +
-          'Please use explicit configs with DefaultExporter and CloudExporter instead. ' +
+          'Please use explicit configs with MastraStorageExporter and MastraPlatformExporter instead. ' +
           'Sensitive data filtering is applied by default and can be controlled via the top-level "sensitiveDataFilter" option. ' +
           'See https://mastra.ai/docs/observability/tracing/overview for the recommended configuration.',
       );
@@ -135,7 +139,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
         serviceName: 'mastra',
         name: 'default',
         sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [new DefaultExporter(), new CloudExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: autoFilter ? [autoFilter] : [],
       });
 
@@ -208,11 +212,15 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
       const config = instance.getConfig();
       const exporters = instance.getExporters();
+      const emitDropEvent =
+        instance instanceof BaseObservabilityInstance
+          ? (event: ObservabilityDropEvent) => instance.getObservabilityBus().emitDropEvent(event)
+          : undefined;
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init({ mastra, config });
+            exporter.init({ mastra, config, emitDropEvent });
           } catch (error) {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,
@@ -402,6 +410,25 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
+  }
+
+  /**
+   * Returns the proxy responsible for client observability (W3C trace
+   * context injection + OTLP/JSON payload reception for spans/logs
+   * returned from client-side execution).
+   *
+   * Lazily constructed on first call. Resolves the target observability
+   * instance per receive call so config selection works the same way
+   * as for server-side spans.
+   */
+  getClientObservabilityProxy(): ClientObservabilityProxy | undefined {
+    if (!this.#clientObservabilityProxy) {
+      this.#clientObservabilityProxy = createClientObservabilityProxy({
+        resolveInstance: () => this.getDefaultInstance(),
+        logger: this.logger,
+      });
+    }
+    return this.#clientObservabilityProxy;
   }
 
   async #getObservabilityStorage(): Promise<ObservabilityStorage | null> {

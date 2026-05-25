@@ -15,6 +15,7 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -820,6 +821,7 @@ describe('Hono Server Adapter', () => {
         handler: async ({ requestContext }) => {
           return {
             resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
             customKey: requestContext?.get('myKey') ?? null,
           };
         },
@@ -835,6 +837,7 @@ describe('Hono Server Adapter', () => {
           body: JSON.stringify({
             requestContext: {
               mastra__resourceId: 'injected-victim-id',
+              [MASTRA_IS_STUDIO_KEY]: true,
               myKey: 'safe-value',
             },
           }),
@@ -844,6 +847,7 @@ describe('Hono Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.resourceId).toBeNull();
+      expect(data.isStudio).toBeNull();
       expect(data.customKey).toBe('safe-value');
     });
 
@@ -901,6 +905,7 @@ describe('Hono Server Adapter', () => {
           return {
             resourceId: requestContext?.get('mastra__resourceId') ?? null,
             threadId: requestContext?.get('mastra__threadId') ?? null,
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
             customKey: requestContext?.get('myKey') ?? null,
           };
         },
@@ -912,6 +917,7 @@ describe('Hono Server Adapter', () => {
       const queryContext = JSON.stringify({
         mastra__resourceId: 'injected-victim-id',
         mastra__threadId: 'injected-thread-id',
+        [MASTRA_IS_STUDIO_KEY]: true,
         myKey: 'safe-value',
       });
 
@@ -925,7 +931,72 @@ describe('Hono Server Adapter', () => {
       const data = await response.json();
       expect(data.resourceId).toBeNull();
       expect(data.threadId).toBeNull();
+      expect(data.isStudio).toBeNull();
       expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should set reserved Studio context from x-mastra-client-type header', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'GET',
+          headers: { 'x-mastra-client-type': 'studio' },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.isStudio).toBe(true);
+    });
+
+    it('should not set reserved Studio context when x-mastra-client-type is not studio', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      for (const headers of [{ 'x-mastra-client-type': 'playground' }, {}]) {
+        const response = await app.request(
+          new Request('http://localhost/test/context', {
+            method: 'GET',
+            headers,
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        const data = await response.json();
+        expect(data.isStudio).toBeNull();
+      }
     });
   });
 });

@@ -9,6 +9,7 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
+import { MASTRA_IS_STUDIO_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { checkRouteFGA } from '../server-adapter';
 import {
@@ -637,6 +638,72 @@ describe('Agent Handlers', () => {
           model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
         },
       ]);
+    });
+
+    it('should use Studio placeholder context when serializing an agent from Studio', async () => {
+      const studioAgent = makeMockAgent({
+        name: 'studio-agent',
+        instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+      });
+
+      const mastraWithStudioAgent = makeMastraMock({
+        agents: { 'studio-agent': studioAgent },
+      });
+      const studioRequestContext = new RequestContext();
+      studioRequestContext.set(MASTRA_IS_STUDIO_KEY, true);
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStudioAgent }),
+        agentId: 'studio-agent',
+        requestContext: studioRequestContext,
+      });
+
+      expect(result.instructions).toBe('Hello <displayName>');
+    });
+
+    it.each([false, 'true', 1])(
+      'should not use Studio placeholder context for non-true isStudio value %s',
+      async isStudio => {
+        const agent = makeMockAgent({
+          name: 'non-studio-agent',
+          instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+        });
+
+        const mastraWithAgent = makeMastraMock({
+          agents: { 'non-studio-agent': agent },
+        });
+        const nonStudioRequestContext = new RequestContext();
+        nonStudioRequestContext.set(MASTRA_IS_STUDIO_KEY, isStudio);
+
+        const result = await GET_AGENT_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithAgent }),
+          agentId: 'non-studio-agent',
+          requestContext: nonStudioRequestContext,
+        });
+
+        expect(result.instructions).toBe('Hello undefined');
+      },
+    );
+
+    it('should not use Studio placeholder context for user-supplied isStudio request context', async () => {
+      const agent = makeMockAgent({
+        name: 'user-is-studio-agent',
+        instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+      });
+
+      const mastraWithAgent = makeMastraMock({
+        agents: { 'user-is-studio-agent': agent },
+      });
+      const requestContextWithUserKey = new RequestContext();
+      requestContextWithUserKey.set('isStudio', true);
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithAgent }),
+        agentId: 'user-is-studio-agent',
+        requestContext: requestContextWithUserKey,
+      });
+
+      expect(result.instructions).toBe('Hello undefined');
     });
 
     it('should return serialized agent without a model list for dynamic single-model selection', async () => {

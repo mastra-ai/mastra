@@ -125,7 +125,7 @@ const SaveAsPromptBlockDialog = ({
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="cta" size="sm" disabled={!name.trim() || isPending}>
+            <Button type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
               {isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>

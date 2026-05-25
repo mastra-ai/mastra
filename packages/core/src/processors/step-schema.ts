@@ -78,7 +78,7 @@ type CoreMessageType = {
 
 export type ProcessorMessageType = {
   id: string;
-  role: 'user' | 'assistant' | 'system' | 'tool';
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
@@ -388,7 +388,7 @@ export const ProcessorMessageSchema: z.ZodType<ProcessorMessageType> = z
     /** Unique message identifier */
     id: z.string(),
     /** Message role */
-    role: z.enum(['user', 'assistant', 'system', 'tool']),
+    role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
     /** When the message was created */
     createdAt: z.coerce.date(),
     /** Thread identifier for conversation grouping */

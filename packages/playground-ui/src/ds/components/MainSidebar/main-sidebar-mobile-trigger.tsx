@@ -33,7 +33,7 @@ export function MainSidebarMobileTrigger({
       className={cn(
         'inline-flex size-10 items-center justify-center rounded-md',
         'in-data-[sidebar-mobile=false]:hidden',
-        'text-neutral4 hover:text-neutral6 hover:bg-surface3',
+        'text-neutral4 hover:text-neutral6 hover:bg-sidebar-nav-hover',
         'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1',
         className,
       )}

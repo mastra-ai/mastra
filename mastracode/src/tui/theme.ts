@@ -650,6 +650,29 @@ export function getContrastText(hexBg: string): string {
   return luminance(hexBg) > 0.179 ? '#000000' : '#ffffff';
 }
 
+const NEAR_BLACK_LUMINANCE = luminance('#111111');
+const NEAR_BLACK_GLYPH_MIN_CONTRAST = 3;
+
+/**
+ * Keep deliberately subdued glyph colors on black/nearly-black backgrounds,
+ * but contrast-adapt them on brighter terminal backgrounds.
+ */
+export function ensureContrastUnlessNearBlack(fgHex: string, minRatio = TUI_MIN_CONTRAST): string {
+  const bgHex = getContrastBg();
+  if (luminance(bgHex) <= NEAR_BLACK_LUMINANCE) return fgHex;
+  return ensureContrast(fgHex, bgHex, minRatio);
+}
+
+/**
+ * Terminal glyphs need a little extra visibility even on black backgrounds.
+ * Keep them subdued on near-black terminals, but do not let them get too faint.
+ */
+export function ensureTerminalGlyphContrast(fgHex: string, minRatio = TUI_MIN_CONTRAST): string {
+  const bgHex = getContrastBg();
+  const targetRatio = luminance(bgHex) <= NEAR_BLACK_LUMINANCE ? NEAR_BLACK_GLYPH_MIN_CONTRAST : minRatio;
+  return ensureContrast(fgHex, bgHex, targetRatio);
+}
+
 // =============================================================================
 // Theme Object
 // =============================================================================

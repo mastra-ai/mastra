@@ -1,10 +1,9 @@
 {
   "meta": {
     "name": "core-src-agent-__tests__-image-prompt.e2e",
-    "testFile": "src/agent/__tests__/image-prompt.e2e.test.ts",
+    "testFile": "packages/core/src/agent/__tests__/image-prompt.e2e.test.ts",
     "model": "gpt-4o",
-    "createdAt": "2026-03-09T19:12:47.438Z",
-    "updatedAt": "2026-03-24T15:26:48.518Z"
+    "createdAt": "2026-05-18T10:50:52.493Z"
   },
   "recordings": [
     {
@@ -37,21 +36,21 @@
             }
           ]
         },
-        "timestamp": 1774366005188
+        "timestamp": 1779101447751
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "access-control-expose-headers": "X-Request-ID",
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e16b22d5b50b72d-BRU",
+          "cf-ray": "9fda4d912bdcba60-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 24 Mar 2026 15:26:46 GMT",
+          "date": "Mon, 18 May 2026 10:50:50 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "684",
+          "openai-processing-ms": "1108",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -67,12 +66,12 @@
           "x-ratelimit-reset-input-images": "1ms",
           "x-ratelimit-reset-requests": "120ms",
           "x-ratelimit-reset-tokens": "1.55s",
-          "x-request-id": "req_7fb02990d3384e7c8b8878e4fbddf45b"
+          "x-request-id": "req_86cadfad186b49d9a7661deda93676e6"
         },
         "body": {
-          "id": "chatcmpl-DMxwUHDdMcy0hhKZGQVetvGUlkwzz",
+          "id": "chatcmpl-DgpqboFmbvdt9VJwyGWGHmBLNuTPM",
           "object": "chat.completion",
-          "created": 1774366006,
+          "created": 1779101449,
           "model": "gpt-4o-2024-08-06",
           "choices": [
             {
@@ -103,13 +102,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_589c9f9262"
+          "system_fingerprint": "fp_4070054e71"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "08b6eab728497942",
+      "hash": "a0598208f8f000b8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -133,23 +132,23 @@
                 }
               ]
             }
-          ],
-          "temperature": 0
+          ]
         },
-        "timestamp": 1774366006917
+        "timestamp": 1779101450453
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e16b2375f11b72d-BRU",
+          "cf-ray": "9fda4da1abf5ba60-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 24 Mar 2026 15:26:48 GMT",
+          "date": "Mon, 18 May 2026 10:50:52 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1423",
+          "openai-processing-ms": "1818",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -158,21 +157,21 @@
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-limit-tokens": "30000",
           "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "28868",
+          "x-ratelimit-remaining-tokens": "28390",
           "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "2.263s",
-          "x-request-id": "req_f0a5ef320e104cf281a231b1f2211764"
+          "x-ratelimit-reset-tokens": "3.218s",
+          "x-request-id": "req_92fc5c636e97461381bc44b0e611bc0d"
         },
         "body": {
-          "id": "resp_023aeb6fc01788720069c2ad3703c8819681914e68197e498d",
+          "id": "resp_0075f23c96b5968b006a0aef0a9f348196b705650dd2f6e281",
           "object": "response",
-          "created_at": 1774366007,
+          "created_at": 1779101450,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774366008,
+          "completed_at": 1779101452,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -180,9 +179,10 @@
           "max_output_tokens": null,
           "max_tool_calls": null,
           "model": "gpt-4o-2024-08-06",
+          "moderation": null,
           "output": [
             {
-              "id": "msg_023aeb6fc01788720069c2ad3838708196a8597dbee316d2b1",
+              "id": "msg_0075f23c96b5968b006a0aef0be82c819692633754e99cbc4f",
               "type": "message",
               "status": "completed",
               "content": [
@@ -190,7 +190,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The image is the logo of Google."
+                  "text": "The image is the Google logo, which features the word \"Google\" in multicolored letters."
                 }
               ],
               "role": "assistant"
@@ -200,7 +200,7 @@
           "presence_penalty": 0,
           "previous_response_id": null,
           "prompt_cache_key": null,
-          "prompt_cache_retention": null,
+          "prompt_cache_retention": "in_memory",
           "reasoning": {
             "effort": null,
             "summary": null
@@ -208,7 +208,7 @@
           "safety_identifier": null,
           "service_tier": "default",
           "store": true,
-          "temperature": 0,
+          "temperature": 1,
           "text": {
             "format": {
               "type": "text"
@@ -225,11 +225,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 9,
+            "output_tokens": 21,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 282
+            "total_tokens": 294
           },
           "user": null,
           "metadata": {}
