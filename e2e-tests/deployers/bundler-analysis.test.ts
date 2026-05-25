@@ -54,6 +54,12 @@ describe.for([['pnpm'] as const])(`%s bundler analysis`, ([pkgManager]) => {
         ),
       );
 
+      // Create pnpm-workspace.yaml (required by pnpm v11 for build policy)
+      await writeFile(
+        join(fixturePath, 'pnpm-workspace.yaml'),
+        'onlyBuiltDependencies:\n  - esbuild\n  - protobufjs\n  - sharp\n  - workerd\n  - bufferutil\n  - utf-8-validate\n',
+      );
+
       // Create tsconfig.json
       await writeFile(
         join(fixturePath, 'tsconfig.json'),

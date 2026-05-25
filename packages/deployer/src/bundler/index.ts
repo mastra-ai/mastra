@@ -82,13 +82,16 @@ export abstract class Bundler extends MastraBundler {
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
-          pnpm: {
-            neverBuiltDependencies: [],
-          },
         },
         null,
         2,
       ),
+    );
+
+    // pnpm v11 requires build policy via pnpm-workspace.yaml, not package.json#pnpm
+    await writeFile(
+      join(outputDirectory, 'pnpm-workspace.yaml'),
+      'onlyBuiltDependencies:\n  - esbuild\n  - sharp\n  - protobufjs\n  - workerd\n  - bufferutil\n  - utf-8-validate\n',
     );
   }
 

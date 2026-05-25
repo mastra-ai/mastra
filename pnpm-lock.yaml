@@ -54,7 +54,7 @@ overrides:
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
 
-packageExtensionsChecksum: sha256-8nGrITkWPbE5qkHV9ZoEqKbBSq+GK1e+iTwaOXq40nA=
+packageExtensionsChecksum: sha256-e5z6k7psnZgFNXA8bqaGMt5i6hJms/w5tp89tRNEsds=
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.3': 1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535
@@ -30127,7 +30127,9 @@ snapshots:
       lru-cache: 10.4.3
       set-blocking: 2.0.0
 
-  '@arcadeai/arcadejs@2.4.1': {}
+  '@arcadeai/arcadejs@2.4.1':
+    dependencies:
+      zod: 3.25.76
 
   '@arizeai/openinference-genai@0.1.7(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.40.0)':
     dependencies:

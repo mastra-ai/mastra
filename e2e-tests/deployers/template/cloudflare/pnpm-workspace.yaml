@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - protobufjs
+  - workerd
+  - bufferutil
+  - utf-8-validate

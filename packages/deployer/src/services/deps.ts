@@ -91,19 +91,31 @@ export class Deps extends MastraBase {
   }
 
   private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
-    const packageJsonPath = path.join(dir, 'package.json');
-    const packageJson = await readJSON(packageJsonPath);
+    const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
 
-    packageJson.pnpm = {
-      ...packageJson.pnpm,
-      supportedArchitectures: {
-        os: options.os || [],
-        cpu: options.cpu || [],
-        libc: options.libc || [],
-      },
-    };
+    // Build the YAML content manually for supportedArchitectures
+    const lines: string[] = ['onlyBuiltDependencies:'];
+    // Collect all packages that need building from the architecture options
+    lines.push('  - esbuild');
+    lines.push('  - sharp');
+    lines.push('  - protobufjs');
+    lines.push('  - workerd');
+    if (options.os?.length || options.cpu?.length || options.libc?.length) {
+      lines.push('');
+      lines.push('supportedArchitectures:');
+      if (options.os?.length) {
+        lines.push(`  os: ${JSON.stringify(options.os)}`);
+      }
+      if (options.cpu?.length) {
+        lines.push(`  cpu: ${JSON.stringify(options.cpu)}`);
+      }
+      if (options.libc?.length) {
+        lines.push(`  libc: ${JSON.stringify(options.libc)}`);
+      }
+    }
+    lines.push('');
 
-    await writeJSON(packageJsonPath, packageJson, { spaces: 2 });
+    await fsPromises.writeFile(workspaceYamlPath, lines.join('\n'), 'utf-8');
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
