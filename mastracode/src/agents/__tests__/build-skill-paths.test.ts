@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG_DIR } from '../../constants.js';
 import { buildSkillPaths } from '../workspace.js';
 
 vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  const actual = await vi.importActual<typeof fs>('node:fs');
   return {
     ...actual,
     default: {
