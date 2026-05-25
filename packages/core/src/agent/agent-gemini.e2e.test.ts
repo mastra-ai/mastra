@@ -47,6 +47,8 @@ beforeEach(async c => {
       // Normalize workflow run IDs that depend on UUID counter state.
       serialized = serialized.replace(/"runId":"[^"]+"/g, '"runId":"NORMALIZED"');
       serialized = serialized.replace(/\\"runId\\":\\"[^\\"]+\\"/g, '\\"runId\\":\\"NORMALIZED\\"');
+      serialized = serialized.replace(/"stepCallId":"[^"]+"/g, '"stepCallId":"NORMALIZED"');
+      serialized = serialized.replace(/\\"stepCallId\\":\\"[^\\"]+\\"/g, '\\"stepCallId\\":\\"NORMALIZED\\"');
       serialized = serialized.replace(/"suspendedToolRunId":"[^"]+"/g, '"suspendedToolRunId":"NORMALIZED"');
       serialized = serialized.replace(
         /\\"suspendedToolRunId\\":\\"[^\\"]+\\"/g,
