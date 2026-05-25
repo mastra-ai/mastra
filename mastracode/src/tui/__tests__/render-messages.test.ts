@@ -31,12 +31,17 @@ function createState(): TUIState {
   } as unknown as TUIState;
 }
 
-function createUserMessage(text: string, id = 'user-1'): HarnessMessage {
+function createUserMessage(
+  text: string,
+  id = 'user-1',
+  attributes?: Record<string, string | number | boolean | null | undefined>,
+): HarnessMessage {
   return {
     id,
     role: 'user',
     content: [{ type: 'text', text }],
-  } as HarnessMessage;
+    attributes,
+  } as unknown as HarnessMessage;
 }
 
 function createReminderMessage(
@@ -64,6 +69,25 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children).toEqual([slashComp]);
     expect(state.messageComponentsById.get('signal-slash')).toBe(slashComp);
+  });
+
+  it('removes pending slash command UI when the echoed slash command message arrives', () => {
+    const state = createState();
+    const slashComp = new SlashCommandComponent('deploy', 'custom output');
+    state.allSlashCommandComponents.push(slashComp);
+    state.chatContainer.addChild(slashComp);
+    addPendingUserMessage(state, 'signal-slash', '/deploy');
+    const pending = state.pendingSignalMessageComponentsById.get('signal-slash')?.component;
+
+    addUserMessage(
+      state,
+      createUserMessage('<slash-command name="deploy">\ncustom output\n</slash-command>', 'signal-slash'),
+    );
+
+    expect(state.pendingSignalMessageComponentsById.has('signal-slash')).toBe(false);
+    expect(state.messageComponentsById.get('signal-slash')).toBe(slashComp);
+    expect(state.chatContainer.children.includes(slashComp as never)).toBe(true);
+    expect(state.chatContainer.children.includes(pending as never)).toBe(false);
   });
 
   it('dedupes echoed <skill> activation messages against the optimistic skill component', () => {
@@ -285,6 +309,31 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children).toHaveLength(3);
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
     expect(state.chatContainer.children[2]).toBeInstanceOf(UserMessageComponent);
+  });
+
+  it('renders while-active user messages with the steer label from message attributes', () => {
+    const state = createState();
+
+    addUserMessage(state, createUserMessage('continue with this', 'signal-1', { delivery: 'while-active' }));
+
+    const rendered = (state.chatContainer.children[0] as UserMessageComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('╭ steer ');
+  });
+
+  it('confirms pending active signals with the steer label', () => {
+    const state = createState();
+
+    addPendingUserMessage(state, 'pending-signal-1', 'continue with this', undefined, { isInterjection: true });
+    addUserMessage(state, createUserMessage('continue with this', 'pending-signal-1'));
+
+    const rendered = (state.chatContainer.children[0] as UserMessageComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('╭ steer ');
   });
 
   it('replaces a pending signal with the echoed user message once the stream is settled', () => {

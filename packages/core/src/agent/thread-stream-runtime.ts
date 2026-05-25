@@ -8,7 +8,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal } from './signals';
+import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
@@ -38,6 +38,7 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   threadId: string;
   resourceId?: string;
   streamOptions: AgentExecutionOptions<OUTPUT>;
+  createSubscriberStream?: () => ReadableStream<unknown>;
 };
 
 type PreparedThreadRun = {
@@ -135,49 +136,106 @@ export class AgentThreadStreamRuntime {
   }
 
   #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
-    if (this.#getPubSub(pubsub) instanceof EventEmitterPubSub) return output;
     const runtime = this;
-    const source = output.fullStream as any;
-    if (!source) return output;
-    const fullStream =
-      typeof source.pipeThrough === 'function'
-        ? source.pipeThrough(
-            new TransformStream({
-              transform(part, controller) {
-                runtime.#publish(pubsub, key, {
-                  type: 'stream-part',
-                  runId: output.runId,
-                  part,
-                  sourceId: runtime.#getSourceId(),
-                });
-                controller.enqueue(part);
-              },
-            }) as any,
-          )
-        : new ReadableStream({
-            async start(controller) {
-              try {
-                for await (const part of source) {
-                  runtime.#publish(pubsub, key, {
-                    type: 'stream-part',
-                    runId: output.runId,
-                    part,
-                    sourceId: runtime.#getSourceId(),
-                  });
-                  controller.enqueue(part);
-                }
-                controller.close();
-              } catch (error) {
-                controller.error(error);
+
+    const parts: unknown[] = [];
+    const waiters = new Set<() => void>();
+    let started = false;
+    let done = false;
+    let error: unknown;
+
+    const wake = () => {
+      const pending = [...waiters];
+      waiters.clear();
+      for (const waiter of pending) waiter();
+    };
+
+    const emitPart = async (part: unknown) => {
+      parts.push(part);
+      await runtime.#publishAndWait(pubsub, key, {
+        type: 'stream-part',
+        runId: output.runId,
+        part,
+        sourceId: runtime.#getSourceId(),
+      });
+      wake();
+    };
+
+    const start = () => {
+      if (started) return;
+      started = true;
+      void (async () => {
+        try {
+          const source = output.fullStream as ReadableStream<unknown> | undefined;
+          if (!source) return;
+
+          if (typeof source.getReader === 'function') {
+            const reader = source.getReader();
+            try {
+              while (true) {
+                const { value: part, done: streamDone } = await reader.read();
+                if (streamDone) break;
+                await emitPart(part);
               }
-            },
-          });
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      enumerable: true,
-      value: fullStream,
-    });
-    return output;
+            } finally {
+              reader.releaseLock();
+            }
+          } else {
+            for await (const part of source as any) {
+              await emitPart(part);
+            }
+          }
+        } catch (caught) {
+          error = caught;
+        } finally {
+          done = true;
+          wake();
+        }
+      })();
+    };
+
+    const createStream = () => {
+      let index = 0;
+      let closed = false;
+      let waiter: (() => void) | undefined;
+      return new ReadableStream({
+        async pull(controller) {
+          start();
+          while (!closed) {
+            if (index < parts.length) {
+              controller.enqueue(parts[index++]);
+              return;
+            }
+            if (error) {
+              controller.error(error);
+              return;
+            }
+            if (done) {
+              controller.close();
+              return;
+            }
+            await new Promise<void>(resolve => {
+              waiter = resolve;
+              waiters.add(resolve);
+            });
+            if (waiter) {
+              waiters.delete(waiter);
+              waiter = undefined;
+            }
+          }
+        },
+        cancel() {
+          closed = true;
+          if (waiter) {
+            waiters.delete(waiter);
+            waiter();
+            waiter = undefined;
+          }
+        },
+      });
+    };
+
+    return { output, createSubscriberStream: createStream, startBroadcast: start };
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -305,7 +363,11 @@ export class AgentThreadStreamRuntime {
 
     const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
-    const outputForSubscribers = this.#withBroadcastStream(output, pubsub, key);
+    const {
+      output: outputForSubscribers,
+      createSubscriberStream,
+      startBroadcast,
+    } = this.#withBroadcastStream(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
@@ -313,12 +375,14 @@ export class AgentThreadStreamRuntime {
       threadId,
       resourceId,
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      createSubscriberStream,
     };
 
     state.threadRunsById.set(output.runId, record);
     state.threadKeysByRunId.set(output.runId, key);
     state.activeThreadRunIds.set(key, output.runId);
-    this.#publish(pubsub, key, { type: 'run-registered', runId: output.runId });
+    const registered = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId });
+    void registered.then(startBroadcast, startBroadcast);
     this.#watchThreadRunCompletion(state, pubsub, key, record);
   }
 
@@ -644,9 +708,46 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            for await (const part of run.output.fullStream) {
-              yield part as any;
-              if (done) break;
+            // Local registered runs expose createSubscriberStream, while remote runs are
+            // already per-subscription streams. Do not silently skip locked streams here:
+            // a locked fallback stream means a caller is sharing a non-multicast stream.
+            const subscriberStream = run.createSubscriberStream?.() ?? run.output.fullStream;
+            const reader = subscriberStream.getReader();
+            let readerReleased = false;
+            try {
+              while (true) {
+                const { value: part, done: streamDone } = await reader.read();
+                if (streamDone) break;
+                const typedPart = part as any;
+                yield typedPart;
+                if (done) break;
+                if (
+                  typedPart.type === 'finish' ||
+                  typedPart.type === 'error' ||
+                  typedPart.type === 'abort' ||
+                  typedPart.type === 'tool-call-suspended'
+                ) {
+                  // After a terminal chunk, drain remaining stream data in the
+                  // background to prevent backpressure from blocking upstream
+                  // processing (e.g. OM), while allowing the generator to
+                  // immediately serve subsequent runs.
+                  readerReleased = true;
+                  void (async () => {
+                    try {
+                      while (true) {
+                        const { done: d } = await reader.read();
+                        if (d) break;
+                      }
+                    } catch {}
+                    reader.releaseLock();
+                  })();
+                  break;
+                }
+              }
+            } finally {
+              if (!readerReleased) {
+                reader.releaseLock();
+              }
             }
           }
         } finally {
@@ -675,7 +776,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
-    const signal = createSignal({ ...signalInput, acceptedAt: new Date() });
+    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -707,6 +808,12 @@ export class AgentThreadStreamRuntime {
     );
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
+
+    // Resolve conditional delivery attributes now that we know the delivery path.
+    signal = resolveDeliveryAttributes(
+      signal,
+      isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
+    );
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {

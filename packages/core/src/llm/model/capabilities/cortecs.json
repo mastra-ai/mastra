@@ -1,0 +1,13 @@
+{
+  "attachment": [
+    "claude-4-5-sonnet",
+    "claude-4-6-sonnet",
+    "claude-haiku-4-5",
+    "claude-opus4-5",
+    "claude-opus4-6",
+    "claude-opus4-7",
+    "intellect-3",
+    "kimi-k2-thinking",
+    "mistral-large-2512"
+  ]
+}
