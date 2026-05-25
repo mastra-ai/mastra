@@ -324,6 +324,32 @@ describe('createMastraCode', () => {
     );
   });
 
+  it('keeps thread locks enabled for configured PubSub unless cross-process mode is explicit', async () => {
+    const pubsub = {} as any;
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub, unixSocketPubSub: true });
+
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
+    expect(harnessConfig?.pubsub).toBe(pubsub);
+    expect(harnessConfig?.threadLock).toBeDefined();
+  });
+
+  it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
+    const pubsub = {} as any;
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub, crossProcessPubSub: true });
+
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
+    expect(harnessConfig?.pubsub).toBe(pubsub);
+    expect(harnessConfig?.threadLock).toBeUndefined();
+  });
+
   it('restores the current thread caveman observation setting at startup', async () => {
     harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
     harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
@@ -363,7 +389,7 @@ describe('createMastraCode', () => {
     expect(harnessCall?.initialState?.observeAttachments).toBe(false);
   });
 
-  it('omits observeAttachments from initial state when global setting is null', async () => {
+  it('defaults observeAttachments to auto when global setting is null', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -371,7 +397,20 @@ describe('createMastraCode', () => {
     const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessCall?.initialState).not.toHaveProperty('observeAttachments');
+    expect(harnessCall?.initialState?.observeAttachments).toBe('auto');
+  });
+
+  it('restores observeAttachments metadata for the current thread at startup', async () => {
+    harnessStateMock = { observeAttachments: true };
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

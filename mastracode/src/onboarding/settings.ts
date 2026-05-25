@@ -169,10 +169,10 @@ export interface GlobalSettings {
     omCavemanObservations: boolean | null;
     /**
      * Whether Observational Memory forwards image/file attachment parts to the
-     * Observer LLM. `null` ⇒ inherit built-in default (true). Turn off when
-     * using a text-only observer model.
+     * Observer LLM. `null` ⇒ inherit built-in default ('auto'). 'auto' checks
+     * model capabilities; true/false forces the setting.
      */
-    omObserveAttachments: boolean | null;
+    omObserveAttachments: 'auto' | boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
@@ -207,8 +207,15 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Signal routing configuration
+  signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+}
+
+export interface SignalSettings {
+  /** Opt into local Unix socket PubSub for cross-process signal routing. */
+  unixSocketPubSub: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -279,6 +286,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  signals: { unixSocketPubSub: false },
   observability: { resources: {}, localTracing: false },
 };
 
@@ -513,6 +521,12 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        signals: {
+          unixSocketPubSub:
+            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
+              ? raw.signals.unixSocketPubSub
+              : DEFAULTS.signals.unixSocketPubSub,
+        },
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -633,6 +647,12 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      signals: {
+        unixSocketPubSub:
+          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
+            ? raw.signals.unixSocketPubSub
+            : DEFAULTS.signals.unixSocketPubSub,
+      },
       observability: parseObservabilitySettings(raw.observability),
     };
 

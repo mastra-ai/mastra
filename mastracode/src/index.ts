@@ -36,7 +36,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
-import { attachCavemanThreadStatePersistence, restoreCavemanForCurrentThread } from './agents/thread-caveman-state.js';
+import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
@@ -73,6 +73,7 @@ import {
   getResourceIdOverride,
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
+import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
@@ -135,6 +136,8 @@ export interface MastraCodeConfig {
   browser?: HarnessConfig['browser'];
   /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
   pubsub?: PubSub;
+  /** Use Mastra Code's built-in Unix socket PubSub for local cross-process signal routing. */
+  unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
 }
@@ -232,8 +235,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceIdOverride = true;
   }
 
-  const signalsPubSub = config?.pubsub;
-  const crossProcessPubSub = config?.crossProcessPubSub ?? false;
+  const configuredPubSub = config?.pubsub;
+  const useUnixSocketPubSub =
+    (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
+  const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
+  const crossProcessPubSub = config?.crossProcessPubSub ?? (!configuredPubSub && useUnixSocketPubSub);
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
@@ -465,7 +471,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
-  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? undefined;
+  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -663,11 +669,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  // Persist /om caveman-observations toggle per-thread (mastracode-only concern;
+  // Persist MastraCode-owned /om settings per-thread (mastracode-only concern;
   // intentionally not in core's harness loadThreadMetadata).
-  const cavemanHarness = harness as unknown as Harness<Record<string, unknown>>;
-  attachCavemanThreadStatePersistence(cavemanHarness);
-  await restoreCavemanForCurrentThread(cavemanHarness).catch(() => {
+  const omThreadStateHarness = harness as unknown as Harness<Record<string, unknown>>;
+  attachOMThreadStatePersistence(omThreadStateHarness);
+  await restoreOMThreadStateForCurrentThread(omThreadStateHarness).catch(() => {
     // Persistence is best-effort; don't crash startup if storage hiccups.
   });
 
@@ -675,11 +681,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     harness,
     mcpManager,
     hookManager,
+    signalsPubSub,
     authStorage,
     resolveModel,
     storageWarning,
     observabilityWarning,
-    signalsPubSub,
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,

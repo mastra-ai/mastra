@@ -83,6 +83,7 @@ function DatasetExperimentPage() {
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
           <ExperimentPageContent
             experimentId={experimentId!}
+            datasetId={datasetId!}
             experimentStatus={experiment?.status}
             results={results ?? []}
             isLoading={resultsLoading}

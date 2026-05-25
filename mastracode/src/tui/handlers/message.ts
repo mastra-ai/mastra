@@ -6,7 +6,10 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
@@ -16,6 +19,10 @@ import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
+
+function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
 
 /**
  * Get content parts after the last tool_call/tool_result in the message.
@@ -109,8 +116,7 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
     if (latestUserComponent) {
       const idx = state.chatContainer.children.indexOf(latestUserComponent as never);
       if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, component);
-        state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(state.chatContainer, component, idx);
         return;
       }
     }
@@ -119,8 +125,7 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
   if (state.streamingComponent && !reminder.precedesMessageId) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, component);
-      state.chatContainer.invalidate();
+      insertChatComponentWithBoundarySpacing(state.chatContainer, component, idx);
       return;
     }
   }
@@ -244,12 +249,14 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         );
         component.setExpanded(state.toolOutputExpanded);
         if (state.quietMode) {
+          component.setCompactToolModeColor(getCurrentModeColor(ctx));
           component.setQuietModeDisplay('quiet');
           component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
         }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
+        reconcileChatBoundarySpacers(state.chatContainer);
 
         state.streamingComponent = new AssistantMessageComponent(
           undefined,

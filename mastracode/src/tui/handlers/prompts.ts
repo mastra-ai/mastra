@@ -255,6 +255,7 @@ export async function handlePlanApproval(
       plan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await approvePlan(ctx, planId, title, plan);
 
         // Fire a structured system-reminder signal to wake the freshly
@@ -280,6 +281,7 @@ export async function handlePlanApproval(
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await approvePlan(ctx, planId, title, plan);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
@@ -296,6 +298,7 @@ export async function handlePlanApproval(
       },
       onReject: async (feedback?: string) => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await state.harness.respondToPlanApproval({
           planId,
           response: { action: 'rejected', feedback },
@@ -337,7 +340,7 @@ export async function handlePlanApproval(
     }
     state.ui.requestRender();
     state.chatContainer.invalidate();
-    approvalComponent.focused = true;
+    state.ui.setFocus(approvalComponent);
 
     ctx.notify('plan_approval', `Plan "${title}" requires approval`);
   });

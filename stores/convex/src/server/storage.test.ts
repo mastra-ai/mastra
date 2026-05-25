@@ -9,7 +9,7 @@ type TypedOperationCtx = Parameters<typeof handleTypedOperation>[0];
 type StorageHandlerForTest = typeof mastraStorage & {
   _handler: (ctx: TypedOperationCtx, request: StorageRequest) => Promise<StorageResponse>;
 };
-type TestDoc = { _id: GenericId<string>; id?: string };
+type TestDoc = { _id: GenericId<string>; id?: string; record?: Record<string, unknown> };
 type TestQueryBuilder = {
   eq: (field: string, value: string) => TestQueryBuilder;
 };
@@ -161,6 +161,7 @@ describe('mastraStorage bulk mutations', () => {
     const lookupKeys: string[] = [];
     const patches: Array<{ id: GenericId<string>; data: Record<string, unknown> }> = [];
     const inserts: Array<{ table: string; record: Record<string, unknown> }> = [];
+    const deletedIds: GenericId<string>[] = [];
     let activeLookups = 0;
     let maxConcurrentLookups = 0;
     let activeWrites = 0;
@@ -205,13 +206,17 @@ describe('mastraStorage bulk mutations', () => {
       activeWrites -= 1;
       inserts.push({ table, record });
     });
-    const ctx = { db: { query, patch, insert } } as unknown as TypedOperationCtx;
+    const deleteDoc = vi.fn(async (id: GenericId<string>) => {
+      deletedIds.push(id);
+    });
+    const ctx = { db: { query, patch, insert, delete: deleteDoc } } as unknown as TypedOperationCtx;
 
     return {
       ctx,
       lookupKeys,
       patches,
       inserts,
+      deletedIds,
       get maxConcurrentLookups() {
         return maxConcurrentLookups;
       },
@@ -278,6 +283,282 @@ describe('mastraStorage bulk mutations', () => {
     expect(batchCtx.maxConcurrentWrites).toBe(25);
   });
 
+  it('typed patch updates an existing record without deleting it', async () => {
+    const batchCtx = createBatchInsertCtx(new Map([['task-1', { _id: asConvexId('task-doc') }]]));
+
+    const result = await handleTypedOperation(batchCtx.ctx, 'mastra_background_tasks', {
+      op: 'patch',
+      tableName: 'mastra_background_tasks',
+      id: 'task-1',
+      record: { id: 'should-not-change', status: 'completed', completedAt: '2026-01-01T00:00:00.000Z' },
+    });
+
+    expect(result).toEqual({ ok: true, result: true });
+    expect(batchCtx.lookupKeys).toEqual(['task-1', 'mastra_background_tasks|task-1']);
+    expect(batchCtx.patches).toEqual([
+      {
+        id: asConvexId('task-doc'),
+        data: { status: 'completed', completedAt: '2026-01-01T00:00:00.000Z' },
+      },
+    ]);
+    expect(batchCtx.inserts).toEqual([]);
+    expect(batchCtx.deletedIds).toEqual([]);
+  });
+
+  it('background task patch deletes stale legacy fallback rows after typed rows exist', async () => {
+    const batchCtx = createBatchInsertCtx(
+      new Map([
+        ['task-1', { _id: asConvexId('task-doc') }],
+        [
+          'mastra_background_tasks|task-1',
+          {
+            _id: asConvexId('legacy-task-doc'),
+            record: { id: 'task-1', status: 'pending', agentId: 'agent-1' },
+          },
+        ],
+      ]),
+    );
+
+    const result = await handleTypedOperation(batchCtx.ctx, 'mastra_background_tasks', {
+      op: 'patch',
+      tableName: 'mastra_background_tasks',
+      id: 'task-1',
+      record: { status: 'running' },
+    });
+
+    expect(result).toEqual({ ok: true, result: true });
+    expect(batchCtx.lookupKeys).toEqual(['task-1', 'mastra_background_tasks|task-1']);
+    expect(batchCtx.patches).toEqual([{ id: asConvexId('task-doc'), data: { status: 'running' } }]);
+    expect(batchCtx.deletedIds).toEqual([asConvexId('legacy-task-doc')]);
+  });
+
+  it('background task patch updates legacy fallback rows when no typed row exists', async () => {
+    const batchCtx = createBatchInsertCtx(
+      new Map([
+        [
+          'mastra_background_tasks|task-1',
+          {
+            _id: asConvexId('legacy-task-doc'),
+            record: { id: 'task-1', status: 'pending', agentId: 'agent-1', retryCount: 0 },
+          },
+        ],
+      ]),
+    );
+
+    const result = await handleTypedOperation(batchCtx.ctx, 'mastra_background_tasks', {
+      op: 'patch',
+      tableName: 'mastra_background_tasks',
+      id: 'task-1',
+      record: { status: 'running', retry_count: 1, startedAt: '2026-01-01T00:01:00.000Z' },
+    });
+
+    expect(result).toEqual({ ok: true, result: true });
+    expect(batchCtx.lookupKeys).toEqual(['task-1', 'mastra_background_tasks|task-1']);
+    expect(batchCtx.patches).toEqual([
+      {
+        id: asConvexId('legacy-task-doc'),
+        data: {
+          record: {
+            id: 'task-1',
+            status: 'running',
+            agentId: 'agent-1',
+            retry_count: 1,
+            startedAt: '2026-01-01T00:01:00.000Z',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('background task load falls back to legacy generic documents during upgrade', async () => {
+    const batchCtx = createBatchInsertCtx(
+      new Map([
+        [
+          'mastra_background_tasks|task-1',
+          {
+            _id: asConvexId('legacy-task-doc'),
+            record: { id: 'task-1', status: 'pending', agentId: 'agent-1' },
+          },
+        ],
+      ]),
+    );
+
+    const result = await handleTypedOperation(batchCtx.ctx, 'mastra_background_tasks', {
+      op: 'load',
+      tableName: 'mastra_background_tasks',
+      keys: { id: 'task-1' },
+    });
+
+    expect(result).toEqual({ ok: true, result: { id: 'task-1', status: 'pending', agentId: 'agent-1' } });
+    expect(batchCtx.lookupKeys).toEqual(['task-1', 'mastra_background_tasks|task-1']);
+  });
+
+  it('background task queryTable applies filters to legacy generic documents', async () => {
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const typedDocs = [
+      { _id: asConvexId('typed-running'), id: 'typed-running', status: 'running', agent_id: 'agent-1' },
+      { _id: asConvexId('typed-completed'), id: 'typed-completed', status: 'completed', agent_id: 'agent-1' },
+    ];
+    const legacyDocs = [
+      {
+        _id: asConvexId('legacy-duplicate-doc'),
+        record: { id: 'typed-running', status: 'running', agentId: 'agent-1' },
+      },
+      {
+        _id: asConvexId('legacy-running-doc'),
+        record: { id: 'legacy-running', status: 'running', agentId: 'agent-1' },
+      },
+      {
+        _id: asConvexId('legacy-completed-doc'),
+        record: { id: 'legacy-completed', status: 'completed', agentId: 'agent-1' },
+      },
+    ];
+    const query = vi.fn((table: string) => ({
+      withIndex: vi.fn((indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+        const eqValues: string[] = [];
+        const localBuilder: TestQueryBuilder = {
+          eq: vi.fn((_field: string, value: string) => {
+            eqValues.push(String(value));
+            return localBuilder;
+          }),
+        };
+        queryBuilder(builder);
+        queryBuilder(localBuilder);
+        return {
+          take: vi.fn(async () => (table === 'mastra_documents' ? legacyDocs : typedDocs)),
+          unique: vi.fn(async () =>
+            table === 'mastra_background_tasks' && indexName === 'by_record_id'
+              ? (typedDocs.find(doc => doc.id === eqValues[0]) ?? null)
+              : null,
+          ),
+        };
+      }),
+      take: vi.fn(async () => (table === 'mastra_background_tasks' ? typedDocs : [])),
+    }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_background_tasks', {
+      op: 'queryTable',
+      tableName: 'mastra_background_tasks',
+      filters: [
+        { field: 'status', value: 'running' },
+        { field: 'agent_id', value: 'agent-1' },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      result: [
+        { _id: asConvexId('typed-running'), id: 'typed-running', status: 'running', agent_id: 'agent-1' },
+        { id: 'legacy-running', status: 'running', agentId: 'agent-1' },
+      ],
+    });
+  });
+
+  it('background task queryTable suppresses stale legacy rows when a typed row exists', async () => {
+    const typedDocs = [{ _id: asConvexId('typed-task-doc'), id: 'task-1', status: 'completed', agent_id: 'agent-1' }];
+    const legacyDocs = [
+      {
+        _id: asConvexId('legacy-task-doc'),
+        record: { id: 'task-1', status: 'running', agentId: 'agent-1' },
+      },
+    ];
+    const query = vi.fn((table: string) => ({
+      withIndex: vi.fn((indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+        const eqValues: string[] = [];
+        const builder: TestQueryBuilder = {
+          eq: vi.fn((_field: string, value: string) => {
+            eqValues.push(String(value));
+            return builder;
+          }),
+        };
+        queryBuilder(builder);
+        return {
+          take: vi.fn(async () => (table === 'mastra_documents' ? legacyDocs : [])),
+          unique: vi.fn(async () =>
+            table === 'mastra_background_tasks' && indexName === 'by_record_id'
+              ? (typedDocs.find(doc => doc.id === eqValues[0]) ?? null)
+              : null,
+          ),
+        };
+      }),
+      take: vi.fn(async () => (table === 'mastra_background_tasks' ? typedDocs : [])),
+    }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_background_tasks', {
+      op: 'queryTable',
+      tableName: 'mastra_background_tasks',
+      filters: [{ field: 'status', value: 'running' }],
+    });
+
+    expect(result).toEqual({ ok: true, result: [] });
+  });
+
+  it('background task queryTable falls back to generic documents when the typed table is not deployed', async () => {
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const legacyDocs = [
+      {
+        _id: asConvexId('legacy-running-doc'),
+        record: { id: 'legacy-running', status: 'running', agentId: 'agent-1' },
+      },
+      {
+        _id: asConvexId('legacy-completed-doc'),
+        record: { id: 'legacy-completed', status: 'completed', agentId: 'agent-1' },
+      },
+    ];
+    const query = vi.fn((table: string) => {
+      if (table === 'mastra_background_tasks') {
+        throw new Error("Table 'mastra_background_tasks' does not exist");
+      }
+
+      return {
+        withIndex: vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+          queryBuilder(builder);
+          return {
+            take: vi.fn(async () => legacyDocs),
+          };
+        }),
+        take: vi.fn(async () => []),
+      };
+    });
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_background_tasks',
+      filters: [
+        { field: 'status', value: 'running' },
+        { field: 'agent_id', value: 'agent-1' },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      result: [{ id: 'legacy-running', status: 'running', agentId: 'agent-1' }],
+    });
+  });
+
+  it('routes background task operations to the typed background task table', async () => {
+    const batchCtx = createBatchInsertCtx(new Map([['task-1', { _id: asConvexId('task-doc') }]]));
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(batchCtx.ctx, {
+      op: 'patch',
+      tableName: 'mastra_background_tasks',
+      id: 'task-1',
+      record: { status: 'running' },
+    });
+
+    expect(result).toEqual({ ok: true, result: true });
+    expect(batchCtx.lookupKeys).toEqual(['task-1', 'mastra_background_tasks|task-1']);
+    expect(batchCtx.patches).toEqual([{ id: asConvexId('task-doc'), data: { status: 'running' } }]);
+    expect(batchCtx.inserts).toEqual([]);
+  });
+
   it('vector batchInsert keeps the last record for duplicate ids and scopes lookups by vector index', async () => {
     const batchCtx = createBatchInsertCtx(new Map([['embeddings|existing', { _id: asConvexId('vector-existing') }]]));
 
@@ -306,6 +587,27 @@ describe('mastraStorage bulk mutations', () => {
         record: { id: 'new', indexName: 'embeddings', embedding: [20], metadata: { version: 2 } },
       },
     ]);
+  });
+
+  it('vector patch updates vector fields without wrapping them in a record object', async () => {
+    const batchCtx = createBatchInsertCtx(new Map([['embeddings|existing', { _id: asConvexId('vector-existing') }]]));
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(batchCtx.ctx, {
+      op: 'patch',
+      tableName: 'mastra_vector_embeddings',
+      id: 'existing',
+      record: { id: 'other', indexName: 'other-index', embedding: [3], metadata: { version: 3 } },
+    });
+
+    expect(result).toEqual({ ok: true, result: true });
+    expect(batchCtx.lookupKeys).toEqual(['embeddings|existing']);
+    expect(batchCtx.patches).toEqual([
+      {
+        id: asConvexId('vector-existing'),
+        data: { embedding: [3], metadata: { version: 3 } },
+      },
+    ]);
+    expect(batchCtx.inserts).toEqual([]);
   });
 
   it('generic batchInsert keeps the last duplicate record for fallback tables', async () => {
@@ -395,6 +697,31 @@ describe('mastraStorage bulk mutations', () => {
     expect(deleteCtx.maxConcurrentDeletes).toBe(25);
   });
 
+  it('background task deleteMany deletes typed and legacy fallback rows', async () => {
+    const deleteCtx = createIndexedDeleteCtx(
+      new Map([
+        ['task-1', { _id: asConvexId('typed-task-doc'), id: 'task-1' }],
+        [
+          'mastra_background_tasks|task-1',
+          {
+            _id: asConvexId('legacy-task-doc'),
+            record: { id: 'task-1', status: 'pending' },
+          },
+        ],
+      ]),
+    );
+
+    const result = await handleTypedOperation(deleteCtx.ctx, 'mastra_background_tasks', {
+      op: 'deleteMany',
+      tableName: 'mastra_background_tasks',
+      ids: ['task-1'],
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(deleteCtx.lookupKeys).toEqual(['task-1', 'mastra_background_tasks|task-1']);
+    expect(deleteCtx.deletedIds.sort()).toEqual([asConvexId('legacy-task-doc'), asConvexId('typed-task-doc')]);
+  });
+
   it('clearTable deletes only the current batch concurrently and reports hasMore', async () => {
     const docs: TestDoc[] = Array.from({ length: 26 }, (_, index) => ({ _id: asConvexId(`doc-${index}`) }));
     const clearCtx = createClearTableCtx(docs);
@@ -409,6 +736,59 @@ describe('mastraStorage bulk mutations', () => {
     expect(clearCtx.deletedIds).toHaveLength(25);
     expect(clearCtx.deletedIds).not.toContain(asConvexId('doc-25'));
     expect(clearCtx.maxConcurrentDeletes).toBe(25);
+  });
+
+  it('background task clearTable deletes legacy fallback rows after typed rows drain', async () => {
+    const legacyDocs = [
+      { _id: asConvexId('legacy-task-doc-1'), record: { id: 'legacy-task-1' } },
+      { _id: asConvexId('legacy-task-doc-2'), record: { id: 'legacy-task-2' } },
+    ];
+    const indexCalls: Array<{ table: string; indexName?: string; eqValues: string[] }> = [];
+    const deletedIds: GenericId<string>[] = [];
+    const query = vi.fn((table: string) => ({
+      take: vi.fn(async () => []),
+      withIndex: vi.fn((indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+        const eqValues: string[] = [];
+        const builder: TestQueryBuilder = {
+          eq: vi.fn((_field: string, value: string) => {
+            eqValues.push(String(value));
+            return builder;
+          }),
+        };
+        queryBuilder(builder);
+        indexCalls.push({ table, indexName, eqValues });
+        return { take: vi.fn(async () => legacyDocs) };
+      }),
+    }));
+    const deleteDoc = vi.fn(async (id: GenericId<string>) => {
+      deletedIds.push(id);
+    });
+    const ctx = { db: { query, delete: deleteDoc } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_background_tasks', {
+      op: 'clearTable',
+      tableName: 'mastra_background_tasks',
+    });
+
+    expect(result).toEqual({ ok: true, hasMore: false });
+    expect(indexCalls).toEqual([
+      { table: 'mastra_documents', indexName: 'by_table', eqValues: ['mastra_background_tasks'] },
+    ]);
+    expect(deletedIds.sort()).toEqual([asConvexId('legacy-task-doc-1'), asConvexId('legacy-task-doc-2')]);
+  });
+
+  it('background task clearTable skips legacy lookup when the typed delete batch is full', async () => {
+    const docs: TestDoc[] = Array.from({ length: 25 }, (_, index) => ({ _id: asConvexId(`task-doc-${index}`) }));
+    const clearCtx = createClearTableCtx(docs);
+
+    const result = await handleTypedOperation(clearCtx.ctx, 'mastra_background_tasks', {
+      op: 'clearTable',
+      tableName: 'mastra_background_tasks',
+    });
+
+    expect(result).toEqual({ ok: true, hasMore: false });
+    expect(clearCtx.indexCalls).toEqual([]);
+    expect(clearCtx.deletedIds).toHaveLength(25);
   });
 
   it('deleteMany applies the same concurrent lookup behavior to vector tables', async () => {
