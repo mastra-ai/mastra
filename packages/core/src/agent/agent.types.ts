@@ -406,7 +406,7 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * const result = await stream.object;
    * ```
    */
-  structuredOutput?: PublicStructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
+  structuredOutput?: PublicStructuredOutputOptions<OUTPUT extends object ? OUTPUT : never>;
 
   /** Callback fired after each LLM step within a sub-agent execution */
   onStepFinish?: LoopConfig<OUTPUT>['onStepFinish'];
@@ -608,14 +608,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
  * Use this type for public method signatures.
  */
 export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  (OUTPUT extends object ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
 
 /**
  * Internal agent execution options that require StandardSchemaWithJSON.
  * Use this type internally after converting from PublicSchema.
  */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  (OUTPUT extends object ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
 
 export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
@@ -629,4 +629,4 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     snapshot: any;
   };
   toolCallId?: string;
-} & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+} & (OUTPUT extends object ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
