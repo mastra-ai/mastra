@@ -29,6 +29,7 @@ import type {
   TabsInput,
   DragInput,
   EvaluateInput,
+  ScreenshotInput,
 } from './schemas';
 import { AgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
@@ -53,9 +54,11 @@ export class AgentBrowser extends MastraBrowser {
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
+  private browserConfig: BrowserConfig;
 
   constructor(config: BrowserConfig = {}) {
     super(config);
+    this.browserConfig = config;
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
@@ -68,7 +71,7 @@ export class AgentBrowser extends MastraBrowser {
     // Initialize thread manager
     this.threadManager = new AgentBrowserThreadManager({
       scope: effectiveScope,
-      browserConfig: config,
+      browserConfig: { ...config, headless: this.headless },
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
@@ -160,7 +163,7 @@ export class AgentBrowser extends MastraBrowser {
 
     const localConfig = this.config as BrowserConfig;
     const launchOptions: BrowserLaunchOptions = {
-      headless: localConfig.headless ?? true,
+      headless: this.headless,
       viewport: localConfig.viewport,
       profile: localConfig.profile,
       executablePath: localConfig.executablePath,
@@ -289,10 +292,17 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Get the browser tools for this provider.
-   * Returns 17 flat tools for browser automation.
+   * Returns 16 flat tools for browser automation.
    */
   getTools(): Record<string, Tool<any, any>> {
-    return createAgentBrowserTools(this);
+    const tools = createAgentBrowserTools(this);
+    const exclude = this.browserConfig.excludeTools;
+    if (exclude?.length) {
+      for (const name of exclude) {
+        delete tools[name];
+      }
+    }
+    return tools;
   }
 
   // ---------------------------------------------------------------------------
@@ -693,6 +703,32 @@ export class AgentBrowser extends MastraBrowser {
       };
     } catch (error) {
       return this.createErrorFromException(error, 'Snapshot');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // browser_screenshot - Capture a screenshot of the current page
+  // ---------------------------------------------------------------------------
+
+  async screenshot(
+    input: ScreenshotInput,
+    threadId?: string,
+  ): Promise<{ base64: string; url: string; title: string } | BrowserToolError> {
+    try {
+      const page = await this.getPage(threadId);
+      const buffer = await page.screenshot({
+        fullPage: input.fullPage ?? false,
+        type: 'png',
+      });
+      const base64 = Buffer.from(buffer).toString('base64');
+
+      return {
+        base64,
+        url: page.url(),
+        title: await page.title(),
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Screenshot');
     }
   }
 
@@ -1298,9 +1334,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      // Wrap script in an async function to allow return statements
-      const wrappedScript = `(async () => { ${input.script} })()`;
-      const result = await page.evaluate(wrappedScript);
+      const result = await page.evaluate(input.script);
 
       return {
         success: true,

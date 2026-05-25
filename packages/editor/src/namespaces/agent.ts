@@ -33,7 +33,9 @@ import type {
   AgentInstructionBlock,
   StoredProcessorGraph,
   StorageWorkspaceRef,
+  StorageBrowserRef,
 } from '@mastra/core/storage';
+import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
 
@@ -43,6 +45,92 @@ import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-gr
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
+
+// ============================================================================
+// Builder Defaults
+// ============================================================================
+
+/** Fields from builder.configuration.agent that can be applied as creation defaults */
+const BUILDER_DEFAULT_FIELDS = ['memory', 'workspace', 'browser'] as const;
+
+/**
+ * Shape of `configuration.agent.models.default` entries (mirrors
+ * `DefaultModelEntry` from `@mastra/core/agent-builder/ee` without the type-level
+ * narrowing — this file only cares about the runtime shape).
+ */
+type DefaultModelEntryRuntime = {
+  kind?: 'custom';
+  provider: string;
+  modelId: string;
+};
+
+/**
+ * Convert the admin's `DefaultModelEntry` (`{ provider, modelId }`) into the
+ * stored `StorageModelConfig` (`{ provider, name }`) used by every agent record.
+ */
+function defaultModelToStored(entry: DefaultModelEntryRuntime): StorageModelConfig {
+  return { provider: entry.provider, name: entry.modelId };
+}
+
+/**
+ * Built-in baseline defaults applied when the admin has not pinned a
+ * `configuration.agent.<field>` value AND the user did not provide one on
+ * the creation input. Explicit `null` on input still wins (opt-out).
+ */
+const BUILDER_BASELINE_DEFAULTS: Partial<Record<(typeof BUILDER_DEFAULT_FIELDS)[number], unknown>> = {
+  memory: { observationalMemory: true } satisfies SerializedMemoryConfig,
+};
+
+/**
+ * Apply builder defaults to agent creation input.
+ * Only applies for fields where input is `undefined` (not `null` — null is explicit disable).
+ *
+ * Resolution order per field:
+ *   1. `input[field]` — user intent always wins
+ *   2. `builderAgentConfig[field]` — admin-pinned default
+ *   3. `BUILDER_BASELINE_DEFAULTS[field]` — built-in default (e.g. observational memory on)
+ *
+ * `model` is special-cased: it is NOT in `BUILDER_DEFAULT_FIELDS` because the
+ * stored shape (`{ provider, name }`) differs from the admin-config shape
+ * (`{ provider, modelId }`). It also must never overwrite a conditional model
+ * already present on `input`.
+ */
+function applyBuilderDefaults(
+  input: StorageCreateAgentInput,
+  builderAgentConfig: Record<string, unknown> | undefined,
+): StorageCreateAgentInput {
+  const defaults: Partial<StorageCreateAgentInput> = {};
+
+  for (const field of BUILDER_DEFAULT_FIELDS) {
+    if (input[field] !== undefined) continue;
+    const adminValue = builderAgentConfig?.[field];
+    if (adminValue !== undefined) {
+      (defaults as Record<string, unknown>)[field] = adminValue;
+      continue;
+    }
+    const baseline = BUILDER_BASELINE_DEFAULTS[field];
+    if (baseline !== undefined) {
+      (defaults as Record<string, unknown>)[field] = baseline;
+    }
+  }
+
+  // Seed `model` from the admin's `models.default` only when input omits it.
+  // Conditional models are preserved verbatim (they are objects but not the
+  // admin-config shape, and the user's intent always wins).
+  if (input.model === undefined && builderAgentConfig) {
+    const models = (builderAgentConfig.models ?? undefined) as { default?: DefaultModelEntryRuntime } | undefined;
+    const adminDefault = models?.default;
+    if (adminDefault && typeof adminDefault.provider === 'string' && typeof adminDefault.modelId === 'string') {
+      (defaults as Record<string, unknown>).model = defaultModelToStored(adminDefault);
+    }
+  }
+
+  return Object.keys(defaults).length > 0 ? { ...input, ...defaults } : input;
+}
+
+// ============================================================================
+// EditorAgentNamespace
+// ============================================================================
 
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
@@ -113,6 +201,84 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return this.createAgentFromStoredConfig(storedAgent);
   }
 
+  /**
+   * Create a new agent, applying builder defaults for fields not specified in input.
+   * Also ensures the referenced workspace (if any) is persisted as a stored workspace.
+   */
+  async create(input: StorageCreateAgentInput): Promise<Agent> {
+    let finalInput = input;
+
+    if (this.editor.hasEnabledBuilderConfig()) {
+      const builder = await this.editor.resolveBuilder();
+      const agentConfig = builder?.getConfiguration()?.agent;
+      finalInput = applyBuilderDefaults(input, agentConfig);
+    }
+
+    // Ensure the workspace referenced by the agent exists in stored workspaces
+    await this.ensureStoredWorkspace(finalInput.workspace as StorageWorkspaceRef | undefined);
+
+    return super.create(finalInput);
+  }
+
+  /**
+   * Ensure a workspace reference is persisted in the DB.
+   *
+   * For `type: 'id'`: looks up the runtime workspace, serializes its config,
+   * and creates a stored workspace record if one doesn't already exist.
+   *
+   * For `type: 'inline'`: derives a deterministic ID from the config and
+   * persists it as a stored workspace if one doesn't already exist.
+   */
+  private async ensureStoredWorkspace(workspaceRef: StorageWorkspaceRef | undefined): Promise<void> {
+    if (!workspaceRef) return;
+
+    const workspaceNs = this.editor.workspace;
+    if (!workspaceNs) return;
+
+    try {
+      if (workspaceRef.type === 'id') {
+        // Check if already stored in DB
+        const existing = await workspaceNs.getById(workspaceRef.workspaceId);
+        if (existing) return;
+
+        // Not in DB — look up the runtime workspace and serialize it
+        const runtimeWorkspace = this.mastra?.getWorkspaceById(workspaceRef.workspaceId);
+        if (!runtimeWorkspace) {
+          this.logger?.warn(
+            `[ensureStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in runtime registry, cannot persist`,
+          );
+          return;
+        }
+
+        const snapshot = await workspaceNs.snapshotFromWorkspace(runtimeWorkspace);
+        await workspaceNs.create({
+          id: workspaceRef.workspaceId,
+          metadata: { source: 'builder', builderWorkspaceId: workspaceRef.workspaceId },
+          ...snapshot,
+        });
+        this.logger?.debug(`[ensureStoredWorkspace] Persisted runtime workspace '${workspaceRef.workspaceId}' to DB`);
+      } else if (workspaceRef.type === 'inline') {
+        // Derive a deterministic ID from the inline config
+        const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
+        const workspaceId = `inline-${configHash}`;
+
+        // Check if already stored in DB
+        const existing = await workspaceNs.getById(workspaceId);
+        if (existing) return;
+
+        await workspaceNs.create({
+          id: workspaceId,
+          metadata: { source: 'builder', builderConfigHash: configHash },
+          ...workspaceRef.config,
+        });
+        this.logger?.debug(`[ensureStoredWorkspace] Persisted inline workspace '${workspaceId}' to DB`);
+      }
+    } catch (error) {
+      // Don't fail agent creation if workspace persistence fails
+      this.logger?.warn('[ensureStoredWorkspace] Failed to persist workspace', { error });
+    }
+  }
+
   protected override onCacheEvict(id: string): void {
     // Only remove stored agents from the Mastra registry.
     // Code-defined agents must survive cache eviction because they live
@@ -176,6 +342,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   async applyStoredOverrides(
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
+    requestContext?: RequestContext,
   ): Promise<Agent> {
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
@@ -229,11 +396,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
       const hasConditionalIntegrationTools =
         storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
-      const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+      const isDynamicTools =
+        hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasStoredIntegrationTools;
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
-        const originalTools = fork.listTools.bind(fork);
+        const originalTools = agent.listTools.bind(agent);
         const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
           const codeTools = await originalTools({ requestContext });
           const ctx = requestContext.toJSON();
@@ -252,7 +420,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 ctx,
               )
             : (storedConfig!.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
           const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
             ? this.accumulateObjectVariants(
@@ -262,7 +430,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 ctx,
               )
             : (storedConfig!.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-          const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+          const integrationTools = await this.resolveStoredIntegrationTools(
+            resolvedIntegrationToolsConfig,
+            requestContext,
+          );
 
           return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
         };
@@ -275,6 +446,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         const mcpTools = await this.resolveStoredMCPTools(
           storedConfig.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+          requestContext,
         );
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -374,12 +546,15 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       storedAgent.defaultOptions != null && this.isConditionalVariants(storedAgent.defaultOptions);
     const hasConditionalModel = this.isConditionalVariants(storedAgent.model);
     const hasConditionalWorkspace = storedAgent.workspace != null && this.isConditionalVariants(storedAgent.workspace);
+    const hasConditionalBrowser = storedAgent.browser != null && this.isConditionalVariants(storedAgent.browser);
 
     // --- Resolve fields: conditional fields accumulate all matching variants ---
 
     // Tools: registry tools, MCP client tools, and integration tools can each be conditional.
     // If any is conditional, the combined result must be a dynamic function.
-    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+    const hasIntegrationTools = storedAgent.integrationTools != null;
+    const isDynamicTools =
+      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
@@ -410,7 +585,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
         // Resolve integration tools (tool providers)
         const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
@@ -419,12 +594,15 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+        const integrationTools = await this.resolveStoredIntegrationTools(
+          resolvedIntegrationToolsConfig,
+          requestContext,
+        );
 
         return { ...registryTools, ...mcpTools, ...integrationTools };
       };
     } else {
-      // All are static — resolve once at agent creation time
+      // All are static — resolve once at agent creation time (no requestContext available)
       const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -634,6 +812,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : await this.resolveStoredWorkspace(storedAgent.workspace as StorageWorkspaceRef | undefined, skillSource);
 
+    // Browser: resolve stored browser config to a runtime MastraBrowser instance.
+    // When conditional, wrapped in a DynamicArgument function resolved at request time.
+    const browser = hasConditionalBrowser
+      ? async ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolvedRef = this.accumulateObjectVariants(
+            storedAgent.browser as StorageConditionalVariant<StorageBrowserRef>[],
+            ctx,
+          );
+          return this.resolveStoredBrowser(resolvedRef);
+        }
+      : await this.resolveStoredBrowser(storedAgent.browser as StorageBrowserRef | undefined);
+
     const skillsFormat = storedAgent.skillsFormat;
 
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
@@ -643,6 +834,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       id: storedAgent.id,
       name: storedAgent.name,
       description: storedAgent.description,
+      metadata: storedAgent.metadata,
       instructions: instructions ?? '',
       model,
       memory,
@@ -657,6 +849,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       defaultOptions,
       requestContextSchema,
       workspace,
+      browser,
       ...(skillsFormat && { skillsFormat }),
     } as any);
 
@@ -754,11 +947,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredMCPTools(
     mcpClients?: Record<string, StorageMCPClientToolsConfig>,
+    requestContext?: RequestContext,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!mcpClients || Object.keys(mcpClients).length === 0) return {};
     if (!this.mastra) return {};
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    // Build auth headers from request context when available.
+    // This allows stored MCP clients to connect to auth-protected MCP servers
+    // (e.g., the Mastra server's own MCP endpoints).
+    const authToken = requestContext?.get('mastra__authToken') as string | undefined;
+    const authRequestInit = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined;
 
     // Lazily loaded — only needed when stored MCP clients are found
     let MCPClient: any;
@@ -785,7 +985,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               continue;
             }
           }
-          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient);
+          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient, authRequestInit);
           const client = new MCPClient(clientOptions);
           tools = await client.listTools();
           this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from stored MCP client "${clientId}"`);
@@ -826,12 +1026,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           }
 
           // Agent-level filter: `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+          // The UI may store tools under their bare name (e.g., "searchKnowledgeBase") while
+          // MCPClient returns them namespaced (e.g., "support_searchKnowledgeBase"), so check both.
           const hasAgentFilter = agentAllowedTools && Object.keys(agentAllowedTools).length > 0;
-          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools)) continue;
+          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools) && !(bareToolName in agentAllowedTools))
+            continue;
 
-          // Description override: agent-level (namespaced key) takes precedence over client-level (bare key)
+          // Description override: agent-level (namespaced or bare key) takes precedence over client-level (bare key)
           const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;
-          const description = agentAllowedTools?.[namespacedToolName]?.description ?? serverToolConfig?.description;
+          const description =
+            agentAllowedTools?.[namespacedToolName]?.description ??
+            agentAllowedTools?.[bareToolName]?.description ??
+            serverToolConfig?.description;
 
           if (description) {
             allTools[namespacedToolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description };
@@ -859,11 +1065,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredIntegrationTools(
     integrationTools?: Record<string, StorageMCPClientToolsConfig>,
-    requestContext?: Record<string, unknown>,
+    requestContext?: RequestContext,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    const providerOptions = { requestContext: requestContext?.toJSON() };
 
     for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
       try {
@@ -891,7 +1099,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
 
         // Fetch tools from the provider — pass slugs, configs, and request context
-        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, { requestContext });
+        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, providerOptions);
 
         for (const [toolId, tool] of Object.entries(providerTools)) {
           // Apply description override if configured at the agent level
@@ -1094,6 +1302,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       newName?: string;
       metadata?: Record<string, unknown>;
       authorId?: string;
+      visibility?: 'private' | 'public';
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType> {
@@ -1188,6 +1397,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : undefined;
 
+    let resolvedMetadata = options.metadata;
+    if (resolvedMetadata === undefined && typeof agent.getMetadata === 'function') {
+      try {
+        resolvedMetadata = await agent.getMetadata({ requestContext });
+      } catch {}
+    }
+
     // 10. Create the stored agent
     const createInput: StorageCreateAgentInput = {
       id: options.newId,
@@ -1201,8 +1417,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       memory: memoryConfig,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
-      metadata: options.metadata,
+      metadata: resolvedMetadata,
       authorId: options.authorId,
+      visibility: options.visibility,
     };
 
     const adapter = await this.getStorageAdapter();
@@ -1244,16 +1461,29 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hydrateOptions = skillSource ? { skillSource } : undefined;
 
     if (workspaceRef.type === 'id') {
-      // Look up the stored workspace by ID and hydrate it to a runtime Workspace
+      // Try DB first — stored workspaces are the source of truth
       const resolved = await workspaceNs.getById(workspaceRef.workspaceId);
-      if (!resolved) {
-        this.logger?.warn(
-          `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in storage, skipping`,
-        );
-        return undefined;
+      if (resolved) {
+        return workspaceNs.hydrateSnapshotToWorkspace(workspaceRef.workspaceId, resolved, hydrateOptions);
       }
-      // getById returns StorageResolvedWorkspaceType — we need to hydrate it
-      return workspaceNs.hydrateSnapshotToWorkspace(workspaceRef.workspaceId, resolved, hydrateOptions);
+
+      // Not in DB — fall back to runtime registry (code-defined workspaces)
+      try {
+        const runtimeWorkspace = this.mastra?.getWorkspaceById(workspaceRef.workspaceId);
+        if (runtimeWorkspace) {
+          this.logger?.debug(
+            `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' found in runtime registry (not in DB)`,
+          );
+          return runtimeWorkspace;
+        }
+      } catch {
+        // getWorkspaceById throws if not found — that's expected
+      }
+
+      this.logger?.warn(
+        `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in storage or runtime registry, skipping`,
+      );
+      return undefined;
     }
 
     if (workspaceRef.type === 'inline') {
@@ -1261,6 +1491,30 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       // duplicate workspace instances on repeated calls.
       const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
       return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Resolve a stored browser config to a runtime MastraBrowser instance.
+   * Looks up the provider by ID in the editor's browser registry.
+   * Only supports `type: 'inline'` refs (config is embedded in the agent snapshot).
+   */
+  private async resolveStoredBrowser(browserRef: StorageBrowserRef | undefined): Promise<MastraBrowser | undefined> {
+    if (!browserRef) return undefined;
+
+    if (browserRef.type === 'inline') {
+      const { provider: providerId, ...config } = browserRef.config;
+      const browserProvider = this.editor.__browsers.get(providerId);
+      if (!browserProvider) {
+        this.logger?.warn(
+          `[resolveStoredBrowser] Browser provider "${providerId}" is not registered. ` +
+            `Register it via new MastraEditor({ browsers: { '${providerId}': yourProvider } })`,
+        );
+        return undefined;
+      }
+      return await browserProvider.createBrowser(config);
     }
 
     return undefined;

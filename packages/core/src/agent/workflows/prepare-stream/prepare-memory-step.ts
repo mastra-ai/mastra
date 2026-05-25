@@ -7,9 +7,10 @@ import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/ty
 import { resolveObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
+import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
@@ -31,6 +32,14 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
     // Handle string, CoreSystemMessage, or SystemModelMessage
     messageList.addSystem(content, tag);
   }
+}
+
+function getInitialSignalEchoes(messageList: MessageList) {
+  const inputMessageIds = messageList.makeMessageSourceChecker().input;
+  return messageList.get.all
+    .db()
+    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
+    .map(mastraDBMessageToSignal);
 }
 
 interface PrepareMemoryStepOptions<OUTPUT = undefined> {
@@ -71,6 +80,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         resourceId,
         generateMessageId: capabilities.generateMessageId,
         logger: capabilities.logger,
+        filterIncompleteToolCalls: memoryConfig?.filterIncompleteToolCalls,
         // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
@@ -89,6 +99,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
+        const initialSignalEchoes = getInitialSignalEchoes(messageList);
 
         // Skip input processors during resume — the messageList has no user messages
         // (resumeStream passes messages: []) and the real conversation state lives in the
@@ -111,6 +122,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           messageList,
           processorStates,
           tripwire,
+          initialSignalEchoes,
         };
       }
 
@@ -139,7 +151,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
         ) {
           threadObject = await memory.saveThread({
-            thread: { ...existingThread, metadata: thread.metadata },
+            thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
             memoryConfig,
           });
         } else {
@@ -169,6 +181,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
+      const initialSignalEchoes = getInitialSignalEchoes(messageList);
 
       // Skip input processors during resume — the messageList has no user messages
       // (resumeStream passes messages: []) and the real conversation state lives in the
@@ -190,6 +203,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         messageList: messageList,
         processorStates,
         tripwire,
+        initialSignalEchoes,
         threadExists: !!existingThread,
       };
     },

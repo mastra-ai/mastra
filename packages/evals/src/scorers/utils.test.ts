@@ -11,8 +11,11 @@ import type {
 import { describe, it, expect } from 'vitest';
 import {
   getTextContentFromMastraDBMessage,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
+  isScorerRunOutputForAgent,
   createTestMessage,
   createToolInvocation,
   extractToolResults,
@@ -58,13 +61,116 @@ describe('Scorer Utils', () => {
       const result = getAssistantMessageFromRunOutput(output);
       expect(result).toBe('Assistant response');
     });
+
+    it('should extract assistant text from workflow-style output', () => {
+      expect(getAssistantMessageFromRunOutput({ text: 'Workflow response' })).toBe('Workflow response');
+      expect(getAssistantMessageFromRunOutput({ content: 'Task response' })).toBe('Task response');
+      expect(getAssistantMessageFromRunOutput('String response')).toBe('String response');
+    });
+
+    it('should not extract non-assistant role text from single message output', () => {
+      expect(getAssistantMessageFromRunOutput({ role: 'user', text: 'User text' })).toBeUndefined();
+      expect(getAssistantMessageFromRunOutput({ role: 'user', content: 'User content' })).toBeUndefined();
+    });
+
+    it('should extract assistant text from nested content output', () => {
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { parts: [{ type: 'text', text: 'Nested task response' }] },
+        }),
+      ).toBe('Nested task response');
+
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { content: { parts: [{ type: 'text', text: 'Nested message response' }] } },
+        }),
+      ).toBe('Nested message response');
+    });
+
+    it('should extract assistant text from model messages', () => {
+      const output = [
+        { role: 'user', content: 'Question' },
+        { role: 'assistant', content: [{ type: 'text', text: 'Model response' }] },
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Model response');
+    });
   });
 
-  /**
-   * When using a reasoning model, the reasoning text
-   * should be available in the scorer's preprocess function. Currently, there's
-   * no utility function to extract reasoning text from the run output.
-   */
+  describe('isScorerRunOutputForAgent', () => {
+    it('should only match arrays of message-like objects', () => {
+      expect(isScorerRunOutputForAgent([createTestMessage({ role: 'assistant', content: 'Assistant response' })])).toBe(
+        true,
+      );
+      expect(isScorerRunOutputForAgent(['Assistant response'])).toBe(false);
+      expect(isScorerRunOutputForAgent([{ role: 'assistant', content: 'Assistant response' }])).toBe(false);
+      expect(isScorerRunOutputForAgent({ text: 'Workflow response' })).toBe(false);
+    });
+  });
+
+  describe('getUserMessageFromRunInput', () => {
+    it('should extract user text content from agent input', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          createTestMessage({ content: 'User question', role: 'user' }),
+          createTestMessage({ content: 'Assistant response', role: 'assistant' }),
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('User question');
+    });
+
+    it('should extract user text from workflow-style input', () => {
+      expect(getUserMessageFromRunInput({ prompt: 'Workflow question' })).toBe('Workflow question');
+      expect(getUserMessageFromRunInput('String question')).toBe('String question');
+    });
+
+    it('should extract user text from common non-agent input fields', () => {
+      expect(getUserMessageFromRunInput({ text: 'Text question' })).toBe('Text question');
+      expect(getUserMessageFromRunInput({ content: 'Content question' })).toBe('Content question');
+      expect(getUserMessageFromRunInput({ input: { text: 'Input question' } })).toBe('Input question');
+      expect(getUserMessageFromRunInput({ user: { body: 'User question' } })).toBe('User question');
+    });
+
+    it('should extract user text from model messages', () => {
+      const input = {
+        messages: [
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: [{ type: 'text', text: 'Model question' }] },
+        ],
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('Model question');
+    });
+
+    it('should extract user text from message text and body fields', () => {
+      expect(getUserMessageFromRunInput({ messages: [{ role: 'user', text: 'Text message question' }] })).toBe(
+        'Text message question',
+      );
+      expect(getUserMessageFromRunInput({ inputMessages: [{ role: 'user', body: 'Body message question' }] })).toBe(
+        'Body message question',
+      );
+    });
+  });
+
+  describe('getCombinedSystemPrompt', () => {
+    it('should include system messages from non-agent message arrays', () => {
+      expect(
+        getCombinedSystemPrompt({
+          messages: [
+            { role: 'system', content: 'System message' },
+            { role: 'user', content: 'User question' },
+          ],
+          inputMessages: [{ role: 'system', text: 'Input system message' }],
+        }),
+      ).toBe('Input system message\n\nSystem message');
+    });
+  });
+
   describe('Reasoning text extraction', () => {
     it('should extract reasoning from content.reasoning field', () => {
       const messageWithReasoning: MastraDBMessage = {
@@ -81,8 +187,6 @@ describe('Scorer Utils', () => {
 
       const output: ScorerRunOutputForAgent = [messageWithReasoning];
 
-      // Currently there's no function to get reasoning - this test documents the missing functionality
-      // We need a getReasoningFromRunOutput function similar to getAssistantMessageFromRunOutput
       const reasoning = getReasoningFromRunOutput(output);
 
       expect(reasoning).toBe('Let me think about this step by step...');

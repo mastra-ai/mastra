@@ -44,3 +44,10 @@ export type { ErrorCode, BrowserToolError } from './errors';
 
 export { BrowserContextProcessor } from './processor';
 export type { BrowserContext } from './processor';
+
+// ============================================================================
+// CLI Handler
+// ============================================================================
+
+export { BrowserCliHandler, browserCliHandler } from './cli-handler';
+export type { BrowserCliConfig, BrowserCliProcessResult } from './cli-handler';

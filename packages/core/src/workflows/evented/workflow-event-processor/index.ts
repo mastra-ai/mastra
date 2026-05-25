@@ -5,7 +5,9 @@ import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context/';
+import type { StepExecutionStrategy } from '../../../worker/types';
 import type {
+  RestartExecutionParams,
   StepFlowEntry,
   StepResult,
   StepSuccess,
@@ -13,7 +15,7 @@ import type {
   WorkflowRunState,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
-import { createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
+import { createRestartExecutionParams, createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
@@ -23,7 +25,7 @@ import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitFor
 import { getNestedWorkflow, getStep, isExecutableStep } from './utils';
 
 export type ProcessorArgs = {
-  activeSteps: Record<string, boolean>;
+  activeStepsPath: Record<string, number[]>;
   workflow: Workflow;
   workflowId: string;
   runId: string;
@@ -33,6 +35,7 @@ export type ProcessorArgs = {
   prevResult: StepResult<any, any, any, any>;
   requestContext: Record<string, any>;
   timeTravel?: TimeTravelExecutionParams;
+  restart?: RestartExecutionParams;
   resumeData?: any;
   parentWorkflow?: ParentWorkflow;
   parentContext?: {
@@ -58,20 +61,33 @@ export type ParentWorkflow = {
   resume: boolean;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
+  timeTravel?: TimeTravelExecutionParams;
+  restart?: RestartExecutionParams;
   stepId: string;
+  stepGraph: StepFlowEntry[];
+  activeStepsPath: Record<string, number[]>;
+  resumeSteps: string[];
+  resumeData: any;
+  input: any;
+  parentContext?: {
+    workflowId: string;
+    input: any;
+  };
 };
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
+  private stepExecutionStrategy?: StepExecutionStrategy;
   // Map of runId -> AbortController for active workflow runs
   private abortControllers: Map<string, AbortController> = new Map();
   // Map of child runId -> parent runId for tracking nested workflows
   private parentChildRelationships: Map<string, string> = new Map();
   private runFormats: Map<string, 'legacy' | 'vnext' | undefined> = new Map();
 
-  constructor({ mastra }: { mastra: Mastra }) {
+  constructor({ mastra, stepExecutionStrategy }: { mastra: Mastra; stepExecutionStrategy?: StepExecutionStrategy }) {
     super({ mastra });
     this.stepExecutor = new StepExecutor({ mastra });
+    this.stepExecutionStrategy = stepExecutionStrategy;
   }
 
   /**
@@ -126,6 +142,22 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.stepExecutor.__registerMastra(mastra);
   }
 
+  /**
+   * Resolves a workflow by id without throwing. Searches first by the
+   * workflow's `.id` (the value that ends up on event payloads) and then
+   * falls back to the registration key in `Mastra.workflows`. Returns
+   * `undefined` if neither lookup succeeds — callers decide how to handle
+   * the missing case (e.g. terminal failure vs. cleanup pass-through) so
+   * we don't throw inside `#dispatch` and trigger infinite event retries.
+   */
+  #tryResolveWorkflow(workflowId: string): Workflow | undefined {
+    try {
+      return this.mastra.getWorkflowById(workflowId) as Workflow;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async errorWorkflow(
     {
       parentWorkflow,
@@ -150,13 +182,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult: { status: 'failed', error: getErrorFromUnknown(e).toJSON() },
         requestContext,
         resumeData,
-        activeSteps: {},
+        activeStepsPath: {},
         parentWorkflow: parentWorkflow,
       },
     });
   }
 
-  protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
+  protected async processWorkflowCancel({ workflowId, runId, prevResult, ...args }: ProcessorArgs) {
     // Cancel this workflow and all nested child workflows
     this.cancelRunAndChildren(runId);
 
@@ -170,19 +202,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.mastra.getLogger()?.warn('Canceling workflow without loaded state', { workflowId, runId });
     }
 
+    //call end workflow with status of canceled to indicate the workflow was canceled
     await this.endWorkflow(
       {
-        workflow: undefined as any,
         workflowId,
         runId,
-        stepResults: (currentState?.context ?? {}) as any,
-        prevResult: { status: 'canceled' } as any,
-        requestContext: (currentState?.requestContext ?? {}) as any,
-        executionPath: [],
-        activeSteps: {},
-        resumeSteps: [],
-        resumeData: undefined,
-        parentWorkflow: undefined,
+        prevResult,
+        ...args,
       },
       'canceled',
     );
@@ -197,6 +223,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     prevResult,
     resumeData,
     timeTravel,
+    restart,
     executionPath,
     stepResults,
     requestContext,
@@ -255,6 +282,27 @@ export class WorkflowEventProcessor extends EventProcessor {
           value: initialState,
         },
       });
+
+      if (parentWorkflow) {
+        const parentSnap = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+        });
+        const existing = parentSnap?.context?.[workflowId] as any;
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          stepId: workflowId,
+          result: {
+            startedAt: existing?.startedAt ?? Date.now(),
+            status: 'running',
+            payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
+            ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
+            metadata: { ...(existing?.metadata ?? {}), nestedRunId: runId },
+          },
+          requestContext,
+        });
+      }
     }
 
     await this.mastra.pubsub.publish('workflows', {
@@ -274,9 +322,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         prevResult,
         timeTravel,
+        restart,
         requestContext,
         resumeData,
-        activeSteps: {},
+        activeStepsPath: {},
         perStep,
         state: initialState,
         outputOptions,
@@ -286,7 +335,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
-    const { workflowId, runId, prevResult, perStep, workflow, stepResults } = args;
+    const { workflowId, runId, prevResult, perStep, workflow, stepResults, activeStepsPath, executionPath } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
     // Check shouldPersistSnapshot option - default to true if not specified
@@ -304,6 +353,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         opts: {
           status: finalStatus,
           result: prevResult,
+          activePaths: executionPath,
+          activeStepsPath: activeStepsPath,
         },
       });
     }
@@ -343,7 +394,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       prevResult,
       resumeData,
       parentWorkflow,
-      activeSteps,
+      activeStepsPath,
       requestContext,
       runId,
       timeTravel,
@@ -361,27 +412,55 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      await this.mastra.pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId: parentWorkflow.runId, // Use parent's runId for event routing
-        data: {
-          workflowId: parentWorkflow.workflowId,
-          runId: parentWorkflow.runId,
-          executionPath: parentWorkflow.executionPath,
-          resumeSteps,
-          stepResults: parentWorkflow.stepResults,
-          prevResult,
-          resumeData,
-          activeSteps,
-          parentWorkflow: parentWorkflow.parentWorkflow,
-          parentContext: parentWorkflow,
-          requestContext,
-          timeTravel,
-          perStep,
-          state: finalState,
-          nestedRunId: runId, // Pass nested workflow's runId for step retrieval
-        },
-      });
+      // get the step from the parent workflow and process it if it's a loop
+      const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+      if (step?.type === 'loop') {
+        // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
+        await processWorkflowLoop(
+          {
+            workflow: parentWorkflow as unknown as Workflow,
+            workflowId: parentWorkflow.workflowId,
+            prevResult,
+            runId: parentWorkflow.runId,
+            executionPath: parentWorkflow.executionPath,
+            stepResults: parentWorkflow.stepResults,
+            activeStepsPath: parentWorkflow.activeStepsPath,
+            resumeSteps: parentWorkflow.resumeSteps,
+            resumeData: parentWorkflow.resumeData,
+            parentWorkflow: parentWorkflow.parentWorkflow,
+            requestContext,
+            retryCount: 0,
+          },
+          {
+            pubsub: this.mastra.pubsub,
+            stepExecutor: this.stepExecutor,
+            step,
+            stepResult: prevResult,
+          },
+        );
+      } else {
+        await this.mastra.pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          runId: parentWorkflow.runId, // Use parent's runId for event routing
+          data: {
+            workflowId: parentWorkflow.workflowId,
+            runId: parentWorkflow.runId,
+            executionPath: parentWorkflow.executionPath,
+            resumeSteps,
+            stepResults: parentWorkflow.stepResults,
+            prevResult,
+            resumeData,
+            activeStepsPath,
+            parentWorkflow: parentWorkflow.parentWorkflow,
+            parentContext: parentWorkflow,
+            requestContext,
+            timeTravel,
+            perStep,
+            state: finalState,
+            nestedRunId: runId, // Pass nested workflow's runId for step retrieval
+          },
+        });
+      }
     }
 
     await this.mastra.pubsub.publish('workflows-finish', {
@@ -393,14 +472,17 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
     const {
+      workflow,
+      executionPath,
       resumeSteps,
       prevResult,
       resumeData,
       parentWorkflow,
-      activeSteps,
+      activeStepsPath,
       runId,
       requestContext,
       timeTravel,
+      restart,
       stepResults,
       state,
       outputOptions,
@@ -413,6 +495,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     // sibling branches are terminal; fan-in emits suspend when siblings include mixed success+suspend.
     // handle nested workflow
     if (parentWorkflow) {
+      // When propagating a suspend up to the parent, the parent stores this result under
+      // the nested-workflow step's id, so the path we hand up must be the path *within
+      // this workflow* to the suspended step (the parent / `execute()` re-prepends the
+      // step id). Prepend the id of the step that suspended here, unless the path already
+      // starts with it (the deepest level — the step that called `suspend()` directly —
+      // already includes its own id via the executor's `path: [step.id]`).
+      const existingPath: string[] = prevResult.suspendPayload?.__workflow_meta?.path ?? [];
+      const suspendedStepId = workflow && executionPath ? getStep(workflow, executionPath)?.id : undefined;
+      const propagatedPath =
+        suspendedStepId && existingPath[0] !== suspendedStepId ? [suspendedStepId, ...existingPath] : existingPath;
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         runId: parentWorkflow.runId, // Use parent's runId for event routing
@@ -427,16 +519,17 @@ export class WorkflowEventProcessor extends EventProcessor {
             suspendPayload: {
               ...prevResult.suspendPayload,
               __workflow_meta: {
+                // keep resumeLabels / foreachIndex etc. — only the runId and path change as we propagate up
+                ...(prevResult.suspendPayload?.__workflow_meta ?? {}),
                 runId: runId,
-                path: parentWorkflow?.stepId
-                  ? [parentWorkflow.stepId].concat(prevResult.suspendPayload?.__workflow_meta?.path ?? [])
-                  : (prevResult.suspendPayload?.__workflow_meta?.path ?? []),
+                path: propagatedPath,
               },
             },
           },
           timeTravel,
+          restart,
           resumeData,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           parentWorkflow: parentWorkflow.parentWorkflow,
           parentContext: parentWorkflow,
@@ -462,13 +555,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       prevResult,
       resumeData,
       parentWorkflow,
-      activeSteps,
+      activeStepsPath,
       requestContext,
       timeTravel,
+      restart,
       stepResults,
       state,
       outputOptions,
       workflow,
+      executionPath,
     } = args;
 
     // Extract final state from stepResults or args
@@ -493,6 +588,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         opts: {
           status: 'failed',
           error: (prevResult as any).error,
+          activePaths: executionPath,
+          activeStepsPath: activeStepsPath,
         },
       });
     }
@@ -510,8 +607,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults: parentWorkflow.stepResults,
           prevResult,
           timeTravel,
+          restart,
           resumeData,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           parentWorkflow: parentWorkflow.parentWorkflow,
           parentContext: parentWorkflow,
@@ -535,9 +633,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     timeTravel,
+    restart,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -560,7 +659,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           prevResult,
           resumeData,
@@ -590,7 +689,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeSteps,
           stepResults,
           prevResult,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           // Use currentState (resolved from stepResults.__state and state) instead of
           // the possibly-undefined state parameter, to ensure final state is preserved
@@ -604,7 +703,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           prevResult,
           resumeData,
@@ -620,7 +719,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    if ((step.type === 'parallel' || step.type === 'conditional') && executionPath.length > 1) {
+    //if parallel/conditional and execution path is greater than 1
+    // and restart is present but isParallelOrConditionalRestarted is false,
+    // then we need to process the step using processWorkflowParallel/processWorkflowConditional
+    // to ensure all active steps are processed.
+    if (
+      (step.type === 'parallel' || step.type === 'conditional') &&
+      executionPath.length > 1 &&
+      (!restart || (restart && restart.isParallelOrConditionalRestarted))
+    ) {
       step = step.steps[executionPath[1]!] as StepFlowEntry;
     } else if (step.type === 'parallel') {
       return processWorkflowParallel(
@@ -630,8 +737,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
+          restart,
           timeTravel,
           prevResult,
           resumeData,
@@ -654,8 +762,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
+          restart,
           timeTravel,
           prevResult,
           resumeData,
@@ -679,9 +788,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           timeTravel,
+          restart,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -704,9 +814,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           timeTravel,
+          restart,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -729,9 +840,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           timeTravel,
+          restart,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -756,7 +868,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           prevResult,
           resumeData,
@@ -772,7 +884,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    activeSteps[step.step.id] = true;
+    activeStepsPath[step.step.id] = executionPath;
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
@@ -789,7 +901,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               stepResults,
-              activeSteps,
+              activeStepsPath,
               resumeSteps,
               prevResult,
               resumeData,
@@ -819,7 +931,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               stepResults,
-              activeSteps,
+              activeStepsPath,
               resumeSteps,
               prevResult,
               resumeData,
@@ -837,6 +949,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         const nestedExecutionPath = snapshot?.suspendedPaths?.[suspendedStepId];
         const nestedStepResults = snapshot?.context;
+        // The resumed inner step's input is the output of the step that ran before it
+        // inside the nested workflow (i.e. the suspended step's stored payload), not the
+        // input to the nested-workflow step itself.
+        const nestedPrevResult = {
+          status: 'success' as const,
+          output: (nestedStepResults?.[suspendedStepId] as any)?.payload ?? (prevResult as any)?.output,
+        };
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.resume',
@@ -847,19 +966,22 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: step.step.id,
               workflowId,
               runId,
+              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
+              activeStepsPath,
+              resumeData,
             },
             executionPath: nestedExecutionPath as any,
             runId: nestedRunId,
             resumeSteps: [suspendedStepId], // Resume the auto-detected inner step
             stepResults: nestedStepResults,
-            prevResult,
+            prevResult: nestedPrevResult,
             resumeData,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             perStep,
             initialState: currentState,
@@ -867,7 +989,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else if (resumeSteps?.length > 1) {
+      } else if (resumeSteps?.length > 1 && resumeSteps[0] === step.step.id) {
         const stepData = stepResults[step.step.id];
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
@@ -877,7 +999,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               stepResults,
-              activeSteps,
+              activeStepsPath,
               resumeSteps,
               prevResult,
               resumeData,
@@ -900,6 +1022,12 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         const nestedStepResults = snapshot?.context;
         const nestedSteps = resumeSteps.slice(1);
+        // The step the nested workflow resumes into receives the output of the step that
+        // ran before it (its stored payload), not the input to the nested-workflow step.
+        const nestedPrevResult = {
+          status: 'success' as const,
+          output: (nestedStepResults?.[nestedSteps[0]!] as any)?.payload ?? (prevResult as any)?.output,
+        };
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.resume',
@@ -910,19 +1038,22 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: step.step.id,
               workflowId,
               runId,
+              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
+              activeStepsPath,
+              resumeData,
             },
             executionPath: snapshot?.suspendedPaths?.[nestedSteps[0]!] as any,
             runId: nestedRunId,
             resumeSteps: nestedSteps,
             stepResults: nestedStepResults,
-            prevResult,
+            prevResult: nestedPrevResult,
             resumeData,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             perStep,
             initialState: currentState,
@@ -931,10 +1062,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
+        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: step.step.id,
-            runId,
+            runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
         // Cast to Workflow since we know this is a nested workflow at this point
@@ -962,23 +1094,73 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: step.step.id,
               workflowId,
               runId,
+              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
               timeTravel,
               input: prevResult,
               parentWorkflow,
+              activeStepsPath,
+              resumeData,
             },
             executionPath: timeTravelParams.executionPath,
-            runId: randomUUID(),
+            runId: nestedRunId,
             stepResults: timeTravelParams.stepResults,
             prevResult: { status: 'success', output: nestedPrevResult?.payload },
             timeTravel: timeTravelParams,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             perStep,
             initialState: currentState,
             state: currentState,
+            outputOptions,
+          },
+        });
+      } else if (restart && !!restart.activeStepsPath?.[step.step.id]) {
+        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
+        const snapshot =
+          (await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: step.step.id,
+            runId: nestedRunId,
+          })) ?? ({ context: {} } as WorkflowRunState);
+        // Cast to Workflow since we know this is a nested workflow at this point
+        const nestedWorkflow = step.step as any;
+
+        const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
+
+        const nestedPrevStep = getStep(nestedWorkflow, snapshot.activePaths);
+        const nestedPrevResult = restartParams.stepResults[nestedPrevStep?.id ?? 'input'];
+
+        await this.mastra.pubsub.publish('workflows', {
+          type: 'workflow.start',
+          runId,
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              stepId: step.step.id,
+              workflowId,
+              runId,
+              stepGraph,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              restart,
+              input: prevResult,
+              parentWorkflow,
+              activeStepsPath,
+              resumeData,
+            },
+            executionPath: restartParams.activePaths,
+            runId: nestedRunId,
+            stepResults: restartParams.stepResults,
+            prevResult: { status: 'success', output: nestedPrevResult?.payload },
+            restart: restartParams,
+            activeStepsPath: restartParams.activeStepsPath,
+            requestContext,
+            perStep,
+            initialState: restartParams.state,
+            state: restartParams.state,
             outputOptions,
           },
         });
@@ -991,19 +1173,22 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow: {
               stepId: step.step.id,
               workflowId,
+              stepGraph,
               runId,
               executionPath,
               resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
+              activeStepsPath,
+              resumeData,
             },
             executionPath: [0],
             runId: randomUUID(),
             resumeSteps,
             prevResult,
             resumeData,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             perStep,
             initialState: currentState,
@@ -1065,23 +1250,74 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Get the abort controller for this workflow run
     const abortController = this.getOrCreateAbortController(runId);
 
-    const stepResult = await this.stepExecutor.execute({
-      workflowId,
-      step: step.step,
-      runId,
-      stepResults,
-      state: currentState,
-      requestContext: rc,
-      input: (prevResult as any)?.output,
-      resumeData: resumeDataToUse,
-      retryCount,
-      foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
-      validateInputs: workflow.options.validateInputs,
-      abortController,
-      format: streamFormat,
-      perStep,
-    });
+    let stepResult: StepResult<any, any, any, any>;
+
+    if (this.stepExecutionStrategy) {
+      stepResult = await this.stepExecutionStrategy.executeStep({
+        workflowId,
+        runId,
+        stepId: step.step.id,
+        executionPath,
+        stepResults,
+        state: currentState,
+        requestContext: Object.fromEntries(rc.entries()),
+        input: (prevResult as any)?.output,
+        resumeData: resumeDataToUse,
+        retryCount,
+        foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+        format: streamFormat,
+        perStep,
+        validateInputs: workflow.options.validateInputs,
+        abortSignal: abortController.signal,
+      });
+    } else {
+      stepResult = await this.stepExecutor.execute({
+        workflowId,
+        step: step.step,
+        runId,
+        stepResults,
+        state: currentState,
+        requestContext: rc,
+        input: (prevResult as any)?.output,
+        resumeData: resumeDataToUse,
+        retryCount,
+        foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+        validateInputs: workflow.options.validateInputs,
+        abortController,
+        format: streamFormat,
+        perStep,
+      });
+    }
     requestContext = Object.fromEntries(rc.entries());
+
+    if (abortController?.signal?.aborted) {
+      // Extract updated state from step result
+      const updatedState = (stepResult as any).__state ?? currentState;
+      //cancel the workflow
+      return this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          timeTravel,
+          stepResults: {
+            ...stepResults,
+            [step.step.id]: stepResult,
+            __state: updatedState,
+          },
+          prevResult: { ...stepResult, status: 'canceled' }, //set the status to canceled to indicate the workflow was canceled
+          activeStepsPath,
+          requestContext,
+          perStep,
+          state: updatedState,
+          outputOptions,
+        },
+      });
+    }
 
     // @ts-expect-error - bailed status not in type
     if (stepResult.status === 'bailed') {
@@ -1101,7 +1337,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           [step.step.id]: stepResult,
         },
         prevResult: stepResult,
-        activeSteps,
+        activeStepsPath,
         requestContext,
         perStep,
         state: currentState,
@@ -1124,7 +1360,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeSteps,
             stepResults,
             prevResult: stepResult,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             state: currentState,
             outputOptions,
@@ -1142,8 +1378,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeSteps,
             stepResults,
             timeTravel,
+            restart,
             prevResult,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             retryCount: retryCount + 1,
             state: currentState,
@@ -1151,6 +1388,38 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       }
+    }
+
+    if (step.type === 'loop' && stepResult.status === 'suspended') {
+      // The loop body suspended — we can't evaluate the loop condition yet (there's no
+      // output). Propagate the suspend like any other step; the body re-runs on resume,
+      // at which point processWorkflowLoop evaluates the condition with its output.
+      const updatedState = (stepResult as any).__state ?? currentState;
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.step.end',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          timeTravel,
+          restart,
+          stepResults: {
+            ...stepResults,
+            [step.step.id]: stepResult,
+            __state: updatedState,
+          },
+          prevResult: stepResult,
+          activeStepsPath,
+          requestContext,
+          perStep,
+          state: updatedState,
+          outputOptions,
+        },
+      });
+      return;
     }
 
     if (step.type === 'loop') {
@@ -1164,7 +1433,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           resumeSteps,
           resumeData,
           parentWorkflow,
@@ -1192,13 +1461,14 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           resumeSteps,
           timeTravel, //timeTravel is passed in as workflow.step.end ends the step, not the workflow, the timeTravel info is passed to the next step to run.
+          restart,
           stepResults: {
             ...stepResults,
             [step.step.id]: stepResult,
             __state: updatedState,
           },
           prevResult: stepResult,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
           state: updatedState,
@@ -1209,6 +1479,172 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Aggregate the results of all branches of a `parallel` / `conditional` entry once
+   * every branch has reached a terminal state (`success` / `skipped`) or `suspended`.
+   *
+   * This runs once per branch completion. It only acts when every branch is accounted
+   * for; otherwise it returns and lets a later branch finish the aggregation. Because
+   * `stepResults` is the snapshot returned by the caller's `updateWorkflowResults`
+   * call — which grows monotonically per branch — only the branch whose write landed
+   * last observes the full set, so exactly one branch emits (no double emit).
+   *
+   * - if any branch is still suspended → re-emit `workflow.suspend` with the full set
+   *   of suspended paths and persist the workflow state. This both fixes the race where
+   *   each branch would overwrite `suspendedPaths` on its own, and lets the workflow
+   *   stay suspended while only some branches have been resumed.
+   * - otherwise → emit `workflow.step.end` for the parallel/conditional entry with the
+   *   merged branch outputs (the existing behaviour).
+   */
+  protected async aggregateBranchResults({
+    workflow,
+    workflowId,
+    runId,
+    branchEntry,
+    branchExecutionPath,
+    latestBranchResult,
+    resumeSteps,
+    timeTravel,
+    restart,
+    parentWorkflow,
+    stepResults,
+    activeStepsPath,
+    requestContext,
+    state,
+    outputOptions,
+  }: {
+    workflow: Workflow;
+    workflowId: string;
+    runId: string;
+    branchEntry: Extract<StepFlowEntry, { type: 'parallel' | 'conditional' }>;
+    branchExecutionPath: number[];
+    /**
+     * The in-flight result of the branch that just finished (i.e. the one at
+     * `branchExecutionPath`). Used for that branch's output so non-JSON values (e.g.
+     * `Date`) survive — the copy in `stepResults` has been round-tripped through storage
+     * serialization. Other branches' outputs unavoidably come from `stepResults`.
+     */
+    latestBranchResult?: StepResult<any, any, any, any>;
+    resumeSteps: string[];
+    timeTravel?: TimeTravelExecutionParams;
+    restart?: RestartExecutionParams;
+    parentWorkflow?: ParentWorkflow;
+    stepResults: Record<string, any>;
+    activeStepsPath: Record<string, number[]>;
+    requestContext: Record<string, any>;
+    state: Record<string, any>;
+    outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
+  }) {
+    const currentState = resolveCurrentState({ stepResults, state });
+    const parentIdx = branchExecutionPath[0]!;
+    const finishedBranchIdx = branchExecutionPath.length > 1 ? branchExecutionPath[1]! : undefined;
+
+    let suspendedCount = 0;
+    let skippedCount = 0;
+    const allResults: Record<string, any> = {};
+    const suspendedPaths: Record<string, number[]> = {};
+    const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+
+    branchEntry.steps.forEach((branch, idx) => {
+      if (!isExecutableStep(branch)) {
+        return;
+      }
+      const res = stepResults?.[branch.step.id] as any;
+      if (!res || !res.status) {
+        return; // branch not finished yet
+      }
+      if (res.status === 'success') {
+        // For the branch that just completed, prefer its in-flight result so structured
+        // values (Date, Map, ...) aren't flattened by the storage round-trip.
+        const output =
+          idx === finishedBranchIdx && latestBranchResult?.status === 'success'
+            ? (latestBranchResult as any).output
+            : res.output;
+        allResults[branch.step.id] = output;
+      } else if (res.status === 'skipped') {
+        skippedCount++;
+      } else if (res.status === 'suspended') {
+        suspendedCount++;
+        suspendedPaths[branch.step.id] = [parentIdx, idx];
+        Object.assign(resumeLabels, res.suspendPayload?.__workflow_meta?.resumeLabels ?? {});
+      }
+      // failed / canceled branches short-circuit the workflow before reaching here
+    });
+
+    const finishedCount = Object.keys(allResults).length + skippedCount + suspendedCount;
+    if (finishedCount < branchEntry.steps.length) {
+      return; // wait for the remaining branches to finish
+    }
+
+    if (suspendedCount > 0) {
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      const shouldPersist =
+        workflow?.options?.shouldPersistSnapshot?.({
+          stepResults: stepResults ?? {},
+          workflowStatus: 'suspended',
+        }) ?? true;
+      if (shouldPersist) {
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: '__state',
+          result: currentState as any,
+          requestContext,
+        });
+        await workflowsStore?.updateWorkflowState({
+          workflowName: workflowId,
+          runId,
+          opts: {
+            status: 'suspended',
+            result: { status: 'suspended' } as any,
+            suspendedPaths,
+            resumeLabels,
+          },
+        });
+      }
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.suspend',
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: branchExecutionPath,
+          resumeSteps,
+          parentWorkflow,
+          stepResults,
+          prevResult: { status: 'suspended' } as any,
+          activeStepsPath,
+          requestContext,
+          timeTravel,
+          restart,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
+    }
+
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.step.end',
+      runId,
+      data: {
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath: branchExecutionPath.slice(0, -1),
+        resumeSteps,
+        stepResults,
+        prevResult: { status: 'success', output: allResults },
+        activeStepsPath,
+        requestContext,
+        timeTravel,
+        restart,
+        state: currentState,
+        outputOptions,
+      },
+    });
+  }
+
   protected async processWorkflowStepEnd({
     workflow,
     workflowId,
@@ -1216,10 +1652,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
     resumeSteps,
     timeTravel,
+    restart,
     prevResult,
     parentWorkflow,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     parentContext,
     requestContext,
     perStep,
@@ -1254,7 +1691,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeSteps,
           prevResult,
           stepResults,
-          activeSteps,
+          activeStepsPath,
           requestContext,
         },
         new MastraError({
@@ -1313,7 +1750,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeSteps,
             stepResults: { ...stepResults, [step.step.id]: bailedResult },
             prevResult: bailedResult,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             perStep,
             state: currentState,
@@ -1361,7 +1798,23 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
-      stepResults = newStepResults;
+      // Persist (and thread forward) any state changes made inside the foreach body.
+      // Each iteration is a separate event in the evented engine, so unless we write
+      // the updated state back here, the next iteration / the step after the foreach
+      // would re-read the stale `__state` from storage instead of `state` (see
+      // resolveCurrentState's priority order). This is what makes setState() inside a
+      // foreach body propagate across iterations.
+      if (currentState) {
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: '__state',
+          result: currentState as any,
+          requestContext,
+        });
+      }
+
+      stepResults = { ...newStepResults, __state: currentState };
 
       // For foreach iterations, check if all iterations are complete before emitting events
       // This prevents emitting workflow.suspend when only some concurrent iterations have finished
@@ -1423,9 +1876,10 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath: [executionPath[0]!],
               stepResults,
-              activeSteps,
+              activeStepsPath,
               resumeSteps,
               timeTravel,
+              restart,
               resumeData: undefined, // Don't pass resumeData when starting new iterations
               parentWorkflow,
               requestContext,
@@ -1510,6 +1964,8 @@ export class WorkflowEventProcessor extends EventProcessor {
                 result: foreachSuspendResult,
                 suspendedPaths,
                 resumeLabels: collectedResumeLabels,
+                activePaths: executionPath,
+                activeStepsPath,
               },
             });
           }
@@ -1525,9 +1981,10 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               stepResults: { ...stepResults, [step.step.id]: foreachSuspendResult },
               prevResult: foreachSuspendResult,
-              activeSteps,
+              activeStepsPath,
               requestContext,
               timeTravel,
+              restart,
               state: currentState,
               outputOptions,
             },
@@ -1545,9 +2002,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             executionPath: [executionPath[0]!],
             stepResults,
-            activeSteps,
+            activeStepsPath,
             resumeSteps,
             timeTravel,
+            restart,
             resumeData: undefined,
             parentWorkflow,
             requestContext,
@@ -1564,8 +2022,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
     } else if (isExecutableStep(step)) {
-      // clear from activeSteps
-      delete activeSteps[step.step.id];
+      // clear from activeStepsPath
+      delete activeStepsPath[step.step.id];
 
       // handle nested workflow
       if (parentContext) {
@@ -1612,8 +2070,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           timeTravel,
+          restart,
           prevResult,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           state: currentState,
           outputOptions,
@@ -1622,48 +2081,54 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       return;
     } else if (prevResult.status === 'suspended') {
-      const parentEntry = executionPath.length >= 2 ? workflow.stepGraph[executionPath[0]!] : undefined;
+      // Emit the per-step suspended watch event (fires per branch even inside a parallel/conditional)
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-suspended',
+          payload: {
+            id: (step as any)?.step?.id,
+            ...prevResult,
+            suspendedAt: Date.now(),
+            suspendPayload: prevResult.suspendPayload,
+          },
+        },
+      });
 
-      // Parallel / conditional: do not emit workflow.suspend until every sibling branch has
-      // reached a terminal step result in storage (matches default engine; avoids incomplete
-      // `suspended` metadata when the first branch suspends before siblings persist).
-      if (parentEntry && (parentEntry.type === 'parallel' || parentEntry.type === 'conditional')) {
-        for (const branch of parentEntry.steps) {
-          if (!isExecutableStep(branch)) {
-            continue;
-          }
-          const sr = stepResults[branch.step.id];
-          if (!sr || !['success', 'skipped', 'suspended', 'failed'].includes(sr.status)) {
-            return;
-          }
-        }
+      const parentEntry = workflow.stepGraph[executionPath[0]!];
+      if ((parentEntry?.type === 'parallel' || parentEntry?.type === 'conditional') && executionPath.length > 1) {
+        // A branch of a parallel/conditional suspended. Wait for all sibling branches and
+        // aggregate their suspended paths into a single workflow.suspend so resume() can
+        // target any of them (each branch publishing its own workflow.suspend would
+        // otherwise race and clobber suspendedPaths).
+        await this.aggregateBranchResults({
+          workflow,
+          workflowId,
+          runId,
+          branchEntry: parentEntry,
+          branchExecutionPath: executionPath,
+          latestBranchResult: prevResult,
+          resumeSteps,
+          timeTravel,
+          restart,
+          parentWorkflow,
+          stepResults,
+          activeStepsPath,
+          requestContext,
+          state: currentState,
+          outputOptions,
+        });
+        return;
       }
 
       const suspendedPaths: Record<string, number[]> = {};
-      let resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
+      const suspendedStep = getStep(workflow, executionPath);
+      if (suspendedStep) {
+        suspendedPaths[suspendedStep.id] = executionPath;
+      }
+      const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
         prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
-
-      if (parentEntry && (parentEntry.type === 'parallel' || parentEntry.type === 'conditional')) {
-        for (let i = 0; i < parentEntry.steps.length; i++) {
-          const branch = parentEntry.steps[i];
-          if (branch?.type !== 'step') continue;
-          const sid = branch.step.id;
-          const sr = stepResults[sid] as { status?: string; suspendPayload?: any } | undefined;
-          if (sr?.status === 'suspended') {
-            suspendedPaths[sid] = [executionPath[0]!, i];
-            const labels = sr.suspendPayload?.__workflow_meta?.resumeLabels;
-            if (labels && typeof labels === 'object') {
-              resumeLabels = { ...resumeLabels, ...labels };
-            }
-          }
-        }
-      }
-      if (Object.keys(suspendedPaths).length === 0) {
-        const suspendedStep = getStep(workflow, executionPath);
-        if (suspendedStep) {
-          suspendedPaths[suspendedStep.id] = executionPath;
-        }
-      }
 
       // Check shouldPersistSnapshot option - default to true if not specified
       const shouldPersist =
@@ -1691,6 +2156,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             result: prevResult,
             suspendedPaths,
             resumeLabels,
+            activePaths: executionPath,
+            activeStepsPath,
           },
         });
       }
@@ -1706,25 +2173,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           timeTravel,
+          restart,
           state: currentState,
           outputOptions,
-        },
-      });
-
-      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-suspended',
-          payload: {
-            id: (step as any)?.step?.id,
-            ...prevResult,
-            suspendedAt: Date.now(),
-            suspendPayload: prevResult.suspendPayload,
-          },
         },
       });
 
@@ -1772,7 +2226,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeSteps,
           stepResults,
           prevResult: { ...nestedPrevResult, status: 'paused' },
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
         });
@@ -1786,151 +2240,28 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeSteps,
           stepResults,
           prevResult,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
         });
       }
     } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
-      const execBranches = step.steps.filter(s => isExecutableStep(s));
-      const allSiblingTerminal = execBranches.every(b => {
-        const res = stepResults?.[b.step.id];
-        return res && ['success', 'skipped', 'suspended', 'failed'].includes(res.status);
-      });
-      if (!allSiblingTerminal) {
-        return;
-      }
-
-      const anySuspended = execBranches.some(b => stepResults[b.step.id]?.status === 'suspended');
-      if (anySuspended) {
-        const suspendedBranch = execBranches.find(b => stepResults[b.step.id]?.status === 'suspended')!;
-        const suspendedPrev = stepResults[suspendedBranch.step.id] as StepResult<any, any, any, any>;
-        const branchIdx = step.steps.findIndex(b => isExecutableStep(b) && b.step.id === suspendedBranch.step.id);
-        const suspendExecutionPath = branchIdx >= 0 ? [executionPath[0]!, branchIdx] : executionPath;
-
-        const suspendedPaths: Record<string, number[]> = {};
-        let resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
-          suspendedPrev.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
-
-        for (let i = 0; i < step.steps.length; i++) {
-          const branch = step.steps[i];
-          if (branch?.type !== 'step') {
-            continue;
-          }
-          const sid = branch.step.id;
-          const sr = stepResults[sid] as { status?: string; suspendPayload?: any } | undefined;
-          if (sr?.status === 'suspended') {
-            suspendedPaths[sid] = [executionPath[0]!, i];
-            const labels = sr.suspendPayload?.__workflow_meta?.resumeLabels;
-            if (labels && typeof labels === 'object') {
-              resumeLabels = { ...resumeLabels, ...labels };
-            }
-          }
-        }
-
-        const shouldPersistSuspend =
-          workflow?.options?.shouldPersistSnapshot?.({
-            stepResults: stepResults ?? {},
-            workflowStatus: 'suspended',
-          }) ?? true;
-
-        if (shouldPersistSuspend) {
-          await workflowsStore?.updateWorkflowResults({
-            workflowName: workflow.id,
-            runId,
-            stepId: '__state',
-            result: currentState as any,
-            requestContext,
-          });
-
-          await workflowsStore?.updateWorkflowState({
-            workflowName: workflowId,
-            runId,
-            opts: {
-              status: 'suspended',
-              result: suspendedPrev,
-              suspendedPaths,
-              resumeLabels,
-            },
-          });
-        }
-
-        await this.mastra.pubsub.publish('workflows', {
-          type: 'workflow.suspend',
-          runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: suspendExecutionPath,
-            resumeSteps,
-            parentWorkflow,
-            stepResults,
-            prevResult: suspendedPrev,
-            activeSteps,
-            requestContext,
-            timeTravel,
-            state: currentState,
-            outputOptions,
-          },
-        });
-
-        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-suspended',
-            payload: {
-              id: suspendedBranch.step.id,
-              ...suspendedPrev,
-              suspendedAt: Date.now(),
-              suspendPayload: suspendedPrev.suspendPayload,
-            },
-          },
-        });
-
-        return;
-      }
-
-      let skippedCount = 0;
-      const allResults: Record<string, any> = step.steps.reduce(
-        (acc, st) => {
-          if (isExecutableStep(st)) {
-            const res = stepResults?.[st.step.id];
-            if (res && res.status === 'success') {
-              acc[st.step.id] = res?.output;
-              // @ts-expect-error - skipped status not in type
-            } else if (res?.status === 'skipped') {
-              skippedCount++;
-            }
-          }
-
-          return acc;
-        },
-        {} as Record<string, StepResult<any, any, any, any>>,
-      );
-
-      const keys = Object.keys(allResults);
-      if (keys.length + skippedCount < execBranches.length) {
-        return;
-      }
-
-      await this.mastra.pubsub.publish('workflows', {
-        type: 'workflow.step.end',
+      await this.aggregateBranchResults({
+        workflow,
+        workflowId,
         runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath: executionPath.slice(0, -1),
-          resumeSteps,
-          stepResults,
-          prevResult: { status: 'success', output: allResults },
-          activeSteps,
-          requestContext,
-          timeTravel,
-          state: currentState,
-          outputOptions,
-        },
+        branchEntry: step,
+        branchExecutionPath: executionPath,
+        latestBranchResult: prevResult,
+        resumeSteps,
+        timeTravel,
+        restart,
+        parentWorkflow,
+        stepResults,
+        activeStepsPath,
+        requestContext,
+        state: currentState,
+        outputOptions,
       });
     } else if (step?.type === 'foreach') {
       // Get the original array from the foreach step's stored payload
@@ -1947,9 +2278,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult: { ...prevResult, output: originalArray },
-          activeSteps,
+          activeStepsPath,
           requestContext,
           timeTravel,
+          restart,
           state: currentState,
           outputOptions,
           forEachIndex,
@@ -1965,7 +2297,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         resumeSteps,
         stepResults,
         prevResult,
-        activeSteps,
+        activeStepsPath,
         requestContext,
         state: currentState,
         outputOptions,
@@ -1982,9 +2314,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           timeTravel,
+          restart,
           state: currentState,
           outputOptions,
         },
@@ -2008,7 +2341,46 @@ export class WorkflowEventProcessor extends EventProcessor {
     return snapshot;
   }
 
+  /**
+   * Result of handling a single workflow event.
+   *
+   * - `ok: true` — event was processed; the transport should ack.
+   * - `ok: false, retry: true` — transient failure, the transport should
+   *   nack/redeliver (or, for HTTP push, return 5xx so the broker retries).
+   * - `ok: false, retry: false` — terminal/poison failure, the transport
+   *   should drop the event (or return 4xx for HTTP push).
+   */
+  async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    try {
+      await this.#dispatch(event);
+      return { ok: true };
+    } catch (err) {
+      this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
+        type: event.type,
+        runId: event.runId,
+        error: err,
+      });
+      return { ok: false, retry: true };
+    }
+  }
+
+  /**
+   * @deprecated prefer {@link WorkflowEventProcessor.handle}, which returns a
+   * structured result instead of relying on an ack callback. Kept as a thin
+   * wrapper so existing pull-mode call sites continue to work.
+   */
   async process(event: Event, ack?: () => Promise<void>) {
+    const result = await this.handle(event);
+    if (result.ok) {
+      try {
+        await ack?.();
+      } catch (e) {
+        this.mastra.getLogger()?.error('Error acking event', e);
+      }
+    }
+  }
+
+  async #dispatch(event: Event) {
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
@@ -2023,10 +2395,25 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (type.startsWith('workflow.user-event.')) {
+      const userEventWorkflow = this.#tryResolveWorkflow(workflowData.workflowId);
+      if (!userEventWorkflow) {
+        // Workflow no longer registered (e.g. deleted from code). Treat as a
+        // terminal failure rather than throwing — otherwise the transport
+        // would redeliver this event indefinitely.
+        return this.errorWorkflow(
+          workflowData,
+          new MastraError({
+            id: 'MASTRA_WORKFLOW',
+            text: `Workflow not found: ${workflowData.workflowId}`,
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.SYSTEM,
+          }),
+        );
+      }
       await processWorkflowWaitForEvent(
         {
           ...workflowData,
-          workflow: this.mastra.getWorkflow(workflowData.workflowId),
+          workflow: userEventWorkflow,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -2043,19 +2430,29 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else if (workflowData.parentWorkflow) {
       workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
     } else {
-      workflow = this.mastra.getWorkflow(workflowData.workflowId);
+      workflow = this.#tryResolveWorkflow(workflowData.workflowId);
     }
 
     if (!workflow) {
-      return this.errorWorkflow(
-        workflowData,
-        new MastraError({
-          id: 'MASTRA_WORKFLOW',
-          text: `Workflow not found: ${workflowData.workflowId}`,
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.SYSTEM,
-        }),
-      );
+      // For terminal/cleanup events (`workflow.fail`, `workflow.end`,
+      // `workflow.cancel`), we deliberately keep dispatching with
+      // `workflow=undefined` so the processors can finish their cleanup work
+      // (persist final state, notify parent workflow, publish to
+      // workflows-finish). Republishing `workflow.fail` here would loop
+      // forever because the redelivered event would hit this same branch.
+      if (type === 'workflow.fail' || type === 'workflow.end' || type === 'workflow.cancel') {
+        // fall through to switch below with workflow=undefined
+      } else {
+        return this.errorWorkflow(
+          workflowData,
+          new MastraError({
+            id: 'MASTRA_WORKFLOW',
+            text: `Workflow not found: ${workflowData.workflowId}`,
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.SYSTEM,
+          }),
+        );
+      }
     }
 
     if (type === 'workflow.start' || type === 'workflow.resume') {
@@ -2072,63 +2469,65 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    // For the cleanup-path events (`workflow.fail`/`workflow.end`/
+    // `workflow.cancel`) we may have fallen through above with no resolved
+    // workflow. The processors for those events tolerate `workflow=undefined`
+    // (they rely on optional chaining / persisted state), so we cast here to
+    // avoid widening the shared `ProcessorArgs.workflow` type across the
+    // hundreds of usage sites in this file.
+    const workflowArg = workflow as Workflow;
+
     switch (type) {
       case 'workflow.cancel':
         await this.processWorkflowCancel({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.start':
         await this.processWorkflowStart({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.resume':
         await this.processWorkflowStart({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.end':
         await this.processWorkflowEnd({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.step.end':
         await this.processWorkflowStepEnd({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.step.run':
         await this.processWorkflowStepRun({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.suspend':
         await this.processWorkflowSuspend({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.fail':
         await this.processWorkflowFail({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       default:
         break;
-    }
-
-    try {
-      await ack?.();
-    } catch (e) {
-      this.mastra.getLogger()?.error('Error acking event', e);
     }
   }
 }

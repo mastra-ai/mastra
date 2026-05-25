@@ -1,5 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import { MastraFGAPermissions } from '../auth/ee';
+import type { MastraFGAPermissionInput } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -564,6 +566,49 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
+   * Static helper to check FGA authorization for thread access.
+   * Can be called from HTTP handlers and agent execution paths.
+   */
+  static async checkThreadFGA(options: {
+    mastra?: Mastra;
+    user: Record<string, unknown>;
+    threadId: string;
+    resourceId?: string;
+    requestContext?: RequestContext;
+    permission?: MastraFGAPermissionInput;
+  }): Promise<void> {
+    const {
+      mastra,
+      user,
+      threadId,
+      resourceId,
+      requestContext,
+      permission = MastraFGAPermissions.MEMORY_READ,
+    } = options;
+    const fgaProvider = mastra?.getServer()?.fga;
+    if (!fgaProvider) return;
+
+    const { requireFGA } = await import('../auth/ee/fga-check');
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'thread', id: threadId },
+      permission,
+      requestContext,
+      context:
+        resourceId || requestContext
+          ? {
+              resourceId,
+            }
+          : undefined,
+      metadata: {
+        threadId,
+        resourceId,
+      },
+    });
+  }
+
+  /**
    * Retrieves working memory for a specific thread
    * @param threadId - The unique identifier of the thread
    * @param resourceId - The unique identifier of the resource
@@ -968,6 +1013,7 @@ https://mastra.ai/en/docs/memory/overview`,
       activateAfterIdle: om.activateAfterIdle,
       activateOnProviderChange: om.activateOnProviderChange,
       shareTokenBudget: om.shareTokenBudget,
+      temporalMarkers: om.temporalMarkers,
       retrieval: om.retrieval,
     };
 
@@ -989,6 +1035,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
         previousObserverTokens: obs.previousObserverTokens,
+        observeAttachments: obs.observeAttachments,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {

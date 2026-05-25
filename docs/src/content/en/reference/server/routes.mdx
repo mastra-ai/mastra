@@ -17,6 +17,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/agents/:agentId` | Get agent by ID (supports version query params) |
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
+| `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
 

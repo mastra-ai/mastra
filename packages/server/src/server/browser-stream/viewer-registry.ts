@@ -1,3 +1,4 @@
+import type { MastraBrowser } from '@mastra/core/browser';
 import type {
   StatusMessage,
   BrowserStreamConfig,
@@ -275,9 +276,16 @@ export class ViewerRegistry implements ViewerRegistryLike {
     agentId: string,
     threadId?: string,
   ): Promise<void> {
-    const toolset = getToolset(agentId);
+    const toolset = await getToolset(agentId);
+    // Viewer may have disconnected while awaiting async toolset lookup.
+    // Bail out so we don't register callbacks or start a screencast for a stale viewer.
+    if (!this.viewers.has(viewerKey)) {
+      return;
+    }
     if (!toolset) {
-      // No browser available for this agent - just keep connection open
+      // No browser available for this agent - just keep connection open.
+      // The screencast will start when the agent hydrates and the browser launches
+      // (via the generation flow calling getAgentFromSystem → createAgentFromStoredConfig).
       console.info(`[ViewerRegistry] No toolset for ${viewerKey}, waiting...`);
       return;
     }
@@ -340,11 +348,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
    * @param toolset - The browser toolset
    * @param threadId - The thread ID for thread-scoped page selection (optional)
    */
-  private async doStartScreencast(
-    viewerKey: string,
-    toolset: NonNullable<ReturnType<BrowserStreamConfig['getToolset']>>,
-    threadId?: string,
-  ): Promise<void> {
+  private async doStartScreencast(viewerKey: string, toolset: MastraBrowser, threadId?: string): Promise<void> {
     // Skip if already streaming or currently starting (prevents race conditions)
     if (this.screencasts.has(viewerKey) || this.startingScreencasts.has(viewerKey)) {
       return;
@@ -399,11 +403,17 @@ export class ViewerRegistry implements ViewerRegistryLike {
         this.broadcastStatus(viewerKey, { status: 'browser_closed' });
       });
 
-      // Wire up error events
+      // Wire up error events - treat errors as browser closed since screencast can't continue
       stream.on('error', error => {
         // Ignore errors from superseded streams
         if (this.screencasts.get(viewerKey) !== currentStream) return;
         console.error(`[ViewerRegistry] Screencast error for ${viewerKey}:`, error);
+        this.screencasts.delete(viewerKey);
+        // Explicitly stop the stream to clean up CDP resources
+        currentStream.stop().catch(stopError => {
+          console.warn(`[ViewerRegistry] Error stopping errored screencast for ${viewerKey}:`, stopError);
+        });
+        this.broadcastStatus(viewerKey, { status: 'browser_closed' });
       });
 
       this.broadcastStatus(viewerKey, { status: 'streaming' });

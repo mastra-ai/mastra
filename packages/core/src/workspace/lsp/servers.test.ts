@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   BUILTIN_SERVERS,
+  buildCustomExtensions,
   buildServerDefs,
   findProjectRoot,
   findProjectRootAsync,
@@ -553,14 +554,229 @@ describe('buildServerDefs', () => {
       const servers = getServersForFile('/project/app.ts', undefined, customDefs);
       const ts = servers.find(s => s.id === 'typescript');
       expect(ts).toBeDefined();
-      // The command should use the override
       expect(ts!.command('/any/root')).toBe('/custom/tls --stdio');
     });
 
     it('falls back to BUILTIN_SERVERS when no defs provided', () => {
       const servers = getServersForFile('/project/app.ts');
-      // Should still return servers from BUILTIN_SERVERS
       expect(servers.some(s => s.id === 'typescript')).toBe(true);
+    });
+  });
+
+  describe('custom servers via config.servers', () => {
+    const phpServer = {
+      id: 'phpactor',
+      name: 'Phpactor Language Server',
+      languageIds: ['php'],
+      extensions: ['.php'],
+      markers: ['composer.json'],
+      command: 'phpactor language-server',
+    };
+
+    it('merges custom server into buildServerDefs result', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.phpactor).toBeDefined();
+      expect(defs.phpactor!.id).toBe('phpactor');
+      expect(defs.phpactor!.name).toBe('Phpactor Language Server');
+      expect(defs.phpactor!.languageIds).toEqual(['php']);
+      expect(defs.phpactor!.markers).toEqual(['composer.json']);
+    });
+
+    it('custom server command is a constant string wrapped as a function', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.phpactor!.command('/any/root')).toBe('phpactor language-server');
+    });
+
+    it('preserves built-in servers alongside custom servers', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.typescript).toBeDefined();
+      expect(defs.python).toBeDefined();
+      expect(defs.go).toBeDefined();
+      expect(defs.rust).toBeDefined();
+      expect(defs.phpactor).toBeDefined();
+    });
+
+    it('custom server overrides built-in with same ID', () => {
+      const customGo = {
+        id: 'go',
+        name: 'Custom Go Server',
+        languageIds: ['go'],
+        extensions: ['.go'],
+        markers: ['go.mod'],
+        command: '/custom/gopls serve',
+      };
+      const defs = buildServerDefs({ servers: { go: customGo } });
+      expect(defs.go!.name).toBe('Custom Go Server');
+      expect(defs.go!.command('/any')).toBe('/custom/gopls serve');
+    });
+
+    it('custom server with initializationOptions exposes initialization()', () => {
+      const serverWithInit = {
+        ...phpServer,
+        initializationOptions: { storagePath: '/tmp/phpactor' },
+      };
+      const defs = buildServerDefs({ servers: { phpactor: serverWithInit } });
+      expect(defs.phpactor!.initialization).toBeDefined();
+      expect(defs.phpactor!.initialization!('/any')).toEqual({ storagePath: '/tmp/phpactor' });
+    });
+
+    it('custom server without initializationOptions has no initialization()', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.phpactor!.initialization).toBeUndefined();
+    });
+
+    it('multiple custom servers can be registered', () => {
+      const rubyServer = {
+        id: 'solargraph',
+        name: 'Solargraph',
+        languageIds: ['ruby'],
+        extensions: ['.rb'],
+        markers: ['Gemfile'],
+        command: 'solargraph stdio',
+      };
+      const defs = buildServerDefs({ servers: { phpactor: phpServer, solargraph: rubyServer } });
+      expect(defs.phpactor).toBeDefined();
+      expect(defs.solargraph).toBeDefined();
+    });
+  });
+
+  describe('buildCustomExtensions', () => {
+    it('builds extension map from custom servers', () => {
+      const servers = {
+        phpactor: {
+          id: 'phpactor',
+          name: 'Phpactor',
+          languageIds: ['php'],
+          extensions: ['.php', '.phtml'],
+          markers: ['composer.json'],
+          command: 'phpactor language-server',
+        },
+      };
+      const extensions = buildCustomExtensions(servers);
+      expect(extensions['.php']).toBe('php');
+      expect(extensions['.phtml']).toBe('php');
+    });
+
+    it('returns empty object when no servers provided', () => {
+      expect(buildCustomExtensions(undefined)).toEqual({});
+      expect(buildCustomExtensions({})).toEqual({});
+    });
+
+    it('maps extensions from multiple servers', () => {
+      const servers = {
+        phpactor: {
+          id: 'phpactor',
+          name: 'Phpactor',
+          languageIds: ['php'],
+          extensions: ['.php'],
+          markers: ['composer.json'],
+          command: 'phpactor language-server',
+        },
+        solargraph: {
+          id: 'solargraph',
+          name: 'Solargraph',
+          languageIds: ['ruby'],
+          extensions: ['.rb', '.erb'],
+          markers: ['Gemfile'],
+          command: 'solargraph stdio',
+        },
+      };
+      const extensions = buildCustomExtensions(servers);
+      expect(extensions['.php']).toBe('php');
+      expect(extensions['.rb']).toBe('ruby');
+      expect(extensions['.erb']).toBe('ruby');
+    });
+
+    it('skips servers with empty languageIds', () => {
+      const servers = {
+        broken: {
+          id: 'broken',
+          name: 'Broken',
+          languageIds: [],
+          extensions: ['.brk'],
+          markers: [],
+          command: 'broken-server',
+        },
+      };
+      const extensions = buildCustomExtensions(servers);
+      expect(extensions['.brk']).toBeUndefined();
+    });
+  });
+
+  describe('getServersForFile with customExtensions', () => {
+    it('finds custom server for custom extension', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const customExtensions = { '.php': 'php' };
+      const servers = getServersForFile('/project/src/App.php', undefined, defs, customExtensions);
+      expect(servers).toHaveLength(1);
+      expect(servers[0]!.id).toBe('phpactor');
+    });
+
+    it('returns empty for unknown extension even with custom defs', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const servers = getServersForFile('/project/data.xyz', undefined, defs, { '.php': 'php' });
+      expect(servers).toEqual([]);
+    });
+
+    it('custom extensions work alongside built-in extensions', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const customExtensions = { '.php': 'php' };
+
+      const phpServers = getServersForFile('/project/App.php', undefined, defs, customExtensions);
+      expect(phpServers.some(s => s.id === 'phpactor')).toBe(true);
+
+      const tsServers = getServersForFile('/project/app.ts', undefined, defs, customExtensions);
+      expect(tsServers.some(s => s.id === 'typescript')).toBe(true);
+    });
+
+    it('disabled servers are filtered from custom servers too', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const servers = getServersForFile('/project/App.php', ['phpactor'], defs, { '.php': 'php' });
+      expect(servers).toEqual([]);
     });
   });
 });

@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Updates dataset metadata, name, description, and/or schemas. Zod schemas are automatically converted to JSON Schema.
+Updates dataset metadata, name, description, and/or schemas. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) for defining schemas.
 
 ## Usage example
 
@@ -29,7 +29,7 @@ const updated = await dataset.update({
   description: 'Revised evaluation set',
 })
 
-// Update with Zod schema (auto-converted to JSON Schema)
+// Update with Zod schema (library that supports Standard JSON Schema)
 const updated2 = await dataset.update({
   inputSchema: z.object({
     question: z.string(),
@@ -62,15 +62,15 @@ const updated2 = await dataset.update({
   },
   {
     name: 'inputSchema',
-    type: 'unknown',
+    type: 'StandardJSONSchemaV1',
     isOptional: true,
-    description: 'JSON Schema or Zod schema for item inputs.',
+    description: 'Standard JSON Schema for item inputs.',
   },
   {
     name: 'groundTruthSchema',
-    type: 'unknown',
+    type: 'StandardJSONSchemaV1',
     isOptional: true,
-    description: 'JSON Schema or Zod schema for item ground truths.',
+    description: 'Standard JSON Schema for item ground truths.',
   },
 ]}
 />

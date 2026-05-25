@@ -170,7 +170,7 @@ export const dynamicAgent = new Agent({
 
     return `${basePrompt} ${localeInstructions}`.trim()
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -197,7 +197,7 @@ export const registryAgent = new Agent({
 
     return prompt.content
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -335,7 +335,7 @@ for (const [key, value] of ctx.entries()) {
 
 ## Schema validation
 
-Use `requestContextSchema` to define a Zod schema that validates request context values at runtime. This catches missing or invalid context values early, provides clear error messages, and gives you type inference within your component.
+Use `requestContextSchema` to define a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) that validates request context values at runtime. This catches missing or invalid context values early, provides clear error messages, and gives you type inference within your component.
 
 ### Agent schema validation
 
@@ -363,7 +363,7 @@ export const validatedAgent = new Agent({
 
     return `You are helping user ${userId}`
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 

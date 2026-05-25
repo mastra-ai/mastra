@@ -115,7 +115,7 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-The `structuredOutput.schema` option accepts any Zod schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
+The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
 
 :::info
 

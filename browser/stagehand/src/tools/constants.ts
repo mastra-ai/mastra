@@ -11,6 +11,8 @@ export const STAGEHAND_TOOLS = {
   NAVIGATE: 'stagehand_navigate',
   TABS: 'stagehand_tabs',
   CLOSE: 'stagehand_close',
+  // Utility
+  SCREENSHOT: 'stagehand_screenshot',
 } as const;
 
 export type StagehandToolName = (typeof STAGEHAND_TOOLS)[keyof typeof STAGEHAND_TOOLS];

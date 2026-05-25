@@ -283,6 +283,17 @@ export const triggerExperimentBodySchema = z.object({
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
+  versions: z
+    .object({
+      agents: z
+        .record(
+          z.string(),
+          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+        )
+        .optional(),
+    })
+    .optional()
+    .describe('Version overrides for sub-agent delegation during experiment execution'),
 });
 
 export const compareExperimentsBodySchema = z.object({
@@ -499,6 +510,7 @@ export const itemVersionResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
+  expectedTrajectory: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),

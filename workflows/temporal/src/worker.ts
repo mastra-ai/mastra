@@ -1,0 +1,1 @@
+export { MastraPlugin } from './plugin';

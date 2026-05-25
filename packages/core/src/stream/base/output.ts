@@ -186,7 +186,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCallStreamingMeta: Record<
     string,
-    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata; dynamic?: boolean }
+    {
+      toolName: string;
+      providerExecuted?: boolean;
+      providerMetadata?: ProviderMetadata;
+      dynamic?: boolean;
+      observability?: ToolCallChunk['payload']['observability'];
+    }
   > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
@@ -339,12 +345,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                */
               if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
                 const processorIndex = processorRunner.outputProcessors.findIndex(
-                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                  p => p.id === STRUCTURED_OUTPUT_PROCESSOR_NAME,
                 );
                 // Only create the state if the processor actually exists in the list
                 if (processorIndex !== -1) {
+                  const structuredOutputProcessor = processorRunner.outputProcessors[processorIndex];
                   const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
-                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    processorName: structuredOutputProcessor?.name ?? STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
                     createSpan: true,
@@ -455,6 +462,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
                 dynamic: chunk.payload.dynamic,
+                ...(chunk.payload.observability ? { observability: chunk.payload.observability } : {}),
               };
               break;
             case 'tool-call-input-streaming-end': {
@@ -485,6 +493,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                     dynamic: meta.dynamic,
+                    ...(meta.observability ? { observability: meta.observability } : {}),
                   },
                 };
                 self.#toolCalls.push(synthetic);
@@ -556,15 +565,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             case 'tool-call': {
               // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
               const existingSynthetic = self.#toolCalls.find(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
+              // In some providers (e.g. Anthropic PTC), args are only present in the final tool-call event.
+              // Synthetic tool-calls built from streaming deltas may have empty args,
+              // so we merge them here if missing.
               if (existingSynthetic) {
-                // Merge properties from the real tool-call onto the synthetic one.
-                // The AI SDK's streaming path emits tool-input-start without providerMetadata
-                // but includes it on the final tool-call chunk (e.g., OpenAI's fc_* itemId).
+                // FIX: merge args if synthetic is empty
+                if (chunk.payload.args && Object.keys(existingSynthetic.payload.args || {}).length === 0) {
+                  existingSynthetic.payload.args = chunk.payload.args;
+                }
+
+                // existing logic
                 if (chunk.payload.providerMetadata && !existingSynthetic.payload.providerMetadata) {
                   existingSynthetic.payload.providerMetadata = chunk.payload.providerMetadata;
                 }
                 if (chunk.payload.dynamic != null && existingSynthetic.payload.dynamic == null) {
                   existingSynthetic.payload.dynamic = chunk.payload.dynamic;
+                }
+                if (chunk.payload.observability && !existingSynthetic.payload.observability) {
+                  existingSynthetic.payload.observability = chunk.payload.observability;
                 }
                 return;
               }
@@ -800,6 +818,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }),
                 ...(self.#usageCount.cachedInputTokens !== undefined && {
                   cachedInputTokens: self.#usageCount.cachedInputTokens,
+                }),
+                ...(self.#usageCount.cacheCreationInputTokens !== undefined && {
+                  cacheCreationInputTokens: self.#usageCount.cacheCreationInputTokens,
+                }),
+                ...(self.#usageCount.raw !== undefined && {
+                  raw: self.#usageCount.raw,
                 }),
               };
 
@@ -1252,6 +1276,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (usage.cachedInputTokens !== undefined) {
       this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
+    if (usage.cacheCreationInputTokens !== undefined) {
+      this.#usageCount.cacheCreationInputTokens =
+        (this.#usageCount.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
+    }
+    // raw is provider-specific and not summable; keep the latest step's raw
+    if (usage.raw !== undefined) {
+      this.#usageCount.raw = usage.raw;
+    }
   }
 
   populateUsageCount(usage: Partial<LanguageModelUsage>) {
@@ -1274,6 +1306,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
     if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
       this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
+    }
+    if (usage.cacheCreationInputTokens !== undefined && this.#usageCount.cacheCreationInputTokens === undefined) {
+      this.#usageCount.cacheCreationInputTokens = usage.cacheCreationInputTokens;
+    }
+    if (usage.raw !== undefined && this.#usageCount.raw === undefined) {
+      this.#usageCount.raw = usage.raw;
     }
   }
 
@@ -1522,6 +1560,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#baseStream;
   }
 
+  /** @internal */
+  _waitUntilFinished() {
+    if (this.#streamFinished) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>(resolve => {
+      this.#emitter.once('finish', resolve);
+    });
+  }
+
   #getTotalUsage(): LanguageModelUsage {
     let total = this.#usageCount.totalTokens;
 
@@ -1538,6 +1587,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       totalTokens: total,
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
+      cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens,
+      ...(this.#usageCount.raw !== undefined && { raw: this.#usageCount.raw }),
     };
   }
 

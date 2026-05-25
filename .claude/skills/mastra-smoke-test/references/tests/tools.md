@@ -64,3 +64,43 @@ Click: Submit button
 Wait: For output
 Verify: JSON output appears
 ```
+
+## Curl / API (for `--skip-browser`)
+
+**`<toolId>` is the tool's `.id` property, not the export name.** A
+`weatherTool` export with `id: 'get-weather'` is addressed as
+`/api/tools/get-weather/execute`, not `/api/tools/weatherTool/execute`.
+
+**List tools:**
+
+```bash
+curl -s http://localhost:4111/api/tools
+```
+
+**Execute a tool:**
+
+```bash
+curl -s -X POST "http://localhost:4111/api/tools/<toolId>/execute" \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"location":"San Francisco"}}'
+```
+
+Note the `data` wrapper — the tool's input schema fields go **inside** `data`,
+not at the top level.
+
+**Pass criteria:**
+
+- `/api/tools` returns a JSON object keyed by tool id
+- `/execute` with valid input returns HTTP 200 with the tool's result object
+- `/execute` with invalid input returns HTTP 200 with
+  `{ error: true, validationErrors: {...} }` (see `errors.md`)
+
+**Common mistakes:**
+
+- Using the export name (e.g. `weatherTool`) instead of the tool's `id`
+  (e.g. `get-weather`) → 404 "Tool not found"
+- Sending input fields at the top level instead of under `data` → validation
+  error on every field
+- External API failures surface as HTTP 500 with upstream error content.
+  Retry with a different input (e.g. a well-known city) before concluding
+  the tool itself is broken.

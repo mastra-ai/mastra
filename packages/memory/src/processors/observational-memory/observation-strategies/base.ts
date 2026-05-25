@@ -154,8 +154,12 @@ export abstract class ObservationStrategy {
 
   protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
     if (this.opts.writer) {
-      await this.opts.writer.custom(marker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      await this.opts.writer.custom({ ...marker, transient: true }).catch(() => {});
     }
+
+    const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
+    await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
   }
 
   protected getObservationMarkerConfig(): ObservationMarkerConfig {

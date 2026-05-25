@@ -1,5 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { listMetricsArgsSchema } from '@mastra/core/storage';
+import { listMetricsArgsSchema, METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -20,13 +20,16 @@ import type {
   GetMetricLabelKeysResponse,
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
+  MetricDistinctColumn,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_METRIC_EVENTS, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
+import { TABLE_METRIC_EVENTS, TABLE_METRIC_EVENTS_DELTA, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
 import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -71,7 +74,23 @@ const METRIC_TYPED_COLUMNS = new Set([
 /** Columns excluded from groupBy because they are complex types. */
 const GROUP_BY_EXCLUDED = new Set(['metadata', 'scope', 'costMetadata', 'tags']);
 
-function getAggregationSql(aggregation: AggregationType, measure = 'value'): string {
+function resolveDistinctColumnSql(distinctColumn: MetricDistinctColumn | undefined): string {
+  if (!distinctColumn) {
+    throw new Error(`count_distinct aggregation requires a 'distinctColumn' argument`);
+  }
+  // Defense-in-depth: the schema enum already restricts this, but the value
+  // flows into raw SQL so we re-check against the system-level allowlist.
+  if (!(METRIC_DISTINCT_COLUMNS as readonly string[]).includes(distinctColumn)) {
+    throw new Error(`Invalid distinctColumn: ${distinctColumn}`);
+  }
+  return parseFieldKey(distinctColumn);
+}
+
+function getAggregationSql(
+  aggregation: AggregationType,
+  measure = 'value',
+  distinctColumn?: MetricDistinctColumn,
+): string {
   switch (aggregation) {
     case 'sum':
       return `sum(${measure})`;
@@ -83,6 +102,10 @@ function getAggregationSql(aggregation: AggregationType, measure = 'value'): str
       return `max(${measure})`;
     case 'count':
       return `toFloat64(count(${measure}))`;
+    case 'count_distinct': {
+      // Use ClickHouse's approximate HyperLogLog (~1-2% error) for dashboard scale.
+      return `toFloat64(uniq(${resolveDistinctColumnSql(distinctColumn)}))`;
+    }
     case 'last':
       return `argMax(${measure}, timestamp)`;
     default:
@@ -236,13 +259,43 @@ export async function batchCreateMetrics(client: ClickHouseClient, args: BatchCr
 // List
 // ============================================================================
 
-export async function listMetrics(client: ClickHouseClient, args: ListMetricsArgs): Promise<ListMetricsResponse> {
+export async function listMetrics(
+  client: ClickHouseClient,
+  args: ListMetricsArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListMetricsResponse> {
   const parsed = listMetricsArgsSchema.parse(args);
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingSupported(strategy);
+
+    const streamHeadCursor = await getStreamHeadCursor(client);
+    if (parsed.after === undefined) {
+      return {
+        metrics: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryMetricsAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      metrics: visibleRows.map(rowToMetricRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      deltaCursor: visibleRows.length > 0 ? buildMetricsCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
+    };
+  }
+
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_METRIC_EVENTS} AS m ${whereClause}`,
@@ -265,7 +318,91 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     metrics: rows.map(rowToMetricRecord),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+type MetricDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  name: string;
+  timestamp: string;
+  metricId: string;
+};
+
+async function queryMetricsAfterCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  cursorId: string,
+): Promise<MetricDeltaRow[]> {
+  return await queryJson<MetricDeltaRow>(
+    client,
+    `
+      SELECT
+        m.* EXCEPT(name, timestamp, metricId),
+        m.name AS name,
+        m.timestamp AS timestamp,
+        m.metricId AS metricId,
+        toString(d.cursorId) AS cursorId
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ORDER BY d.cursorId ASC
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
+  );
+}
+
+async function getDeltaCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
+  }
+
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_METRIC_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_METRIC_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+function buildMetricsCursor(row: MetricDeltaRow): string {
+  return row.cursorId ?? '0';
 }
 
 // ============================================================================
@@ -276,7 +413,7 @@ export async function getMetricAggregate(
   client: ClickHouseClient,
   args: GetMetricAggregateArgs,
 ): Promise<GetMetricAggregateResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
   const combined = mergeFilters(nameFilter, signalFilter);
@@ -369,7 +506,7 @@ export async function getMetricBreakdown(
   client: ClickHouseClient,
   args: GetMetricBreakdownArgs,
 ): Promise<GetMetricBreakdownResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
   const combined = mergeFilters(nameFilter, signalFilter);
@@ -384,14 +521,23 @@ export async function getMetricBreakdown(
   const allConditions = [...combined.conditions, ...labelExclusions];
   const fullWhereClause = allConditions.length ? `WHERE ${allConditions.join(' AND ')}` : '';
 
+  const orderDirection = args.orderDirection === 'ASC' ? 'ASC' : 'DESC';
+  const limitClause = typeof args.limit === 'number' ? `LIMIT {breakdown_limit:UInt32}` : '';
+  const extraParams: Record<string, unknown> = typeof args.limit === 'number' ? { breakdown_limit: args.limit } : {};
+
   const sql = `
     SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()}
     FROM ${TABLE_METRIC_EVENTS}
     ${fullWhereClause}
     GROUP BY ${groupByCols}
-    ORDER BY value DESC
+    ORDER BY value ${orderDirection}
+    ${limitClause}
   `;
-  const rows = await queryJson<Record<string, unknown>>(client, sql, { ...combined.params, ...labelParams });
+  const rows = await queryJson<Record<string, unknown>>(client, sql, {
+    ...combined.params,
+    ...labelParams,
+    ...extraParams,
+  });
 
   const groups = rows.map(row => {
     const dimensions: Record<string, string | null> = {};
@@ -415,7 +561,7 @@ export async function getMetricTimeSeries(
   client: ClickHouseClient,
   args: GetMetricTimeSeriesArgs,
 ): Promise<GetMetricTimeSeriesResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const intervalSql = getIntervalSql(args.interval);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
@@ -560,6 +706,9 @@ export async function getMetricPercentiles(
 // ============================================================================
 // Discovery / Metadata — reads from helper tables, not source tables.
 // Per design: returns empty results until helper tables have been refreshed.
+// Queries use SELECT DISTINCT to stay correct between ReplacingMergeTree
+// background merges, where the same value may briefly appear more than once
+// after a refresh cycle.
 // ============================================================================
 
 export async function getMetricNames(
@@ -579,7 +728,7 @@ export async function getMetricNames(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
     params,
   );
 
@@ -592,7 +741,7 @@ export async function getMetricLabelKeys(
 ): Promise<GetMetricLabelKeysResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'metricLabelKey' AND key1 = {metricName:String} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'metricLabelKey' AND key1 = {metricName:String} ORDER BY value`,
     { metricName: args.metricName },
   );
   return { keys: rows.map(r => r.value) };
@@ -618,7 +767,7 @@ export async function getMetricLabelValues(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
     params,
   );
 

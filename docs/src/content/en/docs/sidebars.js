@@ -93,14 +93,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/supervisor-agents',
-          label: 'Supervisor Agents',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
           id: 'agents/processors',
           label: 'Processors',
         },
@@ -116,8 +108,16 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
+          id: 'agents/background-tasks',
+          label: 'Background Tasks',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -125,6 +125,43 @@ const sidebars = {
           label: 'Channels',
           customProps: {
             tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/a2a',
+          label: 'A2A',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/acp',
+          label: 'ACP',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/adding-voice',
+          label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/response-caching',
+          label: 'Response Caching',
+          customProps: {
+            tags: ['alpha'],
           },
         },
         {
@@ -161,9 +198,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/observational-memory',
           label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -179,6 +213,11 @@ const sidebars = {
           type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
+        },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
         },
       ],
     },
@@ -231,14 +270,16 @@ const sidebars = {
           id: 'workflows/error-handling',
           label: 'Error Handling',
         },
+        {
+          type: 'doc',
+          id: 'workflows/scheduled-workflows',
+          label: 'Scheduled Workflows',
+        },
       ],
     },
     {
       type: 'category',
       label: 'Editor',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -281,6 +322,14 @@ const sidebars = {
           id: 'streaming/workflow-streaming',
           label: 'Workflow Streaming',
         },
+        {
+          type: 'doc',
+          id: 'streaming/background-task-streaming',
+          label: 'Background Task Streaming',
+          customProps: {
+            tags: ['new'],
+          },
+        },
       ],
     },
     {
@@ -295,8 +344,11 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
+          id: 'mcp/mcp-apps',
+          label: 'MCP Apps',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },
@@ -357,6 +409,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser/stagehand',
           label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/browser-viewer',
+          label: 'BrowserViewer',
         },
       ],
     },
@@ -437,6 +494,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/firebase',
               label: 'Firebase',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
             },
             {
               type: 'doc',
@@ -534,6 +596,11 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/bridges/otel',
                   label: 'OpenTelemetry',
                 },
@@ -545,13 +612,13 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/default',
-                  label: 'Default',
+                  id: 'observability/tracing/exporters/mastra-storage',
+                  label: 'Mastra Storage',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/cloud',
-                  label: 'Cloud',
+                  id: 'observability/tracing/exporters/mastra-platform',
+                  label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
@@ -656,6 +723,11 @@ const sidebars = {
           label: 'Running in CI',
         },
         {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
+        },
+        {
           type: 'category',
           label: 'Datasets',
           items: [
@@ -675,7 +747,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       customProps: {
         tags: ['new'],
       },
@@ -684,6 +756,21 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
         },
         {
           type: 'doc',

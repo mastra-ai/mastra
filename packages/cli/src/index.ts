@@ -1,4 +1,5 @@
 #! /usr/bin/env node
+import { coreFeatures } from '@mastra/core/features';
 import { Command } from 'commander';
 import pc from 'picocolors';
 import type { PackageJson } from 'type-fest';
@@ -16,20 +17,26 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
+import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
 import { envListAction, envSetAction, envUnsetAction, envImportAction, envPullAction } from './commands/server/env';
 import { serverPauseAction, serverRestartAction } from './commands/server/lifecycle';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
+import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+import { buildWorker } from './commands/worker/build';
+import { devWorker } from './commands/worker/dev';
+import { startWorker } from './commands/worker/start';
 
 function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
   return (...args: any[]) => {
@@ -97,6 +104,12 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(createProject);
 
 program
@@ -118,7 +131,15 @@ program
     'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
     parseMcp,
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(initProject);
+
+registerApiCommand(program);
 
 program
   .command('lint')
@@ -126,6 +147,12 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('--preflight', 'Also run bundle preflight checks (builds if needed)')
+  .option('--skip-build', 'Skip build, reuse existing .mastra/output (requires --preflight)')
+  .option('--env-file <file>', 'Env file for preflight validation (requires --preflight)')
+  .option('--strict', 'Treat warnings as errors')
+  .option('--json', 'Emit machine-readable JSON output')
+  .option('--debug', 'Enable debug logs', false)
   .action(lintProject);
 
 program
@@ -162,6 +189,55 @@ program
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
 
+const workerCommand = program.command('worker').description('Build and run standalone Mastra worker bundles');
+
+workerCommand
+  .command('build')
+  .description('Bundle a worker artifact (defaults to .mastra/output/index.mjs)')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option(
+    '-o, --output-dir <path>',
+    'Output directory for the worker bundle. Defaults to .mastra/output (overwrites the server bundle if both are built in the same project — fine for split deploys). Pass a different path (relative or absolute) to redirect the worker bundle and leave the server bundle alone.',
+  )
+  .option('--debug', 'Enable debug logs', false)
+  .action((opts: { dir?: string; root?: string; tools?: string; outputDir?: string; debug: boolean }) => {
+    return buildWorker(opts);
+  });
+
+workerCommand
+  .command('start [name]')
+  .description(
+    'Start the built worker (defaults to .mastra/output/index.mjs). [name] sets MASTRA_WORKERS for the spawned process.',
+  )
+  .option('-d, --dir <path>', 'Path to your built worker output directory (default: .mastra/output)')
+  .option('-e, --env <env>', 'Custom env file to load')
+  .action((name: string | undefined, opts: { dir?: string; env?: string }) => {
+    return startWorker({ name, ...opts });
+  });
+
+workerCommand
+  .command('dev [name]')
+  .description('Build and start a worker in one step. [name] sets MASTRA_WORKERS for the spawned process.')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option(
+    '-o, --output-dir <path>',
+    'Output directory for the worker bundle. Defaults to .mastra/output. Pass a different path to keep server and worker bundles side by side.',
+  )
+  .option('-e, --env <env>', 'Custom env file to load')
+  .option('--debug', 'Enable debug logs', false)
+  .action(
+    (
+      name: string | undefined,
+      opts: { dir?: string; root?: string; tools?: string; outputDir?: string; env?: string; debug: boolean },
+    ) => {
+      return devWorker({ name, ...opts });
+    },
+  );
+
 program
   .command('start')
   .description('Start your built Mastra application')
@@ -189,10 +265,12 @@ const deployCommand = studioCommand
   .command('deploy [dir]')
   .description('Deploy studio')
   .option('--org <id>', 'Organization ID')
-  .option('--project <id>', 'Project ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(deployAction));
 
@@ -210,6 +288,13 @@ deployCommand
   .option('-f, --follow', 'Stream logs in real time')
   .option('--tail <n>', 'Number of recent log lines')
   .action(wrapAction(logsAction));
+
+if (coreFeatures.has('deploy-diagnosis')) {
+  deployCommand
+    .command('suggestions [deploy-id]')
+    .description('Show deploy suggestions for a failed deploy')
+    .action(wrapAction(suggestionsAction));
+}
 
 const studioProjects = studioCommand
   .command('projects')
@@ -262,16 +347,26 @@ authTokens.command('revoke <token-id>').description('Revoke an API token').actio
 
 const serverCommand = program.command('server').description('Manage Mastra Server deployments');
 
-serverCommand
+const serverDeployCommand = serverCommand
   .command('deploy [dir]')
   .description('Deploy to Mastra Server')
   .option('--org <id>', 'Organization ID')
-  .option('--project <id>', 'Project ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and deploy the existing .mastra/output directory')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));
+
+if (coreFeatures.has('deploy-diagnosis')) {
+  serverDeployCommand
+    .command('suggestions [deploy-id]')
+    .description('Show deploy suggestions for a failed deploy')
+    .option('--org <id>', 'Organization ID')
+    .action(wrapAction(serverSuggestionsAction));
+}
 
 serverCommand
   .command('pause')

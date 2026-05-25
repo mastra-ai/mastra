@@ -173,11 +173,21 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
   );
 };
 
+/** Check if a tool has an MCP App UI resource */
+function hasAppUi(meta?: Record<string, unknown>): boolean {
+  if (!meta) return false;
+  const ui = meta.ui as { resourceUri?: string } | undefined;
+  if (typeof ui?.resourceUri === 'string' && ui.resourceUri.startsWith('ui://')) return true;
+  if (typeof meta['ui/resourceUri'] === 'string' && (meta['ui/resourceUri'] as string).startsWith('ui://')) return true;
+  return false;
+}
+
 const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) => {
   const linkRef = useRef<HTMLAnchorElement>(null);
   const { Link, paths } = useLinkComponent();
 
   const ToolIconComponent = ToolIconMap[tool.toolType || 'tool'];
+  const isAppTool = hasAppUi(tool._meta);
 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
@@ -187,9 +197,12 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.id)}>
-            {tool.id}
-          </Link>
+          <span className="flex items-center gap-2">
+            <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.id)}>
+              {tool.id}
+            </Link>
+            {isAppTool && <Badge className="text-[10px] py-0">App</Badge>}
+          </span>
         </EntityName>
         <EntityDescription>{tool.description}</EntityDescription>
       </EntityContent>

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ChunkFrom } from '../../types';
-import { convertFullStreamChunkToMastra, sanitizeToolCallInput, tryRepairJson } from './transform';
+import {
+  convertFullStreamChunkToMastra,
+  convertMastraChunkToAISDKv5,
+  sanitizeToolCallInput,
+  tryRepairJson,
+} from './transform';
 import type { StreamPart } from './transform';
 
 describe('convertFullStreamChunkToMastra', () => {
@@ -28,6 +33,74 @@ describe('convertFullStreamChunkToMastra', () => {
           providerMetadata: undefined,
         },
       });
+    });
+
+    it('should preserve observability when converting tool-call input into Mastra chunks', () => {
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const chunk = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{"location": "New York"}',
+        providerExecuted: false,
+        observability,
+      } as StreamPart & { observability: typeof observability };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.observability).toEqual(observability);
+      }
+    });
+
+    it('should preserve observability when converting Mastra tool calls to AI SDK chunks', () => {
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+
+      const result = convertMastraChunkToAISDKv5({
+        chunk: {
+          type: 'tool-call',
+          runId: 'test-run-123',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'get_weather',
+            args: { location: 'New York' },
+            providerExecuted: false,
+            observability,
+          },
+        },
+      });
+
+      expect(result?.type).toBe('tool-call');
+      expect((result as { observability?: unknown } | undefined)?.observability).toEqual(observability);
+    });
+
+    it('should preserve observability when converting Mastra streaming tool-call starts to AI SDK chunks', () => {
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+
+      const result = convertMastraChunkToAISDKv5({
+        chunk: {
+          type: 'tool-call-input-streaming-start',
+          runId: 'test-run-123',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'get_weather',
+            providerExecuted: false,
+            observability,
+          },
+        },
+      });
+
+      expect(result?.type).toBe('tool-input-start');
+      expect((result as { observability?: unknown } | undefined)?.observability).toEqual(observability);
     });
 
     it('should gracefully handle unterminated JSON string in input - simulating streaming race condition', () => {
@@ -548,6 +621,7 @@ describe('convertFullStreamChunkToMastra', () => {
           inputTokens: 10,
           outputTokens: 20,
           totalTokens: 30,
+          cacheCreationInputTokens: 7,
         },
         providerMetadata: {},
         messages: {
@@ -562,6 +636,7 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(result?.type).toBe('finish');
       if (result?.type === 'finish') {
         expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(7);
         expect(result.payload.providerMetadata).toEqual({});
         expect(result.payload.metadata.providerMetadata).toEqual({});
       }
@@ -595,6 +670,7 @@ describe('convertFullStreamChunkToMastra', () => {
       if (result?.type === 'finish') {
         expect(result.payload.stepResult.reason).toBe('stop');
         expect(result.payload.output.usage.cachedInputTokens).toBe(94);
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }

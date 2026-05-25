@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { expectRouteDocsLink } from '../../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -10,10 +11,7 @@ test('overall layout information', async ({ page }) => {
 
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('text=Agents documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/agents/overview',
-  );
+  await expectRouteDocsLink(page, 'Agents documentation', 'https://mastra.ai/en/docs/agents/overview');
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 
@@ -51,16 +49,16 @@ test.describe('agent panels', () => {
     });
 
     test('model trigger modes', async ({ page }) => {
-      const generateRadio = page.getByLabel('Generate');
+      const generateRadio = page.getByRole('radio', { name: 'Generate' });
       await page.click('text=Model settings');
 
       await expect(generateRadio).toBeVisible();
       await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
-      const streamRadio = page.getByLabel('Stream');
+      const streamRadio = page.getByRole('radio', { name: 'Stream' });
       await expect(streamRadio).toBeVisible();
       await expect(streamRadio).toHaveAttribute('aria-checked', 'true');
 
-      const networkRadio = page.getByLabel('Network');
+      const networkRadio = page.getByRole('radio', { name: 'Network' });
       await expect(networkRadio).toBeVisible();
     });
 

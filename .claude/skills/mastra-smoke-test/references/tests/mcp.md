@@ -97,3 +97,56 @@ Click: On server in list
 Verify: Connection status shown
 Verify: Available tools listed
 ```
+
+## Curl / API (for `--skip-browser`)
+
+The server exposes MCP endpoints under `/api/mcp/v0/...` (not `/api/mcps`
+— that's the Studio route). The `MCP` here refers to Mastra hosting MCP
+servers for external clients; it does not list external MCP clients the
+project consumes.
+
+**1. List MCP servers this Mastra instance exposes**
+
+```bash
+curl -s "http://localhost:4111/api/mcp/v0/servers" | jq '.'
+```
+
+Response shape: `{ servers: [...], total_count: N, next: null }`. An
+empty array is a valid pass if the project declares no MCP servers (the
+default `create-mastra` template does not).
+
+**2. Get one server's metadata**
+
+```bash
+curl -s "http://localhost:4111/api/mcp/v0/servers/<serverId>" | jq '.'
+```
+
+**3. List tools a server exposes, and execute one**
+
+```bash
+# List tools
+curl -s "http://localhost:4111/api/mcp/<serverId>/tools" | jq '.'
+
+# Inspect one tool
+curl -s "http://localhost:4111/api/mcp/<serverId>/tools/<toolId>" | jq '.'
+
+# Execute the tool
+curl -s -X POST "http://localhost:4111/api/mcp/<serverId>/tools/<toolId>/execute" \
+  -H "Content-Type: application/json" \
+  -d '{"data":{ ... }}'
+```
+
+**Pass criteria:**
+
+- `GET /api/mcp/v0/servers` returns HTTP 200 with the expected shape
+  (empty `servers` array is OK)
+- If servers are declared: each shows up in the list and
+  `GET /api/mcp/v0/servers/:id` returns a non-null object
+- If tools are exposed: `GET /api/mcp/:serverId/tools` lists them and
+  `POST /.../execute` returns a successful result
+
+**Common mistakes:**
+
+- Hitting `/api/mcps` or `/api/mcp/servers` — neither exists server-side
+- Treating an empty `servers` list as failure on the default template —
+  it's expected

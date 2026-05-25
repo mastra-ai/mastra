@@ -34,11 +34,13 @@ function toElectroRecord(task: BackgroundTask): Record<string, unknown> {
     args: serializeJson(task.args),
     result: serializeJson(task.result),
     error: serializeJson(task.error),
+    suspendPayload: serializeJson(task.suspendPayload),
     retryCount: task.retryCount,
     maxRetries: task.maxRetries,
     timeoutMs: task.timeoutMs,
     createdAt: task.createdAt.toISOString(),
     startedAtIso: task.startedAt?.toISOString(),
+    suspendedAtIso: task.suspendedAt?.toISOString(),
     completedAtIso: task.completedAt?.toISOString(),
   };
 }
@@ -68,11 +70,13 @@ function fromElectroRecord(data: Record<string, any>): BackgroundTask {
     runId: String(data.runId),
     result: parseJson(data.result),
     error: parseJson(data.error),
+    suspendPayload: parseJson(data.suspendPayload),
     retryCount: Number(data.retryCount ?? 0),
     maxRetries: Number(data.maxRetries ?? 0),
     timeoutMs: Number(data.timeoutMs ?? 300_000),
     createdAt: asDate(data.createdAt) ?? new Date(),
     startedAt: asDate(data.startedAtIso),
+    suspendedAt: asDate(data.suspendedAtIso),
     completedAt: asDate(data.completedAtIso),
   };
 }
@@ -133,11 +137,25 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
           setFields.error = serializeJson(update.error);
         }
       }
+      if ('suspendPayload' in update) {
+        if (update.suspendPayload === undefined || update.suspendPayload === null) {
+          removeFields.push('suspendPayload');
+        } else {
+          setFields.suspendPayload = serializeJson(update.suspendPayload);
+        }
+      }
       if ('startedAt' in update) {
         if (update.startedAt === undefined || update.startedAt === null) {
           removeFields.push('startedAtIso');
         } else {
           setFields.startedAtIso = update.startedAt.toISOString();
+        }
+      }
+      if ('suspendedAt' in update) {
+        if (update.suspendedAt === undefined || update.suspendedAt === null) {
+          removeFields.push('suspendedAtIso');
+        } else {
+          setFields.suspendedAtIso = update.suspendedAt.toISOString();
         }
       }
       if ('completedAt' in update) {
@@ -222,6 +240,7 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
       if (filter.threadId) tasks = tasks.filter(t => t.threadId === filter.threadId);
       if (filter.resourceId) tasks = tasks.filter(t => t.resourceId === filter.resourceId);
       if (filter.toolName) tasks = tasks.filter(t => t.toolName === filter.toolName);
+      if (filter.toolCallId) tasks = tasks.filter(t => t.toolCallId === filter.toolCallId);
       if (filter.runId) tasks = tasks.filter(t => t.runId === filter.runId);
 
       const dateCol = filter.dateFilterBy ?? 'createdAt';

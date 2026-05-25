@@ -201,6 +201,21 @@ export const dragInputSchema = z
 export type DragInput = z.output<typeof dragInputSchema>;
 
 // =============================================================================
+// Utility (1)
+// =============================================================================
+
+/**
+ * browser_screenshot - Capture a screenshot of the current page
+ */
+export const screenshotInputSchema = z.object({
+  fullPage: z
+    .boolean()
+    .optional()
+    .describe('Capture the full scrollable page instead of just the viewport (default: false)'),
+});
+export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
+
+// =============================================================================
 // Escape Hatch (1)
 // =============================================================================
 
@@ -208,7 +223,11 @@ export type DragInput = z.output<typeof dragInputSchema>;
  * browser_evaluate - Execute JavaScript in the browser
  */
 export const evaluateInputSchema = z.object({
-  script: z.string().describe('JavaScript code to execute'),
+  script: z
+    .string()
+    .describe(
+      'JavaScript expression to evaluate in the browser and return the result. Do not use `return` — write a bare expression like `document.title` or `1 + 1`. For async code, wrap in an async IIFE: `(async () => { ... })()`.',
+    ),
   arg: z.unknown().optional().describe('Argument to pass to the script (JSON-serializable)'),
 });
 export type EvaluateInput = z.output<typeof evaluateInputSchema>;
@@ -234,6 +253,8 @@ export const browserSchemas = {
   wait: waitInputSchema,
   tabs: tabsInputSchema,
   drag: dragInputSchema,
+  // Utility
+  screenshot: screenshotInputSchema,
   // Escape hatch
   evaluate: evaluateInputSchema,
 } as const;

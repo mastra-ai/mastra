@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CodeIcon } from 'lucide-react';
-import { DataCodeSection } from './data-code-section';
 import { TooltipProvider } from '../Tooltip';
+import { DataCodeSection } from './data-code-section';
 
 const meta: Meta<typeof DataCodeSection> = {
   title: 'Composite/DataCodeSection',
@@ -18,7 +18,6 @@ const meta: Meta<typeof DataCodeSection> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

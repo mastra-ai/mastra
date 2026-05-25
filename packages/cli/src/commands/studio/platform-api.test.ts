@@ -142,6 +142,7 @@ describe('uploadDeploy', () => {
       gitBranch: 'main',
       projectName: 'my-app',
       envVars: { FOO: 'bar' },
+      disablePlatformObservability: true,
     });
 
     expect(result).toMatchObject({ id: 'dep-1', status: 'starting' });
@@ -151,7 +152,7 @@ describe('uploadDeploy', () => {
     expect(mockPOST).toHaveBeenCalledWith(
       '/v1/studio/deploys',
       expect.objectContaining({
-        body: { envVars: { FOO: 'bar' } },
+        body: { envVars: { FOO: 'bar' }, disablePlatformObservability: true },
       }),
     );
     expect(mockPOST).toHaveBeenCalledWith('/v1/studio/deploys/{id}/upload-complete', {
@@ -162,6 +163,30 @@ describe('uploadDeploy', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch.mock.calls[0]![0]).toBe('https://storage.example.com/signed-url');
     expect(mockFetch.mock.calls[0]![1].method).toBe('PUT');
+  });
+
+  it('omits disablePlatformObservability from deploy body when not provided', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true }));
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' } },
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({
+        data: { status: 'ok' },
+        response: { status: 200 },
+      });
+
+    const { uploadDeploy } = await import('./platform-api.js');
+    await uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip-data'));
+
+    expect(mockPOST).toHaveBeenCalledWith(
+      '/v1/studio/deploys',
+      expect.objectContaining({
+        body: { envVars: undefined },
+      }),
+    );
+    expect(mockPOST.mock.calls[0]![1].body).not.toHaveProperty('disablePlatformObservability');
   });
 
   it('throws when deploy creation fails', async () => {

@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   getCustomProviderId,
@@ -9,6 +9,7 @@ import {
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
 } from '../settings.js';
@@ -23,17 +24,24 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       version: 0,
       modePackId: null,
       omPackId: null,
+      quietModePreferenceSelected: true,
     },
     models: {
       activeModelPackId: 'anthropic',
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
+      observerModelOverride: null,
+      reflectorModelOverride: null,
       omObservationThreshold: null,
       omReflectionThreshold: null,
+      omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
+      goalJudgeModel: null,
+      goalMaxTurns: null,
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2 },
     storage,
     customProviders: [],
     customModelPacks: [
@@ -57,6 +65,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    observability: { resources: {}, localTracing: false },
     ...overrides,
   };
 }
@@ -73,8 +82,8 @@ const builtinPacks = [
   {
     id: 'openai',
     models: {
-      plan: 'openai/gpt-5.4',
-      build: 'openai/gpt-5.4',
+      plan: 'openai/gpt-5.5',
+      build: 'openai/gpt-5.5',
       fast: 'openai/gpt-5.4-mini',
     },
   },
@@ -99,6 +108,110 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
+      expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+    });
+  });
+
+  it('normalizes quiet mode preview line limits', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 2.9 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 999 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(8);
+
+      writeFileSync(filePath, '{}', 'utf-8');
+      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
+        onboarding: { quietModePreferenceSelected: true },
+        models: {},
+        preferences: { quietModeMaxToolPreviewLines: Number.NaN },
+        storage: {},
+      });
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      vi.mocked(JSON.parse).mockRestore();
+
+      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
+        onboarding: { quietModePreferenceSelected: true },
+        models: {},
+        preferences: { quietModeMaxToolPreviewLines: Number.POSITIVE_INFINITY },
+        storage: {},
+      });
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('defaults new installs to quiet mode with the preference selected', () => {
+    withTempSettingsFile(filePath => {
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    });
+  });
+
+  it('marks existing classic users as needing the quiet mode preference prompt', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(false);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(false);
+    });
+  });
+
+  it('does not prompt existing users who already enabled quiet mode', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: true }, storage: {} }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    });
+  });
+
+  it('preserves existing quiet mode preference selections', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: { quietModePreferenceSelected: true },
+          models: {},
+          preferences: { quietMode: false },
+          storage: {},
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(false);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
     });
   });
 
@@ -264,8 +377,8 @@ describe('resolveThreadActiveModelPackId', () => {
     const settings = createSettings({ models: { ...createSettings().models, activeModelPackId: 'anthropic' } });
 
     const resolved = resolveThreadActiveModelPackId(settings, builtinPacks, {
-      modeModelId_plan: 'openai/gpt-5.4',
-      modeModelId_build: 'openai/gpt-5.4',
+      modeModelId_plan: 'openai/gpt-5.5',
+      modeModelId_build: 'openai/gpt-5.5',
       modeModelId_fast: 'openai/gpt-5.4-mini',
     });
 
@@ -293,6 +406,73 @@ describe('resolveThreadActiveModelPackId', () => {
     });
 
     expect(resolved).toBeNull();
+  });
+});
+
+describe('resolveOmRoleModel', () => {
+  const omPacks = [
+    { id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' },
+    { id: 'gemini', modelId: 'google/gemini-2.5-flash' },
+  ];
+
+  it('returns per-role overrides independently when both are set', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'custom',
+        omModelOverride: 'shared/fallback',
+        observerModelOverride: 'openrouter/anthropic/claude-haiku-4-5',
+        reflectorModelOverride: 'openrouter/openai/gpt-5.4-mini',
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('openrouter/anthropic/claude-haiku-4-5');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('openrouter/openai/gpt-5.4-mini');
+  });
+
+  it('falls back to omModelOverride when the role-specific override is null (back-compat)', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'custom',
+        omModelOverride: 'shared/fallback',
+        observerModelOverride: null,
+        reflectorModelOverride: null,
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('shared/fallback');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('shared/fallback');
+  });
+
+  it('resolves a built-in OM pack when no role override is set', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'anthropic',
+        omModelOverride: null,
+        observerModelOverride: null,
+        reflectorModelOverride: null,
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('anthropic/claude-haiku-4-5');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('anthropic/claude-haiku-4-5');
+  });
+
+  it('prefers role-specific override even when an active built-in pack exists', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'anthropic',
+        omModelOverride: null,
+        observerModelOverride: 'openrouter/x-ai/grok-4-fast',
+        reflectorModelOverride: null,
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('openrouter/x-ai/grok-4-fast');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('anthropic/claude-haiku-4-5');
   });
 });
 

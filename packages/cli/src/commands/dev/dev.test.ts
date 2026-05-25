@@ -129,6 +129,117 @@ class MockChildProcess extends EventEmitter {
   }
 }
 
+describe('dev command - https scheme in internal fetches', () => {
+  let execaMock: any;
+  let mockChildProcess: MockChildProcess;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mockChildProcess = new MockChildProcess();
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({ disabled: false }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { execa } = await import('execa');
+    execaMock = vi.mocked(execa);
+    execaMock.mockReturnValue(mockChildProcess as unknown as ChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it('should use http:// scheme for internal fetches when https is not configured', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    // Wait for the server-ready message handler to fire and trigger fetch calls
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((call: any[]) => {
+          const url = String(call[0]);
+          return url.includes('__restart-active-workflow-runs') || url.includes('__refresh');
+        }),
+      ).toBe(true);
+    });
+
+    const fetchedUrls = fetchMock.mock.calls.map((call: any[]) => call[0] as string);
+    const internalFetches = fetchedUrls.filter(
+      (url: string) => url.includes('__restart-active-workflow-runs') || url.includes('__refresh'),
+    );
+
+    for (const url of internalFetches) {
+      expect(url).toMatch(/^http:\/\//);
+    }
+  });
+
+  it('should use https:// scheme for internal fetches when server.https is configured', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+      https: {
+        key: Buffer.from('mock-key'),
+        cert: Buffer.from('mock-cert'),
+      },
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    // Wait for the server-ready message handler to fire and trigger fetch calls
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((call: any[]) => {
+          const url = String(call[0]);
+          return url.includes('__restart-active-workflow-runs') || url.includes('__refresh');
+        }),
+      ).toBe(true);
+    });
+
+    const fetchedUrls = fetchMock.mock.calls.map((call: any[]) => call[0] as string);
+    const internalFetches = fetchedUrls.filter(
+      (url: string) => url.includes('__restart-active-workflow-runs') || url.includes('__refresh'),
+    );
+
+    for (const url of internalFetches) {
+      expect(url).toMatch(/^https:\/\//);
+    }
+  });
+});
+
 describe('dev command - inspect flag behavior', () => {
   let execaMock: any;
   let mockChildProcess: MockChildProcess;

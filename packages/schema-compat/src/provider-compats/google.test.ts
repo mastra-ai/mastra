@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import type { ModelInformation } from '../types';
+import { applyCompatLayer } from '../utils';
 import { GoogleSchemaCompatLayer } from './google';
 import { createSuite } from './test-suite';
 
@@ -80,6 +82,59 @@ describe('GoogleSchemaCompatLayer', () => {
 
       const layer = new GoogleSchemaCompatLayer(modelInfo);
       expect(layer.getSchemaTarget()).toBe('jsonSchema7');
+    });
+  });
+
+  describe('processToAISDKSchema', () => {
+    it('removes JSON Schema type arrays for Gemini compatibility', () => {
+      const schema = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            nullableString: {
+              type: ['string', 'null'],
+              description: 'A nullable string',
+            },
+            jsonValue: {
+              type: ['string', 'number', 'integer', 'boolean', 'object', 'null'],
+              description: 'A JSON-serializable value',
+            },
+            literalUnion: {
+              anyOf: [
+                { type: 'boolean', enum: [false] },
+                { type: 'string', enum: ['auto'] },
+              ],
+            },
+          },
+        },
+        compatLayers: [layer],
+        mode: 'aiSdkSchema',
+      });
+
+      expect(schema.jsonSchema).toMatchObject({
+        type: 'object',
+        properties: {
+          nullableString: {
+            type: 'string',
+            nullable: true,
+            description: 'A nullable string',
+          },
+          jsonValue: {},
+        },
+      });
+      expect((schema.jsonSchema as any).properties.jsonValue.type).toBeUndefined();
+      expect((schema.jsonSchema as any).properties.jsonValue.nullable).toBeUndefined();
+    });
+
+    it('removes non-string enum values from union branches', () => {
+      const schema = layer.processToAISDKSchema(
+        z.object({
+          value: z.union([z.literal(false), z.literal('auto')]),
+        }),
+      );
+
+      expect((schema.jsonSchema as any).properties.value.anyOf[0].enum).toBeUndefined();
+      expect((schema.jsonSchema as any).properties.value.anyOf[1].const).toBe('auto');
     });
   });
 });

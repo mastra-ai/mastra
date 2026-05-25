@@ -11,13 +11,22 @@ import type {
   GetScoreTimeSeriesResponse,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   AggregationInterval,
   AggregationType,
 } from '@mastra/core/storage';
+import { listScoresArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import {
+  assertDeltaPollingEnabled,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  extendWhereClause,
+  validateCursorId,
+} from './polling';
 
 type LegacyScoreRecord = CreateScoreArgs['score'] & {
   source?: string | null;
@@ -154,6 +163,7 @@ function toSeriesName(values: unknown[]): string {
 
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    scoreId: row.scoreId as string,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -231,13 +241,15 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
+       v(s.scoreId),
        v(s.timestamp),
+       "nextval('score_events_cursor_id_seq')",
        v(s.traceId),
        v(s.spanId ?? null),
        v(s.experimentId ?? null),
@@ -272,7 +284,8 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.tags ?? null),
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
-     ].join(', ')})`,
+     ].join(', ')})
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -284,7 +297,9 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
+      v(legacyScore.scoreId),
       v(legacyScore.timestamp),
+      "nextval('score_events_cursor_id_seq')",
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
       v(legacyScore.experimentId ?? null),
@@ -324,27 +339,63 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}`,
+     VALUES ${tuples.join(',\n       ')}
+     ON CONFLICT DO NOTHING`,
   );
 }
 
 /** Query score events with filtering, ordering, and pagination. */
 export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Promise<ListScoresResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
   const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>, {
     source: 'scoreSource',
   });
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const streamHeadCursor = await getStreamHeadCursor(db);
+    if (after === undefined) {
+      return {
+        scores: [],
+        delta: { limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursorId = validateCursorId(after);
+    const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT * FROM score_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
+      [...filterParams, afterCursorId, limit + 1],
+    );
+
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: row.cursorId,
+      score: rowToScoreRecord(row),
+    }));
+
+    return {
+      scores: visibleRows.map(row => row.score) as ListScoresResponse['scores'],
+      delta: { limit, hasMore: rows.length > limit },
+      deltaCursor:
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : streamHeadCursor,
+    };
+  }
+
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  const currentDeltaCursor = deltaPollingFeatureEnabled()
+    ? await getDeltaCursor(db, filterClause, filterParams)
+    : undefined;
 
   const countResult = await db.query<{ total: number }>(
     `SELECT COUNT(*) as total FROM score_events ${filterClause}`,
@@ -360,7 +411,35 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+async function getDeltaCursor(db: DuckDBConnection, filterClause: string, filterParams: unknown[]): Promise<string> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM score_events ${filterClause}`,
+    filterParams,
+  );
+
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM score_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
+}
+
+async function getStreamHeadCursor(db: DuckDBConnection): Promise<string> {
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM score_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
+}
+
+export async function getScoreById(db: DuckDBConnection, scoreId: string): Promise<ScoreRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(`SELECT * FROM score_events WHERE scoreId = ? LIMIT 1`, [
+    scoreId,
+  ]);
+  return rows[0] ? (rowToScoreRecord(rows[0]) as ScoreRecord) : null;
 }
 
 export async function getScoreAggregate(

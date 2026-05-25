@@ -1,5 +1,5 @@
-import type { SpanRecord } from '@mastra/core/storage';
-import { Button, CombinedButtons, SearchFieldBlock, Icon } from '@mastra/playground-ui';
+import type { LightSpanRecord } from '@mastra/core/storage';
+import { Button, ButtonsGroup, SearchFieldBlock, Icon } from '@mastra/playground-ui';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useThrottledCallback } from 'use-debounce';
@@ -7,7 +7,7 @@ import type { ExperimentUISpanType } from '../types';
 import { spanTypePrefixes, getExperimentSpanTypeUi } from './experiment-trace-shared';
 
 type ExperimentTraceTimelineToolsProps = {
-  spans?: SpanRecord[];
+  spans?: LightSpanRecord[];
   fadedTypes?: string[];
   onLegendClick?: (val: string) => void;
   onLegendReset?: () => void;
@@ -44,6 +44,7 @@ export function ExperimentTraceTimelineTools({
 
   useEffect(() => {
     handleSearchPhraseChange(localSearchPhrase);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localSearchPhrase, onSearchPhraseChange]);
 
   const handleSearchPhraseChange = useThrottledCallback((value: string) => {
@@ -65,7 +66,7 @@ export function ExperimentTraceTimelineTools({
           onReset={() => setLocalSearchPhrase('')}
         />
       </div>
-      <CombinedButtons>
+      <ButtonsGroup spacing="close">
         {usedSpanTypes.map(item => {
           const spanUI = getExperimentSpanTypeUi(item);
           const isFaded = fadedTypes?.includes(item);
@@ -99,7 +100,7 @@ export function ExperimentTraceTimelineTools({
             <XIcon />
           </Icon>
         </Button>
-      </CombinedButtons>
+      </ButtonsGroup>
     </div>
   );
 }

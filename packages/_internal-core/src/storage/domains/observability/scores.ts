@@ -7,16 +7,22 @@ import {
   bucketTimestampField,
   comparePeriodSchema,
   commonFilterFields,
+  deltaLimitSchema,
+  deltaInfoSchema,
   experimentIdField,
   contextFields,
   dimensionsField,
   entityTypeField,
   groupBySchema,
+  deltaCursorSchema,
+  listModeSchema,
+  normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
+  refineObservabilityListMode,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -43,6 +49,7 @@ const scoreReasonField = z.string().describe('Explanation for the score');
  */
 export const scoreRecordSchema = z
   .object({
+    scoreId: z.string().nullish().describe('Unique id for this score event'),
     timestamp: z.date().describe('When the score was recorded'),
 
     // Target
@@ -193,25 +200,36 @@ export const scoresOrderBySchema = z
   })
   .describe('Order by configuration');
 
-/** Schema for listScores operation arguments */
 export const listScoresArgsSchema = z
   .object({
+    mode: listModeSchema.optional(),
     filters: scoresFilterSchema.optional(),
-    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: scoresOrderBySchema
-      .default({ field: 'timestamp', direction: 'DESC' })
-      .describe('Ordering configuration (defaults to timestamp desc)'),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: scoresOrderBySchema.optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
+  .strict()
+  .superRefine(refineObservabilityListMode)
+  .transform(value =>
+    normalizeObservabilityListArgs<ScoresFilter, z.output<typeof scoresOrderBySchema>>(value, {
+      orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    }),
+  )
   .describe('Arguments for listing scores');
 
 /** Arguments for listing scores */
 export type ListScoresArgs = z.input<typeof listScoresArgsSchema>;
 
 /** Schema for listScores operation response */
-export const listScoresResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  scores: z.array(scoreRecordSchema),
-});
+export const listScoresResponseSchema = z
+  .object({
+    pagination: paginationInfoSchema.optional(),
+    delta: deltaInfoSchema.optional(),
+    deltaCursor: deltaCursorSchema.optional(),
+    scores: z.array(scoreRecordSchema),
+  })
+  .describe('Response from listing scores');
 
 /** Response containing paginated scores */
 export type ListScoresResponse = z.infer<typeof listScoresResponseSchema>;

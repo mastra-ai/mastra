@@ -4,13 +4,24 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Box, getEditorKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, Component } from '@mariozechner/pi-tui';
-import { theme, getSelectListTheme } from '../theme.js';
+import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
+import type { Focusable, SelectItem, Component, TUI } from '@mariozechner/pi-tui';
+import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultilineInput } from './multiline-input.js';
 
 export interface AskQuestionDialogOptions {
   question: string;
   options?: Array<{ label: string; description?: string }>;
+  /**
+   * Use a multiline editor for free-text input (Shift+Enter / \+Enter for new lines).
+   * Defaults to false. Enable for prompts that legitimately want paragraph-length replies.
+   */
+  multiline?: boolean;
+  allowEmptyInput?: boolean;
+  defaultValue?: string;
+  allowCustomResponse?: boolean;
+  selectedOptionLabel?: string;
+  tui?: TUI;
   onSubmit: (answer: string) => void;
   onCancel: () => void;
 }
@@ -19,7 +30,13 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
+  private tui?: TUI;
+  private multiline = false;
+  private allowEmptyInput = false;
+  private defaultValue?: string;
+  private allowCustomResponse = true;
+  private selectedOptionLabel?: string;
   private onSubmit: (answer: string) => void;
   private onCancel: () => void;
 
@@ -40,6 +57,12 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
 
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
+    this.tui = options.tui;
+    this.multiline = Boolean(options.multiline);
+    this.allowEmptyInput = Boolean(options.allowEmptyInput);
+    this.defaultValue = options.defaultValue;
+    this.allowCustomResponse = options.allowCustomResponse ?? true;
+    this.selectedOptionLabel = options.selectedOptionLabel;
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
@@ -64,13 +87,16 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
     }));
 
-    // Append a "Custom response..." option so the user can type a free-text answer
-    items.push({
-      value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
-      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
-    });
+    if (this.allowCustomResponse) {
+      items.push({
+        value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
+        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+      });
+    }
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    const selectedIndex = items.findIndex(item => item.value === this.selectedOptionLabel);
+    if (selectedIndex >= 0) this.selectList.setSelectedIndex(selectedIndex);
 
     this.selectList.onSelect = (item: SelectItem) => {
       if (item.value === AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE) {
@@ -93,14 +119,35 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.modeChildren.push(hint);
   }
 
+  /** Whether this prompt should render a multiline editor (vs a single-line input). */
+  private useMultiline(): boolean {
+    return this.multiline && Boolean(this.tui);
+  }
+
   private buildInputMode(): void {
-    this.input = new Input();
-    this.input.onSubmit = (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed) {
-        this.onSubmit(trimmed);
-      }
-    };
+    if (this.useMultiline()) {
+      const multilineInput = new MultilineInput(this.tui!, getEditorTheme());
+      multilineInput.allowEmptySubmit = this.allowEmptyInput;
+      multilineInput.onSubmit = (value: string) => {
+        // Trim only for the emptiness decision; forward the raw value
+        // so leading indentation / trailing newlines survive.
+        if (value.trim() || this.allowEmptyInput) {
+          this.onSubmit(value);
+        }
+      };
+      multilineInput.onEscape = () => {
+        this.onCancel();
+      };
+      this.input = multilineInput;
+    } else {
+      this.input = new Input();
+      this.input.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed || this.allowEmptyInput) {
+          this.onSubmit(trimmed);
+        }
+      };
+    }
 
     this.modeChildren = [];
     const inputChild = this.input;
@@ -109,9 +156,19 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     const spacer = new Spacer(1);
     this.addChild(spacer);
     this.modeChildren.push(spacer);
-    const hint = new Text(theme.fg('dim', '  Enter to submit · Esc to skip'), 0, 0);
+    const hintText = this.useMultiline()
+      ? '  Enter to submit · Shift+Enter for new line · \\+Enter for new line · Esc to skip'
+      : '  Enter to submit · Esc to skip';
+    const hint = new Text(theme.fg('dim', hintText), 0, 0);
     this.addChild(hint);
     this.modeChildren.push(hint);
+
+    if (this.defaultValue) {
+      (this.input as Input).setValue?.(this.defaultValue);
+    }
+
+    // Carry focus over so switchToCustomInput() yields a focused input.
+    this.input.focused = this._focused;
   }
 
   private switchToCustomInput(): void {
@@ -121,15 +178,14 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     }
     this.selectList = undefined;
     this.buildInputMode();
-    if (this.input) this.input.focused = this._focused;
   }
 
   handleInput(data: string): void {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.onCancel();
         return;
       }

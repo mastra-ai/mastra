@@ -428,6 +428,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             }
           `);
@@ -555,7 +562,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: expect.any(String),
                 content: {
-                  content: '{"content": "Hello, world!"}',
                   format: 2,
                   metadata: {
                     modelId: 'mock-model-id',
@@ -1063,6 +1069,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1072,15 +1085,30 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolCalls": [],
               "toolResults": [],
               "totalUsage": {
+                "cacheCreationInputTokens": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "usage": {
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1349,6 +1377,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1358,15 +1393,30 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolCalls": [],
               "toolResults": [],
               "totalUsage": {
+                "cacheCreationInputTokens": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "usage": {
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1635,6 +1685,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1644,15 +1701,30 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolCalls": [],
               "toolResults": [],
               "totalUsage": {
+                "cacheCreationInputTokens": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "usage": {
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "totalTokens": 13,
               },
               "warnings": [],

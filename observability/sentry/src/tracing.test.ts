@@ -404,8 +404,8 @@ describe('SentryExporter', () => {
         expect.objectContaining({
           'gen_ai.usage.input_tokens': 150,
           'gen_ai.usage.output_tokens': 75,
-          'gen_ai.usage.cached_input_tokens': 100,
-          'gen_ai.usage.cache_write_tokens': 50,
+          'gen_ai.usage.cache_read.input_tokens': 100,
+          'gen_ai.usage.cache_creation.input_tokens': 50,
         }),
       );
     });
@@ -581,6 +581,51 @@ describe('SentryExporter', () => {
           tags: 'production,experiment-v2,user-request',
         }),
       );
+    });
+
+    it('should set gen_ai.conversation.id from threadId', async () => {
+      const span = createMockSpan({
+        id: 'span-with-thread',
+        name: 'test',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          threadId: 'thread-789',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'gen_ai.conversation.id': 'thread-789',
+        }),
+      );
+    });
+
+    it('should not set gen_ai.conversation.id when threadId is absent', async () => {
+      const span = createMockSpan({
+        id: 'span-no-thread',
+        name: 'test',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          userId: 'user-123',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      const call = mockSpan.setAttributes.mock.calls[0][0];
+      expect(call).not.toHaveProperty('gen_ai.conversation.id');
     });
 
     it('should not include langfuse metadata', async () => {
@@ -892,8 +937,8 @@ describe('SentryExporter', () => {
       // Verify tokens were copied to the parent span
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.input_tokens', 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.output_tokens', 50);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read_input_tokens', 20);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_write_input_tokens', 10);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read.input_tokens', 20);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_creation.input_tokens', 10);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning_tokens', 30);
     });
 

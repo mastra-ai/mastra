@@ -324,6 +324,86 @@ export function fullStreamTests({
       expect(reasoningPart?.providerMetadata).toEqual({ openai: { itemId: 'rs_test123' } });
     });
 
+    // Regression: the old eager-flush code would create two reasoning parts with the same
+    // rs_* ID when a non-reasoning chunk (like text-start) interrupted a reasoning span,
+    // triggering an early flush. When this message was later sent as prompt history to
+    // OpenAI, it caused "Duplicate item found with id rs_*" errors.
+    it('should produce exactly one reasoning part per ID even when interleaved with text', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const model = new MockModel({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'reasoning-start',
+              id: 'rs_abc123',
+              providerMetadata: { openai: { itemId: 'rs_abc123' } },
+            },
+            {
+              type: 'reasoning-delta',
+              id: 'rs_abc123',
+              delta: 'Let me think',
+              providerMetadata: { openai: { itemId: 'rs_abc123' } },
+            },
+            // Text span starts while reasoning is still open — this caused the old code
+            // to flush reasoning early, then flush again at reasoning-end
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Here is ' },
+            {
+              type: 'reasoning-delta',
+              id: 'rs_abc123',
+              delta: ' about this...',
+              providerMetadata: { openai: { itemId: 'rs_abc123' } },
+            },
+            { type: 'text-delta', id: 'text-1', delta: 'my answer.' },
+            {
+              type: 'reasoning-end',
+              id: 'rs_abc123',
+              providerMetadata: { openai: { itemId: 'rs_abc123', signature: 'sig_final' } },
+            },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
+        }),
+      } as any);
+
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        models: [{ maxRetries: 0, id: 'test-model', model }],
+        messageList,
+        ...defaultSettings(),
+      });
+
+      await convertAsyncIterableToArray(result.fullStream);
+
+      const responseMessages = messageList.get.response.db();
+      const assistantMsg = responseMessages.find(msg => msg.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // Count reasoning parts — there must be exactly one for rs_abc123
+      const reasoningParts = assistantMsg!.content.parts!.filter(p => p.type === 'reasoning');
+      expect(reasoningParts).toHaveLength(1);
+
+      // The single reasoning part should have the complete text from both deltas
+      expect((reasoningParts[0] as any).details[0].text).toBe('Let me think about this...');
+
+      // It should use the final providerMetadata (from reasoning-end)
+      expect(reasoningParts[0]!.providerMetadata).toEqual({
+        openai: { itemId: 'rs_abc123', signature: 'sig_final' },
+      });
+
+      // Text should also be correctly assembled
+      const textParts = assistantMsg!.content.parts!.filter(p => p.type === 'text');
+      expect(textParts).toHaveLength(1);
+      expect((textParts[0] as any).text).toBe('Here is my answer.');
+    });
+
     it('should send sources', async () => {
       const messageList = createMessageListWithUserMessage();
       const modelWithSourcesLocal = new MockModel({

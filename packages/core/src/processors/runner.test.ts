@@ -221,6 +221,64 @@ describe('ProcessorRunner', () => {
       expect(executionOrder).toEqual(['processor1']);
     });
 
+    it('should call onViolation when a processor triggers abort()', async () => {
+      const onViolation = vi.fn();
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Cost exceeded', { metadata: { limit: 5, usage: 7 } });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'guard-processor',
+        message: 'Cost exceeded',
+        detail: { limit: 5, usage: 7 },
+      });
+    });
+
+    it('should not fail if onViolation throws', async () => {
+      const onViolation = vi.fn().mockRejectedValue(new Error('callback error'));
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Blocked');
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalled();
+    });
+
     it('should skip processors that do not implement processInput', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
@@ -1079,6 +1137,58 @@ describe('ProcessorRunner', () => {
       expect(chunks).toHaveLength(3);
       expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'HELLO' } });
       expect(chunks[1]).toEqual({ type: 'tool-call', toolCallId: '123' });
+      expect(chunks[2]).toEqual({ type: 'finish' });
+    });
+
+    it('should not enqueue undefined into the stream when a processor returns undefined', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'returnUndefined',
+          name: 'Return Undefined',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta' && part.payload.text === 'bad') {
+              // Simulate a processor that forgets to `return part`
+              return undefined as unknown as ChunkType;
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const mockStream = {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.enqueue({ type: 'text-delta', payload: { text: 'bad' } });
+            controller.enqueue({ type: 'text-delta', payload: { text: 'world' } });
+            controller.enqueue({ type: 'finish' });
+            controller.close();
+          },
+        }),
+      };
+
+      const processedStream = await runner.runOutputProcessorsForStream(mockStream as any);
+      const reader = processedStream.getReader();
+      const chunks: Array<ChunkType | undefined> = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // Consumer should never see an `undefined` chunk.
+      expect(chunks.some(c => c === undefined)).toBe(false);
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'hello' } });
+      expect(chunks[1]).toEqual({ type: 'text-delta', payload: { text: 'world' } });
       expect(chunks[2]).toEqual({ type: 'finish' });
     });
   });
@@ -2313,6 +2423,63 @@ describe('ProcessorRunner', () => {
       // Should swallow the error and return retry: false
       expect(result).toEqual({ retry: false });
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('processor sendSignal', () => {
+    it('adds a signal message, rotates the response id, and writes a data part', async () => {
+      const rotateResponseMessageId = vi.fn(() => 'response-2');
+      const chunks: unknown[] = [];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'signal-processor',
+            processInputStep: async ({ sendSignal }) => {
+              await sendSignal?.({
+                type: 'system-reminder',
+                contents: 'remember this',
+                metadata: { type: 'test-reminder' },
+              });
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        messageId: 'response-1',
+        rotateResponseMessageId,
+        writer: {
+          custom: async chunk => {
+            chunks.push(chunk);
+          },
+        },
+      });
+
+      const signalMessage = messageList.get.all.db().at(-1);
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(signalMessage?.role).toBe('signal');
+      expect(signalMessage?.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'remember this' }));
+      expect(chunks).toEqual([
+        expect.objectContaining({
+          type: 'data-system-reminder',
+          data: expect.objectContaining({
+            type: 'system-reminder',
+            contents: 'remember this',
+            metadata: { type: 'test-reminder' },
+          }),
+          transient: true,
+        }),
+      ]);
     });
   });
 });

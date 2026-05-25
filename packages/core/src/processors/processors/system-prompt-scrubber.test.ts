@@ -2,6 +2,7 @@ import type { TextPart } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import { SystemPromptScrubber } from './system-prompt-scrubber';
@@ -130,7 +131,7 @@ describe('SystemPromptScrubber', () => {
       });
 
       const mockAbort = vi.fn().mockImplementation((reason: string) => {
-        throw new Error(reason);
+        throw new TripWire(reason);
       });
       const messages = [createTestMessage('You are a helpful assistant. Hello there!')];
 

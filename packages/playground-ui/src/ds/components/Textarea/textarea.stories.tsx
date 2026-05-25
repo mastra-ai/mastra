@@ -7,7 +7,6 @@ const meta: Meta<typeof Textarea> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     variant: {
       control: { type: 'select' },

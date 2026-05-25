@@ -36,7 +36,7 @@ export function AgentCmsBottomBar({ basePath, currentPath }: AgentCmsBottomBarPr
       </div>
       <div>
         {next && (
-          <Button type="button" variant="light" disabled={isNextDisabled} onClick={() => navigate(next.href)}>
+          <Button type="button" variant="default" disabled={isNextDisabled} onClick={() => navigate(next.href)}>
             {next.name}
             <ArrowRight />
           </Button>

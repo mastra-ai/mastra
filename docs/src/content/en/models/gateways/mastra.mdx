@@ -1,0 +1,71 @@
+---
+title: "Mastra | Gateways | Mastra"
+description: "Use the Mastra gateway to route requests across model providers."
+---
+
+{/* This file is MANUALLY MAINTAINED - DO NOT AUTO-GENERATE */}
+
+# <img src="https://mastra.ai/brand/logo.svg" alt="Mastra logo" className="inline w-8 h-8 mr-2 align-middle invert dark:invert-0" />Mastra
+
+The Mastra Memory Gateway is an OpenAI-compatible API proxy with built-in [Observational Memory](https://gateway.mastra.ai/docs/features#observational-memory). Point any HTTP client, SDK, or framework at the gateway and every conversation is automatically remembered without any memory management code.
+
+Learn more in the [Memory Gateway documentation](https://gateway.mastra.ai/docs).
+
+## Get an API key
+
+Go to [gateway.mastra.ai](https://gateway.mastra.ai) and sign up for a Mastra account. During the onboarding you'll get your personal API key to authenticate requests.
+
+## Usage
+
+Define your API key as an environment variable:
+
+```bash title=".env"
+MASTRA_GATEWAY_API_KEY=your-gateway-key
+```
+
+Set your gateway model ID:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "mastra/openai/gpt-5-mini"
+});
+```
+
+Pass `memory.thread` and `memory.resource` when you generate/stream responses to enable Observational Memory:
+
+```typescript title="src/mastra/run.ts"
+import { weatherAgent } from "./agents/weather-agent";
+
+const memory = {
+  thread: "assistant-thread-1",
+  resource: "user-42",
+};
+
+const result = await weatherAgent.stream("My name is Alex and I prefer concise answers.", {
+  memory,
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Configuration
+
+```bash
+# Use gateway API key
+MASTRA_GATEWAY_API_KEY=your-gateway-key
+```
+
+## Learn more
+
+- [Features](https://gateway.mastra.ai/docs/features)
+- [Models](https://gateway.mastra.ai/docs/models)
+- [Limits](https://gateway.mastra.ai/docs/limits)
+- [API Reference](https://gateway.mastra.ai/docs/api/overview)
+- [Examples](https://gateway.mastra.ai/docs/examples/)

@@ -1,8 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraGateway } from './mastra.js';
 
 describe('MastraGateway', () => {
+  beforeEach(() => {
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+  });
+
   afterEach(() => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
     vi.restoreAllMocks();

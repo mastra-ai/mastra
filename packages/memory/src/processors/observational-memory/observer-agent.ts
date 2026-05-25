@@ -2,13 +2,32 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
+import { isTemporalGapMarker } from './date-utils';
+import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
   resolveToolResultValue,
 } from './tool-result-helpers';
 
-type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
+/**
+ * Filter controlling which attachment parts (image/file) are forwarded to
+ * the Observer model alongside their placeholder text lines.
+ *
+ * - `true` (or undefined): forward all attachments
+ * - `false`: drop all attachments; placeholders still appear in text
+ * - `string[]`: allowlist of mimeType patterns. Each entry is matched against
+ *   the part's mimeType (case-insensitive), supporting exact matches
+ *   (`application/pdf`), wildcard subtypes (`image/\*`), and bare `*` for all.
+ *   Empty array drops everything.
+ */
+export type ObserverAttachmentFilter = boolean | string[];
+
+type ObserverFormatOptions = {
+  maxPartLength?: number;
+  maxToolResultTokens?: number;
+  attachmentFilter?: ObserverAttachmentFilter;
+};
 
 /**
  * The core extraction instructions for the Observer.
@@ -633,6 +652,41 @@ function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
   return hasObserverImageFilenameExtension(part.filename);
 }
 
+function resolveObserverAttachmentMimeType(part: ObserverAttachmentPart): string {
+  if (typeof part.mimeType === 'string' && part.mimeType.length > 0) {
+    return part.mimeType.toLowerCase();
+  }
+  if (part.type === 'image') {
+    return 'image/*';
+  }
+  if (isImageLikeObserverFilePart(part)) {
+    return 'image/*';
+  }
+  return 'application/octet-stream';
+}
+
+function matchObserverMimePattern(mimeType: string, pattern: string): boolean {
+  const normalized = pattern.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === '*' || normalized === '*/*') return true;
+  if (normalized.endsWith('/*')) {
+    const prefix = normalized.slice(0, normalized.length - 1); // keep trailing '/'
+    return mimeType.startsWith(prefix);
+  }
+  return mimeType === normalized;
+}
+
+function shouldIncludeObserverAttachment(
+  part: ObserverAttachmentPart,
+  filter: ObserverAttachmentFilter | undefined,
+): boolean {
+  if (filter === undefined || filter === true) return true;
+  if (filter === false) return false;
+  if (!Array.isArray(filter) || filter.length === 0) return false;
+  const mimeType = resolveObserverAttachmentMimeType(part);
+  return filter.some(pattern => matchObserverMimePattern(mimeType, pattern));
+}
+
 function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
   if (part.type === 'image') {
     return {
@@ -693,9 +747,102 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart | undefined {
+  if (!isRecord(block) || typeof block.type !== 'string') {
+    return undefined;
+  }
+
+  const mediaType = typeof block.mediaType === 'string' ? block.mediaType : undefined;
+  const filename = typeof block.filename === 'string' ? block.filename : undefined;
+
+  switch (block.type) {
+    case 'image-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const image = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'image', image, mimeType: mediaType };
+    }
+
+    case 'image-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'image', image: url, mimeType: mediaType };
+    }
+
+    case 'media': {
+      const data = block.data;
+      if (typeof data !== 'string' || !mediaType) return undefined;
+      const dataUri = `data:${mediaType};base64,${data}`;
+      if (mediaType.toLowerCase().startsWith('image/')) {
+        return { type: 'image', image: dataUri, mimeType: mediaType };
+      }
+      return { type: 'file', data: dataUri, mimeType: mediaType };
+    }
+
+    case 'file-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const dataUri = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'file', data: dataUri, mimeType: mediaType, filename };
+    }
+
+    case 'file-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'file', data: url, mimeType: mediaType, filename };
+    }
+
+    default:
+      return undefined;
+  }
+}
+
+function extractToolResultAttachments(
+  result: unknown,
+  counter: ObserverAttachmentCounter,
+  attachmentFilter?: ObserverAttachmentFilter,
+): { resultWithoutAttachments: unknown; attachments: ObserverInputAttachmentPart[] } {
+  if (!isRecord(result) || result.type !== 'content' || !Array.isArray(result.value)) {
+    return { resultWithoutAttachments: result, attachments: [] };
+  }
+
+  const record = result;
+
+  const attachments: ObserverInputAttachmentPart[] = [];
+  let hadAttachmentBlocks = false;
+  const newValue = (record.value as unknown[]).map(block => {
+    const attachment = mapToolResultBlockToAttachment(block);
+    if (!attachment) {
+      return block;
+    }
+    hadAttachmentBlocks = true;
+
+    if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+      attachments.push(toObserverInputAttachmentPart(attachment));
+    }
+    const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
+    return { type: isRecord(block) ? block.type : undefined, placeholder };
+  });
+
+  if (!hadAttachmentBlocks) {
+    return { resultWithoutAttachments: result, attachments };
+  }
+
+  return { resultWithoutAttachments: { ...record, value: newValue }, attachments };
+}
+
 function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
-  const timeLabel = time && time !== previousTime ? ` (${time})` : '';
-  return `${title}${timeLabel}: ${body}`;
+  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+
+  if (!title) {
+    return timeLabel ? `${timeLabel}: ${body}` : body;
+  }
+
+  return `${title}${timeLabel ? ` ${timeLabel}` : ''}: ${body}`;
 }
 
 function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
@@ -743,6 +890,30 @@ function formatObserverLines(
   };
 }
 
+function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
+  const metadata =
+    typeof msg.content === 'object' && msg.content && 'metadata' in msg.content
+      ? (msg.content.metadata as { gapText?: unknown; reminderType?: unknown; systemReminder?: unknown })
+      : undefined;
+
+  if (metadata?.reminderType === 'temporal-gap' && typeof metadata.gapText === 'string') {
+    return metadata.gapText;
+  }
+
+  if (
+    typeof metadata?.systemReminder === 'object' &&
+    metadata.systemReminder &&
+    'type' in metadata.systemReminder &&
+    metadata.systemReminder.type === 'temporal-gap' &&
+    'gapText' in metadata.systemReminder &&
+    typeof metadata.systemReminder.gapText === 'string'
+  ) {
+    return metadata.systemReminder.gapText;
+  }
+
+  return undefined;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -750,11 +921,14 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
+  const attachmentFilter = options?.attachmentFilter;
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
   const attachments: ObserverInputAttachmentPart[] = [];
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
   let lines: ObserverFormattedLine[] = [];
+
+  const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
 
   const pushLine = (title: string, body: string, createdAt?: unknown) => {
     if (!body) {
@@ -770,7 +944,9 @@ function formatObserverMessage(
     });
   };
 
-  if (typeof msg.content === 'string') {
+  if (temporalGapText) {
+    pushLine('', temporalGapText, messageCreatedAt);
+  } else if (typeof msg.content === 'string') {
     pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
     msg.content.parts.forEach(part => {
@@ -788,9 +964,20 @@ function formatObserverMessage(
             part as { providerMetadata?: Record<string, any> },
             inv.result,
           );
+          const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(
+            resultForObserver,
+            counter,
+            attachmentFilter,
+          );
+          if (extractedAttachments.length > 0) {
+            attachments.push(...extractedAttachments);
+          }
           pushLine(
             `Tool Result ${inv.toolName}`,
-            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            maybeTruncate(
+              formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
+              maxLen,
+            ),
             partCreatedAt,
           );
           return;
@@ -812,9 +999,11 @@ function formatObserverMessage(
 
       if (partType === 'image' || partType === 'file') {
         const attachment = part as ObserverAttachmentPart;
-        const inputAttachment = toObserverInputAttachmentPart(attachment);
-        if (inputAttachment) {
-          attachments.push(inputAttachment);
+        if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+          const inputAttachment = toObserverInputAttachmentPart(attachment);
+          if (inputAttachment) {
+            attachments.push(inputAttachment);
+          }
         }
         pushLine(
           partType === 'image' ? 'Image' : 'File',
@@ -893,8 +1082,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 /** Truncate a string to maxLen characters, appending a note if truncated. */
 function maybeTruncate(str: string, maxLen?: number): string {
   if (!maxLen || str.length <= maxLen) return str;
-  const truncated = str.slice(0, maxLen);
-  const remaining = str.length - maxLen;
+  const truncated = safeSlice(str, maxLen);
+  const remaining = str.length - truncated.length;
   return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
@@ -1341,7 +1530,7 @@ export function sanitizeObservationLines(observations: string): string {
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
-      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      lines[i] = safeSlice(lines[i]!, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
       changed = true;
     }
   }

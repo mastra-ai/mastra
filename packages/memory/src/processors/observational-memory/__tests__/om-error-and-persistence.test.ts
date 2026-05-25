@@ -411,7 +411,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(textContent).toBe('');
   });
 
-  it('should emit tripwire when observer fails and no observation marker parts are persisted', async () => {
+  it('should emit tripwire when observer fails and persist lifecycle marker parts through OM', async () => {
     // When observation fails, OM calls abort() which triggers a TripWire.
     // The stream completes with a tripwire part, not an error throw.
     const threadId = 'test-error-persist';
@@ -451,7 +451,9 @@ describe('OM Error State', { timeout: 30_000 }, () => {
       );
     });
 
-    expect(persistedObservationMarkerParts).toHaveLength(0);
+    expect(persistedObservationMarkerParts.map((part: any) => part.type)).toEqual(
+      expect.arrayContaining(['data-om-observation-start', 'data-om-observation-failed']),
+    );
   });
 });
 

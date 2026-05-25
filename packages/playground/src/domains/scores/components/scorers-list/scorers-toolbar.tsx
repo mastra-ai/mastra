@@ -33,7 +33,7 @@ export function ScorersToolbar({
           className="whitespace-nowrap"
         />
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="light">
+          <Button onClick={onReset} size="sm" variant="default">
             <XIcon className="size-3" /> Reset
           </Button>
         )}
