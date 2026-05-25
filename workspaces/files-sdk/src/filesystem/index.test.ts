@@ -12,7 +12,7 @@
  * All tests mock the FilesSDK Files instance.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { FilesSDKFilesystem } from './index';
 import type { FilesSDKFilesystemOptions } from './index';
@@ -259,15 +259,36 @@ describe('FilesSDKFilesystem', () => {
   describe('deleteFile()', () => {
     it('calls delete for files', async () => {
       const { fs, mockFiles } = createFs();
-      // isDirectory check returns empty (not a directory)
+      // isDirectory check (prefix 'test.txt/') returns empty (not a directory)
       mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      // isFile check (prefix 'test.txt') returns the key (file exists)
+      mockFiles.list.mockResolvedValueOnce({ items: [{ key: 'test.txt' }], cursor: undefined });
 
       await fs.deleteFile('/test.txt');
 
       expect(mockFiles.delete).toHaveBeenCalledWith('test.txt');
     });
 
-    it('delegates to rmdir for directories', async () => {
+    it('throws FileNotFoundError when file does not exist (without force)', async () => {
+      const { fs, mockFiles } = createFs();
+      // Not a directory, not a file
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+
+      await expect(fs.deleteFile('/missing.txt')).rejects.toThrow(/missing\.txt/);
+      expect(mockFiles.delete).not.toHaveBeenCalled();
+    });
+
+    it('silently succeeds when file does not exist and force=true', async () => {
+      const { fs, mockFiles } = createFs();
+      // Not a directory (force path skips the isFile check)
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      mockFiles.delete.mockRejectedValueOnce(Object.assign(new Error('nope'), { code: 'NotFound' }));
+
+      await expect(fs.deleteFile('/missing.txt', { force: true })).resolves.toBeUndefined();
+    });
+
+    it('recursively delegates to rmdir for directories (matches S3/GCS)', async () => {
       const { fs, mockFiles } = createFs();
       // isDirectory check returns items (is a directory)
       mockFiles.list
@@ -275,7 +296,9 @@ describe('FilesSDKFilesystem', () => {
         // rmdir lists all keys
         .mockResolvedValueOnce({ items: [{ key: 'dir/file.txt' }], cursor: undefined });
 
-      await fs.deleteFile('/dir', { recursive: true });
+      // Note: caller does NOT need to pass recursive — deleteFile on a directory
+      // always cleans up recursively.
+      await fs.deleteFile('/dir');
 
       // Should have called delete with array of keys (batch)
       expect(mockFiles.delete).toHaveBeenCalledWith(['dir/file.txt']);
@@ -308,6 +331,23 @@ describe('FilesSDKFilesystem', () => {
       mockFiles.copy.mockRejectedValueOnce(error);
 
       await expect(fs.copyFile('/missing.txt', '/dest.txt')).rejects.toThrow(/missing\.txt/);
+    });
+
+    it('throws FileExistsError when overwrite=false and dest exists', async () => {
+      const { fs, mockFiles } = createFs();
+      mockFiles.exists.mockResolvedValueOnce(true);
+
+      await expect(fs.copyFile('/src.txt', '/dest.txt', { overwrite: false })).rejects.toThrow(/dest\.txt/);
+      expect(mockFiles.copy).not.toHaveBeenCalled();
+    });
+
+    it('allows copy when overwrite=false and dest does not exist', async () => {
+      const { fs, mockFiles } = createFs();
+      mockFiles.exists.mockResolvedValueOnce(false);
+
+      await fs.copyFile('/src.txt', '/dest.txt', { overwrite: false });
+
+      expect(mockFiles.copy).toHaveBeenCalledWith('src.txt', 'dest.txt');
     });
   });
 
@@ -434,6 +474,59 @@ describe('FilesSDKFilesystem', () => {
       expect(entries).toHaveLength(2);
       expect(mockFiles.list).toHaveBeenCalledTimes(2);
     });
+
+    it('recursive: emits every intermediate directory along the path', async () => {
+      const { fs, mockFiles } = createFs();
+      mockFiles.list.mockResolvedValueOnce({
+        items: [{ key: 'root/a/b/c.txt', size: 1 }],
+        cursor: undefined,
+      });
+
+      const entries = await fs.readdir('/root', { recursive: true });
+      const dirs = entries.filter(e => e.type === 'directory').map(e => e.name);
+
+      // For a/b/c.txt: should emit "a", "a/b" as directories
+      expect(dirs).toContain('a');
+      expect(dirs).toContain('a/b');
+      // And the file with full relative path
+      expect(entries).toContainEqual({ name: 'a/b/c.txt', type: 'file', size: 1 });
+    });
+
+    it('recursive: deduplicates intermediate directories across files', async () => {
+      const { fs, mockFiles } = createFs();
+      mockFiles.list.mockResolvedValueOnce({
+        items: [
+          { key: 'root/a/b/x.txt', size: 1 },
+          { key: 'root/a/b/y.txt', size: 2 },
+          { key: 'root/a/c.txt', size: 3 },
+        ],
+        cursor: undefined,
+      });
+
+      const entries = await fs.readdir('/root', { recursive: true });
+      const dirs = entries.filter(e => e.type === 'directory').map(e => e.name);
+
+      expect(dirs.filter(n => n === 'a')).toHaveLength(1);
+      expect(dirs.filter(n => n === 'a/b')).toHaveLength(1);
+    });
+
+    it('recursive: respects maxDepth for both files and directories', async () => {
+      const { fs, mockFiles } = createFs();
+      mockFiles.list.mockResolvedValueOnce({
+        items: [{ key: 'root/a/b/c/deep.txt', size: 1 }],
+        cursor: undefined,
+      });
+
+      const entries = await fs.readdir('/root', { recursive: true, maxDepth: 2 });
+      const dirs = entries.filter(e => e.type === 'directory').map(e => e.name);
+      const files = entries.filter(e => e.type === 'file');
+
+      expect(dirs).toContain('a');
+      expect(dirs).toContain('a/b');
+      expect(dirs).not.toContain('a/b/c');
+      // File has depth 4 > maxDepth 2, so excluded
+      expect(files).toHaveLength(0);
+    });
   });
 
   describe('rmdir()', () => {
@@ -483,14 +576,16 @@ describe('FilesSDKFilesystem', () => {
 
     it('returns true when file exists', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(true);
+      // isDirectory check (prefix 'test.txt/'): no children
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      // isFile check (prefix 'test.txt'): exact key match
+      mockFiles.list.mockResolvedValueOnce({ items: [{ key: 'test.txt' }], cursor: undefined });
 
       expect(await fs.exists('/test.txt')).toBe(true);
     });
 
-    it('checks as directory when file does not exist', async () => {
+    it('returns true when path is a directory (prefix has children)', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(false);
       // isDirectory check: has children
       mockFiles.list.mockResolvedValueOnce({ items: [{ key: 'dir/child.txt' }], cursor: undefined });
 
@@ -499,10 +594,25 @@ describe('FilesSDKFilesystem', () => {
 
     it('returns false when neither file nor directory', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(false);
+      // isDirectory check: empty
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      // isFile check: no matching key
       mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
 
       expect(await fs.exists('/nope')).toBe(false);
+    });
+
+    it('returns false for an empty leftover directory (object-store semantics)', async () => {
+      const { fs, mockFiles } = createFs();
+      // isDirectory: no children
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      // isFile: list returns sibling keys but not the exact key
+      mockFiles.list.mockResolvedValueOnce({
+        items: [{ key: 'other/file.txt' }],
+        cursor: undefined,
+      });
+
+      expect(await fs.exists('/empty')).toBe(false);
     });
   });
 
@@ -644,7 +754,9 @@ describe('FilesSDKFilesystem', () => {
 
     it('allows exists', async () => {
       const { fs, mockFiles } = createFs({ readOnly: true });
-      mockFiles.exists.mockResolvedValueOnce(true);
+      // isDirectory: empty; isFile: matching key
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
+      mockFiles.list.mockResolvedValueOnce({ items: [{ key: 'test.txt' }], cursor: undefined });
 
       expect(await fs.exists('/test.txt')).toBe(true);
     });

@@ -1,5 +1,3 @@
-import type { Files, StoredFile as SDKStoredFile } from 'files-sdk';
-
 import type {
   FileContent,
   FileStat,
@@ -21,6 +19,7 @@ import {
   DirectoryNotEmptyError,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
+import type { Files, StoredFile as SDKStoredFile } from 'files-sdk';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -65,18 +64,28 @@ function basename(key: string): string {
   return idx === -1 ? key : key.slice(idx + 1);
 }
 
-function isNotFoundError(err: unknown): boolean {
-  if (err && typeof err === 'object' && 'code' in err) {
-    return (err as { code: string }).code === 'NotFound';
-  }
+/**
+ * Walk the FilesSDK error code chain.
+ *
+ * FilesSDK frequently wraps an inner `NotFound` / `Unauthorized` error in an
+ * outer `Provider` error (`error.cause` carries the original). Some adapters
+ * may wrap multiple levels deep, so we walk the cause chain and return any
+ * matching code found along the way.
+ */
+function hasFilesSDKCode(err: unknown, code: string, depth = 0): boolean {
+  if (depth > 5 || !err || typeof err !== 'object') return false;
+  const e = err as { code?: unknown; cause?: unknown };
+  if (e.code === code) return true;
+  if (e.cause) return hasFilesSDKCode(e.cause, code, depth + 1);
   return false;
 }
 
+function isNotFoundError(err: unknown): boolean {
+  return hasFilesSDKCode(err, 'NotFound');
+}
+
 function isUnauthorizedError(err: unknown): boolean {
-  if (err && typeof err === 'object' && 'code' in err) {
-    return (err as { code: string }).code === 'Unauthorized';
-  }
-  return false;
+  return hasFilesSDKCode(err, 'Unauthorized');
 }
 
 function generateId(): string {
@@ -257,6 +266,16 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     });
   }
 
+  /**
+   * Append content to a file.
+   *
+   * **Not atomic.** Object storage has no native append, so this is implemented
+   * as a read-modify-write: the existing object is downloaded, the new content
+   * is concatenated, and the result is uploaded as a new object. Concurrent
+   * appends to the same key may overwrite each other. This limitation is
+   * inherent to object storage, not specific to FilesSDK, and matches the
+   * behavior of the sibling S3, GCS, and Azure workspace providers.
+   */
   async appendFile(path: string, content: FileContent): Promise<void> {
     await this.ensureReady();
     this.assertWritable('appendFile');
@@ -285,26 +304,41 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     this.assertWritable('deleteFile');
     const key = toKey(path);
 
-    // Check if path is a directory (has children)
+    // If the path is a directory, recursively delete (matches sibling
+    // filesystems like S3/GCS). Object storage has no first-class directories,
+    // so callers calling deleteFile on a prefix expect it to clean up.
     if (await this.isDirectory(key)) {
-      await this.rmdir(path, options);
+      await this.rmdir(path, { recursive: true, force: options?.force });
       return;
+    }
+
+    // Some FilesSDK adapters (notably the local `fs` adapter) silently succeed
+    // when deleting a non-existent key instead of raising `NotFound`. Match the
+    // shared filesystem contract (and S3/GCS behavior) by checking existence
+    // first when `force` is not set.
+    if (!options?.force && !(await this.isFile(key))) {
+      throw new FileNotFoundError(path);
     }
 
     try {
       await this._files.delete(key);
     } catch (err) {
       if (options?.force) return;
+      if (isNotFoundError(err)) throw new FileNotFoundError(path);
       throw err;
     }
   }
 
-  async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
+  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     this.assertWritable('copyFile');
     const fromKey = toKey(src);
     const toKey_ = toKey(dest);
 
+    if (options?.overwrite === false && (await this._files.exists(toKey_))) {
+      throw new FileExistsError(dest);
+    }
+
     try {
       await this._files.copy(fromKey, toKey_);
     } catch (err) {
@@ -313,19 +347,11 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     }
   }
 
-  async moveFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
-    await this.ensureReady();
-    this.assertWritable('moveFile');
-    const fromKey = toKey(src);
-    const toKey_ = toKey(dest);
-
-    try {
-      await this._files.copy(fromKey, toKey_);
-      await this._files.delete(fromKey);
-    } catch (err) {
-      if (isNotFoundError(err)) throw new FileNotFoundError(src);
-      throw err;
-    }
+  async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    // Object storage has no atomic rename. Mirrors the S3/GCS pattern:
+    // copy first; if that succeeds, force-delete the source.
+    await this.copyFile(src, dest, options);
+    await this.deleteFile(src, { force: true });
   }
 
   // ---------------------------------------------------------------------------
@@ -409,8 +435,8 @@ export class FilesSDKFilesystem extends MastraFilesystem {
             type: 'file',
             size: item.size,
           });
-        } else {
-          // Nested item — synthesize a directory entry for the first segment
+        } else if (!recursive) {
+          // Non-recursive: synthesize a directory entry for the first segment only.
           const dirName = segments[0]!;
           if (!seenDirs.has(dirName)) {
             seenDirs.add(dirName);
@@ -419,25 +445,36 @@ export class FilesSDKFilesystem extends MastraFilesystem {
               type: 'directory',
             });
           }
-
-          // If recursive, also include this file
-          if (recursive) {
-            // Check depth
-            if (maxDepth !== undefined && segments.length > maxDepth) continue;
-
-            const name = relativePath;
-
-            if (extensions) {
-              const ext = name.lastIndexOf('.') !== -1 ? name.slice(name.lastIndexOf('.')) : '';
-              if (!extensions.includes(ext)) continue;
+        } else {
+          // Recursive: emit every intermediate directory along the path, then the file.
+          // For "a/b/c/file.txt": emit "a", "a/b", "a/b/c" as directories, then the file.
+          for (let i = 1; i < segments.length; i++) {
+            const dirPath = segments.slice(0, i).join('/');
+            const dirDepth = i; // number of segments in dirPath
+            if (maxDepth !== undefined && dirDepth > maxDepth) continue;
+            if (!seenDirs.has(dirPath)) {
+              seenDirs.add(dirPath);
+              entries.push({
+                name: dirPath,
+                type: 'directory',
+              });
             }
-
-            entries.push({
-              name,
-              type: 'file',
-              size: item.size,
-            });
           }
+
+          // Depth check for the file itself
+          if (maxDepth !== undefined && segments.length > maxDepth) continue;
+
+          const name = relativePath;
+          if (extensions) {
+            const ext = name.lastIndexOf('.') !== -1 ? name.slice(name.lastIndexOf('.')) : '';
+            if (!extensions.includes(ext)) continue;
+          }
+
+          entries.push({
+            name,
+            type: 'file',
+            size: item.size,
+          });
         }
       }
 
@@ -458,12 +495,20 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     // Root always exists
     if (!key) return true;
 
-    // Check as file
-    const fileExists = await this._files.exists(key);
-    if (fileExists) return true;
+    // Check as directory first (any key under this prefix). Doing the prefix
+    // list before the per-key check matters for adapters like FilesSDK's `fs`
+    // that leave empty parent directories on disk after their contents are
+    // deleted — those would otherwise report true via `_files.exists` even
+    // though no objects exist there. Object-store semantics: a "directory"
+    // exists iff it has children.
+    if (await this.isDirectory(key)) return true;
 
-    // Check as directory (any key with this prefix)
-    return this.isDirectory(key);
+    // Check as a real stored file. We deliberately avoid `_files.exists(key)`
+    // here because some adapters (e.g. the local `fs` adapter) consider an
+    // empty leftover directory to exist as a key, which would break
+    // object-store semantics. A prefix list constrained to the exact key only
+    // matches actually-stored files.
+    return this.isFile(key);
   }
 
   async stat(path: string): Promise<FileStat> {
@@ -523,6 +568,17 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     const prefix = `${key}/`;
     const result = await this._files.list({ prefix, limit: 1 });
     return result.items.length > 0;
+  }
+
+  /**
+   * Check whether `key` refers to a real stored file (not an empty leftover
+   * directory). Uses prefix listing constrained to the exact key, which only
+   * matches actually-stored objects across all adapters.
+   */
+  private async isFile(key: string): Promise<boolean> {
+    if (!key) return false;
+    const result = await this._files.list({ prefix: key, limit: 10 });
+    return result.items.some(item => item.key === key);
   }
 
   /** Convert a FilesSDK StoredFile to a Mastra FileStat. */

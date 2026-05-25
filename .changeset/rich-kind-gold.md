@@ -11,7 +11,7 @@ import { Files } from 'files-sdk';
 import { s3 } from 'files-sdk/s3';
 import { FilesSDKFilesystem } from '@mastra/files-sdk';
 
-const files = new Files(s3({ bucket: 'my-bucket', region: 'us-east-1' }));
+const files = new Files({ adapter: s3({ bucket: 'my-bucket', region: 'us-east-1' }) });
 
 const filesystem = new FilesSDKFilesystem({ files });
 ```
