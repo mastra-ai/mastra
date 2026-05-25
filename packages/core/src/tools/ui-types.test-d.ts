@@ -19,7 +19,7 @@ describe('InferUITools — concrete outputSchema', () => {
     execute: async ({ q }) => ({ q }),
   });
 
-  const tools = { echo: echoTool, noOutput: noOutputTool };
+  const _tools = { echo: echoTool, noOutput: noOutputTool };
 
   it('infers concrete input for tools with a typed outputSchema', () => {
     expectTypeOf<InferToolInput<typeof echoTool>>().toEqualTypeOf<{ x: string }>();
@@ -40,9 +40,10 @@ describe('InferUITools — concrete outputSchema', () => {
   });
 
   it('InferUITools maps a tool set without collapsing entries to `never`', () => {
-    type UITools = InferUITools<typeof tools>;
+    type UITools = InferUITools<typeof _tools>;
     expectTypeOf<UITools['echo']['input']>().toEqualTypeOf<{ x: string }>();
     expectTypeOf<UITools['echo']['output']>().toEqualTypeOf<{ y: number }>();
     expectTypeOf<UITools['noOutput']['input']>().toEqualTypeOf<{ q: string }>();
+    expectTypeOf<UITools['noOutput']['output']>().toEqualTypeOf<unknown>();
   });
 });
