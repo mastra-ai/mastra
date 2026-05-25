@@ -142,8 +142,6 @@ export class AgentThreadStreamRuntime {
 
   #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
     const runtime = this;
-    const source = output.fullStream as ReadableStream<unknown> | undefined;
-    if (!source) return { output };
 
     const parts: unknown[] = [];
     const waiters = new Set<() => void>();
@@ -157,21 +155,24 @@ export class AgentThreadStreamRuntime {
       for (const waiter of pending) waiter();
     };
 
+    const emitPart = async (part: unknown) => {
+      parts.push(part);
+      await runtime.#publishAndWait(pubsub, key, {
+        type: 'stream-part',
+        runId: output.runId,
+        part,
+        sourceId: runtime.#getSourceId(),
+      });
+      wake();
+    };
+
     const start = () => {
       if (started) return;
       started = true;
       void (async () => {
         try {
-          const emitPart = (part: unknown) => {
-            parts.push(part);
-            runtime.#publish(pubsub, key, {
-              type: 'stream-part',
-              runId: output.runId,
-              part,
-              sourceId: runtime.#getSourceId(),
-            });
-            wake();
-          };
+          const source = output.fullStream as ReadableStream<unknown> | undefined;
+          if (!source) return;
 
           if (typeof source.getReader === 'function') {
             const reader = source.getReader();
@@ -179,14 +180,14 @@ export class AgentThreadStreamRuntime {
               while (true) {
                 const { value: part, done: streamDone } = await reader.read();
                 if (streamDone) break;
-                emitPart(part);
+                await emitPart(part);
               }
             } finally {
               reader.releaseLock();
             }
           } else {
             for await (const part of source as any) {
-              emitPart(part);
+              await emitPart(part);
             }
           }
         } catch (caught) {
@@ -239,12 +240,7 @@ export class AgentThreadStreamRuntime {
       });
     };
 
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      enumerable: true,
-      value: createStream(),
-    });
-    return { output, createSubscriberStream: createStream };
+    return { output, createSubscriberStream: createStream, startBroadcast: start };
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -373,7 +369,11 @@ export class AgentThreadStreamRuntime {
 
     const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
-    const { output: outputForSubscribers, createSubscriberStream } = this.#withBroadcastStream(output, pubsub, key);
+    const {
+      output: outputForSubscribers,
+      createSubscriberStream,
+      startBroadcast,
+    } = this.#withBroadcastStream(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
@@ -387,7 +387,8 @@ export class AgentThreadStreamRuntime {
     state.threadRunsById.set(output.runId, record);
     state.threadKeysByRunId.set(output.runId, key);
     state.activeThreadRunIds.set(key, output.runId);
-    this.#publish(pubsub, key, { type: 'run-registered', runId: output.runId });
+    const registered = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId });
+    void registered.then(startBroadcast, startBroadcast);
     this.#watchThreadRunCompletion(state, pubsub, key, record);
   }
 

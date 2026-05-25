@@ -2118,9 +2118,21 @@ export class Workflow<
         infer O,
         any, // Don't infer TResume - causes issues with heterogeneous tuples
         any, // Don't infer TSuspend - causes issues with heterogeneous tuples
-        TEngineType
+        TEngineType,
+        infer TStepRC
       >
-        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, any, any, TEngineType>
+        ? Step<
+            string,
+            SubsetOf<S, TState>,
+            TPrevSchema,
+            O,
+            any,
+            any,
+            TEngineType,
+            // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+            // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+            unknown extends TStepRC ? unknown : TRequestContext
+          >
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
