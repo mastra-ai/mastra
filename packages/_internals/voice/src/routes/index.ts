@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { ErrorDomain, MastraError } from '@internal/core/error';
-import { createRoute } from '@internal/core/routes';
 import type { RequestContext } from '@internal/core/request-context';
+import { createRoute } from '@internal/core/routes';
 import { z } from 'zod/v4';
 
 export const voiceSpeakersResponseSchema = z.array(

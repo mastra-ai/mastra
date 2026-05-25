@@ -4620,7 +4620,7 @@ export interface PostAgentsAgentIdClone_RouteContract {
 // Route: GET /agents/:agentId/voice/speakers
 // ============================================================================
 export type GetAgentsAgentIdVoiceSpeakers_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -4649,7 +4649,7 @@ export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
 // ============================================================================
 /** @deprecated */
 export type GetAgentsAgentIdSpeakers_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -6989,7 +6989,7 @@ export interface GetAgentsAgentIdSkillsSkillName_RouteContract {
 // Route: POST /agents/:agentId/voice/speak
 // ============================================================================
 export type PostAgentsAgentIdVoiceSpeak_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7024,7 +7024,7 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
 // ============================================================================
 /** @deprecated */
 export type PostAgentsAgentIdSpeak_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7062,7 +7062,7 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
 // Route: POST /agents/:agentId/voice/listen
 // ============================================================================
 export type PostAgentsAgentIdVoiceListen_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7103,7 +7103,7 @@ export interface PostAgentsAgentIdVoiceListen_RouteContract {
 // ============================================================================
 /** @deprecated */
 export type PostAgentsAgentIdListen_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7147,7 +7147,7 @@ export interface PostAgentsAgentIdListen_RouteContract {
 // Route: GET /agents/:agentId/voice/listener
 // ============================================================================
 export type GetAgentsAgentIdVoiceListener_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 

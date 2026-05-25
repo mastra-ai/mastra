@@ -78,6 +78,20 @@ export const API_ROUTE_METADATA = {
       "kind": "array"
     }
   },
+  "GET /agents/:agentId/speakers": {
+    "method": "GET",
+    "path": "/agents/:agentId/speakers",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "array"
+    }
+  },
   "POST /agents/:agentId/generate": {
     "method": "POST",
     "path": "/agents/:agentId/generate",
@@ -342,6 +356,23 @@ export const API_ROUTE_METADATA = {
   "POST /agents/:agentId/voice/listen": {
     "method": "POST",
     "path": "/agents/:agentId/voice/listen",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "audio",
+      "options"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/listen": {
+    "method": "POST",
+    "path": "/agents/:agentId/listen",
     "pathParams": [
       "agentId"
     ],
