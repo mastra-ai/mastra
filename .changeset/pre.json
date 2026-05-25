@@ -155,11 +155,15 @@
     "data-list-selection-row-primitives",
     "dataset-items-list-condensed",
     "dirty-ants-help",
+    "dirty-insects-create",
+    "editor-agent-builder-ee",
     "eleven-adults-stay",
     "empty-pandas-march",
     "eval-trace-redirect",
     "fine-trains-dig",
+    "fix-cli-pipe-alignment",
     "fix-posthog-negative-cost",
+    "forty-chefs-care",
     "forty-singers-taste",
     "frank-lines-wish",
     "gold-banks-allow",
@@ -169,11 +173,13 @@
     "khaki-poems-create",
     "lemon-swans-grab",
     "loud-tigers-share",
+    "nice-regions-appear",
     "old-teeth-doubt",
     "per-thread-socket-pubsub",
     "provider-capabilities-auto-attachments",
     "quick-animals-beam",
     "remove-entry-list",
+    "server-stored-workspaces-authorship",
     "shiny-games-visit",
     "silver-plants-kneel",
     "span-feedback-list-condensed",
@@ -181,6 +187,7 @@
     "tame-zoos-clean",
     "tidy-signals-pubsub",
     "tired-kings-obey",
-    "tough-dryers-visit"
+    "tough-dryers-visit",
+    "whole-windows-hope"
   ]
 }
