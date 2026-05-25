@@ -76,6 +76,11 @@ type ClientToolObservabilityEnvelope = {
   payload?: Record<string, unknown>;
 };
 
+type SignalRuntimeOptions = StreamParamsBaseWithoutMessages<any>;
+
+const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptions>();
+const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptions>();
+
 const noopClientToolObserve: ToolObserve = {
   async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
     return fn();
@@ -353,6 +358,67 @@ export class Agent extends BaseResource {
     return queryString ? `${delimiter}${queryString}` : '';
   }
 
+  private getSignalRuntimeRunKey(runId: string): string {
+    return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${runId}`;
+  }
+
+  private getSignalRuntimeThreadKey({
+    resourceId,
+    threadId,
+  }: {
+    resourceId?: string;
+    threadId?: string;
+  }): string | undefined {
+    if (!threadId) return undefined;
+    return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${resourceId ?? ''}|${threadId}`;
+  }
+
+  private setSignalRuntimeOptions({
+    runId,
+    resourceId,
+    threadId,
+    streamOptions,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    streamOptions: SignalRuntimeOptions;
+  }): void {
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    if (runId) {
+      signalRuntimeOptionsByRunId.set(this.getSignalRuntimeRunKey(runId), streamOptions);
+      if (threadKey) latestSignalRuntimeOptionsByThread.delete(threadKey);
+      return;
+    }
+
+    if (threadKey) {
+      latestSignalRuntimeOptionsByThread.set(threadKey, streamOptions);
+    }
+  }
+
+  private getSignalRuntimeOptions({
+    runId,
+    resourceId,
+    threadId,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+  }): SignalRuntimeOptions | undefined {
+    if (runId) {
+      const runOptions = signalRuntimeOptionsByRunId.get(this.getSignalRuntimeRunKey(runId));
+      if (runOptions) return runOptions;
+    }
+
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    return threadKey ? latestSignalRuntimeOptionsByThread.get(threadKey) : undefined;
+  }
+
+  private deleteSignalRuntimeOptions(runId?: string): void {
+    if (!runId) return;
+    signalRuntimeOptionsByRunId.delete(this.getSignalRuntimeRunKey(runId));
+  }
+
   /**
    * Retrieves details about the agent
    * @param requestContext - Optional request context to pass as query parameter
@@ -402,7 +468,16 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+  async sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
     const body = params.ifIdle?.streamOptions
       ? {
           ...params,
@@ -417,10 +492,21 @@ export class Agent extends BaseResource {
         }
       : params;
 
-    return this.request(`/agents/${this.agentId}/signals`, {
+    const response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
       method: 'POST',
       body,
     });
+
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        runId: response.runId,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    return response;
   }
 
   /**
@@ -435,19 +521,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const {
-      clientTools,
-      requestContext,
-      continuationOptions,
-      getClientTools,
-      getRequestContext,
-      getContinuationOptions,
-      ...subscribeBody
-    } = params;
-
+    const { resourceId, threadId } = params;
     const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
       method: 'POST',
-      body: subscribeBody,
+      body: { resourceId, threadId },
       stream: true,
     })) as Response & {
       processDataStream: ({
@@ -462,7 +539,6 @@ export class Agent extends BaseResource {
     }
 
     const agent = this;
-    const { threadId, resourceId } = params;
 
     streamResponse.processDataStream = async ({
       onChunk,
@@ -513,17 +589,27 @@ export class Agent extends BaseResource {
             messages?: { nonUser?: CoreMessage[] };
           };
         };
-        if (!runId || finishPayload.payload?.stepResult?.reason !== 'tool-calls') return;
+        if (!runId) return;
+        if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
 
         const pendingToolCalls = pendingToolCallsByRunId.get(runId);
         pendingToolCallsByRunId.delete(runId);
-        if (!pendingToolCalls?.length) return;
+        if (!pendingToolCalls?.length) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
 
-        const activeClientTools = getClientTools?.() ?? clientTools;
-        if (!activeClientTools) return;
+        const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
+        const activeClientTools = activeRuntimeOptions?.clientTools;
+        if (!activeClientTools) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
 
-        const activeRequestContext = getRequestContext?.() ?? requestContext;
-        const activeContinuationOptions = getContinuationOptions?.() ?? continuationOptions;
+        const activeRequestContext = activeRuntimeOptions.requestContext;
         const processedClientTools = processClientTools(activeClientTools);
         const processedRequestContext = parseClientRequestContext(activeRequestContext);
 
@@ -582,14 +668,17 @@ export class Agent extends BaseResource {
           } as unknown as CoreMessage);
         }
 
-        if (toolResultMessages.length === 0) return;
+        if (toolResultMessages.length === 0) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
 
         try {
           const continuation = await agent.streamUntilIdle(
             [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
             {
+              ...activeRuntimeOptions,
               runId: uuid(),
-              ...(activeContinuationOptions ?? {}),
               requestContext: processedRequestContext,
               memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
               clientTools: processedClientTools,
@@ -602,6 +691,8 @@ export class Agent extends BaseResource {
           }
         } catch (error) {
           console.error('Error running client-tool continuation:', error);
+        } finally {
+          agent.deleteSignalRuntimeOptions(runId);
         }
       };
 

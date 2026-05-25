@@ -84,8 +84,8 @@ describe('useChat forwards clientTools', () => {
     vi.clearAllMocks();
   });
 
-  it('forwards hook-prop clientTools through subscribeToThread when threadId is provided', async () => {
-    renderHook(
+  it('keeps hook-prop clientTools on sendSignal when threadId is provided', async () => {
+    const { result } = renderHook(
       () =>
         useChat({
           agentId: 'test-agent',
@@ -97,16 +97,23 @@ describe('useChat forwards clientTools', () => {
       { wrapper },
     );
 
-    // subscribeToThread opens on mount whenever threadId is set; assert that
-    // clientTools were forwarded so client-js owns the tool-execution loop.
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+      });
+    });
+
     expect(subscribeToThreadMock).toHaveBeenCalled();
     const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
     const params = subscribeCalls[0]?.[0];
-    expect(params.threadId).toBe('thread-1');
-    expect(params.clientTools).toBe(clientTools);
+    expect(params).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+    const signalCalls = sendSignalMock.mock.calls as unknown as Array<[any]>;
+    expect(signalCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
   });
 
-  it('keeps thread subscription getters in sync with latest per-send clientTools and continuation options', async () => {
+  it('keeps per-send clientTools and continuation options on sendSignal', async () => {
     keepSubscriptionOpen = true;
     const perSendClientTools = {
       testTool: {
@@ -142,18 +149,7 @@ describe('useChat forwards clientTools', () => {
 
     const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
     const subscribeParams = subscribeCalls[0]?.[0];
-    expect(subscribeParams).toEqual(
-      expect.objectContaining({
-        resourceId: 'resource-1',
-        threadId: 'thread-1',
-        clientTools,
-      }),
-    );
-    expect(subscribeParams.getClientTools()).toBe(clientTools);
-    expect(subscribeParams.getRequestContext()).toEqual({ userId: 'user-123' });
-    expect(subscribeParams.getContinuationOptions()).toEqual(
-      expect.objectContaining({ maxSteps: 3, instructions: 'use the hook tool' }),
-    );
+    expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
 
     await act(async () => {
       await result.current.sendMessage({
@@ -171,15 +167,7 @@ describe('useChat forwards clientTools', () => {
     });
 
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
-    expect(subscribeParams.getClientTools()).toBe(perSendClientTools);
-    expect(subscribeParams.getRequestContext()).toEqual({ userId: 'user-456' });
-    expect(subscribeParams.getContinuationOptions()).toEqual(
-      expect.objectContaining({
-        maxSteps: 5,
-        instructions: 'use the per-send tool',
-        modelSettings: expect.objectContaining({ temperature: 0.2 }),
-      }),
-    );
+    expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
 
     expect(sendSignalMock).toHaveBeenCalledTimes(2);
     const signalCalls = sendSignalMock.mock.calls as unknown as Array<[any]>;

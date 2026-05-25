@@ -117,8 +117,6 @@ export const useChat = ({
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
   const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
-  const _clientTools = useRef<ToolsInput | undefined>(hookClientTools);
-  const _continuationOptions = useRef<SignalContinuationOptions | undefined>(undefined);
   // Tracks the active streamUntilIdle request so a subsequent stream() call can
   // abort the previous one. Without this, a still-open prior stream keeps its
   // background-task pubsub subscription alive and fans events into a second
@@ -149,10 +147,6 @@ export const useChat = ({
   useEffect(() => {
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
-
-  useEffect(() => {
-    _clientTools.current = hookClientTools;
-  }, [hookClientTools]);
 
   type SignalContentPart =
     | { type: 'text'; text: string }
@@ -272,15 +266,7 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId);
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({
-          resourceId,
-          threadId,
-          clientTools: hookClientTools as any,
-          requestContext: _requestContext.current,
-          getClientTools: () => _clientTools.current,
-          getRequestContext: () => _requestContext.current,
-          getContinuationOptions: () => _continuationOptions.current,
-        } as any)
+        .subscribeToThread({ resourceId, threadId })
         .then(response => {
           void response
             .processDataStream({
@@ -320,7 +306,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, hookClientTools, markThreadSignalsUnsupported, processStreamChunk],
+    [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
   );
 
   useEffect(() => {
@@ -492,8 +478,6 @@ export const useChat = ({
       tracingOptions,
     };
     _requestContext.current = resolvedRequestContext;
-    _clientTools.current = resolvedClientTools;
-    _continuationOptions.current = signalContinuationOptions;
     setIsRunning(true);
 
     _streamAbortRef.current?.abort();
